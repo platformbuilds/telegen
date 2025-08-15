@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: telegen
+spec:
+  selector:
+    matchLabels: { app: telegen }
+  template:
+    metadata:
+      labels: { app: telegen }
+    spec:
+      serviceAccountName: telegen
+      hostPID: true
+      containers:
+        - name: telegen
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["--config", "/etc/telegen/config.yaml"]
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+          securityContext:
+            runAsUser: 65532
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              add: ["BPF","PERFMON","SYS_RESOURCE"]
+          volumeMounts:
+            - { name: cfg, mountPath: /etc/telegen }
+            - { name: sys, mountPath: /sys, readOnly: true }
+            - { name: proc, mountPath: /proc, readOnly: true }
+            - { name: varlog, mountPath: /var/log, readOnly: true }
+            - { name: spool, mountPath: /var/lib/telegen }
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      volumes:
+        - name: cfg
+          configMap: { name: telegen-config }
+        - name: sys
+          hostPath: { path: /sys }
+        - name: proc
+          hostPath: { path: /proc }
+        - name: varlog
+          hostPath: { path: /var/log }
+        - name: spool
+          emptyDir: {}
