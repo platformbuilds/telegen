@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telegen-config
+data:
+  config.yaml: |-
+{{ .Values.config | indent 4 }}

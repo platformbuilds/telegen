@@ -1,0 +1,10 @@
+[Unit]
+Description=Telegen Observability Agent
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/telegen --config /etc/telegen/config.yaml
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

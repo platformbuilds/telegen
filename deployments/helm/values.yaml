@@ -1,0 +1,40 @@
+image:
+  repository: ghcr.io/platformbuilds/telegen
+  tag: v3.1.0
+  pullPolicy: IfNotPresent
+
+resources:
+  requests: { cpu: 100m, memory: 128Mi }
+  limits: { cpu: 500m, memory: 256Mi }
+
+service:
+  port: 19090
+
+config: |
+  selfTelemetry:
+    listen: ":19090"
+    prometheus_namespace: "telegen"
+  exports:
+    remoteWrite:
+      mode: "active"
+      endpoints:
+        - url: "http://otel-remote-write.default.svc.cluster.local:9009/api/v1/push"
+          timeout: "5s"
+          compression: "gzip"
+    otlp:
+      send_mode: "failover"
+      http:
+        enabled: true
+        endpoint: "otel-collector.default.svc.cluster.local:4318"
+        traces_path: "/v1/traces"
+        logs_path: "/v1/logs"
+        gzip: true
+  pipelines:
+    traces: { enabled: true }
+    logs:
+      enabled: true
+      filelog:
+        include: ["/var/log/containers/*.log"]
+        position_file: "/var/lib/telegen/positions.json"
+    metrics:
+      also_expose_prometheus: true
