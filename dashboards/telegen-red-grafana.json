@@ -1,0 +1,48 @@
+{
+  "title": "Telegen \u2014 RED + Agent Health",
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Request Rate (example)",
+      "targets": [
+        {
+          "expr": "sum(rate(system_network_transmit_bytes_total[5m]))"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Exporter Latency p90 (metrics \u2192 remote_write)",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.9, sum by (le,endpoint) (rate(telegen_agent_export_latency_seconds_bucket[5m])))",
+          "exemplar": true
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Queue Drops (5m)",
+      "targets": [
+        {
+          "expr": "sum(increase(telegen_agent_queue_dropped_total[5m]))"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Exporter Failures (5m)",
+      "targets": [
+        {
+          "expr": "sum(increase(telegen_agent_export_failures_total[5m]))"
+        }
+      ]
+    }
+  ]
+}
