@@ -7,8 +7,8 @@ on:
   pull_request:
 
 permissions:
-  contents: write   # for release uploads on tags
-  packages: write   # allow GHCR pushes if needed by future steps
+  contents: write   # needed for creating releases on tags
+  packages: write   # harmless here; useful if you later push artifacts to GHCR from this workflow
   actions: read
 
 env:
@@ -53,6 +53,7 @@ jobs:
         run: |
           mkdir -p dist
           go test -race -covermode=atomic -coverprofile=dist/coverage.out ./...
+
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:
@@ -73,16 +74,25 @@ jobs:
 
       - name: Compose ldflags
         id: ld
+        shell: bash
         run: |
-          VERSION="${GITHUB_REF_TYPE == 'tag' && startsWith(github.ref_name, 'v') && echo "${GITHUB_REF_NAME}" || echo "v0.0.0-dev"}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == v* ]]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="v0.0.0-dev"
+          fi
           COMMIT="$(git rev-parse --short=12 HEAD)"
           BUILDDATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          echo "LDFLAGS=-X ${MODULE}/internal/version.version=${VERSION} -X ${MODULE}/internal/version.commit=${COMMIT} -X ${MODULE}/internal/version.buildDate=${BUILDDATE}" >> $GITHUB_OUTPUT
+
+          echo "LDFLAGS=-X ${MODULE}/internal/version.version=${VERSION} -X ${MODULE}/internal/version.commit=${COMMIT} -X ${MODULE}/internal/version.buildDate=${BUILDDATE}" >> "$GITHUB_OUTPUT"
+          echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Build linux/amd64
         run: |
           mkdir -p dist
-          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w ${{ steps.ld.outputs.LDFLAGS }}" -o dist/telegen ./cmd/telegen
+          GOOS=linux GOARCH=amd64 \
+            go build -trimpath -ldflags "-s -w ${{ steps.ld.outputs.LDFLAGS }}" \
+            -o dist/telegen ./cmd/telegen
 
       - name: Upload linux binary
         uses: actions/upload-artifact@v4
@@ -110,13 +120,16 @@ jobs:
 
       - name: Compose ldflags
         id: ld
+        shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME}"
+          VERSION="${GITHUB_REF_NAME}"   # tags-only job
           COMMIT="$(git rev-parse --short=12 HEAD)"
           BUILDDATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          echo "LDFLAGS=-X ${MODULE}/internal/version.version=${VERSION} -X ${MODULE}/internal/version.commit=${COMMIT} -X ${MODULE}/internal/version.buildDate=${BUILDDATE}" >> $GITHUB_OUTPUT
 
-      - name: Build
+          echo "LDFLAGS=-X ${MODULE}/internal/version.version=${VERSION} -X ${MODULE}/internal/version.commit=${COMMIT} -X ${MODULE}/internal/version.buildDate=${BUILDDATE}" >> "$GITHUB_OUTPUT"
+          echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build (matrix)
         shell: bash
         run: |
           mkdir -p dist
@@ -126,11 +139,11 @@ jobs:
             go build -trimpath -ldflags "-s -w ${{ steps.ld.outputs.LDFLAGS }}" \
             -o "dist/${OUT}-${{ matrix.goos }}-${{ matrix.goarch }}" ./cmd/telegen
 
-      - name: Upload artifacts
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: telegen-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/*
+          path: dist/telegen*-${{ matrix.goos }}-${{ matrix.goarch }}
           retention-days: 30
 
   release:
@@ -140,12 +153,14 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          path: dist
+          path: dist   # downloads all artifacts from previous jobs
 
       - name: Flatten artifacts
+        shell: bash
         run: |
           mkdir -p upload
           find dist -type f -maxdepth 2 -mindepth 2 -exec cp {} upload/ \;
+          ls -l upload
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
