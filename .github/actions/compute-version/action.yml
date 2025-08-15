@@ -1,0 +1,35 @@
+# .github/actions/compute-version/action.yml
+name: "Compute Version (mark-*)"
+description: "Derive version from tag or release branch; fallback to mark-dev"
+outputs:
+  VERSION:
+    description: "Computed version string"
+  LDFLAGS:
+    description: "Go ldflags string"
+runs:
+  using: "composite"
+  steps:
+    - id: compute
+      shell: bash
+      run: |
+        set -euo pipefail
+        MODULE="github.com/platformbuilds/telegen"
+
+        # defaults
+        VERSION="mark-dev"
+
+        ref="${GITHUB_REF}"         # e.g., refs/heads/dev/..., refs/heads/release/mark-v1-2-3, refs/tags/mark-v1-2-3
+        ref_type="${GITHUB_REF_TYPE}"   # branch|tag
+        ref_name="${GITHUB_REF_NAME}"   # just the name
+
+        if [[ "${ref_type}" == "tag" && "${ref_name}" =~ ^mark-v[0-9]+-[0-9]+-[0-9]+$ ]]; then
+          VERSION="${ref_name}"
+        elif [[ "${ref_type}" == "branch" && "${ref_name}" =~ ^release/(mark-v[0-9]+-[0-9]+-[0-9]+)$ ]]; then
+          VERSION="${BASH_REMATCH[1]}"
+        fi
+
+        COMMIT="$(git rev-parse --short=12 HEAD)"
+        BUILDDATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+        echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
+        echo "LDFLAGS=-X ${MODULE}/internal/version.version=${VERSION} -X ${MODULE}/internal/version.commit=${COMMIT} -X ${MODULE}/internal/version.buildDate=${BUILDDATE}" >> "$GITHUB_OUTPUT"

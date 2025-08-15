@@ -1,0 +1,88 @@
+name: Security
+
+on:
+  push:
+    branches: [ "**" ]
+    tags: [ "v*" ]
+  pull_request:
+  schedule:
+    - cron: "0 3 * * 1"  # weekly Monday UTC run
+
+permissions:
+  contents: read
+  security-events: write
+
+env:
+  GO_VERSION: "1.22.x"
+
+jobs:
+  codeql:
+    uses: github/codeql-action/.github/workflows/codeql.yml@v3
+    with:
+      languages: go
+    permissions:
+      security-events: write
+      contents: read
+
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: govulncheck
+        run: |
+          mkdir -p dist
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./... | tee dist/govulncheck.txt
+          govulncheck -format=json ./... > dist/govulncheck.json
+          govulncheck -test ./... | tee dist/govulncheck-test.txt
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: govulncheck
+          path: dist/*
+          retention-days: 14
+
+  gosec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run gosec
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          mkdir -p dist
+          gosec ./... | tee dist/gosec.txt
+      - name: Upload gosec report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gosec
+          path: dist/gosec.txt
+          retention-days: 14
+
+  sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate SBOM (syft)
+        uses: anchore/syft-action@v0.17.0
+        with:
+          format: cyclonedx-json
+          output-file: dist/sbom.cdx.json
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: dist/sbom.cdx.json
+          retention-days: 30

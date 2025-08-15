@@ -1,0 +1,19 @@
+# .github/workflows/branch-guard.yml
+name: Branch Guard
+on:
+  pull_request:
+    branches: [ "main", "release/**" ]
+
+jobs:
+  enforce-release-branch-name:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check branch name for release pattern
+        shell: bash
+        run: |
+          name="${{ github.head_ref }}"
+          # allow anything except we enforce that any branch under release/ must be release/mark-vX-Y-Z
+          if [[ "$name" == release/* && ! "$name" =~ ^release/mark-v[0-9]+-[0-9]+-[0-9]+$ ]]; then
+            echo "::error ::Release branch must be named release/mark-v{Major}-{Minor}-{Bugfix} (e.g., release/mark-v1-2-3)"
+            exit 1
+          fi
