@@ -1,4 +1,4 @@
-# Telegen v3+ (parsers, CI, dashboards, Helm)
+# Telegen
 
 This drop adds:
 - **Parser skeletons:** Cassandra CQL, Postgres Simple Query, Kafka detector.
