@@ -1,12 +1,17 @@
-FROM golang:1.23 as build
-WORKDIR /src
-COPY . .
-RUN go mod tidy && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/telegen ./cmd/telegen
+# syntax=docker/dockerfile:1
 
-FROM gcr.io/distroless/base-debian12
-WORKDIR /
-COPY --from=build /out/telegen /telegen
-COPY api/config.example.yaml /etc/telegen/config.yaml
+ARG GO_VERSION=1.22
+ARG LDFLAGS=""
+
+FROM golang:${GO_VERSION} AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -trimpath -ldflags "-s -w ${LDFLAGS}" -o /out/telegen ./cmd/telegen
+
+FROM gcr.io/distroless/static-debian12
+COPY --from=build /out/telegen /usr/local/bin/telegen
 USER 65532:65532
-EXPOSE 19090
-ENTRYPOINT ["/telegen","--config","/etc/telegen/config.yaml"]
+ENTRYPOINT ["/usr/local/bin/telegen"]
