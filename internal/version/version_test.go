@@ -6,28 +6,40 @@ import (
 	"time"
 )
 
-func TestVersion_SemVerFormat(t *testing.T) {
-	// vMAJOR.MINOR.PATCH with optional -prerelease and +build
-	semver := regexp.MustCompile(`^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
+func TestVersion_SemVerOrUnknown(t *testing.T) {
 	v := Version()
+	if v == "unknown" {
+		// Local build without ldflags is allowed.
+		return
+	}
+	// Enforce SemVer when stamped: vMAJOR.MINOR.PATCH with optional -prerelease and +build
+	semver := regexp.MustCompile(`^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
 	if !semver.MatchString(v) {
 		t.Fatalf("Version() %q is not valid SemVer (expected vMAJOR.MINOR.PATCH with optional -prerelease/+build)", v)
 	}
 }
 
-func TestCommit_Format(t *testing.T) {
+func TestCommit_SHADevOrUnknown(t *testing.T) {
 	c := Commit()
+	if c == "unknown" {
+		// Local build without ldflags is allowed.
+		return
+	}
 	if c == "dev" {
 		return // allow dev builds
 	}
-	sha := regexp.MustCompile(`^[0-9a-f]{7,40}$`) // typical short or full SHA
+	sha := regexp.MustCompile(`^[0-9a-f]{7,40}$`) // typical short/full SHA
 	if !sha.MatchString(c) {
-		t.Fatalf("Commit() %q is not a valid git SHA (7–40 lowercase hex) or 'dev'", c)
+		t.Fatalf("Commit() %q is not a valid git SHA (7–40 lowercase hex), 'dev', or 'unknown'", c)
 	}
 }
 
-func TestBuildDate_RFC3339UTC(t *testing.T) {
+func TestBuildDate_RFC3339UTCOrUnknown(t *testing.T) {
 	bd := BuildDate()
+	if bd == "unknown" {
+		// Local build without ldflags is allowed.
+		return
+	}
 
 	// Must parse as RFC3339
 	tm, err := time.Parse(time.RFC3339, bd)
