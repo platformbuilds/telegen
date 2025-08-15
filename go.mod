@@ -9,7 +9,7 @@ require (
     github.com/prometheus/prometheus v0.51.2
     gopkg.in/yaml.v3 v3.0.1
     golang.org/x/sync v0.8.0
-    google.golang.org/grpc v1.64.0
+    google.golang.org/grpc v1.64.1
 
     go.opentelemetry.io/otel v1.29.0
     go.opentelemetry.io/otel/sdk v1.29.0
