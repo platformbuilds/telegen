@@ -1,168 +1,105 @@
+# .github/workflows/ci.yml
 name: CI
-
 on:
   push:
     branches: [ "**" ]
-    tags: [ "v*" ]
+    tags:     [ "mark-v*" ]
   pull_request:
 
 permissions:
-  contents: write   # needed for creating releases on tags
-  packages: write   # harmless here; useful if you later push artifacts to GHCR from this workflow
-  actions: read
+  contents: write
+  packages: write
 
 env:
   GO_VERSION: "1.22.x"
-  MODULE: "github.com/platformbuilds/telegen"
 
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Go fmt
+        with: { go-version: ${{ env.GO_VERSION }}, cache: true }
+      - name: gofmt
         run: |
-          fmt_out=$(gofmt -s -l .)
-          if [ -n "$fmt_out" ]; then
-            echo "$fmt_out"
-            echo "Run: gofmt -s -w ."
-            exit 1
-          fi
-
-      - name: Go vet
-        run: go vet ./...
+          out=$(gofmt -s -l .); if [[ -n "$out" ]]; then echo "$out"; exit 1; fi
+      - run: go vet ./...
 
   test:
     runs-on: ubuntu-latest
     needs: [lint]
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Unit tests (race + coverage)
-        run: |
+        with: { go-version: ${{ env.GO_VERSION }}, cache: true }
+      - run: |
           mkdir -p dist
           go test -race -covermode=atomic -coverprofile=dist/coverage.out ./...
-
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: dist/coverage.out
-          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with: { name: coverage, path: dist/coverage.out, retention-days: 14 }
 
   build-linux:
     runs-on: ubuntu-latest
     needs: [test]
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Compose ldflags
-        id: ld
-        shell: bash
-        run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == v* ]]; then
-            VERSION="${GITHUB_REF_NAME}"
-          else
-            VERSION="v0.0.0-dev"
-          fi
-          COMMIT="$(git rev-parse --short=12 HEAD)"
-          BUILDDATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-
-          echo "LDFLAGS=-X ${MODULE}/internal/version.version=${VERSION} -X ${MODULE}/internal/version.commit=${COMMIT} -X ${MODULE}/internal/version.buildDate=${BUILDDATE}" >> "$GITHUB_OUTPUT"
-          echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
-
+        with: { go-version: ${{ env.GO_VERSION }}, cache: true }
+      - name: Compute version
+        id: v
+        uses: ./.github/actions/compute-version
       - name: Build linux/amd64
         run: |
           mkdir -p dist
           GOOS=linux GOARCH=amd64 \
-            go build -trimpath -ldflags "-s -w ${{ steps.ld.outputs.LDFLAGS }}" \
+            go build -trimpath -ldflags "-s -w ${{ steps.v.outputs.LDFLAGS }}" \
             -o dist/telegen ./cmd/telegen
-
-      - name: Upload linux binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: telegen-linux-amd64
-          path: dist/telegen
-          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with: { name: telegen-linux-amd64, path: dist/telegen, retention-days: 14 }
 
   build-matrix:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/mark-v')
     runs-on: ubuntu-latest
     needs: [test]
     strategy:
       fail-fast: false
       matrix:
-        goos: [ linux, darwin, windows ]
+        goos:   [ linux, darwin, windows ]
         goarch: [ amd64, arm64 ]
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Compose ldflags
-        id: ld
-        shell: bash
-        run: |
-          VERSION="${GITHUB_REF_NAME}"   # tags-only job
-          COMMIT="$(git rev-parse --short=12 HEAD)"
-          BUILDDATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-
-          echo "LDFLAGS=-X ${MODULE}/internal/version.version=${VERSION} -X ${MODULE}/internal/version.commit=${COMMIT} -X ${MODULE}/internal/version.buildDate=${BUILDDATE}" >> "$GITHUB_OUTPUT"
-          echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
-
+        with: { go-version: ${{ env.GO_VERSION }}, cache: true }
+      - name: Compute version
+        id: v
+        uses: ./.github/actions/compute-version
       - name: Build (matrix)
         shell: bash
         run: |
           mkdir -p dist
-          OUT="telegen"
-          if [ "${{ matrix.goos }}" = "windows" ]; then OUT="telegen.exe"; fi
+          OUT="telegen"; [[ "${{ matrix.goos }}" == "windows" ]] && OUT="telegen.exe"
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
-            go build -trimpath -ldflags "-s -w ${{ steps.ld.outputs.LDFLAGS }}" \
+            go build -trimpath -ldflags "-s -w ${{ steps.v.outputs.LDFLAGS }}" \
             -o "dist/${OUT}-${{ matrix.goos }}-${{ matrix.goarch }}" ./cmd/telegen
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: telegen-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/telegen*-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*-${{ matrix.goos }}-${{ matrix.goarch }}
           retention-days: 30
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/mark-v')
     runs-on: ubuntu-latest
     needs: [build-matrix]
     steps:
       - uses: actions/download-artifact@v4
-        with:
-          path: dist   # downloads all artifacts from previous jobs
-
-      - name: Flatten artifacts
-        shell: bash
+        with: { path: dist }
+      - name: Flatten
         run: |
           mkdir -p upload
           find dist -type f -maxdepth 2 -mindepth 2 -exec cp {} upload/ \;
           ls -l upload
-
-      - name: Create GitHub Release
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           draft: false
