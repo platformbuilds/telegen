@@ -5,6 +5,14 @@ selfTelemetry:
   listen: ":19090"
   prometheus_namespace: "telegen"
 
+cloud:
+  aws:
+    enabled: true
+    timeout: "200ms"
+    refresh_interval: "15m"
+    collect_tags: false
+    tag_allowlist: []
+
 queues:
   traces:  { mem_limit: "256Mi", max_age: "6h" }
   logs:    { mem_limit: "256Mi", max_age: "24h" }
@@ -65,3 +73,12 @@ pipelines:
     filelog:
       include: ["/var/log/*.log", "/var/log/*/*.log"]
       position_file: "/var/lib/telegen/positions.json"
+  jfr:
+    enabled: false
+    input_dir: "/var/log/jfr"
+    output_dir: "/var/log/jfr-json"
+    poll_interval: "5s"
+    sample_interval_ms: 10
+    jfr_command: "jfr"
+    workers: 2
+    pretty_json: false

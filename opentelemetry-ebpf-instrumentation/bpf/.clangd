@@ -1,0 +1,9 @@
+CompileFlags:
+  Add:
+    - -std=gnu17
+    - --target=bpf
+    - -I.
+    - -D__TARGET_ARCH_x86
+Diagnostics:
+  ClangTidy:
+    FastCheckFilter: None

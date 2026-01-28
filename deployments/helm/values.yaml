@@ -14,6 +14,13 @@ config: |
   selfTelemetry:
     listen: ":19090"
     prometheus_namespace: "telegen"
+  cloud:
+    aws:
+      enabled: true
+      timeout: "200ms"
+      refresh_interval: "15m"
+      collect_tags: false
+      tag_allowlist: []
   exports:
     remoteWrite:
       mode: "active"
