@@ -1,0 +1,30 @@
+# Development version of the beyla Dockerfile that compiles for coverage
+# and allows retrieving coverage files.
+# The production-ready minimal image is in the project root's dockerfile.
+FROM golang:1.25.6@sha256:fc24d3881a021e7b968a4610fc024fba749f98fe5c07d4f28e6cfa14dc65a84c AS builder
+
+ARG TARGETARCH
+
+ENV GOARCH=$TARGETARCH
+
+WORKDIR /src
+
+# Copy the go manifests and source
+COPY .git/ .git/
+COPY bpf/ bpf/
+COPY cmd/ cmd/
+COPY pkg/ pkg/
+COPY go.mod go.mod
+COPY go.sum go.sum
+COPY Makefile Makefile
+
+# Build
+RUN make compile-cache-for-coverage
+
+# Create final image from minimal + built binary
+FROM scratch
+
+WORKDIR /
+COPY --from=builder /src/bin/k8s-cache .
+
+ENTRYPOINT [ "/k8s-cache" ]
