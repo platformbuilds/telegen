@@ -1,0 +1,148 @@
+# Telegen SNMP Receiver Configuration
+# Copy to configs/snmp_receiver.yaml and customize for your environment
+
+snmp_receiver:
+  enabled: true
+  
+  # Trap/Inform receiver configuration
+  trap_receiver:
+    enabled: true
+    listen_address: "0.0.0.0:162"
+    community_strings:
+      - "public"
+      - "private"
+    v3_users:
+      - username: "trapuser"
+        auth_protocol: "SHA256"
+        auth_password: "${SNMP_AUTH_PASSWORD}"
+        priv_protocol: "AES256"
+        priv_password: "${SNMP_PRIV_PASSWORD}"
+  
+  # Polling configuration
+  polling:
+    enabled: true
+    default_interval: 60s
+    timeout: 10s
+    retries: 3
+    max_concurrent: 100
+    
+  # Device targets for polling
+  targets:
+    # Example: Core switch with SNMPv2c
+    - name: "core-switch-01"
+      address: "10.0.1.1:161"
+      version: "v2c"
+      community: "public"
+      interval: 30s
+      modules:
+        - "if_mib"
+        - "system"
+      labels:
+        location: "dc-east-1"
+        role: "core"
+        vendor: "cisco"
+        
+    # Example: Distribution switch
+    - name: "dist-switch-01"
+      address: "10.0.1.10:161"
+      version: "v2c"
+      community: "public"
+      interval: 60s
+      modules:
+        - "if_mib"
+      labels:
+        location: "dc-east-1"
+        role: "distribution"
+        
+    # Example: UPS with SNMPv3
+    - name: "ups-01"
+      address: "10.0.2.100:161"
+      version: "v3"
+      security_level: "authPriv"
+      username: "monitor"
+      auth_protocol: "SHA256"
+      auth_password: "${SNMP_AUTH_PASSWORD}"
+      priv_protocol: "AES256"
+      priv_password: "${SNMP_PRIV_PASSWORD}"
+      interval: 120s
+      modules:
+        - "ups_mib"
+      labels:
+        device_type: "ups"
+        vendor: "apc"
+        location: "dc-east-1"
+        
+    # Example: Environmental sensors
+    - name: "env-sensor-01"
+      address: "10.0.3.50:161"
+      version: "v2c"
+      community: "public"
+      interval: 60s
+      modules:
+        - "entity_sensor_mib"
+      labels:
+        device_type: "sensor"
+        location: "server-room-1"
+        
+  # Auto-discovery configuration
+  discovery:
+    enabled: false
+    networks:
+      - "10.0.0.0/16"
+    interval: 1h
+    community_strings:
+      - "public"
+      
+  # MIB configuration
+  mibs:
+    search_paths:
+      - "/usr/share/snmp/mibs"
+      - "/opt/telegen/mibs"
+      - "./configs/mibs"
+    load_standard: true
+    custom_mibs:
+      - "CISCO-PROCESS-MIB"
+      - "UPS-MIB"
+      - "ENTITY-SENSOR-MIB"
+      
+  # Output configuration
+  output:
+    # Prometheus /metrics endpoint
+    prometheus:
+      enabled: true
+      listen_address: ":9116"
+      path: "/metrics"
+      
+    # Prometheus Remote Write
+    remote_write:
+      enabled: false
+      endpoints:
+        - url: "http://prometheus:9090/api/v1/write"
+          timeout: 30s
+          batch_size: 1000
+          # Optional: basic auth
+          # basic_auth:
+          #   username: "admin"
+          #   password: "${PROMETHEUS_PASSWORD}"
+          # Optional: custom headers
+          # headers:
+          #   X-Scope-OrgID: "tenant-1"
+          
+        # Example: VictoriaMetrics
+        # - url: "http://victoria-metrics:8428/api/v1/write"
+        #   timeout: 30s
+        #   batch_size: 1000
+          
+        # Example: Grafana Mimir
+        # - url: "http://mimir:9009/api/v1/push"
+        #   timeout: 30s
+        #   batch_size: 1000
+        #   headers:
+        #     X-Scope-OrgID: "anonymous"
+          
+    # OTLP export
+    otlp:
+      enabled: false
+      endpoint: "otel-collector:4317"
+      protocol: "grpc"  # grpc or http
+      insecure: true

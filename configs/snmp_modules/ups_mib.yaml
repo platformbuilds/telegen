@@ -1,0 +1,326 @@
+# UPS-MIB Module - RFC 1628
+# Uninterruptible Power Supply metrics
+
+module: ups_mib
+description: "RFC 1628 - UPS MIB"
+
+walk:
+  - "1.3.6.1.2.1.33.1"     # upsObjects
+
+metrics:
+  # UPS Identity
+  - name: ups_ident_manufacturer
+    oid: "1.3.6.1.2.1.33.1.1.1.0"
+    type: info
+    help: "The name of the UPS manufacturer"
+
+  - name: ups_ident_model
+    oid: "1.3.6.1.2.1.33.1.1.2.0"
+    type: info
+    help: "The UPS model designation"
+
+  - name: ups_ident_ups_software_version
+    oid: "1.3.6.1.2.1.33.1.1.3.0"
+    type: info
+    help: "The UPS firmware version"
+
+  - name: ups_ident_agent_software_version
+    oid: "1.3.6.1.2.1.33.1.1.4.0"
+    type: info
+    help: "The agent software version"
+
+  # Battery Status
+  - name: ups_battery_status
+    oid: "1.3.6.1.2.1.33.1.2.1.0"
+    type: gauge
+    help: "The current battery status"
+    enum_values:
+      1: unknown
+      2: batteryNormal
+      3: batteryLow
+      4: batteryDepleted
+
+  - name: ups_seconds_on_battery
+    oid: "1.3.6.1.2.1.33.1.2.2.0"
+    type: gauge
+    help: "Time in seconds since the UPS has been on battery power"
+
+  - name: ups_estimated_minutes_remaining
+    oid: "1.3.6.1.2.1.33.1.2.3.0"
+    type: gauge
+    help: "Estimated time to battery exhaustion in minutes"
+
+  - name: ups_estimated_charge_remaining
+    oid: "1.3.6.1.2.1.33.1.2.4.0"
+    type: gauge
+    help: "Estimated remaining battery charge in percent"
+
+  - name: ups_battery_voltage
+    oid: "1.3.6.1.2.1.33.1.2.5.0"
+    type: gauge
+    help: "The current battery voltage in 0.1V DC"
+
+  - name: ups_battery_current
+    oid: "1.3.6.1.2.1.33.1.2.6.0"
+    type: gauge
+    help: "The current battery current in 0.1A DC"
+
+  - name: ups_battery_temperature
+    oid: "1.3.6.1.2.1.33.1.2.7.0"
+    type: gauge
+    help: "The current battery temperature in degrees C"
+
+  # Input
+  - name: ups_input_line_bads
+    oid: "1.3.6.1.2.1.33.1.3.1.0"
+    type: counter
+    help: "The number of times the input has been out of tolerance"
+
+  - name: ups_input_num_lines
+    oid: "1.3.6.1.2.1.33.1.3.2.0"
+    type: gauge
+    help: "The number of input lines utilized in this device"
+
+  - name: ups_input_frequency
+    oid: "1.3.6.1.2.1.33.1.3.3.1.2"
+    type: gauge
+    help: "The input frequency in 0.1Hz"
+    indexes:
+      - labelname: upsInputLineIndex
+        type: Integer
+
+  - name: ups_input_voltage
+    oid: "1.3.6.1.2.1.33.1.3.3.1.3"
+    type: gauge
+    help: "The input voltage in RMS Volts"
+    indexes:
+      - labelname: upsInputLineIndex
+        type: Integer
+
+  - name: ups_input_current
+    oid: "1.3.6.1.2.1.33.1.3.3.1.4"
+    type: gauge
+    help: "The input current in 0.1 RMS Amps"
+    indexes:
+      - labelname: upsInputLineIndex
+        type: Integer
+
+  - name: ups_input_true_power
+    oid: "1.3.6.1.2.1.33.1.3.3.1.5"
+    type: gauge
+    help: "The input true power in Watts"
+    indexes:
+      - labelname: upsInputLineIndex
+        type: Integer
+
+  # Output
+  - name: ups_output_source
+    oid: "1.3.6.1.2.1.33.1.4.1.0"
+    type: gauge
+    help: "The current source of output power"
+    enum_values:
+      1: other
+      2: none
+      3: normal
+      4: bypass
+      5: battery
+      6: booster
+      7: reducer
+
+  - name: ups_output_frequency
+    oid: "1.3.6.1.2.1.33.1.4.2.0"
+    type: gauge
+    help: "The output frequency in 0.1Hz"
+
+  - name: ups_output_num_lines
+    oid: "1.3.6.1.2.1.33.1.4.3.0"
+    type: gauge
+    help: "The number of output lines utilized in this device"
+
+  - name: ups_output_voltage
+    oid: "1.3.6.1.2.1.33.1.4.4.1.2"
+    type: gauge
+    help: "The output voltage in RMS Volts"
+    indexes:
+      - labelname: upsOutputLineIndex
+        type: Integer
+
+  - name: ups_output_current
+    oid: "1.3.6.1.2.1.33.1.4.4.1.3"
+    type: gauge
+    help: "The output current in 0.1 RMS Amps"
+    indexes:
+      - labelname: upsOutputLineIndex
+        type: Integer
+
+  - name: ups_output_power
+    oid: "1.3.6.1.2.1.33.1.4.4.1.4"
+    type: gauge
+    help: "The output true power in Watts"
+    indexes:
+      - labelname: upsOutputLineIndex
+        type: Integer
+
+  - name: ups_output_percent_load
+    oid: "1.3.6.1.2.1.33.1.4.4.1.5"
+    type: gauge
+    help: "The percentage of UPS power capacity used"
+    indexes:
+      - labelname: upsOutputLineIndex
+        type: Integer
+
+  # Bypass
+  - name: ups_bypass_frequency
+    oid: "1.3.6.1.2.1.33.1.5.1.0"
+    type: gauge
+    help: "The bypass frequency in 0.1Hz"
+
+  - name: ups_bypass_num_lines
+    oid: "1.3.6.1.2.1.33.1.5.2.0"
+    type: gauge
+    help: "The number of bypass lines utilized"
+
+  - name: ups_bypass_voltage
+    oid: "1.3.6.1.2.1.33.1.5.3.1.2"
+    type: gauge
+    help: "The bypass voltage in RMS Volts"
+    indexes:
+      - labelname: upsBypassLineIndex
+        type: Integer
+
+  - name: ups_bypass_current
+    oid: "1.3.6.1.2.1.33.1.5.3.1.3"
+    type: gauge
+    help: "The bypass current in 0.1 RMS Amps"
+    indexes:
+      - labelname: upsBypassLineIndex
+        type: Integer
+
+  - name: ups_bypass_power
+    oid: "1.3.6.1.2.1.33.1.5.3.1.4"
+    type: gauge
+    help: "The bypass true power in Watts"
+    indexes:
+      - labelname: upsBypassLineIndex
+        type: Integer
+
+  # Alarms
+  - name: ups_alarms_present
+    oid: "1.3.6.1.2.1.33.1.6.1.0"
+    type: gauge
+    help: "The number of active alarms"
+
+  # Test
+  - name: ups_test_results_summary
+    oid: "1.3.6.1.2.1.33.1.7.3.0"
+    type: gauge
+    help: "The result of the last UPS diagnostic test"
+    enum_values:
+      1: donePass
+      2: doneWarning
+      3: doneError
+      4: aborted
+      5: inProgress
+      6: noTestsInitiated
+
+  - name: ups_test_results_detail
+    oid: "1.3.6.1.2.1.33.1.7.4.0"
+    type: info
+    help: "Additional information about test results"
+
+  - name: ups_test_start_time
+    oid: "1.3.6.1.2.1.33.1.7.5.0"
+    type: gauge
+    help: "The time since the last test started"
+
+  - name: ups_test_elapsed_time
+    oid: "1.3.6.1.2.1.33.1.7.6.0"
+    type: gauge
+    help: "The elapsed time since the test started"
+
+  # Control
+  - name: ups_shutdown_type
+    oid: "1.3.6.1.2.1.33.1.8.1.0"
+    type: gauge
+    help: "The type of shutdown to perform"
+    enum_values:
+      1: output
+      2: system
+
+  - name: ups_shutdown_after_delay
+    oid: "1.3.6.1.2.1.33.1.8.2.0"
+    type: gauge
+    help: "The delay in seconds before shutdown"
+
+  - name: ups_startup_after_delay
+    oid: "1.3.6.1.2.1.33.1.8.3.0"
+    type: gauge
+    help: "The delay in seconds before startup"
+
+  - name: ups_reboot_with_duration
+    oid: "1.3.6.1.2.1.33.1.8.4.0"
+    type: gauge
+    help: "The duration of the reboot in seconds"
+
+  - name: ups_auto_restart
+    oid: "1.3.6.1.2.1.33.1.8.5.0"
+    type: gauge
+    help: "Auto restart enabled"
+    enum_values:
+      1: "on"
+      2: "off"
+
+  # Config
+  - name: ups_config_input_voltage
+    oid: "1.3.6.1.2.1.33.1.9.1.0"
+    type: gauge
+    help: "The nominal input voltage in RMS Volts"
+
+  - name: ups_config_input_freq
+    oid: "1.3.6.1.2.1.33.1.9.2.0"
+    type: gauge
+    help: "The nominal input frequency in Hz"
+
+  - name: ups_config_output_voltage
+    oid: "1.3.6.1.2.1.33.1.9.3.0"
+    type: gauge
+    help: "The nominal output voltage in RMS Volts"
+
+  - name: ups_config_output_freq
+    oid: "1.3.6.1.2.1.33.1.9.4.0"
+    type: gauge
+    help: "The nominal output frequency in Hz"
+
+  - name: ups_config_output_va
+    oid: "1.3.6.1.2.1.33.1.9.5.0"
+    type: gauge
+    help: "The nominal output VA rating"
+
+  - name: ups_config_output_power
+    oid: "1.3.6.1.2.1.33.1.9.6.0"
+    type: gauge
+    help: "The nominal output power in Watts"
+
+  - name: ups_config_low_batt_time
+    oid: "1.3.6.1.2.1.33.1.9.7.0"
+    type: gauge
+    help: "Low battery warning time in minutes"
+
+  - name: ups_config_audible_status
+    oid: "1.3.6.1.2.1.33.1.9.8.0"
+    type: gauge
+    help: "Audible alarm status"
+    enum_values:
+      1: disabled
+      2: enabled
+      3: muted
+
+  - name: ups_config_low_voltage_transfer_point
+    oid: "1.3.6.1.2.1.33.1.9.9.0"
+    type: gauge
+    help: "Low voltage transfer point in RMS Volts"
+
+  - name: ups_config_high_voltage_transfer_point
+    oid: "1.3.6.1.2.1.33.1.9.10.0"
+    type: gauge
+    help: "High voltage transfer point in RMS Volts"
