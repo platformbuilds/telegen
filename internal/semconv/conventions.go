@@ -1,4 +1,6 @@
-package semconv
+// Copyright The Telegen Authors
+// SPDX-License-Identifier: Apache-2.0
+
 // Package semconv provides OpenTelemetry semantic convention helpers for Telegen.
 package semconv
 
@@ -7,447 +9,335 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 )
 
-// Cloud provider constants matching OTel semantic conventions.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-}	return pa.attrsfunc (pa *ProcessAttributes) Build() []attribute.KeyValue {// Build returns the accumulated attributes.}	return pa	}		pa.attrs = append(pa.attrs, semconv.ProcessRuntimeVersionKey.String(version))	if version != "" {func (pa *ProcessAttributes) RuntimeVersion(version string) *ProcessAttributes {// RuntimeVersion sets the runtime version.}	return pa	}		pa.attrs = append(pa.attrs, semconv.ProcessRuntimeNameKey.String(name))	if name != "" {func (pa *ProcessAttributes) RuntimeName(name string) *ProcessAttributes {// RuntimeName sets the runtime name (go, java, python, etc.).}	return pa	}		pa.attrs = append(pa.attrs, semconv.ProcessCommandLineKey.String(cmdline))	if cmdline != "" {func (pa *ProcessAttributes) CommandLine(cmdline string) *ProcessAttributes {// CommandLine sets the command line.}	return pa	}		pa.attrs = append(pa.attrs, semconv.ProcessExecutablePathKey.String(path))	if path != "" {func (pa *ProcessAttributes) ExecutablePath(path string) *ProcessAttributes {// ExecutablePath sets the executable path.}	return pa	}		pa.attrs = append(pa.attrs, semconv.ProcessExecutableNameKey.String(name))	if name != "" {func (pa *ProcessAttributes) ExecutableName(name string) *ProcessAttributes {// ExecutableName sets the executable name.}	return pa	pa.attrs = append(pa.attrs, semconv.ProcessPIDKey.Int(pid))func (pa *ProcessAttributes) PID(pid int) *ProcessAttributes {// PID sets the process ID.}	}		attrs: make([]attribute.KeyValue, 0, 8),	return &ProcessAttributes{func NewProcessAttributes() *ProcessAttributes {// NewProcessAttributes creates a new ProcessAttributes builder.}	attrs []attribute.KeyValuetype ProcessAttributes struct {// ProcessAttributes creates OTel resource attributes for a process.}	return ka.attrsfunc (ka *K8sAttributes) Build() []attribute.KeyValue {// Build returns the accumulated attributes.}	return ka	}		ka.attrs = append(ka.attrs, semconv.K8SNodeNameKey.String(name))	if name != "" {func (ka *K8sAttributes) NodeName(name string) *K8sAttributes {// NodeName sets the node name.}	return ka	}		ka.attrs = append(ka.attrs, semconv.K8SDaemonSetNameKey.String(name))	if name != "" {func (ka *K8sAttributes) DaemonSetName(name string) *K8sAttributes {// DaemonSetName sets the daemon set name.}	return ka	}		ka.attrs = append(ka.attrs, semconv.K8SStatefulSetNameKey.String(name))	if name != "" {func (ka *K8sAttributes) StatefulSetName(name string) *K8sAttributes {// StatefulSetName sets the stateful set name.}	return ka	}		ka.attrs = append(ka.attrs, semconv.K8SReplicaSetNameKey.String(name))	if name != "" {func (ka *K8sAttributes) ReplicaSetName(name string) *K8sAttributes {// ReplicaSetName sets the replica set name.}	return ka	}		ka.attrs = append(ka.attrs, semconv.K8SDeploymentNameKey.String(name))	if name != "" {func (ka *K8sAttributes) DeploymentName(name string) *K8sAttributes {// DeploymentName sets the deployment name.}	return ka	}		ka.attrs = append(ka.attrs, semconv.K8SContainerNameKey.String(name))	if name != "" {func (ka *K8sAttributes) ContainerName(name string) *K8sAttributes {// ContainerName sets the container name.}	return ka	}		ka.attrs = append(ka.attrs, semconv.K8SPodUIDKey.String(uid))	if uid != "" {func (ka *K8sAttributes) PodUID(uid string) *K8sAttributes {// PodUID sets the pod UID.}	return ka	}		ka.attrs = append(ka.attrs, semconv.K8SPodNameKey.String(name))	if name != "" {func (ka *K8sAttributes) PodName(name string) *K8sAttributes {// PodName sets the pod name.}	return ka	}		ka.attrs = append(ka.attrs, semconv.K8SNamespaceNameKey.String(ns))	if ns != "" {func (ka *K8sAttributes) Namespace(ns string) *K8sAttributes {// Namespace sets the Kubernetes namespace.}	return ka	}		ka.attrs = append(ka.attrs, semconv.K8SClusterNameKey.String(name))	if name != "" {func (ka *K8sAttributes) ClusterName(name string) *K8sAttributes {// ClusterName sets the Kubernetes cluster name.}	}		attrs: make([]attribute.KeyValue, 0, 12),	return &K8sAttributes{func NewK8sAttributes() *K8sAttributes {// NewK8sAttributes creates a new K8sAttributes builder.}	attrs []attribute.KeyValuetype K8sAttributes struct {// K8sAttributes creates OTel resource attributes for Kubernetes.}	return sa.attrsfunc (sa *ServiceAttributes) Build() []attribute.KeyValue {// Build returns the accumulated attributes.}	return sa	}		sa.attrs = append(sa.attrs, semconv.ServiceInstanceIDKey.String(id))	if id != "" {func (sa *ServiceAttributes) InstanceID(id string) *ServiceAttributes {// InstanceID sets the service instance ID.}	return sa	}		sa.attrs = append(sa.attrs, semconv.ServiceVersionKey.String(version))	if version != "" {func (sa *ServiceAttributes) Version(version string) *ServiceAttributes {// Version sets the service version.}	return sa	}		sa.attrs = append(sa.attrs, semconv.ServiceNamespaceKey.String(ns))	if ns != "" {func (sa *ServiceAttributes) Namespace(ns string) *ServiceAttributes {// Namespace sets the service namespace.}	return sa	}		sa.attrs = append(sa.attrs, semconv.ServiceNameKey.String(name))	if name != "" {func (sa *ServiceAttributes) Name(name string) *ServiceAttributes {// Name sets the service name.}	}		attrs: make([]attribute.KeyValue, 0, 8),	return &ServiceAttributes{func NewServiceAttributes() *ServiceAttributes {// NewServiceAttributes creates a new ServiceAttributes builder.}	attrs []attribute.KeyValuetype ServiceAttributes struct {// ServiceAttributes creates OTel resource attributes for a discovered service.}	return ca.attrsfunc (ca *CloudAttributes) Build() []attribute.KeyValue {// Build returns the accumulated attributes.}	return ca	}		ca.attrs = append(ca.attrs, AttrCloudHypervisor.String(hypervisor))	if hypervisor != "" {func (ca *CloudAttributes) Hypervisor(hypervisor string) *CloudAttributes {// Hypervisor sets the hypervisor type.}	return ca	}		ca.attrs = append(ca.attrs, AttrCloudClusterName.String(name))	if name != "" {func (ca *CloudAttributes) ClusterName(name string) *CloudAttributes {// ClusterName sets the cluster name.}	return ca	}		ca.attrs = append(ca.attrs, AttrCloudClusterID.String(id))	if id != "" {func (ca *CloudAttributes) ClusterID(id string) *CloudAttributes {// ClusterID sets the cluster ID.}	return ca	}		ca.attrs = append(ca.attrs, AttrCloudDatacenter.String(dc))	if dc != "" {func (ca *CloudAttributes) Datacenter(dc string) *CloudAttributes {// Datacenter sets the datacenter (private cloud).}	return ca	}		ca.attrs = append(ca.attrs, semconv.OSVersionKey.String(version))	if version != "" {func (ca *CloudAttributes) OSVersion(version string) *CloudAttributes {// OSVersion sets the operating system version.}	return ca	}		ca.attrs = append(ca.attrs, semconv.OSNameKey.String(name))	if name != "" {func (ca *CloudAttributes) OSName(name string) *CloudAttributes {// OSName sets the operating system name.}	return ca	}		ca.attrs = append(ca.attrs, semconv.OSTypeKey.String(osType))	if osType != "" {func (ca *CloudAttributes) OSType(osType string) *CloudAttributes {// OSType sets the operating system type.}	return ca	}		ca.attrs = append(ca.attrs, semconv.HostImageNameKey.String(name))	if name != "" {func (ca *CloudAttributes) HostImageName(name string) *CloudAttributes {// HostImageName sets the image name.}	return ca	}		ca.attrs = append(ca.attrs, semconv.HostImageIDKey.String(id))	if id != "" {func (ca *CloudAttributes) HostImageID(id string) *CloudAttributes {// HostImageID sets the image ID.}	return ca	}		ca.attrs = append(ca.attrs, semconv.HostArchKey.String(arch))	if arch != "" {func (ca *CloudAttributes) HostArch(arch string) *CloudAttributes {// HostArch sets the host architecture.}	return ca	}		ca.attrs = append(ca.attrs, semconv.HostTypeKey.String(hostType))	if hostType != "" {func (ca *CloudAttributes) HostType(hostType string) *CloudAttributes {// HostType sets the instance type.}	return ca	}		ca.attrs = append(ca.attrs, semconv.HostNameKey.String(name))	if name != "" {func (ca *CloudAttributes) HostName(name string) *CloudAttributes {// HostName sets the hostname.}	return ca	}		ca.attrs = append(ca.attrs, semconv.HostIDKey.String(id))	if id != "" {func (ca *CloudAttributes) HostID(id string) *CloudAttributes {// HostID sets the host/instance ID.}	return ca	}		ca.attrs = append(ca.attrs, semconv.CloudAccountIDKey.String(id))	if id != "" {func (ca *CloudAttributes) AccountID(id string) *CloudAttributes {// AccountID sets the cloud account/project ID.}	return ca	}		ca.attrs = append(ca.attrs, semconv.CloudAvailabilityZoneKey.String(zone))	if zone != "" {func (ca *CloudAttributes) AvailabilityZone(zone string) *CloudAttributes {// AvailabilityZone sets the availability zone.}	return ca	}		ca.attrs = append(ca.attrs, semconv.CloudRegionKey.String(region))	if region != "" {func (ca *CloudAttributes) Region(region string) *CloudAttributes {// Region sets the cloud region.}	return ca	ca.attrs = append(ca.attrs, semconv.CloudPlatformKey.String(platform))func (ca *CloudAttributes) Platform(platform string) *CloudAttributes {// Platform sets the cloud platform.}	return ca	ca.attrs = append(ca.attrs, semconv.CloudProviderKey.String(provider))func (ca *CloudAttributes) Provider(provider string) *CloudAttributes {// Provider sets the cloud provider.}	}		attrs: make([]attribute.KeyValue, 0, 16),	return &CloudAttributes{func NewCloudAttributes() *CloudAttributes {// NewCloudAttributes creates a new CloudAttributes builder.}	attrs []attribute.KeyValuetype CloudAttributes struct {// CloudAttributes creates OTel resource attributes for a cloud environment.)	AttrNetworkDNSServers    = attribute.Key("network.dns.servers")	AttrNetworkGateway       = attribute.Key("network.gateway")	AttrNetworkInterfaceType = attribute.Key("network.interface.type")	AttrNetworkInterfaceName = attribute.Key("network.interface.name")	// Network discovery attributes	AttrMQPort    = attribute.Key("messaging.port")	AttrMQVersion = attribute.Key("messaging.version")	AttrMQType    = attribute.Key("messaging.type")	// Message queue discovery attributes	AttrDatabasePort    = attribute.Key("db.port")	AttrDatabaseVersion = attribute.Key("db.version")	AttrDatabaseType    = attribute.Key("db.type")	// Database discovery attributes	AttrProcessType         = attribute.Key("process.type")	AttrProcessFrameworkVer = attribute.Key("process.framework.version")	AttrProcessFramework    = attribute.Key("process.framework")	AttrProcessLanguage     = attribute.Key("process.language")	// Process discovery attributes	AttrContainerRuntimeVersion = attribute.Key("container.runtime.version")	AttrContainerRuntimeName    = attribute.Key("container.runtime.name")	// Container runtime attributes	AttrVirtualizationIsVM = attribute.Key("virtualization.is_vm")	AttrVirtualizationType = attribute.Key("virtualization.type")	// Virtualization attributes	AttrCloudHostName         = attribute.Key("cloud.host.name")	AttrCloudHostID           = attribute.Key("cloud.host.id")	AttrCloudHypervisor       = attribute.Key("cloud.hypervisor")	AttrCloudResourcePoolName = attribute.Key("cloud.resource_pool.name")	AttrCloudResourcePoolID   = attribute.Key("cloud.resource_pool.id")	AttrCloudClusterName      = attribute.Key("cloud.cluster.name")	AttrCloudClusterID        = attribute.Key("cloud.cluster.id")	AttrCloudDatacenter       = attribute.Key("cloud.datacenter")	// Cloud attributes beyond standard semconvvar (// Custom attribute keys for Telegen.const TelegenNamespace = "telegen"// Service namespace for Telegen-specific attributes.)	CloudPlatformOnPrem           = "on_premises"	CloudPlatformNutanixAHV       = "nutanix_ahv"	CloudPlatformVMwarevSphere    = "vmware_vsphere"	CloudPlatformOpenStackNova    = "openstack_nova"	CloudPlatformAzureFunctions   = "azure_functions"	CloudPlatformAzureAKS         = "azure_aks"	CloudPlatformAzureVM          = "azure_vm"	CloudPlatformGCPCloudRun      = "gcp_cloud_run"	CloudPlatformGCPGKE           = "gcp_kubernetes_engine"	CloudPlatformGCPComputeEngine = "gcp_compute_engine"	CloudPlatformAWSECS           = "aws_ecs"	CloudPlatformAWSLambda        = "aws_lambda"	CloudPlatformAWSEKS           = "aws_eks"	CloudPlatformAWSEC2           = "aws_ec2"const (// Cloud platform constants.)	CloudProviderOnPrem       = "on_premises"	CloudProviderNutanix      = "nutanix"	CloudProviderVMware       = "vmware"	CloudProviderOpenStack    = "openstack"	CloudProviderDigitalOcean = "digitalocean"	CloudProviderOracleCloud  = "oracle_cloud"	CloudProviderAlibabaCloud = "alibaba_cloud"	CloudProviderAzure        = "azure"	CloudProviderGCP          = "gcp"	CloudProviderAWS          = "aws"const (
+// Cloud provider constants
+const (
+	CloudProviderAWS          = "aws"
+	CloudProviderGCP          = "gcp"
+	CloudProviderAzure        = "azure"
+	CloudProviderAlibabaCloud = "alibaba_cloud"
+	CloudProviderOracleCloud  = "oracle_cloud"
+	CloudProviderDigitalOcean = "digitalocean"
+	CloudProviderOpenStack    = "openstack"
+	CloudProviderVMware       = "vmware"
+	CloudProviderNutanix      = "nutanix"
+	CloudProviderOnPrem       = "on_premises"
+)
+
+// Cloud platform constants
+const (
+	CloudPlatformAWSEC2           = "aws_ec2"
+	CloudPlatformAWSEKS           = "aws_eks"
+	CloudPlatformAWSLambda        = "aws_lambda"
+	CloudPlatformAWSECS           = "aws_ecs"
+	CloudPlatformGCPComputeEngine = "gcp_compute_engine"
+	CloudPlatformGCPGKE           = "gcp_kubernetes_engine"
+	CloudPlatformGCPCloudRun      = "gcp_cloud_run"
+	CloudPlatformAzureVM          = "azure_vm"
+	CloudPlatformAzureAKS         = "azure_aks"
+	CloudPlatformAzureFunctions   = "azure_functions"
+	CloudPlatformOpenStackNova    = "openstack_nova"
+	CloudPlatformVMwarevSphere    = "vmware_vsphere"
+	CloudPlatformNutanixAHV       = "nutanix_ahv"
+	CloudPlatformOnPrem           = "on_premises"
+)
+
+// TelegenNamespace is the service namespace for Telegen-specific attributes
+const TelegenNamespace = "telegen"
+
+// Custom attribute keys for Telegen
+var (
+	AttrCloudDatacenter       = attribute.Key("cloud.datacenter")
+	AttrCloudClusterID        = attribute.Key("cloud.cluster.id")
+	AttrCloudClusterName      = attribute.Key("cloud.cluster.name")
+	AttrCloudResourcePoolID   = attribute.Key("cloud.resource_pool.id")
+	AttrCloudResourcePoolName = attribute.Key("cloud.resource_pool.name")
+	AttrCloudHypervisor       = attribute.Key("cloud.hypervisor")
+	AttrCloudHostID           = attribute.Key("cloud.host.id")
+	AttrCloudHostName         = attribute.Key("cloud.host.name")
+
+	AttrVirtualizationType = attribute.Key("virtualization.type")
+	AttrVirtualizationIsVM = attribute.Key("virtualization.is_vm")
+
+	AttrContainerRuntimeName    = attribute.Key("container.runtime.name")
+	AttrContainerRuntimeVersion = attribute.Key("container.runtime.version")
+
+	AttrProcessLanguage     = attribute.Key("process.language")
+	AttrProcessFramework    = attribute.Key("process.framework")
+	AttrProcessFrameworkVer = attribute.Key("process.framework.version")
+	AttrProcessType         = attribute.Key("process.type")
+
+	AttrDatabaseType    = attribute.Key("db.type")
+	AttrDatabaseVersion = attribute.Key("db.version")
+	AttrDatabasePort    = attribute.Key("db.port")
+
+	AttrMQType    = attribute.Key("messaging.type")
+	AttrMQVersion = attribute.Key("messaging.version")
+	AttrMQPort    = attribute.Key("messaging.port")
+
+	AttrNetworkInterfaceName = attribute.Key("network.interface.name")
+	AttrNetworkInterfaceType = attribute.Key("network.interface.type")
+	AttrNetworkGateway       = attribute.Key("network.gateway")
+	AttrNetworkDNSServers    = attribute.Key("network.dns.servers")
+)
+
+// CloudAttributes creates OTel resource attributes for a cloud environment
+type CloudAttributes struct {
+	attrs []attribute.KeyValue
+}
+
+// NewCloudAttributes creates a new CloudAttributes builder
+func NewCloudAttributes() *CloudAttributes {
+	return &CloudAttributes{attrs: make([]attribute.KeyValue, 0, 16)}
+}
+
+// Provider sets the cloud provider
+func (ca *CloudAttributes) Provider(provider string) *CloudAttributes {
+	ca.attrs = append(ca.attrs, semconv.CloudProviderKey.String(provider))
+	return ca
+}
+
+// Platform sets the cloud platform
+func (ca *CloudAttributes) Platform(platform string) *CloudAttributes {
+	ca.attrs = append(ca.attrs, semconv.CloudPlatformKey.String(platform))
+	return ca
+}
+
+// Region sets the cloud region
+func (ca *CloudAttributes) Region(region string) *CloudAttributes {
+	if region != "" {
+		ca.attrs = append(ca.attrs, semconv.CloudRegionKey.String(region))
+	}
+	return ca
+}
+
+// AvailabilityZone sets the availability zone
+func (ca *CloudAttributes) AvailabilityZone(zone string) *CloudAttributes {
+	if zone != "" {
+		ca.attrs = append(ca.attrs, semconv.CloudAvailabilityZoneKey.String(zone))
+	}
+	return ca
+}
+
+// AccountID sets the cloud account/project ID
+func (ca *CloudAttributes) AccountID(id string) *CloudAttributes {
+	if id != "" {
+		ca.attrs = append(ca.attrs, semconv.CloudAccountIDKey.String(id))
+	}
+	return ca
+}
+
+// HostID sets the host/instance ID
+func (ca *CloudAttributes) HostID(id string) *CloudAttributes {
+	if id != "" {
+		ca.attrs = append(ca.attrs, semconv.HostIDKey.String(id))
+	}
+	return ca
+}
+
+// HostName sets the hostname
+func (ca *CloudAttributes) HostName(name string) *CloudAttributes {
+	if name != "" {
+		ca.attrs = append(ca.attrs, semconv.HostNameKey.String(name))
+	}
+	return ca
+}
+
+// HostType sets the instance type
+func (ca *CloudAttributes) HostType(hostType string) *CloudAttributes {
+	if hostType != "" {
+		ca.attrs = append(ca.attrs, semconv.HostTypeKey.String(hostType))
+	}
+	return ca
+}
+
+// HostArch sets the host architecture
+func (ca *CloudAttributes) HostArch(arch string) *CloudAttributes {
+	if arch != "" {
+		ca.attrs = append(ca.attrs, semconv.HostArchKey.String(arch))
+	}
+	return ca
+}
+
+// Build returns the accumulated attributes
+func (ca *CloudAttributes) Build() []attribute.KeyValue {
+	return ca.attrs
+}
+
+// ServiceAttributes creates OTel resource attributes for a discovered service
+type ServiceAttributes struct {
+	attrs []attribute.KeyValue
+}
+
+// NewServiceAttributes creates a new ServiceAttributes builder
+func NewServiceAttributes() *ServiceAttributes {
+	return &ServiceAttributes{attrs: make([]attribute.KeyValue, 0, 8)}
+}
+
+// Name sets the service name
+func (sa *ServiceAttributes) Name(name string) *ServiceAttributes {
+	if name != "" {
+		sa.attrs = append(sa.attrs, semconv.ServiceNameKey.String(name))
+	}
+	return sa
+}
+
+// Namespace sets the service namespace
+func (sa *ServiceAttributes) Namespace(ns string) *ServiceAttributes {
+	if ns != "" {
+		sa.attrs = append(sa.attrs, semconv.ServiceNamespaceKey.String(ns))
+	}
+	return sa
+}
+
+// Version sets the service version
+func (sa *ServiceAttributes) Version(version string) *ServiceAttributes {
+	if version != "" {
+		sa.attrs = append(sa.attrs, semconv.ServiceVersionKey.String(version))
+	}
+	return sa
+}
+
+// InstanceID sets the service instance ID
+func (sa *ServiceAttributes) InstanceID(id string) *ServiceAttributes {
+	if id != "" {
+		sa.attrs = append(sa.attrs, semconv.ServiceInstanceIDKey.String(id))
+	}
+	return sa
+}
+
+// Build returns the accumulated attributes
+func (sa *ServiceAttributes) Build() []attribute.KeyValue {
+	return sa.attrs
+}
+
+// K8sAttributes creates OTel resource attributes for Kubernetes
+type K8sAttributes struct {
+	attrs []attribute.KeyValue
+}
+
+// NewK8sAttributes creates a new K8sAttributes builder
+func NewK8sAttributes() *K8sAttributes {
+	return &K8sAttributes{attrs: make([]attribute.KeyValue, 0, 12)}
+}
+
+// ClusterName sets the Kubernetes cluster name
+func (ka *K8sAttributes) ClusterName(name string) *K8sAttributes {
+	if name != "" {
+		ka.attrs = append(ka.attrs, semconv.K8SClusterNameKey.String(name))
+	}
+	return ka
+}
+
+// Namespace sets the Kubernetes namespace
+func (ka *K8sAttributes) Namespace(ns string) *K8sAttributes {
+	if ns != "" {
+		ka.attrs = append(ka.attrs, semconv.K8SNamespaceNameKey.String(ns))
+	}
+	return ka
+}
+
+// PodName sets the pod name
+func (ka *K8sAttributes) PodName(name string) *K8sAttributes {
+	if name != "" {
+		ka.attrs = append(ka.attrs, semconv.K8SPodNameKey.String(name))
+	}
+	return ka
+}
+
+// PodUID sets the pod UID
+func (ka *K8sAttributes) PodUID(uid string) *K8sAttributes {
+	if uid != "" {
+		ka.attrs = append(ka.attrs, semconv.K8SPodUIDKey.String(uid))
+	}
+	return ka
+}
+
+// ContainerName sets the container name
+func (ka *K8sAttributes) ContainerName(name string) *K8sAttributes {
+	if name != "" {
+		ka.attrs = append(ka.attrs, semconv.K8SContainerNameKey.String(name))
+	}
+	return ka
+}
+
+// DeploymentName sets the deployment name
+func (ka *K8sAttributes) DeploymentName(name string) *K8sAttributes {
+	if name != "" {
+		ka.attrs = append(ka.attrs, semconv.K8SDeploymentNameKey.String(name))
+	}
+	return ka
+}
+
+// NodeName sets the node name
+func (ka *K8sAttributes) NodeName(name string) *K8sAttributes {
+	if name != "" {
+		ka.attrs = append(ka.attrs, semconv.K8SNodeNameKey.String(name))
+	}
+	return ka
+}
+
+// Build returns the accumulated attributes
+func (ka *K8sAttributes) Build() []attribute.KeyValue {
+	return ka.attrs
+}
+
+// ProcessAttributes creates OTel resource attributes for a process
+type ProcessAttributes struct {
+	attrs []attribute.KeyValue
+}
+
+// NewProcessAttributes creates a new ProcessAttributes builder
+func NewProcessAttributes() *ProcessAttributes {
+	return &ProcessAttributes{attrs: make([]attribute.KeyValue, 0, 8)}
+}
+
+// PID sets the process ID
+func (pa *ProcessAttributes) PID(pid int) *ProcessAttributes {
+	pa.attrs = append(pa.attrs, semconv.ProcessPIDKey.Int(pid))
+	return pa
+}
+
+// ExecutableName sets the executable name
+func (pa *ProcessAttributes) ExecutableName(name string) *ProcessAttributes {
+	if name != "" {
+		pa.attrs = append(pa.attrs, semconv.ProcessExecutableNameKey.String(name))
+	}
+	return pa
+}
+
+// ExecutablePath sets the executable path
+func (pa *ProcessAttributes) ExecutablePath(path string) *ProcessAttributes {
+	if path != "" {
+		pa.attrs = append(pa.attrs, semconv.ProcessExecutablePathKey.String(path))
+	}
+	return pa
+}
+
+// CommandLine sets the command line
+func (pa *ProcessAttributes) CommandLine(cmdline string) *ProcessAttributes {
+	if cmdline != "" {
+		pa.attrs = append(pa.attrs, semconv.ProcessCommandLineKey.String(cmdline))
+	}
+	return pa
+}
+
+// RuntimeName sets the runtime name (go, java, python, etc.)
+func (pa *ProcessAttributes) RuntimeName(name string) *ProcessAttributes {
+	if name != "" {
+		pa.attrs = append(pa.attrs, semconv.ProcessRuntimeNameKey.String(name))
+	}
+	return pa
+}
+
+// RuntimeVersion sets the runtime version
+func (pa *ProcessAttributes) RuntimeVersion(version string) *ProcessAttributes {
+	if version != "" {
+		pa.attrs = append(pa.attrs, semconv.ProcessRuntimeVersionKey.String(version))
+	}
+	return pa
+}
+
+// Build returns the accumulated attributes
+func (pa *ProcessAttributes) Build() []attribute.KeyValue {
+	return pa.attrs
+}

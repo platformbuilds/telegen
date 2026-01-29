@@ -1,3 +1,5 @@
+//go:build !linux
+
 package providers
 
 import (
@@ -9,7 +11,6 @@ import (
 	"time"
 
 	"github.com/platformbuilds/telegen/internal/cloud/unified"
-	"golang.org/x/sys/unix"
 )
 
 const (
@@ -62,21 +63,13 @@ func (p *OnPremProvider) Detect(ctx context.Context) (bool, error) {
 func (p *OnPremProvider) GetMetadata(ctx context.Context) (*unified.CloudMetadata, error) {
 	hostname, _ := os.Hostname()
 
-	// Get uname info
-	var uname unix.Utsname
-	_ = unix.Uname(&uname)
-
 	// Get network interfaces
 	privateIP, publicIP, mac := p.getNetworkInfo()
-
-	// Detect virtualization
-	hypervisor := p.detectHypervisor()
-	isVM := hypervisor != "" && hypervisor != "none"
 
 	// Detect container
 	isContainer := p.detectContainer()
 
-	// Get CPU and memory info
+	// Get CPU info
 	cpuCores := runtime.NumCPU()
 	memoryMB := p.getMemoryMB()
 
@@ -94,8 +87,7 @@ func (p *OnPremProvider) GetMetadata(ctx context.Context) (*unified.CloudMetadat
 		PrivateIP:       privateIP,
 		PublicIP:        publicIP,
 		MAC:             mac,
-		Hypervisor:      hypervisor,
-		IsVM:            isVM,
+		IsVM:            false,
 		IsContainer:     isContainer,
 		CPUCores:        cpuCores,
 		MemoryMB:        memoryMB,
@@ -104,10 +96,8 @@ func (p *OnPremProvider) GetMetadata(ctx context.Context) (*unified.CloudMetadat
 		DetectedAt:      time.Now(),
 		LastUpdated:     time.Now(),
 		Labels: map[string]string{
-			"os.type":    runtime.GOOS,
-			"os.arch":    runtime.GOARCH,
-			"os.kernel":  int8SliceToString(uname.Release[:]),
-			"os.machine": int8SliceToString(uname.Machine[:]),
+			"os.type": runtime.GOOS,
+			"os.arch": runtime.GOARCH,
 		},
 	}, nil
 }
@@ -143,7 +133,6 @@ func (p *OnPremProvider) DiscoverResources(ctx context.Context) ([]unified.Resou
 			MemoryMB: meta.MemoryMB,
 			Labels:   meta.Labels,
 			Attributes: map[string]any{
-				"hypervisor":   meta.Hypervisor,
 				"is_vm":        meta.IsVM,
 				"is_container": meta.IsContainer,
 				"architecture": meta.Architecture,
@@ -153,8 +142,12 @@ func (p *OnPremProvider) DiscoverResources(ctx context.Context) ([]unified.Resou
 }
 
 // HealthCheck always succeeds for on-prem.
-func (p *OnPremProvider) HealthCheck(ctx context.Context) error {
-	return nil
+func (p *OnPremProvider) HealthCheck(ctx context.Context) unified.HealthCheckResult {
+	return unified.HealthCheckResult{
+		Healthy:   true,
+		Message:   "on-premises environment",
+		LastCheck: time.Now(),
+	}
 }
 
 // getNetworkInfo retrieves network interface information.
@@ -237,12 +230,6 @@ func isPrivateIP(ip net.IP) bool {
 	return false
 }
 
-// detectHypervisor detects virtualization.
-func (p *OnPremProvider) detectHypervisor() string {
-	detector := unified.NewPrivateCloudDetector()
-	return string(detector.DetectHypervisor())
-}
-
 // detectContainer checks if running in a container.
 func (p *OnPremProvider) detectContainer() bool {
 	// Check for container indicators
@@ -257,17 +244,6 @@ func (p *OnPremProvider) detectContainer() bool {
 		}
 	}
 
-	// Check cgroup
-	if data, err := os.ReadFile("/proc/1/cgroup"); err == nil {
-		content := string(data)
-		containerPatterns := []string{"docker", "kubepods", "containerd", "lxc", "podman"}
-		for _, pattern := range containerPatterns {
-			if strings.Contains(content, pattern) {
-				return true
-			}
-		}
-	}
-
 	// Check for Kubernetes
 	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
 		return true
@@ -276,43 +252,20 @@ func (p *OnPremProvider) detectContainer() bool {
 	return false
 }
 
-// getMemoryMB returns total memory in MB.
+// getMemoryMB returns total memory in MB (stub for non-Linux).
 func (p *OnPremProvider) getMemoryMB() int64 {
-	var info unix.Sysinfo_t
-	if err := unix.Sysinfo(&info); err != nil {
-		return 0
-	}
-	return int64(info.Totalram) * int64(info.Unit) / (1024 * 1024)
+	// On non-Linux platforms, return 0 as we can't easily get memory info
+	return 0
 }
 
 // generateInstanceID creates a stable instance ID.
 func (p *OnPremProvider) generateInstanceID(hostname, mac string) string {
-	// Use machine-id if available
-	if data, err := os.ReadFile("/etc/machine-id"); err == nil {
-		machineID := strings.TrimSpace(string(data))
-		if machineID != "" {
-			return machineID
-		}
-	}
-
 	// Fall back to hostname + MAC combination
 	if mac != "" {
 		return strings.ReplaceAll(hostname+"-"+mac, ":", "")
 	}
 
 	return hostname
-}
-
-// int8SliceToString converts a C-style int8 array to a Go string.
-func int8SliceToString(s []int8) string {
-	var buf strings.Builder
-	for _, c := range s {
-		if c == 0 {
-			break
-		}
-		buf.WriteByte(byte(c))
-	}
-	return buf.String()
 }
 
 // Ensure OnPremProvider implements CloudProvider

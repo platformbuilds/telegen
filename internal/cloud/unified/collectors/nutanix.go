@@ -1,6 +1,7 @@
 package collectors
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -617,19 +618,19 @@ func (c *NutanixCollector) discoverVMs(ctx context.Context) ([]unified.Resource,
 			Type:     unified.ResourceTypeVM,
 			Provider: "nutanix",
 			Status:   entity.Status.State,
-			Properties: map[string]any{
+			Attributes: map[string]any{
 				"cluster_reference": entity.Status.ClusterReference,
 				"host_reference":    entity.Status.HostReference,
 			},
 		}
 
 		if entity.Status.Resources.CPU != nil {
-			resource.Properties["num_vcpus"] = entity.Status.Resources.CPU.NumVCPUs
-			resource.Properties["num_cores_per_vcpu"] = entity.Status.Resources.CPU.NumCoresPerVCPU
+			resource.Attributes["num_vcpus"] = entity.Status.Resources.CPU.NumVCPUs
+			resource.Attributes["num_cores_per_vcpu"] = entity.Status.Resources.CPU.NumCoresPerVCPU
 		}
 
 		if entity.Status.Resources.Memory != nil {
-			resource.Properties["memory_size_mib"] = entity.Status.Resources.Memory.SizeMiB
+			resource.Attributes["memory_size_mib"] = entity.Status.Resources.Memory.SizeMiB
 		}
 
 		resources = append(resources, resource)
@@ -658,19 +659,19 @@ func (c *NutanixCollector) discoverHosts(ctx context.Context) ([]unified.Resourc
 			Type:     unified.ResourceTypeHost,
 			Provider: "nutanix",
 			Status:   entity.Status.State,
-			Properties: map[string]any{
+			Attributes: map[string]any{
 				"cluster_reference": entity.Status.ClusterReference,
 				"hypervisor_type":   entity.Status.Resources.HypervisorType,
 			},
 		}
 
 		if entity.Status.Resources.CPU != nil {
-			resource.Properties["num_sockets"] = entity.Status.Resources.CPU.NumSockets
-			resource.Properties["num_cores_per_socket"] = entity.Status.Resources.CPU.NumCoresPerSocket
+			resource.Attributes["num_sockets"] = entity.Status.Resources.CPU.NumSockets
+			resource.Attributes["num_cores_per_socket"] = entity.Status.Resources.CPU.NumCoresPerSocket
 		}
 
 		if entity.Status.Resources.Memory != nil {
-			resource.Properties["memory_size_bytes"] = entity.Status.Resources.Memory.SizeBytes
+			resource.Attributes["memory_size_bytes"] = entity.Status.Resources.Memory.SizeBytes
 		}
 
 		resources = append(resources, resource)
@@ -699,14 +700,14 @@ func (c *NutanixCollector) discoverStorageContainers(ctx context.Context) ([]uni
 			Type:     unified.ResourceTypeDatastore,
 			Provider: "nutanix",
 			Status:   entity.Status.State,
-			Properties: map[string]any{
+			Attributes: map[string]any{
 				"cluster_reference": entity.Status.ClusterReference,
 			},
 		}
 
 		if entity.Status.Resources.Stats != nil {
-			resource.Properties["capacity_bytes"] = entity.Status.Resources.Stats.StorageCapacityBytes
-			resource.Properties["used_bytes"] = entity.Status.Resources.Stats.StorageUsageBytes
+			resource.Attributes["capacity_bytes"] = entity.Status.Resources.Stats.StorageCapacityBytes
+			resource.Attributes["used_bytes"] = entity.Status.Resources.Stats.StorageUsageBytes
 		}
 
 		resources = append(resources, resource)
@@ -735,7 +736,7 @@ func (c *NutanixCollector) discoverNetworks(ctx context.Context) ([]unified.Reso
 			Type:     unified.ResourceTypeNetwork,
 			Provider: "nutanix",
 			Status:   entity.Status.State,
-			Properties: map[string]any{
+			Attributes: map[string]any{
 				"cluster_reference": entity.Status.ClusterReference,
 				"subnet_type":       entity.Status.Resources.SubnetType,
 			},
@@ -748,7 +749,7 @@ func (c *NutanixCollector) discoverNetworks(ctx context.Context) ([]unified.Reso
 
 // doRequest performs an authenticated request to Nutanix Prism.
 func (c *NutanixCollector) doRequest(ctx context.Context, path string, body map[string]any) ([]byte, error) {
-	url := fmt.Sprintf("https://%s:%d%s", c.config.PrismURL, c.config.Port, path)
+	url := fmt.Sprintf("https://%s%s", c.config.Endpoint, path)
 
 	var bodyReader io.Reader
 	if body != nil {
@@ -756,7 +757,7 @@ func (c *NutanixCollector) doRequest(ctx context.Context, path string, body map[
 		if err != nil {
 			return nil, err
 		}
-		bodyReader = &bytesReader{data: bodyBytes}
+		bodyReader = bytes.NewReader(bodyBytes)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bodyReader)

@@ -30,6 +30,13 @@ type Edge struct {
 	Role string       // Relationship role
 }
 
+// RelationEdge represents a relationship edge with target information.
+type RelationEdge struct {
+	TargetID   string       // Target resource ID
+	TargetType ResourceType // Target resource type
+	Relation   string       // Relationship type (parent, child, etc.)
+}
+
 // NewResourceGraph creates a new empty resource graph.
 func NewResourceGraph() *ResourceGraph {
 	return &ResourceGraph{
@@ -355,6 +362,34 @@ func (g *ResourceGraph) Count() int {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	return len(g.resources)
+}
+
+// GetEdges returns all edges (both outgoing and incoming) for a resource.
+func (g *ResourceGraph) GetEdges(resourceID string) []RelationEdge {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	var result []RelationEdge
+
+	// Get outgoing edges
+	for _, edge := range g.edges[resourceID] {
+		result = append(result, RelationEdge{
+			TargetID:   edge.To,
+			TargetType: edge.Type,
+			Relation:   edge.Role,
+		})
+	}
+
+	// Get incoming edges
+	for _, edge := range g.inEdges[resourceID] {
+		result = append(result, RelationEdge{
+			TargetID:   edge.From,
+			TargetType: edge.Type,
+			Relation:   reverseRole(edge.Role),
+		})
+	}
+
+	return result
 }
 
 // CountByType returns the count of resources by type.

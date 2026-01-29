@@ -106,8 +106,7 @@ func NewPerfbufReader(
 	}
 
 	opts := perf.ReaderOptions{
-		PerCPUBuffer: cfg.PerCPUBufferSize,
-		Watermark:    cfg.Watermark,
+		Watermark: cfg.Watermark,
 	}
 
 	reader, err := perf.NewReaderWithOptions(perfMap, cfg.PerCPUBufferSize, opts)

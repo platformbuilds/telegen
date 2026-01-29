@@ -59,9 +59,9 @@ func (p *AlibabaProvider) Detect(ctx context.Context) bool {
 // GetMetadata retrieves Alibaba Cloud instance metadata.
 func (p *AlibabaProvider) GetMetadata(ctx context.Context) (*unified.CloudMetadata, error) {
 	metadata := &unified.CloudMetadata{
-		Provider:      "alibaba",
-		Platform:      "alibaba_ecs",
-		DetectionTime: time.Now(),
+		Provider:   "alibaba",
+		Platform:   "alibaba_ecs",
+		DetectedAt: time.Now(),
 	}
 
 	// Instance ID
@@ -114,7 +114,7 @@ func (p *AlibabaProvider) GetMetadata(ctx context.Context) (*unified.CloudMetada
 
 	// VPC ID
 	if vpcID, err := p.getMetadataValue(ctx, "vpc-id"); err == nil {
-		metadata.VPCID = vpcID
+		metadata.VPC = vpcID
 	}
 
 	// Tags
@@ -256,9 +256,9 @@ func (p *OracleProvider) Detect(ctx context.Context) bool {
 // GetMetadata retrieves Oracle Cloud instance metadata.
 func (p *OracleProvider) GetMetadata(ctx context.Context) (*unified.CloudMetadata, error) {
 	metadata := &unified.CloudMetadata{
-		Provider:      "oracle",
-		Platform:      "oracle_compute",
-		DetectionTime: time.Now(),
+		Provider:   "oracle",
+		Platform:   "oracle_compute",
+		DetectedAt: time.Now(),
 	}
 
 	// Get instance data
@@ -413,9 +413,9 @@ func (p *DigitalOceanProvider) Detect(ctx context.Context) bool {
 // GetMetadata retrieves DigitalOcean droplet metadata.
 func (p *DigitalOceanProvider) GetMetadata(ctx context.Context) (*unified.CloudMetadata, error) {
 	metadata := &unified.CloudMetadata{
-		Provider:      "digitalocean",
-		Platform:      "digitalocean_droplet",
-		DetectionTime: time.Now(),
+		Provider:   "digitalocean",
+		Platform:   "digitalocean_droplet",
+		DetectedAt: time.Now(),
 	}
 
 	// Droplet ID

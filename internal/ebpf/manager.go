@@ -247,7 +247,7 @@ func (m *Manager) LoadCollection(name string, opts *ebpf.CollectionOptions) (*eb
 	if m.cfg.LogLevel > 0 {
 		opts.Programs.LogLevel = ebpf.LogLevel(m.cfg.LogLevel)
 		if m.cfg.LogSize > 0 {
-			opts.Programs.LogSize = m.cfg.LogSize
+			opts.Programs.LogSizeStart = uint32(m.cfg.LogSize)
 		}
 	}
 
@@ -451,7 +451,7 @@ func (m *Manager) ListPrograms() []ProgramInfo {
 				continue
 			}
 
-			tag, _ := info.Tag()
+			tag := info.Tag
 			id, _ := info.ID()
 
 			infos = append(infos, ProgramInfo{

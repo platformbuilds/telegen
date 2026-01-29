@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -233,15 +232,31 @@ func (p *GCPProvider) DiscoverResources(ctx context.Context) ([]unified.Resource
 }
 
 // HealthCheck verifies metadata server connectivity.
-func (p *GCPProvider) HealthCheck(ctx context.Context) error {
+func (p *GCPProvider) HealthCheck(ctx context.Context) unified.HealthCheckResult {
+	start := time.Now()
 	detected, err := p.Detect(ctx)
 	if err != nil {
-		return err
+		return unified.HealthCheckResult{
+			Healthy:   false,
+			Message:   err.Error(),
+			LastCheck: time.Now(),
+			Latency:   time.Since(start),
+		}
 	}
 	if !detected {
-		return fmt.Errorf("GCP metadata server not accessible")
+		return unified.HealthCheckResult{
+			Healthy:   false,
+			Message:   "GCP metadata server not accessible",
+			LastCheck: time.Now(),
+			Latency:   time.Since(start),
+		}
 	}
-	return nil
+	return unified.HealthCheckResult{
+		Healthy:   true,
+		Message:   "GCP metadata server accessible",
+		LastCheck: time.Now(),
+		Latency:   time.Since(start),
+	}
 }
 
 // getMetadataValue retrieves a single metadata value.

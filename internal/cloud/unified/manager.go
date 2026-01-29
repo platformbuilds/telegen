@@ -337,6 +337,19 @@ func (cm *CloudManager) discoverResources(ctx context.Context) {
 	}
 }
 
+// DiscoverResources is the public API for resource discovery.
+func (cm *CloudManager) DiscoverResources(ctx context.Context) ([]Resource, error) {
+	cm.mu.RLock()
+	provider := cm.activeProvider
+	cm.mu.RUnlock()
+
+	if provider == nil {
+		return nil, nil
+	}
+
+	return provider.DiscoverResources(ctx)
+}
+
 // redetectLoop periodically re-runs provider detection.
 func (cm *CloudManager) redetectLoop(ctx context.Context) {
 	defer cm.stoppedWg.Done()
@@ -495,13 +508,17 @@ func (cm *CloudManager) ProviderType() CloudType {
 }
 
 // HealthCheck runs a health check on the active provider.
-func (cm *CloudManager) HealthCheck(ctx context.Context) error {
+func (cm *CloudManager) HealthCheck(ctx context.Context) HealthCheckResult {
 	cm.mu.RLock()
 	provider := cm.activeProvider
 	cm.mu.RUnlock()
 
 	if provider == nil {
-		return fmt.Errorf("no active provider")
+		return HealthCheckResult{
+			Healthy:   false,
+			Message:   "no active provider",
+			LastCheck: time.Now(),
+		}
 	}
 
 	return provider.HealthCheck(ctx)

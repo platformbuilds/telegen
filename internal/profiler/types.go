@@ -1,4 +1,3 @@
-package profiler
 // Copyright The Telegen Authors
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,19 +11,19 @@ import (
 type Profile struct {
 	// Type of profile
 	Type ProfileType
-	
+
 	// Timestamp when the profile was collected
 	Timestamp time.Time
-	
+
 	// Duration of the profiling period
 	Duration time.Duration
-	
+
 	// ProcessInfo about the profiled processes
 	ProcessInfo []ProcessInfo
-	
+
 	// Samples collected in this profile
 	Samples []StackSample
-	
+
 	// Metadata about the profile
 	Metadata map[string]string
 }
@@ -43,26 +42,26 @@ type ProcessInfo struct {
 type StackSample struct {
 	// Stack frames from bottom to top
 	Frames []ResolvedFrame
-	
+
 	// Value depends on profile type:
 	// - CPU: sample count
 	// - Off-CPU: total block time in nanoseconds
 	// - Memory: bytes allocated
 	// - Mutex: total wait time in nanoseconds
 	Value int64
-	
+
 	// Count of occurrences
 	Count int64
-	
+
 	// ProcessInfo
 	PID  uint32
 	TGID uint32
 	Comm string
-	
+
 	// Timestamps
 	FirstSeen time.Time
 	LastSeen  time.Time
-	
+
 	// Type-specific fields
 	BlockReason BlockReason // For off-CPU
 	AllocType   uint8       // For memory
@@ -72,28 +71,28 @@ type StackSample struct {
 type ResolvedFrame struct {
 	// Address is the instruction pointer
 	Address uint64
-	
+
 	// Function is the fully qualified function name
 	Function string
-	
+
 	// ShortName is the function name without package path
 	ShortName string
-	
+
 	// Module is the binary/library name
 	Module string
-	
+
 	// File is the source file path
 	File string
-	
+
 	// Line is the line number in the source file
 	Line int
-	
+
 	// Column is the column number (if available)
 	Column int
-	
+
 	// Inlined indicates if this frame was inlined
 	Inlined bool
-	
+
 	// Language-specific fields
 	Package  string // Go package
 	Receiver string // Go method receiver

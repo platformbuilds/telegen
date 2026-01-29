@@ -14,16 +14,18 @@ import (
 	"github.com/platformbuilds/telegen/internal/agent/memory"
 	"github.com/platformbuilds/telegen/internal/exporters"
 	"github.com/platformbuilds/telegen/internal/selftelemetry"
+	"github.com/platformbuilds/telegen/internal/sigdef"
 )
 
-// SignalType represents the type of telemetry signal
-type SignalType string
+// SignalType is an alias to sigdef.SignalType for backwards compatibility
+type SignalType = sigdef.SignalType
 
+// Signal type constants - re-exported from sigdef
 const (
-	SignalTraces   SignalType = "traces"
-	SignalMetrics  SignalType = "metrics"
-	SignalLogs     SignalType = "logs"
-	SignalProfiles SignalType = "profiles"
+	SignalTraces   = sigdef.SignalTraces
+	SignalMetrics  = sigdef.SignalMetrics
+	SignalLogs     = sigdef.SignalLogs
+	SignalProfiles = sigdef.SignalProfiles
 )
 
 // Config holds pipeline configuration

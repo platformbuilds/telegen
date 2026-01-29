@@ -1,5 +1,4 @@
 package providers
-package providers
 
 import (
 	"context"
@@ -7,332 +6,346 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-var _ unified.CloudProvider = (*AWSProvider)(nil)// Ensure AWSProvider implements CloudProvider}	return tags	}		tags[key] = value		value := p.getMetadataValue(ctx, "tags/instance/"+key)		}			continue		if key == "" {		key = strings.TrimSpace(key)	for _, key := range strings.Split(tagKeys, "\n") {	// Get each tag	}		return tags	if tagKeys == "" {	tagKeys := p.getMetadataValue(ctx, "tags/instance")	// Check if tags are enabled in IMDS	tags := make(map[string]string)func (p *AWSProvider) getInstanceTags(ctx context.Context) map[string]string {// getInstanceTags retrieves instance tags (if IMDS tags are enabled).}	return strings.TrimSpace(string(body))	}		return ""	if err != nil {	body, err := io.ReadAll(resp.Body)	}		return ""	if resp.StatusCode != http.StatusOK {	defer resp.Body.Close()	}		return ""	if err != nil {	resp, err := p.client.Do(req)	req.Header.Set("X-aws-ec2-metadata-token", p.token)	}		return ""	if err != nil {	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)	url := endpoint + awsIMDSMetadataPath + path	}		endpoint = awsIMDSEndpoint	if endpoint == "" {	endpoint := p.config.IMDSEndpointfunc (p *AWSProvider) getMetadataValue(ctx context.Context, path string) string {// getMetadataValue retrieves a single metadata value.}	return &doc, nil	}		return nil, err	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {	var doc awsInstanceIdentityDocument	}		return nil, fmt.Errorf("failed to get identity document: status %d", resp.StatusCode)	if resp.StatusCode != http.StatusOK {	defer resp.Body.Close()	}		return nil, err	if err != nil {	resp, err := p.client.Do(req)	req.Header.Set("X-aws-ec2-metadata-token", p.token)	}		return nil, err	if err != nil {	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+awsIMDSDynamicPath, nil)	}		endpoint = awsIMDSEndpoint	if endpoint == "" {	endpoint := p.config.IMDSEndpointfunc (p *AWSProvider) getInstanceIdentityDocument(ctx context.Context) (*awsInstanceIdentityDocument, error) {// getInstanceIdentityDocument retrieves the instance identity document.}	Version          string `json:"version"`	Region           string `json:"region"`	PrivateIP        string `json:"privateIp"`	InstanceType     string `json:"instanceType"`	InstanceID       string `json:"instanceId"`	ImageID          string `json:"imageId"`	AvailabilityZone string `json:"availabilityZone"`	Architecture     string `json:"architecture"`	AccountID        string `json:"accountId"`type awsInstanceIdentityDocument struct {// awsInstanceIdentityDocument represents the instance identity document.}	return nil	p.tokenExpiry = time.Now().Add(6 * time.Hour)	p.token = token	}		return err	if err != nil {	token, err := p.getToken(ctx)	}		return nil	if p.token != "" && time.Now().Before(p.tokenExpiry) {func (p *AWSProvider) ensureToken(ctx context.Context) error {// ensureToken ensures we have a valid token.}	return string(body), nil	}		return "", err	if err != nil {	body, err := io.ReadAll(resp.Body)	}		return "", fmt.Errorf("failed to get token: status %d", resp.StatusCode)	if resp.StatusCode != http.StatusOK {	defer resp.Body.Close()	}		return "", err	if err != nil {	resp, err := p.client.Do(req)	req.Header.Set("X-aws-ec2-metadata-token-ttl-seconds", "21600") // 6 hours	}		return "", err	if err != nil {	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint+awsIMDSTokenPath, nil)	}		endpoint = awsIMDSEndpoint	if endpoint == "" {	endpoint := p.config.IMDSEndpointfunc (p *AWSProvider) getToken(ctx context.Context) (string, error) {// getToken retrieves an IMDSv2 token.}	return nil	}		return fmt.Errorf("IMDS health check failed: %w", err)	if err := p.ensureToken(ctx); err != nil {func (p *AWSProvider) HealthCheck(ctx context.Context) error {// HealthCheck verifies IMDS connectivity.}	}, nil		},			},				"subnet_id":     meta.Subnet,				"vpc_id":        meta.VPC,				"ami_id":        meta.ImageID,				"instance_type": meta.InstanceType,			Attributes: map[string]any{			Tags:             meta.Tags,			Status:           "running",			AvailabilityZone: meta.AvailabilityZone,			Region:           meta.Region,			Provider:         "aws",			Type:             unified.ResourceTypeVM,			Name:             meta.InstanceName,			ID:               meta.InstanceID,		{	return []unified.Resource{	// Return the local instance as a resource	}		return nil, err	if err != nil {	meta, err := p.GetMetadata(ctx)func (p *AWSProvider) DiscoverResources(ctx context.Context) ([]unified.Resource, error) {// This provides the local instance as a resource.// Note: For full resource discovery, use the AWS SDK.// DiscoverResources discovers AWS resources.}	return []unified.Metric{}, nil		// Here we can provide instance metadata as metrics.	// CloudWatch integration would be done separately.	// IMDS doesn't provide many metrics directly.func (p *AWSProvider) CollectMetrics(ctx context.Context) ([]unified.Metric, error) {// This provides basic IMDS-available metrics.// Note: For detailed CloudWatch metrics, use the AWS SDK.// CollectMetrics collects AWS-specific metrics.}	}, nil		LastUpdated:      time.Now(),		DetectedAt:       time.Now(),		DetectionMethod:  "imdsv2",		Tags:             tags,		IsContainer:      false, // Will be updated by container detection		IsVM:             true,		Architecture:     doc.Architecture,		ImageID:          ami,		Subnet:           subnetID,		VPC:              vpcID,		MAC:              mac,		PublicIP:         publicIP,		PrivateIP:        privateIP,		Hostname:         hostname,		InstanceType:     instanceType,		InstanceName:     tags["Name"],		InstanceID:       doc.InstanceID,		AccountID:        doc.AccountID,		AvailabilityZone: doc.AvailabilityZone,		Region:           doc.Region,		ProviderType:     unified.CloudTypePublic,		Provider:         "aws",	return &unified.CloudMetadata{	tags := p.getInstanceTags(ctx)	// Get instance tags (if enabled)	}		subnetID = p.getMetadataValue(ctx, fmt.Sprintf("network/interfaces/macs/%s/subnet-id", mac))		vpcID = p.getMetadataValue(ctx, fmt.Sprintf("network/interfaces/macs/%s/vpc-id", mac))	if mac != "" {	subnetID := ""	vpcID := ""	// Get VPC info from network interface	ami := p.getMetadataValue(ctx, "ami-id")	instanceType := p.getMetadataValue(ctx, "instance-type")	mac := p.getMetadataValue(ctx, "mac")	privateIP := p.getMetadataValue(ctx, "local-ipv4")	publicIP := p.getMetadataValue(ctx, "public-ipv4")	hostname := p.getMetadataValue(ctx, "hostname")	// Get additional metadata	}		return nil, fmt.Errorf("failed to get instance identity: %w", err)	if err != nil {	doc, err := p.getInstanceIdentityDocument(ctx)	// Get instance identity document	}		return nil, fmt.Errorf("failed to get IMDS token: %w", err)	if err := p.ensureToken(ctx); err != nil {	// Ensure we have a valid tokenfunc (p *AWSProvider) GetMetadata(ctx context.Context) (*unified.CloudMetadata, error) {// GetMetadata retrieves AWS EC2 instance metadata.}	return true, nil	p.tokenExpiry = time.Now().Add(6 * time.Hour)	p.token = token	}		return false, nil // Not on AWS or IMDS not available	if err != nil {	token, err := p.getToken(ctx)	// Try to get IMDSv2 tokenfunc (p *AWSProvider) Detect(ctx context.Context) (bool, error) {// Detect checks if running on AWS EC2.}	return awsPriorityfunc (p *AWSProvider) Priority() int {// Priority returns the detection priority.}	return unified.CloudTypePublicfunc (p *AWSProvider) Type() unified.CloudType {// Type returns the cloud type.}	return "aws"func (p *AWSProvider) Name() string {// Name returns the provider name.}	}		},			},				DisableKeepAlives: true,			Transport: &http.Transport{			Timeout: timeout,		client: &http.Client{		config: config,	return &AWSProvider{	}		timeout = 2 * time.Second	if timeout == 0 {	timeout := config.IMDSTimeout	}		config = unified.DefaultAWSConfig()	if config == nil {func NewAWSProvider(config *unified.AWSConfig) *AWSProvider {// NewAWSProvider creates a new AWS cloud provider.}	tokenExpiry time.Time	token  string	client *http.Client	config *unified.AWSConfigtype AWSProvider struct {// AWSProvider implements CloudProvider for Amazon Web Services.)	awsPriority = 1	// AWS provider priority (public cloud, highest)	awsIMDSDynamicPath   = "/latest/dynamic/instance-identity/document"	awsIMDSMetadataPath  = "/latest/meta-data/"	awsIMDSTokenPath     = "/latest/api/token"	awsIMDSEndpoint      = "http://169.254.169.254"	// AWS IMDS endpointsconst ()	"github.com/platformbuilds/telegen/internal/cloud/unified"	"time"	"strings"
+	"strings"
+	"time"
+
+	"github.com/platformbuilds/telegen/internal/cloud/unified"
+)
+
+const (
+	// AWS IMDS endpoints
+	awsIMDSEndpoint     = "http://169.254.169.254"
+	awsIMDSTokenPath    = "/latest/api/token"
+	awsIMDSMetadataPath = "/latest/meta-data/"
+	awsIMDSDynamicPath  = "/latest/dynamic/instance-identity/document"
+
+	// AWS provider priority (public cloud, highest)
+	awsPriority = 1
+)
+
+// AWSProvider implements CloudProvider for Amazon Web Services.
+type AWSProvider struct {
+	config      *unified.AWSConfig
+	client      *http.Client
+	token       string
+	tokenExpiry time.Time
+}
+
+// NewAWSProvider creates a new AWS cloud provider.
+func NewAWSProvider(config *unified.AWSConfig) *AWSProvider {
+	if config == nil {
+		config = unified.DefaultAWSConfig()
+	}
+
+	timeout := config.IMDSTimeout
+	if timeout == 0 {
+		timeout = 2 * time.Second
+	}
+
+	return &AWSProvider{
+		config: config,
+		client: &http.Client{
+			Timeout: timeout,
+			Transport: &http.Transport{
+				DisableKeepAlives: true,
+			},
+		},
+	}
+}
+
+// Name returns the provider name.
+func (p *AWSProvider) Name() string {
+	return "aws"
+}
+
+// Type returns the cloud type.
+func (p *AWSProvider) Type() unified.CloudType {
+	return unified.CloudTypePublic
+}
+
+// Priority returns the detection priority.
+func (p *AWSProvider) Priority() int {
+	return awsPriority
+}
+
+// Detect checks if running on AWS EC2.
+func (p *AWSProvider) Detect(ctx context.Context) (bool, error) {
+	// Try to get IMDSv2 token
+	token, err := p.getToken(ctx)
+	if err != nil {
+		return false, nil // Not on AWS or IMDS not available
+	}
+
+	p.token = token
+	p.tokenExpiry = time.Now().Add(6 * time.Hour)
+	return true, nil
+}
+
+// GetMetadata retrieves AWS EC2 instance metadata.
+func (p *AWSProvider) GetMetadata(ctx context.Context) (*unified.CloudMetadata, error) {
+	// Ensure we have a valid token
+	if err := p.ensureToken(ctx); err != nil {
+		return nil, fmt.Errorf("failed to get IMDS token: %w", err)
+	}
+
+	// Get instance identity document
+	doc, err := p.getInstanceIdentityDocument(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get instance identity: %w", err)
+	}
+
+	// Get additional metadata
+	hostname := p.getMetadataValue(ctx, "hostname")
+	publicIP := p.getMetadataValue(ctx, "public-ipv4")
+	privateIP := p.getMetadataValue(ctx, "local-ipv4")
+	mac := p.getMetadataValue(ctx, "mac")
+	instanceType := p.getMetadataValue(ctx, "instance-type")
+	ami := p.getMetadataValue(ctx, "ami-id")
+
+	// Get VPC info from network interface
+	vpcID := ""
+	subnetID := ""
+	if mac != "" {
+		vpcID = p.getMetadataValue(ctx, fmt.Sprintf("network/interfaces/macs/%s/vpc-id", mac))
+		subnetID = p.getMetadataValue(ctx, fmt.Sprintf("network/interfaces/macs/%s/subnet-id", mac))
+	}
+
+	// Get instance tags (if enabled)
+	tags := p.getInstanceTags(ctx)
+
+	return &unified.CloudMetadata{
+		Provider:         "aws",
+		ProviderType:     unified.CloudTypePublic,
+		Region:           doc.Region,
+		AvailabilityZone: doc.AvailabilityZone,
+		AccountID:        doc.AccountID,
+		InstanceID:       doc.InstanceID,
+		InstanceName:     tags["Name"],
+		InstanceType:     instanceType,
+		Hostname:         hostname,
+		PrivateIP:        privateIP,
+		PublicIP:         publicIP,
+		MAC:              mac,
+		VPC:              vpcID,
+		Subnet:           subnetID,
+		ImageID:          ami,
+		Architecture:     doc.Architecture,
+		IsVM:             true,
+		IsContainer:      false, // Will be updated by container detection
+		Tags:             tags,
+		DetectionMethod:  "imdsv2",
+		DetectedAt:       time.Now(),
+		LastUpdated:      time.Now(),
+	}, nil
+}
+
+// CollectMetrics collects AWS-specific metrics.
+// Note: For detailed CloudWatch metrics, use the AWS SDK.
+// This provides basic IMDS-available metrics.
+func (p *AWSProvider) CollectMetrics(ctx context.Context) ([]unified.Metric, error) {
+	// IMDS doesn't provide many metrics directly.
+	// CloudWatch integration would be done separately.
+	// Here we can provide instance metadata as metrics.
+	return []unified.Metric{}, nil
+}
+
+// DiscoverResources discovers AWS resources.
+// Note: For full resource discovery, use the AWS SDK.
+// This provides the local instance as a resource.
+func (p *AWSProvider) DiscoverResources(ctx context.Context) ([]unified.Resource, error) {
+	meta, err := p.GetMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return the local instance as a resource
+	return []unified.Resource{
+		{
+			ID:               meta.InstanceID,
+			Name:             meta.InstanceName,
+			Type:             unified.ResourceTypeVM,
+			Provider:         "aws",
+			Region:           meta.Region,
+			AvailabilityZone: meta.AvailabilityZone,
+			Status:           "running",
+			Tags:             meta.Tags,
+			Attributes: map[string]any{
+				"instance_type": meta.InstanceType,
+				"ami_id":        meta.ImageID,
+				"vpc_id":        meta.VPC,
+				"subnet_id":     meta.Subnet,
+			},
+		},
+	}, nil
+}
+
+// HealthCheck verifies IMDS connectivity.
+func (p *AWSProvider) HealthCheck(ctx context.Context) unified.HealthCheckResult {
+	start := time.Now()
+	if err := p.ensureToken(ctx); err != nil {
+		return unified.HealthCheckResult{
+			Healthy:   false,
+			Message:   fmt.Sprintf("IMDS health check failed: %v", err),
+			LastCheck: time.Now(),
+			Latency:   time.Since(start),
+		}
+	}
+	return unified.HealthCheckResult{
+		Healthy:   true,
+		Message:   "AWS IMDS accessible",
+		LastCheck: time.Now(),
+		Latency:   time.Since(start),
+	}
+}
+
+// getToken retrieves an IMDSv2 token.
+func (p *AWSProvider) getToken(ctx context.Context) (string, error) {
+	endpoint := p.config.IMDSEndpoint
+	if endpoint == "" {
+		endpoint = awsIMDSEndpoint
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint+awsIMDSTokenPath, nil)
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("X-aws-ec2-metadata-token-ttl-seconds", "21600") // 6 hours
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to get token: status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return string(body), nil
+}
+
+// ensureToken ensures we have a valid token.
+func (p *AWSProvider) ensureToken(ctx context.Context) error {
+	if p.token != "" && time.Now().Before(p.tokenExpiry) {
+		return nil
+	}
+
+	token, err := p.getToken(ctx)
+	if err != nil {
+		return err
+	}
+
+	p.token = token
+	p.tokenExpiry = time.Now().Add(6 * time.Hour)
+	return nil
+}
+
+// awsInstanceIdentityDocument represents the instance identity document.
+type awsInstanceIdentityDocument struct {
+	AccountID        string `json:"accountId"`
+	Architecture     string `json:"architecture"`
+	AvailabilityZone string `json:"availabilityZone"`
+	ImageID          string `json:"imageId"`
+	InstanceID       string `json:"instanceId"`
+	InstanceType     string `json:"instanceType"`
+	PrivateIP        string `json:"privateIp"`
+	Region           string `json:"region"`
+	Version          string `json:"version"`
+}
+
+// getInstanceIdentityDocument retrieves the instance identity document.
+func (p *AWSProvider) getInstanceIdentityDocument(ctx context.Context) (*awsInstanceIdentityDocument, error) {
+	endpoint := p.config.IMDSEndpoint
+	if endpoint == "" {
+		endpoint = awsIMDSEndpoint
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+awsIMDSDynamicPath, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("X-aws-ec2-metadata-token", p.token)
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get identity document: status %d", resp.StatusCode)
+	}
+
+	var doc awsInstanceIdentityDocument
+	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
+		return nil, err
+	}
+
+	return &doc, nil
+}
+
+// getMetadataValue retrieves a single metadata value.
+func (p *AWSProvider) getMetadataValue(ctx context.Context, path string) string {
+	endpoint := p.config.IMDSEndpoint
+	if endpoint == "" {
+		endpoint = awsIMDSEndpoint
+	}
+
+	url := endpoint + awsIMDSMetadataPath + path
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return ""
+	}
+
+	req.Header.Set("X-aws-ec2-metadata-token", p.token)
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ""
+	}
+
+	return strings.TrimSpace(string(body))
+}
+
+// getInstanceTags retrieves instance tags (if IMDS tags are enabled).
+func (p *AWSProvider) getInstanceTags(ctx context.Context) map[string]string {
+	tags := make(map[string]string)
+
+	// Check if tags are enabled in IMDS
+	tagKeys := p.getMetadataValue(ctx, "tags/instance")
+	if tagKeys == "" {
+		return tags
+	}
+
+	// Get each tag
+	for _, key := range strings.Split(tagKeys, "\n") {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		value := p.getMetadataValue(ctx, "tags/instance/"+key)
+		tags[key] = value
+	}
+
+	return tags
+}
+
+// Ensure AWSProvider implements CloudProvider
+var _ unified.CloudProvider = (*AWSProvider)(nil)

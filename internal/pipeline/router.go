@@ -12,15 +12,11 @@ import (
 
 	"github.com/platformbuilds/telegen/internal/exporters"
 	"github.com/platformbuilds/telegen/internal/selftelemetry"
+	"github.com/platformbuilds/telegen/internal/sigdef"
 )
 
-// Signal represents a generic telemetry signal that can be routed
-type Signal interface {
-	// Type returns the signal type
-	Type() SignalType
-	// Size returns the approximate size in bytes
-	Size() int
-}
+// Signal is an alias to sigdef.Signal for backwards compatibility
+type Signal = sigdef.Signal
 
 // Router routes signals through processors and to exporters
 type Router struct {

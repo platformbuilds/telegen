@@ -298,15 +298,31 @@ func (p *AzureProvider) DiscoverResources(ctx context.Context) ([]unified.Resour
 }
 
 // HealthCheck verifies IMDS connectivity.
-func (p *AzureProvider) HealthCheck(ctx context.Context) error {
+func (p *AzureProvider) HealthCheck(ctx context.Context) unified.HealthCheckResult {
+	start := time.Now()
 	detected, err := p.Detect(ctx)
 	if err != nil {
-		return err
+		return unified.HealthCheckResult{
+			Healthy:   false,
+			Message:   err.Error(),
+			LastCheck: time.Now(),
+			Latency:   time.Since(start),
+		}
 	}
 	if !detected {
-		return fmt.Errorf("Azure IMDS not accessible")
+		return unified.HealthCheckResult{
+			Healthy:   false,
+			Message:   "Azure IMDS not accessible",
+			LastCheck: time.Now(),
+			Latency:   time.Since(start),
+		}
 	}
-	return nil
+	return unified.HealthCheckResult{
+		Healthy:   true,
+		Message:   "Azure IMDS accessible",
+		LastCheck: time.Now(),
+		Latency:   time.Since(start),
+	}
 }
 
 // getInstanceMetadata retrieves the full instance metadata.

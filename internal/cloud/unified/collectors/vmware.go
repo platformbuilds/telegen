@@ -42,7 +42,7 @@ func NewVMwareCollector(config unified.VMwareConfig) *VMwareCollector {
 
 // Authenticate authenticates with vCenter.
 func (c *VMwareCollector) Authenticate(ctx context.Context) error {
-	loginURL := fmt.Sprintf("https://%s/api/session", c.config.VCenterURL)
+	loginURL := fmt.Sprintf("https://%s/api/session", c.config.Address)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", loginURL, nil)
 	if err != nil {
@@ -95,7 +95,7 @@ func (c *VMwareCollector) ensureAuthenticated(ctx context.Context) error {
 
 // checkSession verifies the session is still valid.
 func (c *VMwareCollector) checkSession(ctx context.Context) bool {
-	sessionURL := fmt.Sprintf("https://%s/api/session", c.config.VCenterURL)
+	sessionURL := fmt.Sprintf("https://%s/api/session", c.config.Address)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", sessionURL, nil)
 	if err != nil {
@@ -587,7 +587,7 @@ func (c *VMwareCollector) discoverVMs(ctx context.Context) ([]unified.Resource, 
 			Type:     unified.ResourceTypeVM,
 			Provider: "vmware",
 			Status:   vm.PowerState,
-			Properties: map[string]any{
+			Attributes: map[string]any{
 				"cpu_count":       vm.CPUCount,
 				"memory_size_mib": vm.MemorySizeMiB,
 				"power_state":     vm.PowerState,
@@ -619,7 +619,7 @@ func (c *VMwareCollector) discoverHosts(ctx context.Context) ([]unified.Resource
 			Type:     unified.ResourceTypeHost,
 			Provider: "vmware",
 			Status:   host.ConnectionState,
-			Properties: map[string]any{
+			Attributes: map[string]any{
 				"power_state":      host.PowerState,
 				"connection_state": host.ConnectionState,
 			},
@@ -649,7 +649,7 @@ func (c *VMwareCollector) discoverDatastores(ctx context.Context) ([]unified.Res
 			Name:     ds.Name,
 			Type:     unified.ResourceTypeDatastore,
 			Provider: "vmware",
-			Properties: map[string]any{
+			Attributes: map[string]any{
 				"type":       ds.Type,
 				"capacity":   ds.Capacity,
 				"free_space": ds.FreeSpace,
@@ -680,7 +680,7 @@ func (c *VMwareCollector) discoverNetworks(ctx context.Context) ([]unified.Resou
 			Name:     net.Name,
 			Type:     unified.ResourceTypeNetwork,
 			Provider: "vmware",
-			Properties: map[string]any{
+			Attributes: map[string]any{
 				"type": net.Type,
 			},
 		}
@@ -692,7 +692,7 @@ func (c *VMwareCollector) discoverNetworks(ctx context.Context) ([]unified.Resou
 
 // doRequest performs an authenticated request to vCenter.
 func (c *VMwareCollector) doRequest(ctx context.Context, path string) ([]byte, error) {
-	baseURL := fmt.Sprintf("https://%s", c.config.VCenterURL)
+	baseURL := fmt.Sprintf("https://%s", c.config.Address)
 	reqURL, err := url.Parse(baseURL + path)
 	if err != nil {
 		return nil, err
@@ -731,7 +731,7 @@ func (c *VMwareCollector) Logout(ctx context.Context) error {
 		return nil
 	}
 
-	logoutURL := fmt.Sprintf("https://%s/api/session", c.config.VCenterURL)
+	logoutURL := fmt.Sprintf("https://%s/api/session", c.config.Address)
 	req, err := http.NewRequestWithContext(ctx, "DELETE", logoutURL, nil)
 	if err != nil {
 		return err

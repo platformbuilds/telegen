@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/platformbuilds/telegen/internal/pipeline"
 	"github.com/platformbuilds/telegen/internal/selftelemetry"
+	"github.com/platformbuilds/telegen/internal/sigdef"
 )
 
 // Registry manages multiple exporters and routes signals to them
@@ -21,7 +21,7 @@ type Registry struct {
 
 	mu        sync.RWMutex
 	exporters map[string]Exporter
-	bySignal  map[pipeline.SignalType][]Exporter
+	bySignal  map[sigdef.SignalType][]Exporter
 
 	running bool
 }
@@ -33,7 +33,7 @@ func NewRegistry(cfg Config, log *slog.Logger, st *selftelemetry.Metrics) (*Regi
 		log:       log.With("component", "exporter_registry"),
 		st:        st,
 		exporters: make(map[string]Exporter),
-		bySignal:  make(map[pipeline.SignalType][]Exporter),
+		bySignal:  make(map[sigdef.SignalType][]Exporter),
 	}
 
 	// Initialize configured exporters
@@ -155,7 +155,7 @@ func (r *Registry) Stop(ctx context.Context) error {
 }
 
 // Export exports signals to all relevant exporters
-func (r *Registry) Export(ctx context.Context, signalType pipeline.SignalType, signals []pipeline.Signal) error {
+func (r *Registry) Export(ctx context.Context, signalType sigdef.SignalType, signals []sigdef.Signal) error {
 	r.mu.RLock()
 	exporters := r.bySignal[signalType]
 	r.mu.RUnlock()
@@ -185,7 +185,7 @@ func (r *Registry) Export(ctx context.Context, signalType pipeline.SignalType, s
 }
 
 // ExportToExporter exports signals to a specific exporter by name
-func (r *Registry) ExportToExporter(ctx context.Context, name string, signalType pipeline.SignalType, signals []pipeline.Signal) error {
+func (r *Registry) ExportToExporter(ctx context.Context, name string, signalType sigdef.SignalType, signals []sigdef.Signal) error {
 	r.mu.RLock()
 	exp, ok := r.exporters[name]
 	r.mu.RUnlock()
@@ -247,5 +247,5 @@ type RegistryStats struct {
 // ExporterInfo holds information about an exporter
 type ExporterInfo struct {
 	Name    string
-	Signals []pipeline.SignalType
+	Signals []sigdef.SignalType
 }
