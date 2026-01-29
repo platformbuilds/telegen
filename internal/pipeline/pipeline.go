@@ -6,10 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/capture/cassandra"
-	httpcap "github.com/platformbuilds/telegen/internal/capture/http"
-	"github.com/platformbuilds/telegen/internal/capture/kafka"
-	"github.com/platformbuilds/telegen/internal/capture/postgres"
 	"github.com/platformbuilds/telegen/internal/config"
 	"github.com/platformbuilds/telegen/internal/exporters/otlp"
 	"github.com/platformbuilds/telegen/internal/exporters/remotewrite"
@@ -22,9 +18,7 @@ import (
 	"github.com/platformbuilds/telegen/internal/selftelemetry"
 
 	"github.com/prometheus/prometheus/prompb"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/resource"
-	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -120,45 +114,15 @@ func (p *Pipeline) Start(ctx context.Context) error {
 		p.startJFRPipeline(ctx)
 	}
 
-	// Demo span synthesis to show exemplars plumbing: http + cql + pg + kafka recognizers.
-	if p.ot != nil && p.ot.Trace != nil {
-		go p.demoSpanGenerators(ctx)
+	// eBPF instrumentation (OBI-based auto-instrumentation)
+	if p.cfg.EBPF.Enabled {
+		log.Printf("eBPF instrumentation enabled (context propagation, protocol detection)")
+		// TODO: Initialize and start the OBI instrumenter pipeline
+		// This will be done by calling internal/appolly.Build() with the config
 	}
 
 	p.st.SetReady(true)
 	return nil
-}
-
-func (p *Pipeline) demoSpanGenerators(ctx context.Context) {
-	tr := p.ot.Trace.Tracer("telegen/demo")
-	// HTTP
-	if g := httpcap.Classify([]byte("GET /health HTTP/1.1\r\n")); g.Proto != "" {
-		ctx2, span := tr.Start(ctx, "HTTP "+g.Method+" "+g.Path, trace.WithSpanKind(trace.SpanKindServer))
-		span.SetAttributes(attribute.String("http.method", g.Method), attribute.String("url.path", g.Path))
-		span.End()
-		// The ctx2 would carry span context for exemplar linking downstream.
-		_ = ctx2
-	}
-	// Cassandra CQL
-	ok, stmt := cassandra.CQL{}.TryParseQuery([]byte("SELECT * FROM ks.tbl WHERE id=1;"))
-	if ok {
-		_, span := tr.Start(ctx, "Cassandra SELECT", trace.WithSpanKind(trace.SpanKindClient))
-		span.SetAttributes(attribute.String("db.system", "cassandra"), attribute.String("db.statement", stmt))
-		span.End()
-	}
-	// Postgres
-	ok2, sql := postgres.TryParseSimpleQuery([]byte("Q\x00\x00\x00\x14SELECT 1;\x00"))
-	if ok2 {
-		_, span := tr.Start(ctx, "PostgreSQL query", trace.WithSpanKind(trace.SpanKindClient))
-		span.SetAttributes(attribute.String("db.system", "postgresql"), attribute.String("db.statement", sql))
-		span.End()
-	}
-	// Kafka
-	if kafka.MaybeKafka([]byte{0x00, 0x12}) {
-		_, span := tr.Start(ctx, "Kafka request", trace.WithSpanKind(trace.SpanKindClient))
-		span.SetAttributes(attribute.String("messaging.system", "kafka"))
-		span.End()
-	}
 }
 
 func (p *Pipeline) runRemoteWrite(ctx context.Context) {
@@ -193,17 +157,17 @@ func mustDur(s string) time.Duration { d, _ := time.ParseDuration(s); return d }
 
 func (p *Pipeline) EnqueueMetrics(wr *prompb.WriteRequest) {
 	if len(p.awsLabels) > 0 && wr != nil {
-		for _, ts := range wr.Timeseries {
+		for i := range wr.Timeseries {
 			// Build a set of existing labels for quick lookup
 			have := map[string]struct{}{}
-			for _, l := range ts.Labels {
+			for _, l := range wr.Timeseries[i].Labels {
 				have[l.Name] = struct{}{}
 			}
 			for k, v := range p.awsLabels {
 				if _, ok := have[k]; ok {
 					continue
 				}
-				ts.Labels = append(ts.Labels, prompb.Label{Name: k, Value: v})
+				wr.Timeseries[i].Labels = append(wr.Timeseries[i].Labels, prompb.Label{Name: k, Value: v})
 			}
 		}
 	}

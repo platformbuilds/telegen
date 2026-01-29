@@ -5,6 +5,13 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/platformbuilds/telegen/internal/appolly/services"
+	obiconfig "github.com/platformbuilds/telegen/internal/obiconfig"
+	"github.com/platformbuilds/telegen/internal/transform"
+	"github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
+	"github.com/platformbuilds/telegen/pkg/export/prom"
+	"github.com/platformbuilds/telegen/pkg/filter"
 )
 
 type TLS struct {
@@ -55,6 +62,48 @@ type Config struct {
 		} `yaml:"logs"`
 		JFR JFRConfig `yaml:"jfr"`
 	} `yaml:"pipelines"`
+
+	// eBPF instrumentation configuration (OBI integration)
+	EBPF EBPFConfig `yaml:"ebpf"`
+}
+
+// EBPFConfig holds configuration for eBPF-based auto-instrumentation (from OBI)
+type EBPFConfig struct {
+	// Enabled controls whether eBPF instrumentation is active
+	Enabled bool `yaml:"enabled"`
+
+	// Tracer holds eBPF tracer settings
+	Tracer obiconfig.EBPFTracer `yaml:"tracer"`
+
+	// Discovery configuration for finding processes to instrument
+	Discovery services.DiscoveryConfig `yaml:"discovery"`
+
+	// NameResolver configuration for resolving service names
+	NameResolver *transform.NameResolverConfig `yaml:"name_resolver"`
+
+	// Routes for request path aggregation
+	Routes *transform.RoutesConfig `yaml:"routes"`
+
+	// Filters for attribute-based filtering
+	Filters filter.AttributesConfig `yaml:"filter"`
+
+	// OTELMetrics configures OpenTelemetry metrics export
+	OTELMetrics otelcfg.MetricsConfig `yaml:"otel_metrics_export"`
+
+	// Traces configures OpenTelemetry traces export
+	Traces otelcfg.TracesConfig `yaml:"otel_traces_export"`
+
+	// Prometheus configures Prometheus metrics endpoint
+	Prometheus prom.PrometheusConfig `yaml:"prometheus_export"`
+
+	// NetworkFlows configures network observability
+	NetworkFlows NetworkFlowsConfig `yaml:"network"`
+}
+
+// NetworkFlowsConfig holds configuration for network flow observability
+type NetworkFlowsConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// Additional network config fields can be added as needed
 }
 
 // JFRConfig holds Java Flight Recorder pipeline configuration
