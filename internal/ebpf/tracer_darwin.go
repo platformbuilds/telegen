@@ -1,0 +1,51 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package ebpf // import "github.com/platformbuilds/telegen/internal/ebpf"
+
+import (
+	"context"
+	"time"
+
+	"github.com/cilium/ebpf/link"
+
+	"github.com/platformbuilds/telegen/internal/appolly/app/request"
+	"github.com/platformbuilds/telegen/internal/discover/exec"
+	ebpfcommon "github.com/platformbuilds/telegen/internal/ebpf/common"
+	"github.com/platformbuilds/telegen/pkg/export/imetrics"
+	"github.com/platformbuilds/telegen/pkg/pipe/msg"
+)
+
+type instrumenter struct{}
+
+// dummy implementations to avoid compilation errors in Darwin.
+// The tracer component is only usable in Linux.
+
+func (pt *ProcessTracer) Run(ctx context.Context, _ *ebpfcommon.EBPFEventContext, _ *msg.Queue[[]request.Span]) {
+	// avoids linter complaining for not using metrics
+	pt.metrics.Start(ctx)
+}
+
+func NewProcessTracer(_ ProcessTracerType, _ []Tracer, _ time.Duration, _ imetrics.Reporter) *ProcessTracer {
+	return nil
+}
+
+func (pt *ProcessTracer) Init(_ *ebpfcommon.EBPFEventContext) error {
+	pt.log.Debug("avoiding linter complaints for not using log and shutdownTimeout fields",
+		"v", pt.shutdownTimeout)
+	return nil
+}
+
+func (pt *ProcessTracer) NewExecutable(_ *link.Executable, _ *Instrumentable) error {
+	return nil
+}
+
+func (pt *ProcessTracer) NewExecutableInstance(_ *Instrumentable) error {
+	return nil
+}
+
+func (pt *ProcessTracer) UnlinkExecutable(_ *exec.FileInfo) {}
+
+func RunUtilityTracer(_ context.Context, _ *ebpfcommon.EBPFEventContext, _ UtilityTracer) error {
+	return nil
+}

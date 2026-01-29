@@ -1,7 +1,0 @@
-attributes:
-  select:
-    obi_network_flow_bytes:
-      include:
-      - obi.ip
-      - src.name
-      - dst.port
