@@ -1,0 +1,163 @@
+# Entity Sensor MIB Module - RFC 3433
+# Environmental sensors (temperature, voltage, current, power)
+
+module: entity_sensor_mib
+description: "RFC 3433 - Entity Sensor MIB"
+
+walk:
+  - "1.3.6.1.2.1.99.1.1"   # entPhySensorTable
+
+metrics:
+  # Sensor Type
+  - name: entity_sensor_type
+    oid: "1.3.6.1.2.1.99.1.1.1.1"
+    type: gauge
+    help: "The type of data returned by the associated entPhySensorValue"
+    indexes:
+      - labelname: entPhysicalIndex
+        type: Integer
+    lookups:
+      - labels: [entPhysicalIndex]
+        oid: "1.3.6.1.2.1.47.1.1.1.1.7"
+        labelname: entPhysicalName
+    enum_values:
+      1: other
+      2: unknown
+      3: voltsAC
+      4: voltsDC
+      5: amperes
+      6: watts
+      7: hertz
+      8: celsius
+      9: percentRH
+      10: rpm
+      11: cmm
+      12: truthvalue
+
+  # Sensor Scale
+  - name: entity_sensor_scale
+    oid: "1.3.6.1.2.1.99.1.1.1.2"
+    type: gauge
+    help: "An exponent-of-ten scaling factor for the value"
+    indexes:
+      - labelname: entPhysicalIndex
+        type: Integer
+    enum_values:
+      1: yocto  # 10^-24
+      2: zepto  # 10^-21
+      3: atto   # 10^-18
+      4: femto  # 10^-15
+      5: pico   # 10^-12
+      6: nano   # 10^-9
+      7: micro  # 10^-6
+      8: milli  # 10^-3
+      9: units  # 10^0
+      10: kilo  # 10^3
+      11: mega  # 10^6
+      12: giga  # 10^9
+      13: tera  # 10^12
+      14: exa   # 10^15
+      15: peta  # 10^18
+      16: zetta # 10^21
+      17: yotta # 10^24
+
+  # Sensor Precision
+  - name: entity_sensor_precision
+    oid: "1.3.6.1.2.1.99.1.1.1.3"
+    type: gauge
+    help: "The number of decimal places in the sensor value"
+    indexes:
+      - labelname: entPhysicalIndex
+        type: Integer
+
+  # Sensor Value
+  - name: entity_sensor_value
+    oid: "1.3.6.1.2.1.99.1.1.1.4"
+    type: gauge
+    help: "The most recent measurement from the sensor"
+    indexes:
+      - labelname: entPhysicalIndex
+        type: Integer
+    lookups:
+      - labels: [entPhysicalIndex]
+        oid: "1.3.6.1.2.1.47.1.1.1.1.7"
+        labelname: entPhysicalName
+
+  # Sensor Operational Status
+  - name: entity_sensor_oper_status
+    oid: "1.3.6.1.2.1.99.1.1.1.5"
+    type: gauge
+    help: "The operational status of the sensor"
+    indexes:
+      - labelname: entPhysicalIndex
+        type: Integer
+    enum_values:
+      1: ok
+      2: unavailable
+      3: nonoperational
+
+  # Sensor Units Display
+  - name: entity_sensor_units_display
+    oid: "1.3.6.1.2.1.99.1.1.1.6"
+    type: info
+    help: "A textual description of the units associated with the sensor value"
+    indexes:
+      - labelname: entPhysicalIndex
+        type: Integer
+
+  # Sensor Value Timestamp
+  - name: entity_sensor_value_timestamp
+    oid: "1.3.6.1.2.1.99.1.1.1.7"
+    type: gauge
+    help: "The time when the sensor value was last updated"
+    indexes:
+      - labelname: entPhysicalIndex
+        type: Integer
+
+  # Sensor Value Update Rate
+  - name: entity_sensor_value_update_rate
+    oid: "1.3.6.1.2.1.99.1.1.1.8"
+    type: gauge
+    help: "The interval (in ms) between sensor updates"
+    indexes:
+      - labelname: entPhysicalIndex
+        type: Integer
+
+# Entity Physical Table (for lookups)
+entity_physical:
+  - name: entity_physical_descr
+    oid: "1.3.6.1.2.1.47.1.1.1.1.2"
+    type: info
+    help: "A textual description of the physical entity"
+    indexes:
+      - labelname: entPhysicalIndex
+        type: Integer
+
+  - name: entity_physical_name
+    oid: "1.3.6.1.2.1.47.1.1.1.1.7"
+    type: info
+    help: "The textual name of the physical entity"
+    indexes:
+      - labelname: entPhysicalIndex
+        type: Integer
+
+  - name: entity_physical_class
+    oid: "1.3.6.1.2.1.47.1.1.1.1.5"
+    type: gauge
+    help: "The general hardware type of the physical entity"
+    indexes:
+      - labelname: entPhysicalIndex
+        type: Integer
+    enum_values:
+      1: other
+      2: unknown
+      3: chassis
+      4: backplane
+      5: container
+      6: powerSupply
+      7: fan
+      8: sensor
+      9: module
+      10: port
+      11: stack
+      12: cpu
