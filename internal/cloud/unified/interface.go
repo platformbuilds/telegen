@@ -1,4 +1,3 @@
-package unified
 // Package unified provides a unified cloud abstraction layer for detecting and collecting
 // metrics from public clouds (AWS, GCP, Azure), private clouds (OpenStack, VMware, Nutanix),
 // and on-premises infrastructure.
@@ -9,211 +8,217 @@ import (
 	"time"
 )
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-)	RelationshipRoleGuest    = "guest"	RelationshipRoleHost     = "host"	RelationshipRoleOwner    = "owner"	RelationshipRoleMember   = "member"	RelationshipRoleAttached = "attached"	RelationshipRoleChild    = "child"	RelationshipRoleParent   = "parent"const (// RelationshipRole defines standard relationship roles.}	Provider string       `json:"provider,omitempty"`	Role     string       `json:"role"` // parent, child, attached, member, owner	Type     ResourceType `json:"type"`	Name     string       `json:"name,omitempty"`	ID       string       `json:"id"`type ResourceRef struct {// ResourceRef links resources together (parent/child, attachment, etc.).}	Relationships []ResourceRef `json:"relationships,omitempty"`	// Relationships to other resources	Attributes map[string]any `json:"attributes,omitempty"`	// Extended attributes (provider-specific)	Labels map[string]string `json:"labels,omitempty"`	Tags   map[string]string `json:"tags,omitempty"`	// User metadata	DiskUsedGB int64 `json:"disk_used_gb,omitempty"`	DiskGB     int64 `json:"disk_gb,omitempty"`	MemoryMB   int64 `json:"memory_mb,omitempty"`	CPUCores   int   `json:"cpu_cores,omitempty"`	// Capacity (for compute/storage resources)	UpdatedAt time.Time `json:"updated_at,omitempty"`	CreatedAt time.Time `json:"created_at,omitempty"`	PowerState string   `json:"power_state,omitempty"` // on, off, suspended	Status    string    `json:"status"` // running, stopped, pending, error	// State	Datacenter       string `json:"datacenter,omitempty"`	AvailabilityZone string `json:"availability_zone,omitempty"`	Region           string `json:"region,omitempty"`	// Location	Provider string       `json:"provider"`	Type     ResourceType `json:"type"`	Name     string       `json:"name"`	ID       string       `json:"id"`	// Identificationtype Resource struct {// Resource represents any cloud resource with unified attributes.}	return string(rt)func (rt ResourceType) String() string {// String returns the string representation of ResourceType.)	ResourceTypeVApp         ResourceType = "vapp"	ResourceTypeResourcePool ResourceType = "resource_pool"	// Other resources	ResourceTypeDatabase ResourceType = "database"	// Database resources	ResourceTypeFloatingIP   ResourceType = "floating_ip"	ResourceTypeRouter       ResourceType = "router"	ResourceTypeLoadBalancer ResourceType = "load_balancer"	ResourceTypeSubnet       ResourceType = "subnet"	ResourceTypeNetwork      ResourceType = "network"	// Network resources	ResourceTypeDisk      ResourceType = "disk"	ResourceTypeVolume    ResourceType = "volume"	ResourceTypeDatastore ResourceType = "datastore"	// Storage resources	ResourceTypePod       ResourceType = "pod"	ResourceTypeContainer ResourceType = "container"	ResourceTypeCluster   ResourceType = "cluster"	ResourceTypeHost      ResourceType = "host"	ResourceTypeVM        ResourceType = "vm"	// Compute resourcesconst (type ResourceType string// ResourceType enumerates cloud resource types.}	LastUpdated     time.Time `json:"last_updated"`	DetectedAt      time.Time `json:"detected_at"`	DetectionMethod string    `json:"detection_method"` // imds, env, hypervisor, api, dmi	// Detection metadata	Labels map[string]string `json:"labels,omitempty"`	Tags   map[string]string `json:"tags,omitempty"`	// Labels and tags (user-defined metadata)	Architecture  string `json:"architecture,omitempty"` // amd64, arm64	DiskGB        int64 `json:"disk_gb,omitempty"`	MemoryMB      int64 `json:"memory_mb,omitempty"`	CPUCores      int   `json:"cpu_cores,omitempty"`	// Hardware details (when available)	ImageName string `json:"image_name,omitempty"`	ImageID   string `json:"image_id,omitempty"`	// Image information	ResourcePoolID string `json:"resource_pool_id,omitempty"` // VMware resource pool	ClusterName    string `json:"cluster_name,omitempty"`    // Cluster name	ClusterID      string `json:"cluster_id,omitempty"`      // vSphere cluster, Nutanix cluster	HostName       string `json:"host_name,omitempty"`       // ESXi hostname	HostID         string `json:"host_id,omitempty"`         // ESXi host ID, hypervisor ID	IsContainer    bool   `json:"is_container"`	IsVM           bool   `json:"is_vm"`	Hypervisor     string `json:"hypervisor,omitempty"` // kvm, xen, vmware, hyperv, ahv	// Virtualization details	MAC         string `json:"mac,omitempty"`    // Primary MAC address	Subnet      string `json:"subnet,omitempty"` // Subnet ID or name	VPC         string `json:"vpc,omitempty"`    // VPC, VNet, Network	PublicIPv6  string `json:"public_ipv6,omitempty"`	PrivateIPv6 string `json:"private_ipv6,omitempty"`	PublicIP    string `json:"public_ip,omitempty"`	PrivateIP   string `json:"private_ip"`	// Network configuration	Hostname     string `json:"hostname"`	InstanceType string `json:"instance_type"` // Flavor, machine type, VM size	InstanceName string `json:"instance_name"`	InstanceID   string `json:"instance_id"`	// Compute instance information	AccountName string `json:"account_name,omitempty"` // Human-readable account name	AccountID   string `json:"account_id"`             // AWS account, GCP project, OpenStack project	// Account/Project identification	Datacenter       string `json:"datacenter,omitempty"` // For VMware/private clouds	AvailabilityZone string `json:"availability_zone"`	Region           string `json:"region"`	// Location	ProviderType CloudType `json:"provider_type"` // public, private, hybrid, on_premises	Provider     string    `json:"provider"`      // aws, gcp, azure, openstack, vmware, nutanix, onprem	// Provider identificationtype CloudMetadata struct {// This struct normalizes cloud-specific metadata into a common format.// CloudMetadata contains unified metadata across all cloud types.}	return string(ct)func (ct CloudType) String() string {// String returns the string representation of CloudType.)	CloudTypeUnknown CloudType = "unknown"	// CloudTypeUnknown represents an unknown or undetected environment.	CloudTypeOnPrem CloudType = "on_premises"	// CloudTypeOnPrem represents on-premises/bare metal infrastructure.	CloudTypeHybrid CloudType = "hybrid"	// CloudTypeHybrid represents hybrid cloud environments.	CloudTypePrivate CloudType = "private"	// CloudTypePrivate represents private cloud platforms (OpenStack, VMware, Nutanix).	CloudTypePublic CloudType = "public"	// CloudTypePublic represents public cloud providers (AWS, GCP, Azure, etc.).const (type CloudType string// CloudType categorizes cloud environments.}	HealthCheck(ctx context.Context) error	// HealthCheck verifies the provider connection is healthy.	DiscoverResources(ctx context.Context) ([]Resource, error)	// DiscoverResources discovers cloud resources (VMs, hosts, datastores, etc.).	CollectMetrics(ctx context.Context) ([]Metric, error)	// CollectMetrics collects cloud-specific metrics.	GetMetadata(ctx context.Context) (*CloudMetadata, error)	// GetMetadata retrieves cloud metadata for the current instance.	Detect(ctx context.Context) (bool, error)	// Returns true if detected, along with any error encountered.	// Detect checks if this provider is the active cloud environment.	Priority() int	// Public clouds: 0-10, Private clouds: 11-20, On-prem: 100+	// Priority returns the detection priority (lower = higher priority).	Type() CloudType	// Type returns the cloud type category.	Name() string	// Name returns the provider name (e.g., "aws", "gcp", "openstack", "vmware").type CloudProvider interface {// Implementations must be safe for concurrent use.// CloudProvider represents any cloud platform (public or private).
+// CloudType categorizes cloud environments.
+type CloudType string
+
+const (
+	// CloudTypePublic represents public cloud providers (AWS, GCP, Azure, etc.).
+	CloudTypePublic CloudType = "public"
+	// CloudTypePrivate represents private cloud platforms (OpenStack, VMware, Nutanix).
+	CloudTypePrivate CloudType = "private"
+	// CloudTypeHybrid represents hybrid cloud environments.
+	CloudTypeHybrid CloudType = "hybrid"
+	// CloudTypeOnPrem represents on-premises/bare metal infrastructure.
+	CloudTypeOnPrem CloudType = "on_premises"
+	// CloudTypeUnknown represents an unknown or undetected environment.
+	CloudTypeUnknown CloudType = "unknown"
+	// CloudTypeAlibaba represents Alibaba Cloud (Aliyun).
+	CloudTypeAlibaba CloudType = "alibaba"
+	// CloudTypeOracle represents Oracle Cloud Infrastructure.
+	CloudTypeOracle CloudType = "oracle"
+	// CloudTypeDigitalOcean represents DigitalOcean.
+	CloudTypeDigitalOcean CloudType = "digitalocean"
+)
+
+// String returns the string representation of CloudType.
+func (ct CloudType) String() string {
+	return string(ct)
+}
+
+// CloudProvider represents any cloud platform (public or private).
+// Implementations must be safe for concurrent use.
+type CloudProvider interface {
+	// Name returns the provider name (e.g., "aws", "gcp", "openstack", "vmware").
+	Name() string
+	// Type returns the cloud type category.
+	Type() CloudType
+	// Priority returns the detection priority (lower = higher priority).
+	Priority() int
+	// Detect checks if this provider is the active cloud environment.
+	Detect(ctx context.Context) (bool, error)
+	// GetMetadata retrieves cloud metadata for the current instance.
+	GetMetadata(ctx context.Context) (*CloudMetadata, error)
+	// CollectMetrics collects cloud-specific metrics.
+	CollectMetrics(ctx context.Context) ([]Metric, error)
+	// DiscoverResources discovers cloud resources (VMs, hosts, datastores, etc.).
+	DiscoverResources(ctx context.Context) ([]Resource, error)
+	// HealthCheck verifies the provider connection is healthy.
+	HealthCheck(ctx context.Context) HealthCheckResult
+}
+
+// CloudMetadata contains unified metadata across all cloud types.
+type CloudMetadata struct {
+	// Provider identification
+	Provider     string    `json:"provider"`
+	ProviderType CloudType `json:"provider_type"`
+	Platform     string    `json:"platform,omitempty"` // Underlying platform (e.g., vmware, kvm)
+
+	// Location
+	Region           string `json:"region"`
+	AvailabilityZone string `json:"availability_zone"`
+	Zone             string `json:"zone,omitempty"` // Alias for AvailabilityZone
+	Datacenter       string `json:"datacenter,omitempty"`
+
+	// Account/Project identification
+	AccountID   string `json:"account_id"`
+	AccountName string `json:"account_name,omitempty"`
+
+	// Compute instance information
+	InstanceID   string `json:"instance_id"`
+	InstanceName string `json:"instance_name"`
+	InstanceType string `json:"instance_type"`
+	Hostname     string `json:"hostname"`
+
+	// Network configuration
+	PrivateIP   string `json:"private_ip"`
+	PublicIP    string `json:"public_ip,omitempty"`
+	PrivateIPv6 string `json:"private_ipv6,omitempty"`
+	PublicIPv6  string `json:"public_ipv6,omitempty"`
+	VPC         string `json:"vpc,omitempty"`
+	Subnet      string `json:"subnet,omitempty"`
+	MAC         string `json:"mac,omitempty"`
+
+	// Virtualization details
+	Hypervisor  string `json:"hypervisor,omitempty"`
+	IsVM        bool   `json:"is_vm"`
+	IsContainer bool   `json:"is_container"`
+
+	// Host/Cluster information
+	HostID         string `json:"host_id,omitempty"`
+	HostName       string `json:"host_name,omitempty"`
+	ClusterID      string `json:"cluster_id,omitempty"`
+	ClusterName    string `json:"cluster_name,omitempty"`
+	Cluster        string `json:"cluster,omitempty"` // Alias for ClusterName
+	ResourcePoolID string `json:"resource_pool_id,omitempty"`
+
+	// Image information
+	ImageID   string `json:"image_id,omitempty"`
+	ImageName string `json:"image_name,omitempty"`
+
+	// Hardware details
+	CPUCores     int    `json:"cpu_cores,omitempty"`
+	MemoryMB     int64  `json:"memory_mb,omitempty"`
+	DiskGB       int64  `json:"disk_gb,omitempty"`
+	Architecture string `json:"architecture,omitempty"`
+
+	// User-defined metadata
+	Tags   map[string]string `json:"tags,omitempty"`
+	Labels map[string]string `json:"labels,omitempty"`
+
+	// Detection metadata
+	DetectionMethod string    `json:"detection_method"`
+	DetectedAt      time.Time `json:"detected_at"`
+	LastUpdated     time.Time `json:"last_updated"`
+}
+
+// ResourceType enumerates cloud resource types.
+type ResourceType string
+
+const (
+	// Compute resources
+	ResourceTypeVM        ResourceType = "vm"
+	ResourceTypeHost      ResourceType = "host"
+	ResourceTypeCluster   ResourceType = "cluster"
+	ResourceTypeContainer ResourceType = "container"
+	ResourceTypePod       ResourceType = "pod"
+
+	// Storage resources
+	ResourceTypeDatastore ResourceType = "datastore"
+	ResourceTypeVolume    ResourceType = "volume"
+	ResourceTypeDisk      ResourceType = "disk"
+
+	// Network resources
+	ResourceTypeNetwork      ResourceType = "network"
+	ResourceTypeSubnet       ResourceType = "subnet"
+	ResourceTypeLoadBalancer ResourceType = "load_balancer"
+	ResourceTypeRouter       ResourceType = "router"
+	ResourceTypeFloatingIP   ResourceType = "floating_ip"
+
+	// Database resources
+	ResourceTypeDatabase ResourceType = "database"
+
+	// Other resources
+	ResourceTypeResourcePool ResourceType = "resource_pool"
+	ResourceTypeVApp         ResourceType = "vapp"
+)
+
+// String returns the string representation of ResourceType.
+func (rt ResourceType) String() string {
+	return string(rt)
+}
+
+// Resource represents any cloud resource with unified attributes.
+type Resource struct {
+	// Identification
+	ID       string       `json:"id"`
+	Name     string       `json:"name"`
+	Type     ResourceType `json:"type"`
+	Provider string       `json:"provider"`
+
+	// Location
+	Region           string `json:"region,omitempty"`
+	AvailabilityZone string `json:"availability_zone,omitempty"`
+	Datacenter       string `json:"datacenter,omitempty"`
+
+	// State
+	Status     string    `json:"status"`
+	PowerState string    `json:"power_state,omitempty"`
+	CreatedAt  time.Time `json:"created_at,omitempty"`
+	UpdatedAt  time.Time `json:"updated_at,omitempty"`
+
+	// Capacity
+	CPUCores   int   `json:"cpu_cores,omitempty"`
+	MemoryMB   int64 `json:"memory_mb,omitempty"`
+	DiskGB     int64 `json:"disk_gb,omitempty"`
+	DiskUsedGB int64 `json:"disk_used_gb,omitempty"`
+
+	// User metadata
+	Tags   map[string]string `json:"tags,omitempty"`
+	Labels map[string]string `json:"labels,omitempty"`
+
+	// Extended attributes
+	Attributes map[string]any `json:"attributes,omitempty"`
+
+	// Relationships to other resources
+	Relationships []ResourceRef `json:"relationships,omitempty"`
+}
+
+// ResourceRef links resources together.
+type ResourceRef struct {
+	ID       string       `json:"id"`
+	Name     string       `json:"name,omitempty"`
+	Type     ResourceType `json:"type"`
+	Role     string       `json:"role"`
+	Provider string       `json:"provider,omitempty"`
+}
+
+// Relationship roles
+const (
+	RelationshipRoleParent   = "parent"
+	RelationshipRoleChild    = "child"
+	RelationshipRoleAttached = "attached"
+	RelationshipRoleMember   = "member"
+	RelationshipRoleOwner    = "owner"
+	RelationshipRoleHost     = "host"
+	RelationshipRoleGuest    = "guest"
+)
+
+// HealthCheckResult contains health check information
+type HealthCheckResult struct {
+	Healthy   bool          `json:"healthy"`
+	Message   string        `json:"message,omitempty"`
+	Latency   time.Duration `json:"latency,omitempty"`
+	LastCheck time.Time     `json:"last_check"`
+}
+
+// Metric is defined in metrics.go

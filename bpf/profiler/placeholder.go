@@ -1,4 +1,3 @@
-package profiler
 // Copyright The Telegen Authors
 // SPDX-License-Identifier: Apache-2.0
 

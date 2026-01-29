@@ -20,8 +20,8 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/platformbuilds/telegen/internal/pipeline"
 	"github.com/platformbuilds/telegen/internal/selftelemetry"
+	"github.com/platformbuilds/telegen/internal/sigdef"
 )
 
 // OTLPExporter exports signals via OpenTelemetry Protocol
@@ -241,7 +241,7 @@ func (e *OTLPExporter) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (e *OTLPExporter) Export(ctx context.Context, signalType pipeline.SignalType, signals []pipeline.Signal) error {
+func (e *OTLPExporter) Export(ctx context.Context, signalType sigdef.SignalType, signals []sigdef.Signal) error {
 	if len(signals) == 0 {
 		return nil
 	}
@@ -250,13 +250,13 @@ func (e *OTLPExporter) Export(ctx context.Context, signalType pipeline.SignalTyp
 	var err error
 
 	switch signalType {
-	case pipeline.SignalTraces:
+	case sigdef.SignalTraces:
 		err = e.exportTraces(ctx, signals)
-	case pipeline.SignalMetrics:
+	case sigdef.SignalMetrics:
 		err = e.exportMetrics(ctx, signals)
-	case pipeline.SignalLogs:
+	case sigdef.SignalLogs:
 		err = e.exportLogs(ctx, signals)
-	case pipeline.SignalProfiles:
+	case sigdef.SignalProfiles:
 		err = e.exportProfiles(ctx, signals)
 	default:
 		return fmt.Errorf("unsupported signal type: %s", signalType)
@@ -270,13 +270,13 @@ func (e *OTLPExporter) Export(ctx context.Context, signalType pipeline.SignalTyp
 	return err
 }
 
-func (e *OTLPExporter) exportTraces(ctx context.Context, signals []pipeline.Signal) error {
+func (e *OTLPExporter) exportTraces(ctx context.Context, signals []sigdef.Signal) error {
 	if e.traceExporter == nil {
 		return nil
 	}
 
 	// Convert signals to trace spans
-	// In a real implementation, this would convert pipeline.Signal to trace.ReadOnlySpan
+	// In a real implementation, this would convert sigdef.Signal to trace.ReadOnlySpan
 	e.log.Debug("exporting traces", "count", len(signals))
 
 	if e.st != nil {
@@ -286,7 +286,7 @@ func (e *OTLPExporter) exportTraces(ctx context.Context, signals []pipeline.Sign
 	return nil
 }
 
-func (e *OTLPExporter) exportMetrics(ctx context.Context, signals []pipeline.Signal) error {
+func (e *OTLPExporter) exportMetrics(ctx context.Context, signals []sigdef.Signal) error {
 	if !e.cfg.Metrics.Enabled {
 		return nil
 	}
@@ -300,7 +300,7 @@ func (e *OTLPExporter) exportMetrics(ctx context.Context, signals []pipeline.Sig
 	return nil
 }
 
-func (e *OTLPExporter) exportLogs(ctx context.Context, signals []pipeline.Signal) error {
+func (e *OTLPExporter) exportLogs(ctx context.Context, signals []sigdef.Signal) error {
 	if !e.cfg.Logs.Enabled {
 		return nil
 	}
@@ -314,7 +314,7 @@ func (e *OTLPExporter) exportLogs(ctx context.Context, signals []pipeline.Signal
 	return nil
 }
 
-func (e *OTLPExporter) exportProfiles(ctx context.Context, signals []pipeline.Signal) error {
+func (e *OTLPExporter) exportProfiles(ctx context.Context, signals []sigdef.Signal) error {
 	if !e.cfg.Profiles.Enabled {
 		return nil
 	}
@@ -328,19 +328,19 @@ func (e *OTLPExporter) exportProfiles(ctx context.Context, signals []pipeline.Si
 	return nil
 }
 
-func (e *OTLPExporter) SupportedSignals() []pipeline.SignalType {
-	var signals []pipeline.SignalType
+func (e *OTLPExporter) SupportedSignals() []sigdef.SignalType {
+	var signals []sigdef.SignalType
 	if e.cfg.Traces.Enabled {
-		signals = append(signals, pipeline.SignalTraces)
+		signals = append(signals, sigdef.SignalTraces)
 	}
 	if e.cfg.Metrics.Enabled {
-		signals = append(signals, pipeline.SignalMetrics)
+		signals = append(signals, sigdef.SignalMetrics)
 	}
 	if e.cfg.Logs.Enabled {
-		signals = append(signals, pipeline.SignalLogs)
+		signals = append(signals, sigdef.SignalLogs)
 	}
 	if e.cfg.Profiles.Enabled {
-		signals = append(signals, pipeline.SignalProfiles)
+		signals = append(signals, sigdef.SignalProfiles)
 	}
 	return signals
 }
@@ -384,7 +384,7 @@ func (e *DebugExporter) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (e *DebugExporter) Export(ctx context.Context, signalType pipeline.SignalType, signals []pipeline.Signal) error {
+func (e *DebugExporter) Export(ctx context.Context, signalType sigdef.SignalType, signals []sigdef.Signal) error {
 	e.mu.Lock()
 	e.count++
 	count := e.count
@@ -421,11 +421,11 @@ func (e *DebugExporter) Export(ctx context.Context, signalType pipeline.SignalTy
 	return nil
 }
 
-func (e *DebugExporter) SupportedSignals() []pipeline.SignalType {
-	return []pipeline.SignalType{
-		pipeline.SignalTraces,
-		pipeline.SignalMetrics,
-		pipeline.SignalLogs,
-		pipeline.SignalProfiles,
+func (e *DebugExporter) SupportedSignals() []sigdef.SignalType {
+	return []sigdef.SignalType{
+		sigdef.SignalTraces,
+		sigdef.SignalMetrics,
+		sigdef.SignalLogs,
+		sigdef.SignalProfiles,
 	}
 }

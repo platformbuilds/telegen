@@ -130,8 +130,8 @@ func (d *MQDetector) identifyMQ(port ListeningPort) *MQInfo {
 		// ActiveMQ
 		61616: {MQTypeActiveMQ, "ActiveMQ (OpenWire)"},
 		61617: {MQTypeActiveMQ, "ActiveMQ (OpenWire SSL)"},
-		5672:  {MQTypeActiveMQ, "ActiveMQ (AMQP)"}, // overlaps with RabbitMQ
-		8161:  {MQTypeActiveMQ, "ActiveMQ (Web Console)"},
+		// Note: ActiveMQ AMQP port 5672 overlaps with RabbitMQ, so it's excluded
+		8161: {MQTypeActiveMQ, "ActiveMQ (Web Console)"},
 
 		// Redis (as queue)
 		6379: {MQTypeRedis, "Redis"},

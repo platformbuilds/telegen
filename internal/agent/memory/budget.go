@@ -1,4 +1,3 @@
-package memory
 // Copyright The Telegen Authors
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,308 +11,260 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-}	}		)			"heap", m.HeapAlloc,			"limit", b.hardLimitBytes,			"allocated", b.allocated.Load(),		b.log.Warn("memory hard limit reached",	if state == StateHardLimit {	}		runtime.GC()		b.log.Debug("triggering GC due to soft memory limit")	if state == StateSoftLimit && b.cfg.GCOnLimit {	state := b.State()	}		b.st.MemoryPeakBytes.Set(float64(b.peak.Load()))		b.st.MemoryAllocatedBytes.Set(float64(b.allocated.Load()))		b.st.MemoryStackBytes.Set(float64(m.StackInuse))		b.st.MemoryHeapBytes.Set(float64(m.HeapAlloc))	if b.st != nil {	// Update self-telemetry metrics	runtime.ReadMemStats(&m)	var m runtime.MemStatsfunc (b *Budget) checkMemory() {// checkMemory reads runtime memory stats and updates metrics}	}		}			b.checkMemory()		case <-ticker.C:			return		case <-b.stopCh:			return		case <-ctx.Done():		select {	for {	defer ticker.Stop()	ticker := time.NewTicker(b.cfg.CheckInterval)	defer b.wg.Done()func (b *Budget) monitor(ctx context.Context) {// monitor runs the background memory monitoring loop}	}		cb(state)	for _, cb := range subs {	b.subscribersMu.RUnlock()	subs := b.subscribers	b.subscribersMu.RLock()func (b *Budget) notifySubscribers(state State) {// notifySubscribers calls all registered callbacks with the new state}	}		}			b.st.MemoryState.Set(float64(newState))		if b.st != nil {		b.notifySubscribers(newState)	if oldState != newState {	oldState := State(b.state.Swap(int32(newState)))	}		newState = StateNormal	default:		newState = StateSoftLimit	case allocated >= b.softLimitBytes:		newState = StateHardLimit	case allocated >= b.hardLimitBytes:	switch {	var newState State	allocated := b.allocated.Load()func (b *Budget) updateState() {// updateState checks current allocation and updates state}	b.subscribers = append(b.subscribers, callback)	defer b.subscribersMu.Unlock()	b.subscribersMu.Lock()func (b *Budget) Subscribe(callback func(State)) {// Subscribe registers a callback for state change notifications}	return float64(b.allocated.Load()) / float64(b.maxBytes) * 100func (b *Budget) UsagePercent() float64 {// UsagePercent returns current usage as a percentage of max}	return available	}		return 0	if available < 0 {	available := b.hardLimitBytes - b.allocated.Load()func (b *Budget) Available() int64 {// Available returns the bytes available before hard limit}	return b.peak.Load()func (b *Budget) Peak() int64 {// Peak returns the peak allocated bytes since start}	return b.allocated.Load()func (b *Budget) Allocated() int64 {// Allocated returns the current allocated bytes}	return State(b.state.Load())func (b *Budget) State() State {// State returns the current memory pressure state}		bytes, b.allocated.Load(), b.hardLimitBytes)	return fmt.Errorf("memory budget exceeded: requested %d bytes, allocated %d of %d bytes",	}		return nil	if b.Allocate(bytes) {func (b *Budget) TryAllocate(bytes int64) error {// TryAllocate attempts allocation, returning error with reason if denied}	b.updateState()	}		b.allocated.Store(0)		// Shouldn't happen, but clamp to 0	if newVal < 0 {	newVal := b.allocated.Add(-bytes)	}		return	if bytes <= 0 {func (b *Budget) Free(bytes int64) {// Free releases the given number of bytes back to the budget}	return true	b.updateState()	}		return false		}			b.st.MemoryRejected.Add(float64(bytes))		if b.st != nil {		b.updateState()		b.allocated.Add(-bytes)		// Rollback	if newAllocated > b.hardLimitBytes {	// Check if we exceeded hard limit	}		}			break		if newAllocated <= peak || b.peak.CompareAndSwap(peak, newAllocated) {		peak := b.peak.Load()	for {	// Update peak if necessary	newAllocated := b.allocated.Add(bytes)	}		return true	if bytes <= 0 {func (b *Budget) Allocate(bytes int64) bool {// Returns true if allocation is allowed, false if it would exceed hard limit// Allocate attempts to allocate the given number of bytes}	return nil	b.wg.Wait()	close(b.stopCh)func (b *Budget) Stop(ctx context.Context) error {// Stop halts the memory monitoring goroutine}	return nil	go b.monitor(ctx)	b.wg.Add(1)func (b *Budget) Start(ctx context.Context) error {// Start begins the memory monitoring goroutine}	return b, nil	b.state.Store(int32(StateNormal))	}		stopCh:         make(chan struct{}),		hardLimitBytes: maxBytes * int64(cfg.HardLimitPercent) / 100,		softLimitBytes: maxBytes * int64(cfg.SoftLimitPercent) / 100,		maxBytes:       maxBytes,		st:             st,		log:            log.With("component", "memory_budget"),		cfg:            cfg,	b := &Budget{	maxBytes := cfg.MaxMemoryMB * 1024 * 1024	}		cfg.CheckInterval = 5 * time.Second	if cfg.CheckInterval <= 0 {	}		}			cfg.HardLimitPercent = 100		if cfg.HardLimitPercent > 100 {		cfg.HardLimitPercent = cfg.SoftLimitPercent + 10	if cfg.HardLimitPercent <= cfg.SoftLimitPercent {	}		cfg.HardLimitPercent = 90	if cfg.HardLimitPercent <= 0 || cfg.HardLimitPercent > 100 {	}		cfg.SoftLimitPercent = 70	if cfg.SoftLimitPercent <= 0 || cfg.SoftLimitPercent > 100 {	}		cfg.MaxMemoryMB = 512	if cfg.MaxMemoryMB <= 0 {func NewBudget(cfg Config, log *slog.Logger, st *selftelemetry.Metrics) (*Budget, error) {// NewBudget creates a new memory budget manager}	wg     sync.WaitGroup	stopCh chan struct{}	// Lifecycle	subscribers   []func(State)	subscribersMu sync.RWMutex	// Subscriber callbacks for state changes	maxBytes       int64	hardLimitBytes int64	softLimitBytes int64	// Limits in bytes	peak      atomic.Int64	allocated atomic.Int64	// Current allocation tracking	state atomic.Int32	st    *selftelemetry.Metrics	log   *slog.Logger	cfg   Configtype Budget struct {// Budget manages memory allocation and tracks usage against configured limits}	}		return "unknown"	default:		return "hard_limit"	case StateHardLimit:		return "soft_limit"	case StateSoftLimit:		return "normal"	case StateNormal:	switch s {func (s State) String() string {)	StateHardLimit	// StateHardLimit indicates memory usage is at critical levels	StateSoftLimit	// StateSoftLimit indicates memory usage is approaching the limit	StateNormal State = iota	// StateNormal indicates memory usage is within acceptable limitsconst (type State int32// State represents the current memory pressure state}	}		GCOnLimit:        true,		CheckInterval:    5 * time.Second,		HardLimitPercent: 90,		SoftLimitPercent: 70,		MaxMemoryMB:      512,	return Config{func DefaultConfig() Config {// DefaultConfig returns a Config with sensible defaults}	GCOnLimit bool `mapstructure:"gc_on_limit"`	// GCOnLimit triggers GC when soft limit is reached	CheckInterval time.Duration `mapstructure:"check_interval"`	// CheckInterval is how often to check memory usage	HardLimitPercent int `mapstructure:"hard_limit_percent"`	// HardLimitPercent is the percentage of max memory where drops occur	SoftLimitPercent int `mapstructure:"soft_limit_percent"`	// SoftLimitPercent is the percentage of max memory where warnings start	MaxMemoryMB int64 `mapstructure:"max_memory_mb"`	// MaxMemoryMB is the maximum memory budget in megabytestype Config struct {// Config holds memory budget configuration)	"github.com/platformbuilds/telegen/internal/selftelemetry"	"time"
+	"time"
+
+	"github.com/platformbuilds/telegen/internal/selftelemetry"
+)
+
+// Config holds memory budget configuration
+type Config struct {
+	MaxMemoryMB      int64         `mapstructure:"max_memory_mb"`
+	SoftLimitPercent int           `mapstructure:"soft_limit_percent"`
+	HardLimitPercent int           `mapstructure:"hard_limit_percent"`
+	CheckInterval    time.Duration `mapstructure:"check_interval"`
+	GCOnLimit        bool          `mapstructure:"gc_on_limit"`
+}
+
+// DefaultConfig returns a Config with sensible defaults
+func DefaultConfig() Config {
+	return Config{
+		MaxMemoryMB:      512,
+		SoftLimitPercent: 70,
+		HardLimitPercent: 90,
+		CheckInterval:    5 * time.Second,
+		GCOnLimit:        true,
+	}
+}
+
+// State represents the current memory pressure state
+type State int32
+
+const (
+	StateNormal State = iota
+	StateSoftLimit
+	StateHardLimit
+)
+
+func (s State) String() string {
+	switch s {
+	case StateNormal:
+		return "normal"
+	case StateSoftLimit:
+		return "soft_limit"
+	case StateHardLimit:
+		return "hard_limit"
+	default:
+		return "unknown"
+	}
+}
+
+// Budget manages memory allocation and tracks usage
+type Budget struct {
+	cfg Config
+	log *slog.Logger
+	st  *selftelemetry.Metrics
+
+	state     atomic.Int32
+	allocated atomic.Int64
+	peak      atomic.Int64
+
+	softLimitBytes int64
+	hardLimitBytes int64
+	maxBytes       int64
+
+	subscribersMu sync.RWMutex
+	subscribers   []func(State)
+
+	stopCh chan struct{}
+	wg     sync.WaitGroup
+}
+
+// NewBudget creates a new memory budget manager
+func NewBudget(cfg Config, log *slog.Logger, st *selftelemetry.Metrics) (*Budget, error) {
+	if cfg.MaxMemoryMB <= 0 {
+		cfg.MaxMemoryMB = 512
+	}
+	if cfg.SoftLimitPercent <= 0 || cfg.SoftLimitPercent > 100 {
+		cfg.SoftLimitPercent = 70
+	}
+	if cfg.HardLimitPercent <= 0 || cfg.HardLimitPercent > 100 {
+		cfg.HardLimitPercent = 90
+	}
+	if cfg.HardLimitPercent <= cfg.SoftLimitPercent {
+		cfg.HardLimitPercent = cfg.SoftLimitPercent + 10
+		if cfg.HardLimitPercent > 100 {
+			cfg.HardLimitPercent = 100
+		}
+	}
+	if cfg.CheckInterval <= 0 {
+		cfg.CheckInterval = 5 * time.Second
+	}
+
+	maxBytes := cfg.MaxMemoryMB * 1024 * 1024
+	b := &Budget{
+		cfg:            cfg,
+		log:            log.With("component", "memory_budget"),
+		st:             st,
+		maxBytes:       maxBytes,
+		softLimitBytes: maxBytes * int64(cfg.SoftLimitPercent) / 100,
+		hardLimitBytes: maxBytes * int64(cfg.HardLimitPercent) / 100,
+		stopCh:         make(chan struct{}),
+	}
+	b.state.Store(int32(StateNormal))
+	return b, nil
+}
+
+// Start begins the memory monitoring goroutine
+func (b *Budget) Start(ctx context.Context) error {
+	b.wg.Add(1)
+	go b.monitor(ctx)
+	return nil
+}
+
+// Stop halts the memory monitoring goroutine
+func (b *Budget) Stop(_ context.Context) error {
+	close(b.stopCh)
+	b.wg.Wait()
+	return nil
+}
+
+// Allocate attempts to allocate the given number of bytes
+func (b *Budget) Allocate(bytes int64) bool {
+	if bytes <= 0 {
+		return true
+	}
+	newAllocated := b.allocated.Add(bytes)
+	for {
+		peak := b.peak.Load()
+		if newAllocated <= peak || b.peak.CompareAndSwap(peak, newAllocated) {
+			break
+		}
+	}
+	if newAllocated > b.hardLimitBytes {
+		b.allocated.Add(-bytes)
+		b.updateState()
+		if b.st != nil {
+			b.st.MemoryRejected.Add(float64(bytes))
+		}
+		return false
+	}
+	b.updateState()
+	return true
+}
+
+// Free releases the given number of bytes
+func (b *Budget) Free(bytes int64) {
+	if bytes <= 0 {
+		return
+	}
+	newVal := b.allocated.Add(-bytes)
+	if newVal < 0 {
+		b.allocated.Store(0)
+	}
+	b.updateState()
+}
+
+// TryAllocate attempts allocation returning error if denied
+func (b *Budget) TryAllocate(bytes int64) error {
+	if b.Allocate(bytes) {
+		return nil
+	}
+	return fmt.Errorf("memory budget exceeded: requested %d bytes", bytes)
+}
+
+// State returns the current memory pressure state
+func (b *Budget) State() State { return State(b.state.Load()) }
+
+// Allocated returns the current allocated bytes
+func (b *Budget) Allocated() int64 { return b.allocated.Load() }
+
+// Peak returns the peak allocated bytes
+func (b *Budget) Peak() int64 { return b.peak.Load() }
+
+// Available returns bytes available before hard limit
+func (b *Budget) Available() int64 {
+	available := b.hardLimitBytes - b.allocated.Load()
+	if available < 0 {
+		return 0
+	}
+	return available
+}
+
+// UsagePercent returns current usage as percentage
+func (b *Budget) UsagePercent() float64 {
+	return float64(b.allocated.Load()) / float64(b.maxBytes) * 100
+}
+
+// Subscribe registers a callback for state changes
+func (b *Budget) Subscribe(callback func(State)) {
+	b.subscribersMu.Lock()
+	defer b.subscribersMu.Unlock()
+	b.subscribers = append(b.subscribers, callback)
+}
+
+func (b *Budget) updateState() {
+	allocated := b.allocated.Load()
+	var newState State
+	switch {
+	case allocated >= b.hardLimitBytes:
+		newState = StateHardLimit
+	case allocated >= b.softLimitBytes:
+		newState = StateSoftLimit
+	default:
+		newState = StateNormal
+	}
+	oldState := State(b.state.Swap(int32(newState)))
+	if oldState != newState {
+		b.notifySubscribers(newState)
+		if b.st != nil {
+			b.st.MemoryState.Set(float64(newState))
+		}
+	}
+}
+
+func (b *Budget) notifySubscribers(state State) {
+	b.subscribersMu.RLock()
+	subs := b.subscribers
+	b.subscribersMu.RUnlock()
+	for _, cb := range subs {
+		cb(state)
+	}
+}
+
+func (b *Budget) monitor(ctx context.Context) {
+	defer b.wg.Done()
+	ticker := time.NewTicker(b.cfg.CheckInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-b.stopCh:
+			return
+		case <-ticker.C:
+			b.checkMemory()
+		}
+	}
+}
+
+func (b *Budget) checkMemory() {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	if b.st != nil {
+		b.st.MemoryHeapBytes.Set(float64(m.HeapAlloc))
+		b.st.MemoryStackBytes.Set(float64(m.StackInuse))
+		b.st.MemoryAllocatedBytes.Set(float64(b.allocated.Load()))
+		b.st.MemoryPeakBytes.Set(float64(b.peak.Load()))
+	}
+	state := b.State()
+	if state == StateSoftLimit && b.cfg.GCOnLimit {
+		b.log.Debug("triggering GC due to soft memory limit")
+		runtime.GC()
+	}
+	if state == StateHardLimit {
+		b.log.Warn("memory hard limit reached",
+			"allocated", b.allocated.Load(),
+			"limit", b.hardLimitBytes,
+			"heap", m.HeapAlloc)
+	}
+}

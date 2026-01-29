@@ -260,7 +260,6 @@ func (g *FlameGraphGenerator) getColor(node *FlameNode, scheme ColorScheme) stri
 // hotColor returns a red-yellow color based on intensity
 func (g *FlameGraphGenerator) hotColor(percentage float64) string {
 	// Gradient from yellow (#ffff00) to red (#ff0000)
-	r := 255
 	green := int(255 * (1 - percentage/100))
 	if green < 0 {
 		green = 0

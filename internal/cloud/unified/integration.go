@@ -3,6 +3,7 @@ package unified
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -12,17 +13,19 @@ import (
 // UnifiedAgent is the main integration point for cloud and discovery services.
 type UnifiedAgent struct {
 	cloudManager     *CloudManager
-	discoveryEngine  *autodiscover.DiscoveryEngine
+	discoveryEngine  *autodiscover.Engine
 	otelExporter     *OTelExporter
 	resourceExporter *ResourceExporter
 	healthReporter   *HealthReporter
 	metricsAgg       *MetricsAggregator
 
 	config UnifiedAgentConfig
+	logger *slog.Logger
 	mu     sync.RWMutex
 
-	stopCh chan struct{}
-	wg     sync.WaitGroup
+	stopCh          chan struct{}
+	discoveryStopCh chan struct{}
+	wg              sync.WaitGroup
 }
 
 // UnifiedAgentConfig configures the unified agent.
@@ -70,30 +73,11 @@ func DefaultUnifiedAgentConfig() UnifiedAgentConfig {
 
 // NewUnifiedAgent creates a new unified agent.
 func NewUnifiedAgent(config UnifiedAgentConfig) *UnifiedAgent {
-	cloudManager := NewCloudManager(config.CloudConfig)
+	logger := slog.Default().With("component", "unified-agent")
+	cloudManager := NewCloudManager(config.CloudConfig, logger)
 
 	// Create discovery engine
-	discoveryConfig := autodiscover.DiscoveryConfig{
-		Interval:         config.DiscoveryInterval,
-		EnabledDetectors: []string{"os", "container"},
-	}
-
-	if config.DiscoverK8s {
-		discoveryConfig.EnabledDetectors = append(discoveryConfig.EnabledDetectors, "kubernetes")
-	}
-	if config.DiscoverDatabases {
-		discoveryConfig.EnabledDetectors = append(discoveryConfig.EnabledDetectors, "database")
-	}
-	if config.DiscoverMQ {
-		discoveryConfig.EnabledDetectors = append(discoveryConfig.EnabledDetectors, "message_queue")
-	}
-	if config.DiscoverRuntimes {
-		discoveryConfig.EnabledDetectors = append(discoveryConfig.EnabledDetectors, "runtime", "process")
-	}
-
-	discoveryConfig.EnabledDetectors = append(discoveryConfig.EnabledDetectors, "network", "service_classifier")
-
-	discoveryEngine := autodiscover.NewDiscoveryEngine(discoveryConfig)
+	discoveryEngine := autodiscover.NewEngine(logger)
 
 	return &UnifiedAgent{
 		cloudManager:     cloudManager,
@@ -102,7 +86,9 @@ func NewUnifiedAgent(config UnifiedAgentConfig) *UnifiedAgent {
 		healthReporter:   NewHealthReporter(cloudManager),
 		metricsAgg:       NewMetricsAggregator(),
 		config:           config,
+		logger:           logger,
 		stopCh:           make(chan struct{}),
+		discoveryStopCh:  make(chan struct{}),
 	}
 }
 
@@ -120,11 +106,10 @@ func (a *UnifiedAgent) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start cloud manager: %w", err)
 	}
 
-	// Start discovery engine
+	// Start discovery loop
 	if a.config.EnableDiscovery {
-		if err := a.discoveryEngine.Start(ctx); err != nil {
-			return fmt.Errorf("failed to start discovery engine: %w", err)
-		}
+		a.wg.Add(1)
+		go a.discoveryLoop(ctx)
 	}
 
 	// Start metrics export loop
@@ -152,9 +137,12 @@ func (a *UnifiedAgent) Start(ctx context.Context) error {
 func (a *UnifiedAgent) Stop(ctx context.Context) error {
 	close(a.stopCh)
 
-	// Stop discovery engine
-	if a.discoveryEngine != nil {
-		a.discoveryEngine.Stop()
+	// Stop discovery loop
+	select {
+	case <-a.discoveryStopCh:
+		// Already closed
+	default:
+		close(a.discoveryStopCh)
 	}
 
 	// Stop cloud manager
@@ -196,20 +184,54 @@ func (a *UnifiedAgent) metricsExportLoop(ctx context.Context) {
 	}
 }
 
+// discoveryLoop runs discovery periodically.
+func (a *UnifiedAgent) discoveryLoop(ctx context.Context) {
+	defer a.wg.Done()
+
+	ticker := time.NewTicker(a.config.DiscoveryInterval)
+	defer ticker.Stop()
+
+	// Initial discovery
+	a.runDiscovery(ctx)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-a.stopCh:
+			return
+		case <-a.discoveryStopCh:
+			return
+		case <-ticker.C:
+			a.runDiscovery(ctx)
+		}
+	}
+}
+
+// runDiscovery performs a single discovery run.
+func (a *UnifiedAgent) runDiscovery(ctx context.Context) {
+	_, err := a.discoveryEngine.Discover(ctx)
+	if err != nil {
+		a.logger.Warn("discovery failed", "error", err)
+	}
+}
+
 // exportMetrics collects and exports metrics.
 func (a *UnifiedAgent) exportMetrics(ctx context.Context) {
 	// Collect metrics from cloud manager
-	metrics, err := a.cloudManager.CollectMetrics(ctx)
+	provider := a.cloudManager.GetActiveProvider()
+	if provider == nil {
+		return
+	}
+
+	metrics, err := provider.CollectMetrics(ctx)
 	if err != nil {
 		// Log error
 		return
 	}
 
 	// Normalize metrics
-	provider := a.cloudManager.GetActiveProvider()
-	if provider != nil {
-		metrics = NormalizeMetrics(metrics, provider.Name())
-	}
+	metrics = NormalizeMetrics(metrics, provider.Name())
 
 	// Add to aggregator
 	a.metricsAgg.Add(metrics)
@@ -295,12 +317,16 @@ func (a *UnifiedAgent) runHealthCheck(ctx context.Context) {
 
 // GetCloudMetadata returns current cloud metadata.
 func (a *UnifiedAgent) GetCloudMetadata() (*CloudMetadata, error) {
-	return a.cloudManager.GetMetadata()
+	metadata := a.cloudManager.GetMetadata()
+	if metadata == nil {
+		return nil, fmt.Errorf("no cloud metadata available")
+	}
+	return metadata, nil
 }
 
 // GetDiscoveredState returns current discovery state.
 func (a *UnifiedAgent) GetDiscoveredState() *autodiscover.DiscoveredState {
-	return a.discoveryEngine.GetState()
+	return a.discoveryEngine.LastResult()
 }
 
 // GetResources returns discovered resources.
@@ -310,7 +336,11 @@ func (a *UnifiedAgent) GetResources(ctx context.Context) ([]Resource, error) {
 
 // GetMetrics returns current metrics.
 func (a *UnifiedAgent) GetMetrics(ctx context.Context) ([]Metric, error) {
-	return a.cloudManager.CollectMetrics(ctx)
+	provider := a.cloudManager.GetActiveProvider()
+	if provider == nil {
+		return nil, nil
+	}
+	return provider.CollectMetrics(ctx)
 }
 
 // GetHealthStatus returns current health status.
@@ -320,7 +350,7 @@ func (a *UnifiedAgent) GetHealthStatus(ctx context.Context) (*HealthStatus, erro
 
 // TriggerDiscovery triggers an immediate discovery run.
 func (a *UnifiedAgent) TriggerDiscovery(ctx context.Context) (*autodiscover.DiscoveredState, error) {
-	return a.discoveryEngine.RunDiscovery(ctx)
+	return a.discoveryEngine.Discover(ctx)
 }
 
 // Integration provides a high-level integration API.

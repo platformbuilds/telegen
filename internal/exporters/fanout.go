@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/platformbuilds/telegen/internal/pipeline"
 	"github.com/platformbuilds/telegen/internal/selftelemetry"
+	"github.com/platformbuilds/telegen/internal/sigdef"
 )
 
 // FanoutExporter exports signals to multiple destinations in parallel
@@ -111,7 +111,7 @@ func (f *FanoutExporter) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (f *FanoutExporter) Export(ctx context.Context, signalType pipeline.SignalType, signals []pipeline.Signal) error {
+func (f *FanoutExporter) Export(ctx context.Context, signalType sigdef.SignalType, signals []sigdef.Signal) error {
 	if len(f.exporters) == 0 {
 		return nil
 	}
@@ -125,7 +125,7 @@ func (f *FanoutExporter) Export(ctx context.Context, signalType pipeline.SignalT
 	return f.exportParallel(ctx, signalType, signals)
 }
 
-func (f *FanoutExporter) exportParallel(ctx context.Context, signalType pipeline.SignalType, signals []pipeline.Signal) error {
+func (f *FanoutExporter) exportParallel(ctx context.Context, signalType sigdef.SignalType, signals []sigdef.Signal) error {
 	var (
 		wg      sync.WaitGroup
 		errChan = make(chan error, len(f.exporters))
@@ -192,7 +192,7 @@ func (f *FanoutExporter) exportParallel(ctx context.Context, signalType pipeline
 	return nil
 }
 
-func (f *FanoutExporter) supportsSignal(exp Exporter, signalType pipeline.SignalType) bool {
+func (f *FanoutExporter) supportsSignal(exp Exporter, signalType sigdef.SignalType) bool {
 	for _, s := range exp.SupportedSignals() {
 		if s == signalType {
 			return true
@@ -201,16 +201,16 @@ func (f *FanoutExporter) supportsSignal(exp Exporter, signalType pipeline.Signal
 	return false
 }
 
-func (f *FanoutExporter) SupportedSignals() []pipeline.SignalType {
+func (f *FanoutExporter) SupportedSignals() []sigdef.SignalType {
 	// Collect all supported signals from child exporters
-	signalSet := make(map[pipeline.SignalType]struct{})
+	signalSet := make(map[sigdef.SignalType]struct{})
 	for _, exp := range f.exporters {
 		for _, s := range exp.SupportedSignals() {
 			signalSet[s] = struct{}{}
 		}
 	}
 
-	signals := make([]pipeline.SignalType, 0, len(signalSet))
+	signals := make([]sigdef.SignalType, 0, len(signalSet))
 	for s := range signalSet {
 		signals = append(signals, s)
 	}

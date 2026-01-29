@@ -44,9 +44,9 @@ func (d *OSDetector) Detect(ctx context.Context) (any, error) {
 	// Get kernel version and hostname from uname
 	var uname unix.Utsname
 	if err := unix.Uname(&uname); err == nil {
-		info.KernelVersion = int8SliceToString(uname.Version[:])
-		info.KernelRelease = int8SliceToString(uname.Release[:])
-		info.Hostname = int8SliceToString(uname.Nodename[:])
+		info.KernelVersion = byteSliceToString(uname.Version[:])
+		info.KernelRelease = byteSliceToString(uname.Release[:])
+		info.Hostname = byteSliceToString(uname.Nodename[:])
 	}
 
 	// Detect Linux distribution
@@ -255,6 +255,16 @@ func int8SliceToString(s []int8) string {
 		buf.WriteByte(byte(c))
 	}
 	return buf.String()
+}
+
+// byteSliceToString converts a C-style byte array to a Go string.
+func byteSliceToString(s []byte) string {
+	for i, c := range s {
+		if c == 0 {
+			return string(s[:i])
+		}
+	}
+	return string(s)
 }
 
 // ContainerDetector detects container environments.

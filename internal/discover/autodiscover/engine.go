@@ -1,498 +1,273 @@
-package autodiscover
-// Package autodiscover provides automatic discovery of infrastructure components
-// including OS, cloud, Kubernetes, network, databases, message queues, and runtimes.
+// Copyright The Telegen Authors
+// SPDX-License-Identifier: Apache-2.0
+
 package autodiscover
 
 import (
 	"context"
 	"log/slog"
-	"sort"
 	"sync"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-}	return false	}		}			return true		if s == val {	for _, s := range slice {func contains(slice []string, val string) bool {// contains checks if a string slice contains a value.}	return e.runFullDiscovery(ctx)func (e *DiscoveryEngine) Refresh(ctx context.Context) error {// Refresh forces an immediate full discovery.}	return result	copy(result, e.state.MessageQueues)	result := make([]MQInfo, len(e.state.MessageQueues))	defer e.mu.RUnlock()	e.mu.RLock()func (e *DiscoveryEngine) GetMessageQueues() []MQInfo {// GetMessageQueues returns discovered message queues.}	return result	copy(result, e.state.Databases)	result := make([]DatabaseInfo, len(e.state.Databases))	defer e.mu.RUnlock()	e.mu.RLock()func (e *DiscoveryEngine) GetDatabases() []DatabaseInfo {// GetDatabases returns discovered databases.}	return e.state.Network	defer e.mu.RUnlock()	e.mu.RLock()func (e *DiscoveryEngine) GetNetworkTopology() *NetworkTopology {// GetNetworkTopology returns the network topology.}	return e.state.Kubernetes	defer e.mu.RUnlock()	e.mu.RLock()func (e *DiscoveryEngine) GetK8sInfo() *K8sInfo {// GetK8sInfo returns Kubernetes information.}	return e.state.Cloud	defer e.mu.RUnlock()	e.mu.RLock()func (e *DiscoveryEngine) GetCloudMetadata() *unified.CloudMetadata {// GetCloudMetadata returns the cloud metadata.}	return e.state.OS	defer e.mu.RUnlock()	e.mu.RLock()func (e *DiscoveryEngine) GetOSInfo() OSInfo {// GetOSInfo returns the discovered OS information.}	return &stateCopy	stateCopy := *e.state	// Make a copy	defer e.mu.RUnlock()	e.mu.RLock()func (e *DiscoveryEngine) GetState() *DiscoveredState {// GetState returns a copy of the current discovered state.}	return contains(e.config.EnabledDetectors, name)	}		return true	if len(e.config.EnabledDetectors) == 0 {	// If enabled list is empty, all are enabled	}		return false	if contains(e.config.DisabledDetectors, name) {	// Check disabled list firstfunc (e *DiscoveryEngine) isDetectorEnabled(name string) bool {// isDetectorEnabled checks if a detector is enabled.}	}		}			}				e.state.Services[name] = info			for name, info := range services {		if services, ok := result.(map[string]*ServiceInfo); ok {	case "service_classifier":		}			e.state.MessageQueues = mqs		if mqs, ok := result.([]MQInfo); ok {	case "mq":		}			e.state.Databases = databases		if databases, ok := result.([]DatabaseInfo); ok {	case "database":		}			}				e.state.Processes[pid] = info			for pid, info := range processes {		if processes, ok := result.(map[uint32]*ProcessInfo); ok {	case "runtime":		}			e.state.Network = networkInfo		if networkInfo, ok := result.(*NetworkTopology); ok {	case "network":		}			e.state.Kubernetes = k8sInfo		if k8sInfo, ok := result.(*K8sInfo); ok {	case "kubernetes":		}			e.state.OS.IsContainer = containerInfo.IsContainer			e.state.OS.ContainerRuntime = containerInfo.Runtime		if containerInfo, ok := result.(ContainerInfo); ok {	case "container":		}			e.state.OS = osInfo		if osInfo, ok := result.(OSInfo); ok {	case "os":	switch detectorName {	defer e.mu.Unlock()	e.mu.Lock()func (e *DiscoveryEngine) applyDetectorResult(detectorName string, result any) {// applyDetectorResult applies a detector's result to the state.}	}		e.mu.Unlock()		e.state.LastUpdated = time.Now()		e.state.Resources = e.cloudManager.GetResources()		e.mu.Lock()	if e.cloudManager != nil {	// Update cloud resources	}		e.applyDetectorResult(detector.Name(), result)		}			continue				"error", err)				"name", detector.Name(),			e.logger.Debug("dynamic detector failed",		if err != nil {		result, err := detector.Detect(ctx)		}			continue		if !e.isDetectorEnabled(detector.Name()) {		}			continue		if !contains(dynamicDetectors, detector.Name()) {	for _, detector := range e.detectors {	dynamicDetectors := []string{"network", "runtime", "database", "mq", "service_classifier"}	// Dynamic components: processes, network, servicesfunc (e *DiscoveryEngine) runDynamicDiscovery(ctx context.Context) {// runDynamicDiscovery runs discovery for dynamic components only.}	}		}			e.runDynamicDiscovery(ctx)		case <-ticker.C:			return		case <-e.stopCh:			return		case <-ctx.Done():		select {	for {	defer ticker.Stop()	ticker := time.NewTicker(e.config.ContinuousDiscoveryInterval)	defer e.stoppedWg.Done()func (e *DiscoveryEngine) continuousDiscovery(ctx context.Context) {// continuousDiscovery runs periodic discovery for dynamic components.}	return nil	}		callback(&stateCopy)	if callback != nil {	// Notify callback	e.mu.Unlock()	stateCopy := *e.state	callback := e.onStateChange	e.state.LastUpdated = now	}		e.state.DiscoveredAt = now	if e.state.DiscoveredAt.IsZero() {	now := time.Now()	e.mu.Lock()	// Update timestamps	}		}				"error", err)				"name", enricher.Name(),			e.logger.Warn("enricher failed",		if err := enricher.Enrich(ctx, state); err != nil {		e.mu.RUnlock()		state := e.state		e.mu.RLock()	for _, enricher := range e.enrichers {	// Run enrichers	}		e.mu.Unlock()		e.state.Resources = e.cloudManager.GetResources()		e.state.Cloud = e.cloudManager.GetMetadata()		e.mu.Lock()	if e.cloudManager != nil {	// Get cloud metadata if available	}		e.applyDetectorResult(detector.Name(), result)		}			continue				"error", err)				"name", detector.Name(),			e.logger.Warn("detector failed",		if err != nil {		result, err := detector.Detect(ctx)		e.logger.Debug("running detector", "name", detector.Name())		}			continue		if !e.isDetectorEnabled(detector.Name()) {	for _, detector := range e.detectors {	// Run each detector in priority order	e.logger.Debug("running full discovery")	defer cancel()	ctx, cancel := context.WithTimeout(ctx, e.config.InitialDiscoveryTimeout)func (e *DiscoveryEngine) runFullDiscovery(ctx context.Context) error {// runFullDiscovery runs all detectors.}	e.logger.Info("discovery engine stopped")	e.stoppedWg.Wait()	close(e.stopCh)	e.mu.Unlock()	e.started = false	}		return		e.mu.Unlock()	if !e.started {	e.mu.Lock()func (e *DiscoveryEngine) Stop() {// Stop gracefully shuts down the discovery engine.}	return nil	go e.continuousDiscovery(ctx)	e.stoppedWg.Add(1)	// Start continuous discovery loop	}		e.logger.Warn("initial discovery had errors", "error", err)	if err := e.runFullDiscovery(ctx); err != nil {	// Run initial full discovery	e.logger.Info("starting discovery engine")	e.mu.Unlock()	e.started = true	}		return nil		e.mu.Unlock()	if e.started {	e.mu.Lock()func (e *DiscoveryEngine) Start(ctx context.Context) error {// Start begins the discovery process.}	e.onStateChange = fn	defer e.mu.Unlock()	e.mu.Lock()func (e *DiscoveryEngine) OnStateChange(fn func(*DiscoveredState)) {// OnStateChange sets a callback for when state changes.}	e.enrichers = append(e.enrichers, enricher)	defer e.mu.Unlock()	e.mu.Lock()func (e *DiscoveryEngine) RegisterEnricher(enricher Enricher) {// RegisterEnricher adds a custom enricher.}	})		return e.detectors[i].Priority() < e.detectors[j].Priority()	sort.Slice(e.detectors, func(i, j int) bool {	// Re-sort by priority	e.detectors = append(e.detectors, detector)	defer e.mu.Unlock()	e.mu.Lock()func (e *DiscoveryEngine) RegisterDetector(detector Detector) {// RegisterDetector adds a custom detector.}	})		return e.detectors[i].Priority() < e.detectors[j].Priority()	sort.Slice(e.detectors, func(i, j int) bool {	// Sort by priority	}		NewServiceClassifier(),    // Priority 40		NewMQDetector(),           // Priority 30		NewDatabaseDetector(),     // Priority 30		NewRuntimeDetector(),      // Priority 20		NewNetworkDetector(),      // Priority 10		NewK8sDetector(),          // Priority 3		NewContainerDetector(),    // Priority 1		NewOSDetector(),           // Priority 0	e.detectors = []Detector{	// Register detectors in priority orderfunc (e *DiscoveryEngine) registerDefaultDetectors() {// registerDefaultDetectors adds all built-in detectors.}	return engine	engine.registerDefaultDetectors()	// Register default detectors	}		},			Services:  make(map[string]*ServiceInfo),			Processes: make(map[uint32]*ProcessInfo),		state: &DiscoveredState{		stopCh:       make(chan struct{}),		logger:       logger.With("component", "discovery-engine"),		config:       config,		cloudManager: cloudManager,	engine := &DiscoveryEngine{	}		logger = slog.Default()	if logger == nil {func NewDiscoveryEngine(cloudManager *unified.CloudManager, config DiscoveryConfig, logger *slog.Logger) *DiscoveryEngine {// NewDiscoveryEngine creates a new discovery engine.}	Enrich(ctx context.Context, state *DiscoveredState) error	// Enrich adds additional metadata to the state.	Name() string	// Name returns the enricher name.type Enricher interface {// Enricher adds additional metadata to discovered components.}	Dependencies() []string	// Dependencies returns names of detectors this one depends on.	Detect(ctx context.Context) (any, error)	// Detect runs the detection and returns the result.	Priority() int	// Priority returns the detection priority (lower = higher priority).	Name() string	// Name returns the detector name.type Detector interface {// Detector interface for pluggable discovery components.}	LastUpdated  time.Time `json:"last_updated"`	DiscoveredAt time.Time `json:"discovered_at"`	// Discovery metadata	Resources []unified.Resource `json:"resources,omitempty"`	// Cloud resources (from unified cloud layer)	Caches []CacheInfo `json:"caches,omitempty"`	// Discovered caches	MessageQueues []MQInfo `json:"message_queues,omitempty"`	// Discovered message queues	Databases []DatabaseInfo `json:"databases,omitempty"`	// Discovered databases	Services map[string]*ServiceInfo `json:"services,omitempty"`	// Discovered services	Network *NetworkTopology `json:"network,omitempty"`	// Network topology	Processes map[uint32]*ProcessInfo `json:"processes,omitempty"`	// Discovered processes	Kubernetes *K8sInfo `json:"kubernetes,omitempty"`	// Kubernetes environment	Cloud *unified.CloudMetadata `json:"cloud,omitempty"`	// Cloud environment metadata (from unified cloud layer)	OS OSInfo `json:"os"`	// Operating system informationtype DiscoveredState struct {// DiscoveredState holds all auto-discovered information.}	}		NetworkDiscoveryInterval:    60 * time.Second,		ProcessDiscoveryInterval:    30 * time.Second,		ContinuousDiscoveryInterval: 60 * time.Second,		InitialDiscoveryTimeout:     30 * time.Second,	return DiscoveryConfig{func DefaultDiscoveryConfig() DiscoveryConfig {// DefaultDiscoveryConfig returns sensible defaults.}	NetworkDiscoveryInterval time.Duration `mapstructure:"network_discovery_interval" yaml:"network_discovery_interval"`	// NetworkDiscoveryInterval is how often to discover network topology.	ProcessDiscoveryInterval time.Duration `mapstructure:"process_discovery_interval" yaml:"process_discovery_interval"`	// ProcessDiscoveryInterval is how often to discover processes.	ContinuousDiscoveryInterval time.Duration `mapstructure:"continuous_discovery_interval" yaml:"continuous_discovery_interval"`	// ContinuousDiscoveryInterval is how often to run continuous discovery.	InitialDiscoveryTimeout time.Duration `mapstructure:"initial_discovery_timeout" yaml:"initial_discovery_timeout"`	// InitialDiscoveryTimeout is the timeout for initial discovery.	DisabledDetectors []string `mapstructure:"disabled_detectors" yaml:"disabled_detectors"`	// DisabledDetectors specifies which detectors to disable.	EnabledDetectors []string `mapstructure:"enabled_detectors" yaml:"enabled_detectors"`	// EnabledDetectors specifies which detectors to enable (empty = all).type DiscoveryConfig struct {// DiscoveryConfig holds configuration for the discovery engine.}	onStateChange func(*DiscoveredState)	// Callbacks	stoppedWg sync.WaitGroup	stopCh    chan struct{}	started   bool	// State management	logger *slog.Logger	// Logger	config DiscoveryConfig	// Configuration	state *DiscoveredState	// Current discovered state	cloudManager *unified.CloudManager	// Cloud manager integration	enrichers []Enricher	// Enrichers for adding additional metadata	detectors []Detector	// Detectors for various components	mu sync.RWMutextype DiscoveryEngine struct {// DiscoveryEngine automatically discovers all observable components in the environment.)	"github.com/platformbuilds/telegen/internal/cloud/unified"	"time"
+	"time"
+)
+
+// DiscoveryResult contains all discovered information
+type DiscoveryResult struct {
+	OS       *OSInfo          `json:"os,omitempty"`
+	K8s      *K8sInfo         `json:"k8s,omitempty"`
+	Network  *NetworkTopology `json:"network,omitempty"`
+	Services []ServiceInfo    `json:"services,omitempty"`
+	DBs      []DatabaseInfo   `json:"databases,omitempty"`
+	MQs      []MQInfo         `json:"message_queues,omitempty"`
+
+	DiscoveredAt time.Time     `json:"discovered_at"`
+	Duration     time.Duration `json:"duration"`
+}
+
+// DiscoveredState is an alias for DiscoveryResult for compatibility
+type DiscoveredState = DiscoveryResult
+
+// DiscoveryEngine is an alias for Engine for compatibility
+type DiscoveryEngine = Engine
+
+// Detector is the interface for component detectors
+type Detector interface {
+	Name() string
+	Detect(ctx context.Context) (any, error)
+}
+
+// Enricher can enrich discovered services with additional info
+type Enricher interface {
+	Name() string
+	Enrich(ctx context.Context, services []ServiceInfo) ([]ServiceInfo, error)
+}
+
+// Engine orchestrates the autodiscovery process
+type Engine struct {
+	log *slog.Logger
+
+	mu        sync.RWMutex
+	enrichers []Enricher
+
+	// Detectors
+	osDetector      *OSDetector
+	k8sDetector     *K8sDetector
+	networkDetector *NetworkDetector
+	processDetector *ProcessDetector
+	runtimeDetector *RuntimeDetector
+	dbDetector      *DatabaseDetector
+	mqDetector      *MQDetector
+	classifier      *ServiceClassifier
+
+	// Cached results
+	lastResult *DiscoveryResult
+	osResult   *OSInfo
+	k8sResult  *K8sInfo
+	netResult  *NetworkTopology
+	dbResults  []DatabaseInfo
+	mqResults  []MQInfo
+	processes  []ProcessInfo
+}
+
+// NewEngine creates a new autodiscovery engine
+func NewEngine(log *slog.Logger) *Engine {
+	return &Engine{
+		log:             log.With("component", "autodiscover_engine"),
+		osDetector:      NewOSDetector(),
+		k8sDetector:     NewK8sDetector(),
+		networkDetector: NewNetworkDetector(),
+		processDetector: NewProcessDetector(),
+		runtimeDetector: NewRuntimeDetector(),
+		dbDetector:      NewDatabaseDetector(),
+		mqDetector:      NewMQDetector(),
+		classifier:      NewServiceClassifier(),
+	}
+}
+
+// RegisterEnricher adds a custom enricher
+func (e *Engine) RegisterEnricher(en Enricher) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.enrichers = append(e.enrichers, en)
+}
+
+// Discover performs full autodiscovery
+func (e *Engine) Discover(ctx context.Context) (*DiscoveryResult, error) {
+	start := time.Now()
+	e.log.Info("starting autodiscovery")
+
+	result := &DiscoveryResult{
+		DiscoveredAt: start,
+	}
+
+	// Run OS detection
+	if res, err := e.osDetector.Detect(ctx); err != nil {
+		e.log.Warn("OS detection failed", "error", err)
+	} else if osInfo, ok := res.(OSInfo); ok {
+		e.osResult = &osInfo
+		result.OS = &osInfo
+	}
+
+	// Run K8s detection
+	if res, err := e.k8sDetector.Detect(ctx); err != nil {
+		e.log.Warn("K8s detection failed", "error", err)
+	} else if k8sInfo, ok := res.(*K8sInfo); ok {
+		e.k8sResult = k8sInfo
+		result.K8s = k8sInfo
+	}
+
+	// Run network detection
+	if res, err := e.networkDetector.Detect(ctx); err != nil {
+		e.log.Warn("network detection failed", "error", err)
+	} else if netTopo, ok := res.(*NetworkTopology); ok {
+		e.netResult = netTopo
+		result.Network = netTopo
+	}
+
+	// Run process detection
+	if res, err := e.processDetector.Detect(ctx); err != nil {
+		e.log.Warn("process detection failed", "error", err)
+	} else if procs, ok := res.([]ProcessInfo); ok {
+		e.processes = procs
+	}
+
+	// Run runtime detection (non-fatal)
+	if _, err := e.runtimeDetector.Detect(ctx); err != nil {
+		e.log.Debug("runtime detection failed", "error", err)
+	}
+
+	// Run database detection
+	if res, err := e.dbDetector.Detect(ctx); err != nil {
+		e.log.Warn("database detection failed", "error", err)
+	} else if dbs, ok := res.([]DatabaseInfo); ok {
+		e.dbResults = dbs
+		result.DBs = dbs
+	}
+
+	// Run message queue detection
+	if res, err := e.mqDetector.Detect(ctx); err != nil {
+		e.log.Warn("MQ detection failed", "error", err)
+	} else if mqs, ok := res.([]MQInfo); ok {
+		e.mqResults = mqs
+		result.MQs = mqs
+	}
+
+	// Classify processes as services
+	var services []ServiceInfo
+	if res, err := e.classifier.Detect(ctx); err != nil {
+		e.log.Warn("service classification failed", "error", err)
+	} else if svcs, ok := res.([]ServiceInfo); ok {
+		services = svcs
+	}
+
+	// Run enrichers
+	for _, en := range e.enrichers {
+		var err error
+		services, err = en.Enrich(ctx, services)
+		if err != nil {
+			e.log.Warn("enricher failed", "name", en.Name(), "error", err)
+		}
+	}
+
+	result.Services = services
+	result.Duration = time.Since(start)
+
+	e.mu.Lock()
+	e.lastResult = result
+	e.mu.Unlock()
+
+	e.log.Info("autodiscovery complete",
+		"duration", result.Duration,
+		"services", len(result.Services),
+		"databases", len(result.DBs),
+		"message_queues", len(result.MQs),
+	)
+
+	return result, nil
+}
+
+// LastResult returns the most recent discovery result
+func (e *Engine) LastResult() *DiscoveryResult {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.lastResult
+}
+
+// DiscoverOS performs only OS detection
+func (e *Engine) DiscoverOS(ctx context.Context) (*OSInfo, error) {
+	res, err := e.osDetector.Detect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if osInfo, ok := res.(OSInfo); ok {
+		return &osInfo, nil
+	}
+	return nil, nil
+}
+
+// DiscoverK8s performs only Kubernetes detection
+func (e *Engine) DiscoverK8s(ctx context.Context) (*K8sInfo, error) {
+	res, err := e.k8sDetector.Detect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if k8sInfo, ok := res.(*K8sInfo); ok {
+		return k8sInfo, nil
+	}
+	return nil, nil
+}
+
+// DiscoverNetwork performs only network topology detection
+func (e *Engine) DiscoverNetwork(ctx context.Context) (*NetworkTopology, error) {
+	res, err := e.networkDetector.Detect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if netTopo, ok := res.(*NetworkTopology); ok {
+		return netTopo, nil
+	}
+	return nil, nil
+}
+
+// DiscoverServices performs process and service detection
+func (e *Engine) DiscoverServices(ctx context.Context) ([]ServiceInfo, error) {
+	if _, err := e.processDetector.Detect(ctx); err != nil {
+		return nil, err
+	}
+
+	if _, err := e.runtimeDetector.Detect(ctx); err != nil {
+		e.log.Warn("runtime detection failed", "error", err)
+	}
+
+	res, err := e.classifier.Detect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if svcs, ok := res.([]ServiceInfo); ok {
+		return svcs, nil
+	}
+	return nil, nil
+}
+
+// DiscoverDatabases performs database detection
+func (e *Engine) DiscoverDatabases(ctx context.Context) ([]DatabaseInfo, error) {
+	res, err := e.dbDetector.Detect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if dbs, ok := res.([]DatabaseInfo); ok {
+		return dbs, nil
+	}
+	return nil, nil
+}
+
+// DiscoverMessageQueues performs message queue detection
+func (e *Engine) DiscoverMessageQueues(ctx context.Context) ([]MQInfo, error) {
+	res, err := e.mqDetector.Detect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if mqs, ok := res.([]MQInfo); ok {
+		return mqs, nil
+	}
+	return nil, nil
+}
