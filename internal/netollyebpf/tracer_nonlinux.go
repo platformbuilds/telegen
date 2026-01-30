@@ -6,9 +6,9 @@
 package ebpf // import "github.com/platformbuilds/telegen/internal/netollyebpf"
 
 import (
+	"github.com/platformbuilds/telegen/internal/ebpf/tcmanager"
 	"github.com/platformbuilds/telegen/internal/obiconfig"
 	"github.com/platformbuilds/telegen/internal/ringbuf"
-	"github.com/platformbuilds/telegen/internal/ebpf/tcmanager"
 )
 
 type FlowFetcher struct{}

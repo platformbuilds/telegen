@@ -14,11 +14,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
 	"github.com/platformbuilds/telegen/internal/helpers/container"
 	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
 	"github.com/platformbuilds/telegen/internal/kube/kubecache/meta"
+	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
+	"github.com/platformbuilds/telegen/pkg/export/imetrics"
 )
 
 func TestContainerInfoWithTemplate(t *testing.T) {

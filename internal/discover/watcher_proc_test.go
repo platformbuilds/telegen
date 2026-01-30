@@ -16,8 +16,8 @@ import (
 
 	ebpfcommon "github.com/platformbuilds/telegen/internal/ebpf/common"
 	"github.com/platformbuilds/telegen/internal/ebpfwatcher"
-	"github.com/platformbuilds/telegen/internal/testutil"
 	"github.com/platformbuilds/telegen/internal/obi"
+	"github.com/platformbuilds/telegen/internal/testutil"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"
 )
 

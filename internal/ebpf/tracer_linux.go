@@ -24,9 +24,9 @@ import (
 	"github.com/platformbuilds/telegen/internal/appolly/app/request"
 	"github.com/platformbuilds/telegen/internal/discover/exec"
 	common "github.com/platformbuilds/telegen/internal/ebpf/common"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
-	ebpfconvenience "github.com/platformbuilds/telegen/internal/tracers/convenience"
 	"github.com/platformbuilds/telegen/internal/goexec"
+	ebpfconvenience "github.com/platformbuilds/telegen/internal/tracers/convenience"
+	"github.com/platformbuilds/telegen/pkg/export/imetrics"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"
 )
 

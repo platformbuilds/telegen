@@ -30,11 +30,11 @@ import (
 	"net"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/ringbuf"
 	"github.com/platformbuilds/telegen/internal/ebpf/tcmanager"
-	"github.com/platformbuilds/telegen/internal/netollyebpf"
 	"github.com/platformbuilds/telegen/internal/flow"
+	"github.com/platformbuilds/telegen/internal/netollyebpf"
 	"github.com/platformbuilds/telegen/internal/obi"
+	"github.com/platformbuilds/telegen/internal/ringbuf"
 	"github.com/platformbuilds/telegen/pkg/pipe/global"
 	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
 )

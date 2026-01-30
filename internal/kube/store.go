@@ -14,14 +14,14 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/platformbuilds/telegen/internal/helpers/container"
+	"github.com/platformbuilds/telegen/internal/helpers/maps"
+	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
+	"github.com/platformbuilds/telegen/internal/kube/kubecache/meta"
+	"github.com/platformbuilds/telegen/internal/kubei"
 	"github.com/platformbuilds/telegen/pkg/export/attributes"
 	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 	"github.com/platformbuilds/telegen/pkg/export/imetrics"
-	"github.com/platformbuilds/telegen/internal/helpers/container"
-	"github.com/platformbuilds/telegen/internal/helpers/maps"
-	"github.com/platformbuilds/telegen/internal/kubei"
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/meta"
 )
 
 func dblog() *slog.Logger {

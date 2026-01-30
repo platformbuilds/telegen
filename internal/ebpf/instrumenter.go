@@ -25,9 +25,9 @@ import (
 	"golang.org/x/sys/unix"
 
 	ebpfcommon "github.com/platformbuilds/telegen/internal/ebpf/common"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
 	"github.com/platformbuilds/telegen/internal/goexec"
 	"github.com/platformbuilds/telegen/internal/procs"
+	"github.com/platformbuilds/telegen/pkg/export/imetrics"
 )
 
 func ilog() *slog.Logger {

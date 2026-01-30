@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/internal/discover/exec"
 	"github.com/platformbuilds/telegen/internal/appolly/services"
+	"github.com/platformbuilds/telegen/internal/discover/exec"
 	"github.com/platformbuilds/telegen/internal/route"
 )
 

@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 	"github.com/platformbuilds/telegen/internal/netollyebpf"
+	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"
 	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
 )

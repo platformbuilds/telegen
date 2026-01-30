@@ -13,8 +13,8 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 
-	convenience "github.com/platformbuilds/telegen/internal/tracers/convenience"
 	"github.com/platformbuilds/telegen/internal/ringbuf"
+	convenience "github.com/platformbuilds/telegen/internal/tracers/convenience"
 )
 
 // tracer represents the main structure for DNS response tracking.

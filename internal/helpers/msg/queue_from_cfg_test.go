@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/platformbuilds/telegen/internal/testutil"
 	"github.com/platformbuilds/telegen/internal/obi"
+	"github.com/platformbuilds/telegen/internal/testutil"
 	msg2 "github.com/platformbuilds/telegen/pkg/pipe/msg"
 )
 

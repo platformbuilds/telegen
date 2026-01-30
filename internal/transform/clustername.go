@@ -18,8 +18,8 @@ import (
 
 	"go.opentelemetry.io/contrib/detectors/aws/eks"
 
-	attr2 "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 	"github.com/platformbuilds/telegen/internal/kube"
+	attr2 "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 )
 
 const (

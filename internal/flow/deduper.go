@@ -27,8 +27,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/netollyebpf"
 	"github.com/platformbuilds/telegen/internal/flowdef"
+	"github.com/platformbuilds/telegen/internal/netollyebpf"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"
 	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
 )

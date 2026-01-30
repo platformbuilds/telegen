@@ -11,8 +11,8 @@ import (
 	"github.com/caarlos0/env/v9"
 	"gopkg.in/yaml.v3"
 
-	"github.com/platformbuilds/telegen/internal/obiconfig"
 	"github.com/platformbuilds/telegen/internal/kube/kubecache/instrument"
+	"github.com/platformbuilds/telegen/internal/obiconfig"
 )
 
 // Config options of the Kubernetes Cache service. Check the "DefaultConfig" variable for a view of the default values.

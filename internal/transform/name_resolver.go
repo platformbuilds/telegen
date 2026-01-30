@@ -15,10 +15,10 @@ import (
 
 	"github.com/platformbuilds/telegen/internal/appolly/app/request"
 	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 	"github.com/platformbuilds/telegen/internal/helpers/maps"
-	"github.com/platformbuilds/telegen/internal/rdns/store"
 	"github.com/platformbuilds/telegen/internal/kube"
+	"github.com/platformbuilds/telegen/internal/rdns/store"
+	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 	"github.com/platformbuilds/telegen/pkg/pipe/global"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"
 	"github.com/platformbuilds/telegen/pkg/pipe/swarm"

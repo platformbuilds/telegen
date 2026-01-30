@@ -28,15 +28,15 @@ import (
 
 	"github.com/hashicorp/golang-lru/v2/simplelru"
 
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	ikube "github.com/platformbuilds/telegen/internal/kubei"
-	"github.com/platformbuilds/telegen/internal/netollyebpf"
 	"github.com/platformbuilds/telegen/internal/kube"
 	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
+	ikube "github.com/platformbuilds/telegen/internal/kubei"
+	"github.com/platformbuilds/telegen/internal/netollyebpf"
+	"github.com/platformbuilds/telegen/internal/transform"
+	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"
 	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
 	"github.com/platformbuilds/telegen/pkg/pipe/swarm/swarms"
-	"github.com/platformbuilds/telegen/internal/transform"
 )
 
 const (

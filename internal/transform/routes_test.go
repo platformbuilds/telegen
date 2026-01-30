@@ -12,8 +12,8 @@ import (
 
 	"github.com/platformbuilds/telegen/internal/appolly/app/request"
 	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/internal/testutil"
 	"github.com/platformbuilds/telegen/internal/route/clusterurl"
+	"github.com/platformbuilds/telegen/internal/testutil"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"
 )
 

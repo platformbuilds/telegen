@@ -24,8 +24,8 @@ import (
 	"github.com/hashicorp/golang-lru/v2/simplelru"
 
 	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/internal/obiconfig"
 	"github.com/platformbuilds/telegen/internal/ebpf/common/dnsparser"
+	"github.com/platformbuilds/telegen/internal/obiconfig"
 	"github.com/platformbuilds/telegen/internal/parsers/kafkaparser"
 	"github.com/platformbuilds/telegen/internal/ringbuf"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"

@@ -14,8 +14,8 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/oschwald/maxminddb-golang"
 
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 	"github.com/platformbuilds/telegen/internal/netollyebpf"
+	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"
 	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
 )

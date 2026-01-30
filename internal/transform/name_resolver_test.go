@@ -12,10 +12,10 @@ import (
 
 	"github.com/platformbuilds/telegen/internal/appolly/app/request"
 	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
 	"github.com/platformbuilds/telegen/internal/kube"
 	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
+	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
+	"github.com/platformbuilds/telegen/pkg/export/imetrics"
 )
 
 func TestSuffixPrefix(t *testing.T) {

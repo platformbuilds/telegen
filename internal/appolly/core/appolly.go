@@ -14,18 +14,18 @@ import (
 
 	"github.com/platformbuilds/telegen/internal/appolly"
 	"github.com/platformbuilds/telegen/internal/appolly/app/request"
+	"github.com/platformbuilds/telegen/internal/appolly/traces"
 	"github.com/platformbuilds/telegen/internal/discover"
 	"github.com/platformbuilds/telegen/internal/discover/exec"
-	"github.com/platformbuilds/telegen/internal/appolly/traces"
 	"github.com/platformbuilds/telegen/internal/ebpf"
 	ebpfcommon "github.com/platformbuilds/telegen/internal/ebpf/common"
 	msg2 "github.com/platformbuilds/telegen/internal/helpers/msg"
 	"github.com/platformbuilds/telegen/internal/obi"
+	"github.com/platformbuilds/telegen/internal/transform"
 	"github.com/platformbuilds/telegen/pkg/pipe/global"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"
 	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
 	"github.com/platformbuilds/telegen/pkg/pipe/swarm/swarms"
-	"github.com/platformbuilds/telegen/internal/transform"
 )
 
 var errShutdownTimeout = errors.New("graceful shutdown has timed out while waiting for eBPF tracers to finish")

@@ -7,12 +7,12 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/platformbuilds/telegen/internal/appolly/app/request"
+	"github.com/platformbuilds/telegen/internal/kube"
+	"github.com/platformbuilds/telegen/internal/netollyebpf"
 	"github.com/platformbuilds/telegen/pkg/export/attributes"
 	"github.com/platformbuilds/telegen/pkg/export/connector"
 	"github.com/platformbuilds/telegen/pkg/export/imetrics"
 	"github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
-	"github.com/platformbuilds/telegen/internal/netollyebpf"
-	"github.com/platformbuilds/telegen/internal/kube"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"
 )
 

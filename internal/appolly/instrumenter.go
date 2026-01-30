@@ -9,6 +9,10 @@ import (
 
 	"github.com/platformbuilds/telegen/internal/appolly/app/request"
 	"github.com/platformbuilds/telegen/internal/discover/exec"
+	msg2 "github.com/platformbuilds/telegen/internal/helpers/msg"
+	"github.com/platformbuilds/telegen/internal/obi"
+	"github.com/platformbuilds/telegen/internal/traces"
+	"github.com/platformbuilds/telegen/internal/transform"
 	"github.com/platformbuilds/telegen/pkg/export/attributes"
 	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 	"github.com/platformbuilds/telegen/pkg/export/debug"
@@ -17,13 +21,9 @@ import (
 	"github.com/platformbuilds/telegen/pkg/export/otel/perapp"
 	"github.com/platformbuilds/telegen/pkg/export/prom"
 	"github.com/platformbuilds/telegen/pkg/filter"
-	msg2 "github.com/platformbuilds/telegen/internal/helpers/msg"
-	"github.com/platformbuilds/telegen/internal/traces"
-	"github.com/platformbuilds/telegen/internal/obi"
 	"github.com/platformbuilds/telegen/pkg/pipe/global"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"
 	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
-	"github.com/platformbuilds/telegen/internal/transform"
 )
 
 // builder with injectable instantiators for unit testing

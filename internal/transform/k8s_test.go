@@ -15,13 +15,13 @@ import (
 	"github.com/platformbuilds/telegen/internal/appolly/app/request"
 	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
 	"github.com/platformbuilds/telegen/internal/discover/exec"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
 	"github.com/platformbuilds/telegen/internal/helpers/container"
-	"github.com/platformbuilds/telegen/internal/testutil"
 	"github.com/platformbuilds/telegen/internal/kube"
 	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
 	"github.com/platformbuilds/telegen/internal/kube/kubecache/meta"
+	"github.com/platformbuilds/telegen/internal/testutil"
+	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
+	"github.com/platformbuilds/telegen/pkg/export/imetrics"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"
 )
 

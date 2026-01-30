@@ -11,12 +11,12 @@ import (
 
 	"github.com/platformbuilds/telegen/internal/appolly/services"
 	"github.com/platformbuilds/telegen/internal/helpers/container"
-	ikube "github.com/platformbuilds/telegen/internal/kubei"
 	"github.com/platformbuilds/telegen/internal/kube"
 	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
+	ikube "github.com/platformbuilds/telegen/internal/kubei"
+	"github.com/platformbuilds/telegen/internal/transform"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"
 	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
-	"github.com/platformbuilds/telegen/internal/transform"
 )
 
 // injectable functions for testing

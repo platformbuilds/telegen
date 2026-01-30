@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 	"github.com/platformbuilds/telegen/internal/netollyebpf"
 	"github.com/platformbuilds/telegen/internal/testutil"
+	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"
 )
 
