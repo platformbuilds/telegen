@@ -1,0 +1,179 @@
+# Telegen v2.0 OpenShift SecurityContextConstraints
+# Task: DEP-016
+# Provides privileged access required for eBPF instrumentation
+#
+# Apply with: oc apply -f scc.yaml
+# Assign to service account: oc adm policy add-scc-to-user telegen-scc -z telegen -n telegen
+---
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: telegen-scc
+  labels:
+    app.kubernetes.io/name: telegen
+    app.kubernetes.io/component: security
+    app.kubernetes.io/version: "2.0.0"
+  annotations:
+    kubernetes.io/description: |
+      telegen-scc provides privileged access for the Telegen observability agent.
+      Required for eBPF-based instrumentation, syscall auditing, and network tracing.
+
+# Allow privileged containers for eBPF
+allowPrivilegedContainer: true
+allowPrivilegeEscalation: true
+
+# Host access required for eBPF
+allowHostPID: true
+allowHostNetwork: true
+allowHostPorts: true
+allowHostDirVolumePlugin: true
+allowHostIPC: false
+
+# Volume types needed
+volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - hostPath
+  - persistentVolumeClaim
+  - projected
+  - secret
+
+# Allow all capabilities needed for eBPF
+allowedCapabilities:
+  - SYS_ADMIN
+  - SYS_PTRACE
+  - SYS_RESOURCE
+  - NET_ADMIN
+  - NET_RAW
+  - BPF
+  - PERFMON
+  - DAC_READ_SEARCH
+
+# Required capabilities
+requiredDropCapabilities: []
+
+# Default capabilities to add
+defaultAddCapabilities:
+  - SYS_ADMIN
+  - SYS_PTRACE
+  - NET_ADMIN
+  - BPF
+  - PERFMON
+
+# Run as root (required for eBPF)
+runAsUser:
+  type: RunAsAny
+
+# SELinux context
+seLinuxContext:
+  type: RunAsAny
+
+# Supplemental groups
+supplementalGroups:
+  type: RunAsAny
+
+# FSGroup
+fsGroup:
+  type: RunAsAny
+
+# Seccomp profiles
+seccompProfiles:
+  - '*'
+
+# Allow any host paths
+allowedHostPaths:
+  - pathPrefix: /sys
+    readOnly: true
+  - pathPrefix: /proc
+    readOnly: true
+  - pathPrefix: /sys/kernel/debug
+    readOnly: false
+  - pathPrefix: /sys/fs/bpf
+    readOnly: false
+  - pathPrefix: /var/log
+    readOnly: true
+  - pathPrefix: /var/lib/docker/containers
+    readOnly: true
+  - pathPrefix: /var/lib/telegen
+    readOnly: false
+  - pathPrefix: /sys/fs/cgroup
+    readOnly: true
+
+# Users allowed to use this SCC
+users:
+  - system:serviceaccount:telegen:telegen
+
+# Priority (higher = more permissive)
+priority: 10
+
+# Read-only root filesystem
+readOnlyRootFilesystem: false
+
+---
+# Less privileged SCC for collector mode
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: telegen-collector-scc
+  labels:
+    app.kubernetes.io/name: telegen
+    app.kubernetes.io/component: security
+    app.kubernetes.io/version: "2.0.0"
+  annotations:
+    kubernetes.io/description: |
+      telegen-collector-scc provides minimal access for the Telegen collector.
+      Used for SNMP polling and storage array monitoring.
+
+# No privileged access needed
+allowPrivilegedContainer: false
+allowPrivilegeEscalation: false
+
+# No host access needed
+allowHostPID: false
+allowHostNetwork: false
+allowHostPorts: false
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+
+# Volume types needed
+volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - persistentVolumeClaim
+  - projected
+  - secret
+
+# Only allow NET_BIND_SERVICE for SNMP traps on port 162
+allowedCapabilities:
+  - NET_BIND_SERVICE
+
+requiredDropCapabilities:
+  - ALL
+
+defaultAddCapabilities: []
+
+# Run as non-root
+runAsUser:
+  type: MustRunAsNonRoot
+
+# SELinux context
+seLinuxContext:
+  type: MustRunAs
+
+# Supplemental groups
+supplementalGroups:
+  type: RunAsAny
+
+# FSGroup
+fsGroup:
+  type: RunAsAny
+
+# Users allowed to use this SCC
+users:
+  - system:serviceaccount:telegen:telegen-collector
+
+priority: 5
+
+readOnlyRootFilesystem: true

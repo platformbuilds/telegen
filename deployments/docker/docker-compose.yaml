@@ -1,0 +1,243 @@
+# Telegen v2.0 Docker Compose
+# Task: DEP-015
+# Local development environment with full observability stack
+
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # Telegen Agent - eBPF-based observability
+  # ==========================================================================
+  telegen-agent:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: ghcr.io/platformbuilds/telegen:v2.0.0
+    container_name: telegen-agent
+    command: ["--mode=agent", "--config=/etc/telegen/config.yaml"]
+    
+    # Required for eBPF
+    privileged: true
+    pid: host
+    network_mode: host
+    
+    environment:
+      - TELEGEN_MODE=agent
+      - TELEGEN_OTLP_ENDPOINT=localhost:4317
+      - TELEGEN_LOG_LEVEL=info
+      - GOMAXPROCS=4
+    
+    volumes:
+      # Configuration
+      - ./configs/agent.yaml:/etc/telegen/config.yaml:ro
+      # Host filesystem access for eBPF
+      - /sys:/sys:ro
+      - /proc:/host/proc:ro
+      - /sys/kernel/debug:/sys/kernel/debug
+      - /sys/fs/bpf:/sys/fs/bpf
+      # Container logs
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      # Persistent state
+      - telegen-data:/var/lib/telegen
+    
+    depends_on:
+      - otel-collector
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ==========================================================================
+  # Telegen Collector - Remote device monitoring
+  # ==========================================================================
+  telegen-collector:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: ghcr.io/platformbuilds/telegen:v2.0.0
+    container_name: telegen-collector
+    command: ["--mode=collector", "--config=/etc/telegen/collector.yaml"]
+    
+    # Collector doesn't need privileged mode
+    user: "65532:65532"
+    
+    ports:
+      - "162:1162/udp"  # SNMP traps
+      - "19091:19090"   # Metrics
+    
+    environment:
+      - TELEGEN_MODE=collector
+      - TELEGEN_OTLP_ENDPOINT=otel-collector:4317
+      - DELL_PASSWORD=${DELL_PASSWORD:-}
+      - PURE_TOKEN=${PURE_TOKEN:-}
+      - NETAPP_PASSWORD=${NETAPP_PASSWORD:-}
+    
+    volumes:
+      - ./configs/collector.yaml:/etc/telegen/collector.yaml:ro
+      - telegen-collector-data:/var/lib/telegen
+    
+    depends_on:
+      - otel-collector
+    
+    restart: unless-stopped
+    
+    profiles:
+      - collector
+
+  # ==========================================================================
+  # OpenTelemetry Collector
+  # ==========================================================================
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.95.0
+    container_name: otel-collector
+    command: ["--config=/etc/otelcol/config.yaml"]
+    
+    ports:
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
+      - "8888:8888"     # Prometheus metrics
+      - "8889:8889"     # Prometheus exporter
+      - "13133:13133"   # Health check
+    
+    volumes:
+      - ./configs/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ==========================================================================
+  # Jaeger - Distributed Tracing UI
+  # ==========================================================================
+  jaeger:
+    image: jaegertracing/all-in-one:1.54
+    container_name: jaeger
+    
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "14268:14268"   # Jaeger HTTP
+      - "14250:14250"   # Jaeger gRPC
+    
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Prometheus - Metrics Storage
+  # ==========================================================================
+  prometheus:
+    image: prom/prometheus:v2.49.1
+    container_name: prometheus
+    
+    ports:
+      - "9090:9090"
+    
+    volumes:
+      - ./configs/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+      - '--web.enable-remote-write-receiver'
+      - '--enable-feature=exemplar-storage'
+    
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Grafana - Dashboards
+  # ==========================================================================
+  grafana:
+    image: grafana/grafana:10.3.1
+    container_name: grafana
+    
+    ports:
+      - "3000:3000"
+    
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor
+    
+    volumes:
+      - ./configs/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./configs/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    
+    depends_on:
+      - prometheus
+      - jaeger
+    
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Loki - Log Aggregation
+  # ==========================================================================
+  loki:
+    image: grafana/loki:2.9.4
+    container_name: loki
+    
+    ports:
+      - "3100:3100"
+    
+    volumes:
+      - ./configs/loki.yaml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+    
+    command: -config.file=/etc/loki/config.yaml
+    
+    restart: unless-stopped
+    
+    profiles:
+      - logs
+
+  # ==========================================================================
+  # Pyroscope - Continuous Profiling
+  # ==========================================================================
+  pyroscope:
+    image: grafana/pyroscope:1.4.0
+    container_name: pyroscope
+    
+    ports:
+      - "4040:4040"
+    
+    volumes:
+      - pyroscope-data:/data
+    
+    restart: unless-stopped
+    
+    profiles:
+      - profiling
+
+# ==========================================================================
+# Volumes
+# ==========================================================================
+volumes:
+  telegen-data:
+  telegen-collector-data:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+  pyroscope-data:
+
+# ==========================================================================
+# Networks
+# ==========================================================================
+networks:
+  default:
+    name: telegen-network
+    driver: bridge

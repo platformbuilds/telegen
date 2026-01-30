@@ -1,0 +1,270 @@
+# =============================================================================
+# Telegen v2.0 - AWS ECS Collector Mode Configuration (Fully Loaded)
+# =============================================================================
+# Task: DEP-018
+# Purpose: Comprehensive configuration for collector mode on AWS ECS
+# File: collector-config.yaml
+# =============================================================================
+
+# =============================================================================
+# CORE AGENT CONFIGURATION
+# =============================================================================
+agent:
+  # Deployment mode
+  mode: collector  # collector mode for SNMP/storage monitoring
+  
+  # Service identification
+  service_name: telegen-collector
+  instance_id: ${ECS_TASK_ID:-ecs-collector}
+  deployment_environment: ${DEPLOYMENT_ENV:-production}
+  
+  # Logging configuration
+  log_level: INFO
+  log_format: json
+  log_output: stdout
+
+# =============================================================================
+# SELF TELEMETRY
+# =============================================================================
+selfTelemetry:
+  enabled: true
+  metrics:
+    port: 19091
+  health:
+    port: 8081
+
+# =============================================================================
+# INTERNAL METRICS
+# =============================================================================
+internal_metrics:
+  prometheus:
+    port: 19091
+    path: /metrics
+    namespace: telegen_collector
+
+# =============================================================================
+# SNMP RECEIVER - AWS ENVIRONMENT CONFIGURATION
+# =============================================================================
+snmp_receiver:
+  enabled: true
+  
+  # Trap receiver configuration
+  trap_receiver:
+    enabled: true
+    listen_address: 0.0.0.0:162
+    community: public
+    security:
+      v3_enabled: true
+      v3_username: ${SNMP_V3_USER}
+      v3_auth_protocol: SHA256
+      v3_auth_password: ${SNMP_V3_AUTH_PASS}
+      v3_priv_protocol: AES256
+      v3_priv_password: ${SNMP_V3_PRIV_PASS}
+    
+  # SNMP polling configuration
+  polling:
+    interval: 60s
+    timeout: 30s
+    retries: 3
+    max_repetitions: 25
+    
+  # Polling targets (configured via environment)
+  targets:
+    # VPC Network devices
+    - name: vpc-router-primary
+      address: ${VPC_ROUTER_PRIMARY}:161
+      version: v3
+      security:
+        username: ${SNMP_V3_USER}
+        auth_protocol: SHA256
+        auth_password: ${SNMP_V3_AUTH_PASS}
+        priv_protocol: AES256
+        priv_password: ${SNMP_V3_PRIV_PASS}
+      modules:
+        - if_mib
+        - system_mib
+      labels:
+        environment: ${DEPLOYMENT_ENV:-production}
+        region: ${AWS_REGION}
+        
+  # Target discovery
+  discovery:
+    enabled: true
+    networks:
+      - ${VPC_CIDR:-10.0.0.0/16}
+    interval: 1h
+    port: 161
+    
+  # MIB modules configuration
+  mibs:
+    system_mib:
+      oids:
+        - oid: 1.3.6.1.2.1.1.1.0
+          name: sysDescr
+          type: DisplayString
+        - oid: 1.3.6.1.2.1.1.3.0
+          name: sysUpTime
+          type: TimeTicks
+        - oid: 1.3.6.1.2.1.1.5.0
+          name: sysName
+          type: DisplayString
+          
+    if_mib:
+      walk:
+        - 1.3.6.1.2.1.2.2.1
+        - 1.3.6.1.2.1.31.1.1.1
+      metrics:
+        - name: ifInOctets
+          oid: 1.3.6.1.2.1.2.2.1.10
+          type: counter
+        - name: ifOutOctets
+          oid: 1.3.6.1.2.1.2.2.1.16
+          type: counter
+        - name: ifHCInOctets
+          oid: 1.3.6.1.2.1.31.1.1.1.6
+          type: counter
+        - name: ifHCOutOctets
+          oid: 1.3.6.1.2.1.31.1.1.1.10
+          type: counter
+          
+  # Output configuration
+  output:
+    format: otlp
+    batch_size: 100
+    flush_interval: 30s
+
+# =============================================================================
+# STORAGE MONITORING - AWS STORAGE SERVICES
+# =============================================================================
+storage:
+  enabled: true
+  
+  # AWS FSx monitoring
+  aws_fsx:
+    enabled: true
+    regions:
+      - ${AWS_REGION}
+    polling_interval: 60s
+    metrics:
+      - capacity
+      - performance
+      - data_repository
+    
+  # AWS EFS monitoring
+  aws_efs:
+    enabled: true
+    regions:
+      - ${AWS_REGION}
+    polling_interval: 60s
+    metrics:
+      - capacity
+      - performance
+      - burst_credits
+      
+  # AWS S3 bucket monitoring
+  aws_s3:
+    enabled: true
+    buckets:
+      - ${S3_MONITORING_BUCKET:-*}
+    polling_interval: 300s
+    metrics:
+      - size
+      - object_count
+      - request_metrics
+
+# =============================================================================
+# AWS CONFIGURATION
+# =============================================================================
+cloud:
+  autodetect: true
+  detection_timeout: 10s
+  
+  # AWS-specific configuration
+  aws:
+    enabled: true
+    collect_tags: true
+    imdsv2_only: true
+    timeout: 200ms
+    refresh_interval: 15m
+    
+    # IAM role (uses ECS Task Role)
+    use_task_role: true
+    
+    # CloudWatch integration
+    cloudwatch:
+      enabled: true
+      namespace: Telegen/Collector
+      push_interval: 60s
+
+# =============================================================================
+# PIPELINES CONFIGURATION
+# =============================================================================
+pipelines:
+  # Metrics pipeline
+  metrics:
+    enabled: true
+    processors:
+      - resource_detection
+      - batch
+    exporters:
+      - otlp
+      - cloudwatch
+
+# =============================================================================
+# OTLP EXPORT CONFIGURATION
+# =============================================================================
+exports:
+  otlp:
+    enabled: true
+    endpoint: ${TELEGEN_OTLP_ENDPOINT:-otel-collector:4317}
+    protocol: grpc
+    timeout: 10s
+    insecure: false
+    gzip: true
+    headers:
+      Authorization: Bearer ${OTLP_AUTH_TOKEN}
+    send_mode: failover
+    
+    # TLS configuration for AWS
+    tls:
+      enabled: true
+      insecure_skip_verify: false
+
+# =============================================================================
+# QUEUE CONFIGURATION
+# =============================================================================
+queues:
+  metrics:
+    mem_limit: 128Mi
+    max_age: 5m
+    storage_enabled: false
+
+# =============================================================================
+# BACKOFF CONFIGURATION
+# =============================================================================
+backoff:
+  initial_interval: 500ms
+  max_interval: 30s
+  multiplier: 2.0
+  max_elapsed_time: 5m
+  jitter: 0.2
+
+# =============================================================================
+# ATTRIBUTES
+# =============================================================================
+attributes:
+  # Resource attributes
+  resource:
+    service.name: telegen-collector
+    service.namespace: infrastructure
+    deployment.environment: ${DEPLOYMENT_ENV:-production}
+    cloud.provider: aws
+    cloud.region: ${AWS_REGION}
+    cloud.account.id: ${AWS_ACCOUNT_ID}
+    telegen.mode: collector
+    telegen.version: 2.0.0
+    
+  # ECS metadata
+  metadata:
+    ecs.cluster: ${ECS_CLUSTER}
+    ecs.task.family: telegen-collector

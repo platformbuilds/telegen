@@ -1,6 +1,38 @@
+# Telegen v2.0 Helm Chart
+# Task: DEP-006
 apiVersion: v2
 name: telegen
-description: Telegen eBPF Observability Agent (v3+)
+description: |
+  Telegen - Zero-config universal observability agent powered by eBPF.
+  Collects metrics, traces, logs, and profiles with automatic instrumentation.
 type: application
-version: 3.1.0
-appVersion: "3.1.0"
+version: 2.0.0
+appVersion: "2.0.0"
+
+# Chart metadata
+home: https://github.com/platformbuilds/telegen
+icon: https://raw.githubusercontent.com/platformbuilds/telegen/main/docs/logo.png
+sources:
+  - https://github.com/platformbuilds/telegen
+
+keywords:
+  - observability
+  - ebpf
+  - tracing
+  - metrics
+  - logs
+  - profiling
+  - opentelemetry
+  - apm
+
+maintainers:
+  - name: Platform Builds
+    email: platform@platformbuilds.io
+    url: https://platformbuilds.io
+
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/category: observability
+  artifacthub.io/signKey: |
+    fingerprint: TBD
+    url: https://platformbuilds.io/gpg-key.asc

@@ -1,0 +1,48 @@
+{
+  "serviceName": "telegen-agent",
+  "cluster": "${ECS_CLUSTER_NAME}",
+  "taskDefinition": "telegen-agent",
+  "desiredCount": 1,
+  "launchType": "EC2",
+  "schedulingStrategy": "DAEMON",
+  "deploymentConfiguration": {
+    "deploymentCircuitBreaker": {
+      "enable": true,
+      "rollback": true
+    },
+    "maximumPercent": 100,
+    "minimumHealthyPercent": 0
+  },
+  "placementConstraints": [
+    {
+      "type": "distinctInstance"
+    }
+  ],
+  "placementStrategy": [
+    {
+      "type": "spread",
+      "field": "attribute:ecs.availability-zone"
+    }
+  ],
+  "enableECSManagedTags": true,
+  "propagateTags": "SERVICE",
+  "enableExecuteCommand": true,
+  "tags": [
+    {
+      "key": "Application",
+      "value": "telegen"
+    },
+    {
+      "key": "Component",
+      "value": "agent"
+    },
+    {
+      "key": "Environment",
+      "value": "${ENVIRONMENT}"
+    },
+    {
+      "key": "ManagedBy",
+      "value": "terraform"
+    }
+  ]
+}

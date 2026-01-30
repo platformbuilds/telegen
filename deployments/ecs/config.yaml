@@ -1,0 +1,582 @@
+# =============================================================================
+# Telegen v2.0 Agent Configuration for AWS ECS
+# Fully loaded configuration with all features enabled
+# This file should be stored in AWS SSM Parameter Store or mounted as a volume
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Core Agent Configuration
+# -----------------------------------------------------------------------------
+agent:
+  service_name: "telegen-ecs"
+  instance_id: "${ECS_CONTAINER_METADATA_URI_V4}"
+  mode: agent
+  log_level: INFO
+  log_format: json
+  log_config: ""
+  shutdown_timeout: 10s
+  enforce_sys_caps: false
+
+# -----------------------------------------------------------------------------
+# Self-Telemetry Configuration
+# -----------------------------------------------------------------------------
+selfTelemetry:
+  listen: ":19090"
+  health_listen: ":8080"
+  prometheus_namespace: "telegen"
+  pprof_enabled: false
+  pprof_port: 6060
+
+# -----------------------------------------------------------------------------
+# Internal Metrics Configuration
+# -----------------------------------------------------------------------------
+internal_metrics:
+  exporter: disabled
+  prometheus:
+    port: 0
+    path: "/internal/metrics"
+  bpf_metric_scrape_interval: 15s
+
+# -----------------------------------------------------------------------------
+# eBPF Tracer Configuration
+# -----------------------------------------------------------------------------
+ebpf:
+  enabled: true
+  batch_length: 100
+  batch_timeout: 1s
+  http_request_timeout: 0s
+  dns_request_timeout: 5s
+  max_transaction_time: 5m
+  tc_backend: auto
+  context_propagation: disabled
+  buffer_sizes:
+    http: 0
+    mysql: 0
+    postgres: 0
+    kafka: 0
+  ringbuf_size: 262144
+  perf_buffer_size: 8192
+  bpf_fs: "/sys/fs/bpf"
+  pin_objects: false
+  mysql_prepared_statements_cache_size: 1024
+  postgres_prepared_statements_cache_size: 1024
+  mongo_requests_cache_size: 1024
+  kafka_topic_uuid_cache_size: 1024
+  couchbase_db_cache_size: 1024
+  redis_db_cache:
+    enabled: false
+    max_size: 1000
+  override_bpf_loop_enabled: false
+  payload_extraction:
+    http:
+      graphql:
+        enabled: false
+      elasticsearch:
+        enabled: false
+      aws:
+        enabled: true  # Enable AWS payload extraction for ECS
+  log_enricher:
+    cache_ttl: 30m
+    cache_size: 128
+    async_writer_workers: 8
+    async_writer_channel_len: 500
+
+# -----------------------------------------------------------------------------
+# Channel Configuration
+# -----------------------------------------------------------------------------
+channel_buffer_len: 50
+channel_send_timeout: 1m
+channel_send_timeout_panic: false
+
+# -----------------------------------------------------------------------------
+# Network Observability Configuration
+# -----------------------------------------------------------------------------
+network:
+  enabled: true
+  capture:
+    enabled: true
+    interfaces: []
+    exclude_loopback: true
+    bpf_filter: ""
+  dns:
+    enabled: true
+    cache_size: 10000
+    capture_queries: true
+    capture_responses: true
+  tcp:
+    enabled: true
+    state_tracking: true
+    retransmissions: true
+    rtt: true
+  aggregation:
+    interval: 30s
+    max_flows: 100000
+  protocols:
+    http:
+      enabled: true
+      parse_headers: true
+      max_body_size: 65536
+    grpc:
+      enabled: true
+    mysql:
+      enabled: true
+      capture_query: true
+    postgres:
+      enabled: true
+      capture_query: true
+    redis:
+      enabled: true
+      capture_command: true
+    mongodb:
+      enabled: true
+      capture_query: true
+    kafka:
+      enabled: true
+    rabbitmq:
+      enabled: true
+    mqtt:
+      enabled: true
+    dns:
+      enabled: true
+
+# -----------------------------------------------------------------------------
+# Discovery Configuration
+# -----------------------------------------------------------------------------
+discovery:
+  exclude_otel_instrumented_services: true
+  exclude_otel_instrumented_services_span_metrics: false
+  instrument:
+    - path: "*"
+  min_process_age: 5s
+  default_otlp_grpc_port: 4317
+  route_harvester_timeout: 10s
+  disabled_route_harvesters: []
+  route_harvester_advanced:
+    java_harvest_delay: 60s
+
+# -----------------------------------------------------------------------------
+# Profiling Configuration
+# -----------------------------------------------------------------------------
+profiling:
+  enabled: true
+  cpu:
+    enabled: true
+    sample_rate: 99
+    max_stack_depth: 127
+  off_cpu:
+    enabled: true
+    min_block_time_ns: 1000000
+  memory:
+    enabled: true
+    min_alloc_size: 1024
+  mutex:
+    enabled: true
+    contention_threshold_ns: 1000000
+  wall:
+    enabled: false
+  collection_interval: 10s
+  target_pid: 0
+  target_pids: []
+  target_container_ids: []
+  exclude_kernel: false
+  exclude_user: false
+  symbols:
+    cache_size: 10000
+    debug_info_enabled: true
+    demangling_enabled: true
+    go_symbols: true
+    kernel_symbols: true
+  output_format: pprof
+  aggregate_stacks: true
+  upload_interval: 60s
+
+# -----------------------------------------------------------------------------
+# Security Observability Configuration
+# -----------------------------------------------------------------------------
+security:
+  enabled: true
+  syscall_audit:
+    enabled: true
+    syscalls: []
+    exclude_processes:
+      - telegen
+      - amazon-ecs-agent
+      - dockerd
+      - containerd
+    exclude_uids: []
+    capture_args: true
+    capture_execve_args: true
+  file_integrity:
+    enabled: true
+    sensitive_paths:
+      - /etc/passwd
+      - /etc/shadow
+      - /etc/group
+      - /etc/gshadow
+      - /etc/sudoers
+      - /etc/sudoers.d/*
+      - /etc/ssh/*
+      - /root/.ssh/*
+      - /home/*/.ssh/*
+      - /usr/bin/*
+      - /usr/sbin/*
+      - /bin/*
+      - /sbin/*
+    exclude_paths:
+      - /etc/*.tmp
+      - /etc/*.bak
+    monitor_writes: true
+    monitor_deletes: true
+    monitor_renames: true
+    monitor_permissions: true
+    monitor_ownership: true
+  container_escape:
+    enabled: true
+    alert_on_all_caps: false
+    monitor_mounts: true
+    monitor_namespaces: true
+    monitor_modules: true
+    dangerous_capabilities:
+      - CAP_SYS_ADMIN
+      - CAP_SYS_PTRACE
+      - CAP_SYS_RAWIO
+      - CAP_NET_ADMIN
+      - CAP_DAC_OVERRIDE
+      - CAP_DAC_READ_SEARCH
+  alerting:
+    min_severity: high
+    destinations:
+      - type: log
+    rate_limiting:
+      enabled: true
+      max_alerts_per_min: 100
+      burst_size: 20
+  export:
+    format: otlp_logs
+    endpoint: ""
+    batch_size: 100
+    flush_interval_ms: 5000
+
+# -----------------------------------------------------------------------------
+# Database Tracing Configuration
+# -----------------------------------------------------------------------------
+database_tracing:
+  enabled: true
+  postgresql:
+    enabled: true
+    capture_query: true
+    max_query_length: 2048
+    capture_errors: true
+    prune_sensitive: true
+    track_prepared: true
+    slow_query_threshold: 1s
+  mysql:
+    enabled: true
+    capture_query: true
+    max_query_length: 2048
+    capture_errors: true
+    prune_sensitive: true
+    track_prepared: true
+    slow_query_threshold: 1s
+  oracle:
+    enabled: true
+    capture_sql: true
+    capture_plsql: true
+    capture_wait_events: true
+    max_sql_length: 2048
+    slow_query_threshold: 2s
+  kafka:
+    enabled: true
+    capture_headers: true
+    track_consumer_lag: true
+    capture_topic_info: true
+  redis:
+    enabled: true
+    capture_keys: true
+    max_key_length: 256
+    track_hot_keys: true
+    max_hot_keys: 10000
+    slow_command_threshold: 100ms
+
+# -----------------------------------------------------------------------------
+# Query Statistics Configuration
+# -----------------------------------------------------------------------------
+stats:
+  enabled: true
+  aggregation_interval: 10s
+  max_patterns: 10000
+  calculate_percentiles: true
+  percentiles: [50, 90, 95, 99]
+
+# -----------------------------------------------------------------------------
+# Slow Query Detection Configuration
+# -----------------------------------------------------------------------------
+slow_queries:
+  enabled: true
+  default_threshold: 1s
+  thresholds:
+    postgresql: 1s
+    mysql: 1s
+    oracle: 2s
+    redis: 100ms
+    kafka: 500ms
+  max_retained: 1000
+  alert_very_slow: true
+  alert_repeated: true
+  repeated_min_count: 5
+
+# -----------------------------------------------------------------------------
+# Language-Specific Instrumentation
+# -----------------------------------------------------------------------------
+nodejs:
+  enabled: true
+
+javaagent:
+  enabled: true
+  timeout: 10s
+
+# -----------------------------------------------------------------------------
+# Cloud Provider Configuration (AWS-focused for ECS)
+# -----------------------------------------------------------------------------
+cloud:
+  auto_detect: true
+  detection_timeout: 10s
+  detection_interval: 5m
+  collect_metrics: true
+  metrics_interval: 30s
+  discover_resources: true
+  resource_interval: 5m
+  aws:
+    enabled: true
+    timeout: 200ms
+    refresh_interval: 15m
+    collect_tags: true  # Collect ECS/EC2 tags
+    tag_allowlist:
+      - Name
+      - Environment
+      - Application
+      - Team
+      - CostCenter
+    region: ""  # Auto-detect from ECS metadata
+    imdsv2_only: true
+    imds_endpoint: ""
+    imds_timeout: 2s
+  gcp:
+    enabled: false
+  azure:
+    enabled: false
+
+# -----------------------------------------------------------------------------
+# Attributes Configuration
+# -----------------------------------------------------------------------------
+attributes:
+  instance_id:
+    hostname_dns_resolution: true
+  kubernetes:
+    enable: false  # Not applicable on ECS
+  host_id:
+    fetch_timeout: 500ms
+  rename_unresolved_hosts: "unresolved"
+  rename_unresolved_hosts_outgoing: "outgoing"
+  rename_unresolved_hosts_incoming: "incoming"
+  metric_span_name_aggregation_limit: 100
+
+# -----------------------------------------------------------------------------
+# Name Resolver Configuration
+# -----------------------------------------------------------------------------
+name_resolver:
+  sources:
+    - host
+  cache_len: 1024
+  cache_ttl: 5m
+
+# -----------------------------------------------------------------------------
+# Routes Configuration
+# -----------------------------------------------------------------------------
+routes:
+  unmatch: heuristic
+  wildcard_char: "*"
+  max_path_segment_cardinality: 10
+  patterns: []
+
+# -----------------------------------------------------------------------------
+# Filter Configuration
+# -----------------------------------------------------------------------------
+filter:
+  application:
+    by_attribute: []
+  network:
+    by_attribute: []
+
+# -----------------------------------------------------------------------------
+# Queues Configuration
+# -----------------------------------------------------------------------------
+queues:
+  traces:
+    mem_limit: "256Mi"
+    max_age: "6h"
+  logs:
+    mem_limit: "256Mi"
+    max_age: "24h"
+  metrics:
+    mem_limit: "128Mi"
+    max_age: "5m"
+
+# -----------------------------------------------------------------------------
+# Backoff Configuration
+# -----------------------------------------------------------------------------
+backoff:
+  initial: "500ms"
+  max: "30s"
+  multiplier: 2.0
+  jitter: 0.2
+
+# -----------------------------------------------------------------------------
+# Pipelines Configuration
+# -----------------------------------------------------------------------------
+pipelines:
+  metrics:
+    enabled: true
+    also_expose_prometheus: true
+  traces:
+    enabled: true
+  logs:
+    enabled: true
+    filelog:
+      include:
+        - /var/log/*.log
+        - /var/log/*/*.log
+        - /var/lib/docker/containers/*/*.log
+      exclude:
+        - /var/log/telegen/*.log
+      position_file: /var/lib/telegen/positions.json
+      poll_interval: 500ms
+  jfr:
+    enabled: false
+    input_dir: /var/log/jfr
+    output_dir: /var/log/jfr-json
+    poll_interval: 5s
+    sample_interval_ms: 10
+    jfr_command: jfr
+    workers: 2
+    pretty_json: false
+
+# -----------------------------------------------------------------------------
+# Export Configuration
+# -----------------------------------------------------------------------------
+exports:
+  remoteWrite:
+    mode: active
+    tls:
+      enable: false
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      insecure_skip_verify: false
+    endpoints: []
+  otlp:
+    send_mode: failover
+    tls:
+      enable: false
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      insecure_skip_verify: false
+    grpc:
+      enabled: true
+      endpoint: "otel-collector.internal:4317"
+      headers: {}
+      insecure: true
+      gzip: true
+      timeout: "10s"
+    http:
+      enabled: false
+      endpoint: "http://otel-collector.internal:4318"
+      traces_path: "/v1/traces"
+      logs_path: "/v1/logs"
+      metrics_path: "/v1/metrics"
+      headers: {}
+      gzip: true
+      timeout: "10s"
+
+# -----------------------------------------------------------------------------
+# OpenTelemetry Metrics Export Configuration
+# -----------------------------------------------------------------------------
+otel_metrics_export:
+  protocol: unset
+  metrics_protocol: unset
+  otel_interval_ms: 60000
+  buckets:
+    duration_histogram_buckets:
+      - 0.005
+      - 0.01
+      - 0.025
+      - 0.05
+      - 0.1
+      - 0.25
+      - 0.5
+      - 1
+      - 2.5
+      - 5
+      - 10
+    request_size_histogram_buckets:
+      - 0
+      - 100
+      - 1024
+      - 10240
+      - 102400
+      - 1048576
+  reporters_cache_len: 256
+  histogram_aggregation: explicit
+  instrumentations:
+    - all
+  ttl: 5m
+
+# -----------------------------------------------------------------------------
+# OpenTelemetry Traces Export Configuration
+# -----------------------------------------------------------------------------
+otel_traces_export:
+  protocol: unset
+  traces_protocol: unset
+  max_queue_size: 4096
+  batch_timeout: 15s
+  reporters_cache_len: 256
+  instrumentations:
+    - http
+    - grpc
+    - sql
+    - redis
+    - kafka
+    - mqtt
+    - mongo
+
+# -----------------------------------------------------------------------------
+# Prometheus Export Configuration
+# -----------------------------------------------------------------------------
+prometheus_export:
+  enabled: true
+  path: /metrics
+  port: 0
+  buckets:
+    duration_histogram_buckets:
+      - 0.005
+      - 0.01
+      - 0.025
+      - 0.05
+      - 0.1
+      - 0.25
+      - 0.5
+      - 1
+      - 2.5
+      - 5
+      - 10
+  instrumentations:
+    - all
+  ttl: 5m
+  span_metrics_service_cache_size: 10000
+
+# -----------------------------------------------------------------------------
+# Debug Configuration
+# -----------------------------------------------------------------------------
+trace_printer: disabled
+profile_port: 0

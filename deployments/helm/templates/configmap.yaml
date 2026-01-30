@@ -1,7 +1,17 @@
+# Telegen v2.0 ConfigMap
+# Task: DEP-008
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: telegen-config
+  name: {{ include "telegen.fullname" . }}-config
+  namespace: {{ include "telegen.namespace" . }}
+  labels:
+    {{- include "telegen.labels" . | nindent 4 }}
+    app.kubernetes.io/component: config
 data:
-  config.yaml: |-
-{{ .Values.config | indent 4 }}
+  config.yaml: |
+    {{- if eq .Values.mode "agent" }}
+    {{- include "telegen.config" . | nindent 4 }}
+    {{- else }}
+    {{- include "telegen.collectorConfig" . | nindent 4 }}
+    {{- end }}
