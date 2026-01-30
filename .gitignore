@@ -2,4 +2,4 @@ dev/*
 cmd/*
 bin/*
 obj/*
-.tools/
+.tools/telegen
