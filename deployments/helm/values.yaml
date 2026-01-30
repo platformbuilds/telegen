@@ -516,6 +516,62 @@ security:
     flushIntervalMs: 5000
 
 # =============================================================================
+# AI/ML Observability Configuration
+# =============================================================================
+aiml:
+  enabled: true
+  # GPU Metrics Collection (NVIDIA NVML)
+  gpu:
+    enabled: true
+    collectInterval: 10s
+    devices: []  # Auto-detect all GPUs on node
+    collectProcessInfo: true
+    collectPcieMetrics: true
+    collectNvlinkMetrics: true
+    collectMigMetrics: true
+    collectEccMetrics: true
+    metrics:
+      utilization: true
+      memory: true
+      power: true
+      temperature: true
+      clocks: true
+      pcieThroughput: true
+      nvlinkThroughput: true
+  # LLM Token Tracking
+  llm:
+    enabled: true
+    trackRequests: true
+    enableCostEstimation: true
+    aggregationInterval: 10s
+    costConfig:
+      currency: "USD"
+      customRates: {}
+    capturePrompts: false
+    maxPromptPreviewLength: 100
+  # ML Framework Profiling (PyTorch, TensorFlow)
+  framework:
+    enabled: false
+    pytorch:
+      enabled: true
+      traceAutograd: true
+      profileMemory: true
+    tensorflow:
+      enabled: true
+      traceEager: true
+      profileXla: false
+    sampleRate: 0.1
+    minDurationUs: 100
+  # Export configuration
+  export:
+    format: otlp
+    interval: 10s
+    includeResourceAttributes: true
+    semanticConventions:
+      useGenAiPrefix: true
+      useGpuPrefix: true
+
+# =============================================================================
 # Database Tracing Configuration
 # =============================================================================
 databaseTracing:

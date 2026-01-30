@@ -379,6 +379,62 @@ data:
         flush_interval_ms: 5000
 
     # -----------------------------------------------------------------------------
+    # AI/ML Observability Configuration
+    # -----------------------------------------------------------------------------
+    aiml:
+      enabled: true
+      # GPU Metrics Collection (NVIDIA NVML) - For OpenShift GPU nodes
+      gpu:
+        enabled: true
+        collect_interval: 10s
+        devices: []  # Auto-detect all GPUs via NVIDIA GPU Operator
+        collect_process_info: true
+        collect_pcie_metrics: true
+        collect_nvlink_metrics: true
+        collect_mig_metrics: true
+        collect_ecc_metrics: true
+        metrics:
+          utilization: true
+          memory: true
+          power: true
+          temperature: true
+          clocks: true
+          pcie_throughput: true
+          nvlink_throughput: true
+      # LLM Token Tracking - For OpenShift AI/RHODS workloads
+      llm:
+        enabled: true
+        track_requests: true
+        enable_cost_estimation: true
+        aggregation_interval: 10s
+        cost_config:
+          currency: "USD"
+          custom_rates: {}
+        capture_prompts: false
+        max_prompt_preview_length: 100
+      # ML Framework Profiling (PyTorch, TensorFlow)
+      framework:
+        enabled: false
+        pytorch:
+          enabled: true
+          trace_autograd: true
+          profile_memory: true
+        tensorflow:
+          enabled: true
+          trace_eager: true
+          profile_xla: false
+        sample_rate: 0.1
+        min_duration_us: 100
+      # Export configuration
+      export:
+        format: otlp
+        interval: 10s
+        include_resource_attributes: true
+        semantic_conventions:
+          use_gen_ai_prefix: true
+          use_gpu_prefix: true
+
+    # -----------------------------------------------------------------------------
     # Database Tracing Configuration
     # -----------------------------------------------------------------------------
     database_tracing:
