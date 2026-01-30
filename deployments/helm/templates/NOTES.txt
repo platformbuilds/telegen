@@ -1,0 +1,112 @@
+# Telegen v2.0 Post-Install Notes
+# Task: DEP-010
+
+Telegen v{{ .Chart.AppVersion }} has been deployed!
+
+{{- if eq .Values.mode "agent" }}
+================================================================================
+                         AGENT MODE DEPLOYMENT
+================================================================================
+
+Telegen is now running as a DaemonSet on all nodes in your cluster.
+
+To check the status:
+  kubectl get pods -n {{ include "telegen.namespace" . }} -l app.kubernetes.io/name={{ include "telegen.name" . }}
+
+To view logs:
+  kubectl logs -n {{ include "telegen.namespace" . }} -l app.kubernetes.io/name={{ include "telegen.name" . }} -f
+
+To check metrics:
+  kubectl port-forward -n {{ include "telegen.namespace" . }} svc/{{ include "telegen.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+  curl http://localhost:{{ .Values.service.port }}/metrics
+
+{{- else }}
+================================================================================
+                        COLLECTOR MODE DEPLOYMENT
+================================================================================
+
+Telegen Collector is now running with {{ .Values.collector.replicas }} replicas.
+
+To check the status:
+  kubectl get pods -n {{ include "telegen.namespace" . }} -l app.kubernetes.io/name={{ include "telegen.name" . }}
+
+{{- if .Values.collector.snmp.enabled }}
+SNMP Configuration:
+  - Poll Interval: {{ .Values.collector.snmp.pollInterval }}
+  {{- if .Values.collector.snmp.traps.enabled }}
+  - Trap Receiver: Port {{ .Values.collector.snmp.traps.port }}
+  {{- end }}
+{{- end }}
+{{- end }}
+
+================================================================================
+                              OTLP EXPORT
+================================================================================
+
+Telemetry is being exported to:
+  Endpoint: {{ include "telegen.otlpEndpoint" . }}
+  Protocol: {{ .Values.otlp.protocol }}
+
+Signals enabled:
+  - Traces:   {{ .Values.otlp.traces.enabled }}
+  - Metrics:  {{ .Values.otlp.metrics.enabled }}
+  - Logs:     {{ .Values.otlp.logs.enabled }}
+  - Profiles: {{ .Values.otlp.profiles.enabled }}
+
+{{- if .Values.features.profiling.enabled }}
+================================================================================
+                          CONTINUOUS PROFILING
+================================================================================
+
+Profiling is enabled with the following settings:
+  - CPU Profiling:    {{ .Values.features.profiling.cpu }}
+  - Off-CPU Profiling: {{ .Values.features.profiling.offCpu }}
+  - Memory Profiling: {{ .Values.features.profiling.memory }}
+  - Mutex Profiling:  {{ .Values.features.profiling.mutex }}
+  - Sample Rate:      {{ .Values.features.profiling.sampleRate }} Hz
+{{- end }}
+
+{{- if .Values.features.security.enabled }}
+================================================================================
+                        SECURITY OBSERVABILITY
+================================================================================
+
+Security monitoring is enabled:
+  - Syscall Auditing:      {{ .Values.features.security.syscallAudit }}
+  - File Integrity:        {{ .Values.features.security.fileIntegrity }}
+  - Container Escape:      {{ .Values.features.security.containerEscape }}
+{{- end }}
+
+{{- if .Values.serviceMonitor.enabled }}
+================================================================================
+                          PROMETHEUS INTEGRATION
+================================================================================
+
+A ServiceMonitor has been created for Prometheus Operator.
+Metrics will be scraped at interval: {{ .Values.serviceMonitor.interval }}
+{{- end }}
+
+================================================================================
+                             TROUBLESHOOTING
+================================================================================
+
+If you encounter issues:
+
+1. Check pod status:
+   kubectl describe pod -n {{ include "telegen.namespace" . }} -l app.kubernetes.io/name={{ include "telegen.name" . }}
+
+2. Verify eBPF is working:
+   kubectl logs -n {{ include "telegen.namespace" . }} -l app.kubernetes.io/name={{ include "telegen.name" . }} | grep -i ebpf
+
+3. Check health endpoint:
+   kubectl port-forward -n {{ include "telegen.namespace" . }} svc/{{ include "telegen.fullname" . }} {{ .Values.service.healthPort }}:{{ .Values.service.healthPort }}
+   curl http://localhost:{{ .Values.service.healthPort }}/healthz
+
+4. Common issues:
+   - Ensure kernel version >= 5.4 for full eBPF support
+   - Verify /sys/kernel/debug is mounted
+   - Check that BPF filesystem is available at /sys/fs/bpf
+
+Documentation: https://github.com/platformbuilds/telegen
+
+Thank you for using Telegen! 🚀

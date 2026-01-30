@@ -1,0 +1,195 @@
+# Telegen v2.0 RBAC Configuration
+# Task: DEP-003
+# ServiceAccount, ClusterRole, and ClusterRoleBinding for Telegen agent
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    app.kubernetes.io/name: telegen
+    app.kubernetes.io/component: namespace
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: telegen
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: telegen
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/version: "2.0.0"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: telegen
+  labels:
+    app.kubernetes.io/name: telegen
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/version: "2.0.0"
+rules:
+  # Pod and node discovery
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - nodes
+      - nodes/proxy
+      - nodes/stats
+      - namespaces
+      - services
+      - endpoints
+      - configmaps
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+  
+  # Deployment and replicaset discovery for service topology
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - replicasets
+      - daemonsets
+      - statefulsets
+    verbs:
+      - get
+      - list
+      - watch
+  
+  # Jobs and cronjobs
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs:
+      - get
+      - list
+      - watch
+  
+  # Ingress discovery
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+      - networkpolicies
+    verbs:
+      - get
+      - list
+      - watch
+  
+  # Custom resource discovery
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - get
+      - list
+      - watch
+  
+  # Events for correlation
+  - apiGroups: [""]
+    resources:
+      - events
+    verbs:
+      - get
+      - list
+      - watch
+  
+  # Metrics access
+  - apiGroups: ["metrics.k8s.io"]
+    resources:
+      - pods
+      - nodes
+    verbs:
+      - get
+      - list
+  
+  # Service mesh resources (Istio)
+  - apiGroups: ["networking.istio.io"]
+    resources:
+      - virtualservices
+      - destinationrules
+      - gateways
+      - serviceentries
+    verbs:
+      - get
+      - list
+      - watch
+  
+  # Cilium resources
+  - apiGroups: ["cilium.io"]
+    resources:
+      - ciliumnetworkpolicies
+      - ciliumendpoints
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: telegen
+  labels:
+    app.kubernetes.io/name: telegen
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/version: "2.0.0"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: telegen
+subjects:
+  - kind: ServiceAccount
+    name: telegen
+    namespace: observability
+---
+# Role for namespace-scoped resources
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: telegen
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: telegen
+    app.kubernetes.io/component: rbac
+rules:
+  - apiGroups: [""]
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+  - apiGroups: ["coordination.k8s.io"]
+    resources:
+      - leases
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: telegen
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: telegen
+    app.kubernetes.io/component: rbac
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: telegen
+subjects:
+  - kind: ServiceAccount
+    name: telegen
+    namespace: observability

@@ -1,40 +1,920 @@
+# Telegen v2.0 Helm Values
+# Task: DEP-007
+# Full configuration reference for Telegen deployment
+
+# =============================================================================
+# REQUIRED: OTLP Endpoint (everything else is optional with sensible defaults)
+# =============================================================================
+otlp:
+  endpoint: "otel-collector:4317"
+  protocol: "grpc"  # grpc or http
+  insecure: true
+  gzip: true
+  timeout: "10s"
+  headers: {}
+  tls:
+    enabled: false
+    caFile: ""
+    certFile: ""
+    keyFile: ""
+    insecureSkipVerify: false
+  # Per-signal endpoint overrides (optional)
+  traces:
+    enabled: true
+    endpoint: ""  # Uses main endpoint if empty
+  metrics:
+    enabled: true
+    endpoint: ""
+  logs:
+    enabled: true
+    endpoint: ""
+  profiles:
+    enabled: true
+    endpoint: ""
+
+# =============================================================================
+# Image Configuration
+# =============================================================================
 image:
   repository: ghcr.io/platformbuilds/telegen
-  tag: v3.1.0
+  tag: "2.0.0"
   pullPolicy: IfNotPresent
 
-resources:
-  requests: { cpu: 100m, memory: 128Mi }
-  limits: { cpu: 500m, memory: 256Mi }
+imagePullSecrets: []
 
-service:
-  port: 19090
+# =============================================================================
+# Deployment Mode
+# =============================================================================
+# agent: DaemonSet for local eBPF instrumentation
+# collector: Deployment for remote device monitoring
+mode: agent
 
-config: |
-  selfTelemetry:
-    listen: ":19090"
-    prometheus_namespace: "telegen"
-  exports:
-    remoteWrite:
-      mode: "active"
-      endpoints:
-        - url: "http://otel-remote-write.default.svc.cluster.local:9009/api/v1/push"
-          timeout: "5s"
-          compression: "gzip"
-    otlp:
-      send_mode: "failover"
-      http:
-        enabled: true
-        endpoint: "otel-collector.default.svc.cluster.local:4318"
-        traces_path: "/v1/traces"
-        logs_path: "/v1/logs"
-        gzip: true
-  pipelines:
-    traces: { enabled: true }
-    logs:
+# =============================================================================
+# Agent Mode Settings (DaemonSet)
+# =============================================================================
+agent:
+  enabled: true
+  serviceName: "telegen"
+  logLevel: INFO
+  logFormat: json
+  shutdownTimeout: 10s
+  enforceSysCaps: false
+  
+  # Host access for eBPF
+  hostPID: true
+  hostNetwork: true
+  dnsPolicy: ClusterFirstWithHostNet
+  
+  # Priority class
+  priorityClassName: system-node-critical
+  
+  # Tolerations for running on all nodes
+  tolerations:
+    - operator: Exists
+      effect: NoSchedule
+    - operator: Exists
+      effect: NoExecute
+  
+  # Node selector
+  nodeSelector: {}
+  
+  # Affinity rules
+  affinity: {}
+
+# =============================================================================
+# Collector Mode Settings (Deployment)
+# =============================================================================
+collector:
+  enabled: false
+  replicas: 2
+  serviceName: "telegen-collector"
+  logLevel: INFO
+  logFormat: json
+  
+  # SNMP configuration
+  snmp:
+    enabled: false
+    trapReceiver:
       enabled: true
-      filelog:
-        include: ["/var/log/containers/*.log"]
-        position_file: "/var/lib/telegen/positions.json"
+      listenAddress: "0.0.0.0:1162"
+      communityStrings:
+        - public
+        - private
+      v3Users: []
+    polling:
+      enabled: true
+      defaultInterval: 60s
+      timeout: 10s
+      retries: 3
+      maxConcurrent: 100
+    targets: []
+    discovery:
+      enabled: false
+      networks: []
+      interval: 1h
+      communityStrings:
+        - public
+    mibs:
+      searchPaths:
+        - /usr/share/snmp/mibs
+        - /opt/telegen/mibs
+      loadStandard: true
+      customMibs: []
+    output:
+      prometheus:
+        enabled: true
+        listenAddress: ":9116"
+        path: /metrics
+      remoteWrite:
+        enabled: false
+        endpoints: []
+  
+  # Storage array monitoring
+  storage:
+    enabled: false
+    collectInterval: 60s
+    dellPowerStore: []
+    pureFlashArray: []
+    netappOntap: []
+    hpePrimera: []
+    otlp:
+      enabled: true
+      endpoint: ""
+
+# =============================================================================
+# Self-Telemetry Configuration
+# =============================================================================
+selfTelemetry:
+  listen: ":19090"
+  healthListen: ":8080"
+  prometheusNamespace: "telegen"
+  pprofEnabled: false
+  pprofPort: 6060
+
+# =============================================================================
+# Internal Metrics Configuration
+# =============================================================================
+internalMetrics:
+  exporter: disabled
+  prometheus:
+    port: 0
+    path: "/internal/metrics"
+  bpfMetricScrapeInterval: 15s
+
+# =============================================================================
+# eBPF Tracer Configuration
+# =============================================================================
+ebpf:
+  enabled: true
+  batchLength: 100
+  batchTimeout: 1s
+  httpRequestTimeout: 0s
+  dnsRequestTimeout: 5s
+  maxTransactionTime: 5m
+  tcBackend: auto
+  contextPropagation: disabled
+  bufferSizes:
+    http: 0
+    mysql: 0
+    postgres: 0
+    kafka: 0
+  ringbufSize: 262144
+  perfBufferSize: 8192
+  bpfFs: "/sys/fs/bpf"
+  pinObjects: false
+  mysqlPreparedStatementsCacheSize: 1024
+  postgresPreparedStatementsCacheSize: 1024
+  mongoRequestsCacheSize: 1024
+  kafkaTopicUuidCacheSize: 1024
+  couchbaseDbCacheSize: 1024
+  redisDbCache:
+    enabled: false
+    maxSize: 1000
+  overrideBpfLoopEnabled: false
+  payloadExtraction:
+    http:
+      graphql:
+        enabled: false
+      elasticsearch:
+        enabled: false
+      aws:
+        enabled: false
+  logEnricher:
+    cacheTtl: 30m
+    cacheSize: 128
+    asyncWriterWorkers: 8
+    asyncWriterChannelLen: 500
+
+# =============================================================================
+# Channel Configuration
+# =============================================================================
+channel:
+  bufferLen: 50
+  sendTimeout: 1m
+  sendTimeoutPanic: false
+
+# =============================================================================
+# Network Observability Configuration
+# =============================================================================
+network:
+  enabled: true
+  capture:
+    enabled: true
+    interfaces: []
+    excludeLoopback: true
+    bpfFilter: ""
+  dns:
+    enabled: true
+    cacheSize: 10000
+    captureQueries: true
+    captureResponses: true
+  tcp:
+    enabled: true
+    stateTracking: true
+    retransmissions: true
+    rtt: true
+  aggregation:
+    interval: 30s
+    maxFlows: 100000
+  protocols:
+    http:
+      enabled: true
+      parseHeaders: true
+      maxBodySize: 65536
+    grpc:
+      enabled: true
+    mysql:
+      enabled: true
+      captureQuery: true
+    postgres:
+      enabled: true
+      captureQuery: true
+    redis:
+      enabled: true
+      captureCommand: true
+    mongodb:
+      enabled: true
+      captureQuery: true
+    kafka:
+      enabled: true
+    rabbitmq:
+      enabled: true
+    mqtt:
+      enabled: true
+    dns:
+      enabled: true
+
+# =============================================================================
+# Discovery Configuration
+# =============================================================================
+discovery:
+  excludeOtelInstrumentedServices: true
+  excludeOtelInstrumentedServicesSpanMetrics: false
+  instrument:
+    - path: "*"
+  minProcessAge: 5s
+  defaultOtlpGrpcPort: 4317
+  routeHarvesterTimeout: 10s
+  disabledRouteHarvesters: []
+  routeHarvesterAdvanced:
+    javaHarvestDelay: 60s
+
+# =============================================================================
+# Kubernetes Attributes Configuration
+# =============================================================================
+attributes:
+  instanceId:
+    hostnameDnsResolution: true
+  kubernetes:
+    enable: true
+    informersSyncTimeout: 30s
+    informersResyncPeriod: 30m
+    resourceLabels:
+      - app
+      - app.kubernetes.io/name
+      - app.kubernetes.io/component
+      - app.kubernetes.io/instance
+      - app.kubernetes.io/version
+  hostId:
+    fetchTimeout: 500ms
+  renameUnresolvedHosts: "unresolved"
+  renameUnresolvedHostsOutgoing: "outgoing"
+  renameUnresolvedHostsIncoming: "incoming"
+  metricSpanNameAggregationLimit: 100
+
+# =============================================================================
+# Resource Limits (DEP-004)
+# =============================================================================
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+# Collector mode resources (typically needs more)
+collectorResources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+# =============================================================================
+# Security Context
+# =============================================================================
+securityContext:
+  privileged: true
+  runAsUser: 0
+  capabilities:
+    add:
+      - SYS_ADMIN
+      - SYS_PTRACE
+      - SYS_RESOURCE
+      - NET_ADMIN
+      - NET_RAW
+      - BPF
+      - PERFMON
+      - DAC_READ_SEARCH
+
+# Collector mode runs unprivileged
+collectorSecurityContext:
+  runAsUser: 65532
+  runAsNonRoot: true
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+# =============================================================================
+# Service Configuration
+# =============================================================================
+service:
+  type: ClusterIP
+  port: 19090
+  healthPort: 8080
+  annotations: {}
+
+# =============================================================================
+# ServiceMonitor (Prometheus Operator)
+# =============================================================================
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  additionalLabels: {}
+
+# =============================================================================
+# Health Probes (DEP-005)
+# =============================================================================
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /healthz
+    port: health
+  initialDelaySeconds: 15
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /readyz
+    port: health
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+startupProbe:
+  enabled: true
+  httpGet:
+    path: /healthz
+    port: health
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  failureThreshold: 30
+
+# =============================================================================
+# RBAC
+# =============================================================================
+rbac:
+  create: true
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# =============================================================================
+# Profiling Configuration
+# =============================================================================
+profiling:
+  enabled: true
+  cpu:
+    enabled: true
+    sampleRate: 99
+    maxStackDepth: 127
+  offCpu:
+    enabled: true
+    minBlockTimeNs: 1000000
+  memory:
+    enabled: true
+    minAllocSize: 1024
+  mutex:
+    enabled: true
+    contentionThresholdNs: 1000000
+  wall:
+    enabled: false
+  collectionInterval: 10s
+  targetPid: 0
+  targetPids: []
+  targetContainerIds: []
+  excludeKernel: false
+  excludeUser: false
+  symbols:
+    cacheSize: 10000
+    debugInfoEnabled: true
+    demanglingEnabled: true
+    goSymbols: true
+    kernelSymbols: true
+  outputFormat: pprof
+  aggregateStacks: true
+  uploadInterval: 60s
+
+# =============================================================================
+# Security Observability Configuration
+# =============================================================================
+security:
+  enabled: true
+  syscallAudit:
+    enabled: true
+    syscalls: []
+    excludeProcesses:
+      - telegen
+      - kubelet
+      - containerd
+      - dockerd
+    excludeUids: []
+    captureArgs: true
+    captureExecveArgs: true
+  fileIntegrity:
+    enabled: true
+    sensitivePaths:
+      - /etc/passwd
+      - /etc/shadow
+      - /etc/group
+      - /etc/gshadow
+      - /etc/sudoers
+      - /etc/sudoers.d/*
+      - /etc/ssh/*
+      - /root/.ssh/*
+      - /home/*/.ssh/*
+      - /usr/bin/*
+      - /usr/sbin/*
+      - /bin/*
+      - /sbin/*
+    excludePaths:
+      - /etc/*.tmp
+      - /etc/*.bak
+      - /var/log
+      - /tmp
+    monitorWrites: true
+    monitorDeletes: true
+    monitorRenames: true
+    monitorPermissions: true
+    monitorOwnership: true
+  containerEscape:
+    enabled: true
+    alertOnAllCaps: false
+    monitorMounts: true
+    monitorNamespaces: true
+    monitorModules: true
+    dangerousCapabilities:
+      - CAP_SYS_ADMIN
+      - CAP_SYS_PTRACE
+      - CAP_SYS_RAWIO
+      - CAP_NET_ADMIN
+      - CAP_DAC_OVERRIDE
+      - CAP_DAC_READ_SEARCH
+  alerting:
+    minSeverity: high
+    destinations:
+      - type: log
+    rateLimiting:
+      enabled: true
+      maxAlertsPerMin: 100
+      burstSize: 20
+  export:
+    format: otlp_logs
+    endpoint: ""
+    batchSize: 100
+    flushIntervalMs: 5000
+
+# =============================================================================
+# AI/ML Observability Configuration
+# =============================================================================
+aiml:
+  enabled: true
+  # GPU Metrics Collection (NVIDIA NVML)
+  gpu:
+    enabled: true
+    collectInterval: 10s
+    devices: []  # Auto-detect all GPUs on node
+    collectProcessInfo: true
+    collectPcieMetrics: true
+    collectNvlinkMetrics: true
+    collectMigMetrics: true
+    collectEccMetrics: true
     metrics:
-      also_expose_prometheus: true
+      utilization: true
+      memory: true
+      power: true
+      temperature: true
+      clocks: true
+      pcieThroughput: true
+      nvlinkThroughput: true
+  # LLM Token Tracking
+  llm:
+    enabled: true
+    trackRequests: true
+    enableCostEstimation: true
+    aggregationInterval: 10s
+    costConfig:
+      currency: "USD"
+      customRates: {}
+    capturePrompts: false
+    maxPromptPreviewLength: 100
+  # ML Framework Profiling (PyTorch, TensorFlow)
+  framework:
+    enabled: false
+    pytorch:
+      enabled: true
+      traceAutograd: true
+      profileMemory: true
+    tensorflow:
+      enabled: true
+      traceEager: true
+      profileXla: false
+    sampleRate: 0.1
+    minDurationUs: 100
+  # Export configuration
+  export:
+    format: otlp
+    interval: 10s
+    includeResourceAttributes: true
+    semanticConventions:
+      useGenAiPrefix: true
+      useGpuPrefix: true
+
+# =============================================================================
+# Database Tracing Configuration
+# =============================================================================
+databaseTracing:
+  enabled: true
+  postgresql:
+    enabled: true
+    captureQuery: true
+    maxQueryLength: 2048
+    captureErrors: true
+    pruneSensitive: true
+    trackPrepared: true
+    slowQueryThreshold: 1s
+  mysql:
+    enabled: true
+    captureQuery: true
+    maxQueryLength: 2048
+    captureErrors: true
+    pruneSensitive: true
+    trackPrepared: true
+    slowQueryThreshold: 1s
+  oracle:
+    enabled: true
+    captureSql: true
+    capturePlsql: true
+    captureWaitEvents: true
+    maxSqlLength: 2048
+    slowQueryThreshold: 2s
+  kafka:
+    enabled: true
+    captureHeaders: true
+    trackConsumerLag: true
+    captureTopicInfo: true
+  redis:
+    enabled: true
+    captureKeys: true
+    maxKeyLength: 256
+    trackHotKeys: true
+    maxHotKeys: 10000
+    slowCommandThreshold: 100ms
+
+# =============================================================================
+# Query Statistics Configuration
+# =============================================================================
+stats:
+  enabled: true
+  aggregationInterval: 10s
+  maxPatterns: 10000
+  calculatePercentiles: true
+  percentiles: [50, 90, 95, 99]
+
+# =============================================================================
+# Slow Query Detection Configuration
+# =============================================================================
+slowQueries:
+  enabled: true
+  defaultThreshold: 1s
+  thresholds:
+    postgresql: 1s
+    mysql: 1s
+    oracle: 2s
+    redis: 100ms
+    kafka: 500ms
+  maxRetained: 1000
+  alertVerySlow: true
+  alertRepeated: true
+  repeatedMinCount: 5
+
+# =============================================================================
+# Language-Specific Instrumentation
+# =============================================================================
+nodejs:
+  enabled: true
+
+javaagent:
+  enabled: true
+  timeout: 10s
+
+# =============================================================================
+# Cloud Discovery
+# =============================================================================
+cloud:
+  autoDetect: true
+  detectionTimeout: 10s
+  detectionInterval: 5m
+  collectMetrics: true
+  metricsInterval: 30s
+  discoverResources: true
+  resourceInterval: 5m
+  aws:
+    enabled: true
+    timeout: 200ms
+    refreshInterval: 15m
+    collectTags: false
+    tagAllowlist: []
+    region: ""
+    imdsv2Only: true
+    imdsEndpoint: ""
+    imdsTimeout: 2s
+  gcp:
+    enabled: true
+    project: ""
+    zone: ""
+    metadataEndpoint: ""
+    metadataTimeout: 2s
+  azure:
+    enabled: true
+    subscriptionId: ""
+    resourceGroup: ""
+    imdsEndpoint: ""
+    imdsTimeout: 2s
+
+# =============================================================================
+# Name Resolver Configuration
+# =============================================================================
+nameResolver:
+  sources:
+    - host
+    - k8s
+  cacheLen: 1024
+  cacheTtl: 5m
+
+# =============================================================================
+# Routes Configuration
+# =============================================================================
+routes:
+  unmatch: heuristic
+  wildcardChar: "*"
+  maxPathSegmentCardinality: 10
+  patterns: []
+
+# =============================================================================
+# Filter Configuration
+# =============================================================================
+filter:
+  application:
+    byAttribute: []
+  network:
+    byAttribute: []
+
+# =============================================================================
+# Queues Configuration
+# =============================================================================
+queues:
+  traces:
+    memLimit: "256Mi"
+    maxAge: "6h"
+  logs:
+    memLimit: "256Mi"
+    maxAge: "24h"
+  metrics:
+    memLimit: "128Mi"
+    maxAge: "5m"
+
+# =============================================================================
+# Backoff Configuration
+# =============================================================================
+backoff:
+  initial: "500ms"
+  max: "30s"
+  multiplier: 2.0
+  jitter: 0.2
+
+# =============================================================================
+# Pipelines Configuration
+# =============================================================================
+pipelines:
+  metrics:
+    enabled: true
+    alsoExposePrometheus: true
+  traces:
+    enabled: true
+  logs:
+    enabled: true
+    filelog:
+      include:
+        - /var/log/containers/*.log
+        - /var/log/pods/**/*.log
+      exclude:
+        - /var/log/containers/*telegen*.log
+      positionFile: /var/lib/telegen/positions.json
+      pollInterval: 500ms
+  jfr:
+    enabled: false
+    inputDir: /var/log/jfr
+    outputDir: /var/log/jfr-json
+    pollInterval: 5s
+    sampleIntervalMs: 10
+    jfrCommand: jfr
+    workers: 2
+    prettyJson: false
+
+# =============================================================================
+# Remote Write Configuration
+# =============================================================================
+remoteWrite:
+  mode: active
+  tls:
+    enabled: false
+    caFile: ""
+    certFile: ""
+    keyFile: ""
+    insecureSkipVerify: false
+  endpoints: []
+
+# =============================================================================
+# OpenTelemetry Metrics Export Configuration
+# =============================================================================
+otelMetricsExport:
+  protocol: unset
+  metricsProtocol: unset
+  otelIntervalMs: 60000
+  buckets:
+    durationHistogramBuckets:
+      - 0.005
+      - 0.01
+      - 0.025
+      - 0.05
+      - 0.1
+      - 0.25
+      - 0.5
+      - 1
+      - 2.5
+      - 5
+      - 10
+    requestSizeHistogramBuckets:
+      - 0
+      - 100
+      - 1024
+      - 10240
+      - 102400
+      - 1048576
+  reportersCacheLen: 256
+  histogramAggregation: explicit
+  instrumentations:
+    - all
+  ttl: 5m
+
+# =============================================================================
+# OpenTelemetry Traces Export Configuration
+# =============================================================================
+otelTracesExport:
+  protocol: unset
+  tracesProtocol: unset
+  maxQueueSize: 4096
+  batchTimeout: 15s
+  reportersCacheLen: 256
+  instrumentations:
+    - http
+    - grpc
+    - sql
+    - redis
+    - kafka
+    - mqtt
+    - mongo
+
+# =============================================================================
+# Prometheus Export Configuration
+# =============================================================================
+prometheusExport:
+  enabled: true
+  path: /metrics
+  port: 0
+  buckets:
+    durationHistogramBuckets:
+      - 0.005
+      - 0.01
+      - 0.025
+      - 0.05
+      - 0.1
+      - 0.25
+      - 0.5
+      - 1
+      - 2.5
+      - 5
+      - 10
+  instrumentations:
+    - all
+  ttl: 5m
+  spanMetricsServiceCacheSize: 10000
+
+# =============================================================================
+# Anomaly Detection
+# =============================================================================
+anomalyDetection:
+  enabled: true
+  isolationForest:
+    numTrees: 100
+    subsampleSize: 256
+    threshold: 0.5
+
+# =============================================================================
+# Root Cause Analysis
+# =============================================================================
+rca:
+  enabled: true
+  maxWhyDepth: 5
+  correlationWindow: "5m"
+
+# =============================================================================
+# Volume Mounts
+# =============================================================================
+extraVolumes: []
+extraVolumeMounts: []
+
+# =============================================================================
+# Environment Variables
+# =============================================================================
+env: []
+envFrom: []
+
+# =============================================================================
+# Secrets
+# =============================================================================
+secrets:
+  # Create a secret with storage credentials
+  create: false
+  data: {}
+
+# =============================================================================
+# Pod Annotations and Labels
+# =============================================================================
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "19090"
+  prometheus.io/path: "/metrics"
+
+podLabels: {}
+
+# =============================================================================
+# Namespace
+# =============================================================================
+namespaceOverride: ""
+
+# =============================================================================
+# Debug Configuration
+# =============================================================================
+debug:
+  tracePrinter: disabled
+  profilePort: 0
+
+# =============================================================================
+# Full Config Override
+# =============================================================================
+# If you want to provide a complete config.yaml, set this
+configOverride: ""
+

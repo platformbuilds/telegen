@@ -1,0 +1,151 @@
+# Database Tracing Configuration
+# This file configures eBPF-based database and message queue tracing.
+
+database_tracing:
+  # Global enable/disable
+  enabled: true
+  
+  # PostgreSQL tracing
+  postgresql:
+    enabled: true
+    # Capture full query text
+    capture_query: true
+    # Maximum query length to capture (truncated beyond this)
+    max_query_length: 2048
+    # Capture error details
+    capture_errors: true
+    # Prune sensitive data from queries
+    prune_sensitive: true
+    # Track prepared statements
+    track_prepared: true
+    # Slow query threshold (queries slower than this are flagged)
+    slow_query_threshold: 1s
+    
+  # MySQL/MariaDB tracing
+  mysql:
+    enabled: true
+    capture_query: true
+    max_query_length: 2048
+    capture_errors: true
+    prune_sensitive: true
+    track_prepared: true
+    slow_query_threshold: 1s
+    
+  # Oracle tracing
+  oracle:
+    enabled: true
+    # Capture SQL text
+    capture_sql: true
+    # Capture PL/SQL blocks
+    capture_plsql: true
+    # Capture wait events for performance analysis
+    capture_wait_events: true
+    max_sql_length: 2048
+    slow_query_threshold: 2s
+    
+  # Kafka message queue tracing
+  kafka:
+    enabled: true
+    # Capture message headers (for trace propagation)
+    capture_headers: true
+    # Track consumer group offsets and lag
+    track_consumer_lag: true
+    # Capture topic and partition info
+    capture_topic_info: true
+    
+  # Redis tracing
+  redis:
+    enabled: true
+    # Capture key names
+    capture_keys: true
+    # Maximum key length to capture
+    max_key_length: 256
+    # Track hot keys (frequently accessed)
+    track_hot_keys: true
+    # Maximum number of hot keys to track
+    max_hot_keys: 10000
+    # Slow command threshold (Redis commands should be fast)
+    slow_command_threshold: 100ms
+
+# Query statistics aggregation
+stats:
+  enabled: true
+  # How often to aggregate stats
+  aggregation_interval: 10s
+  # Maximum number of unique query patterns to track
+  max_patterns: 10000
+  # Enable percentile calculations
+  calculate_percentiles: true
+  # Percentiles to calculate
+  percentiles: [50, 90, 95, 99]
+  
+# Slow query detection and alerting
+slow_queries:
+  enabled: true
+  # Default slow query threshold (per-database thresholds override)
+  default_threshold: 1s
+  # Per-database thresholds
+  thresholds:
+    postgresql: 1s
+    mysql: 1s
+    oracle: 2s
+    redis: 100ms
+    kafka: 500ms
+  # Maximum slow queries to retain
+  max_retained: 1000
+  # Alert on very slow queries (>5x threshold)
+  alert_very_slow: true
+  # Alert on repeated slow queries (same pattern)
+  alert_repeated: true
+  # Minimum repeat count to trigger repeated slow query alert
+  repeated_count_threshold: 3
+
+# Export settings
+export:
+  # Enable OTLP export
+  enabled: true
+  # Export traces
+  traces: true
+  # Export metrics  
+  metrics: true
+  # Batch size for export
+  batch_size: 100
+  # Flush interval
+  flush_interval: 5s
+  # Maximum queue size
+  max_queue_size: 10000
+  
+  # OTLP exporter settings (uses global OTLP config if not specified)
+  otlp:
+    # Endpoint (uses global endpoint if not set)
+    # endpoint: localhost:4317
+    # Use insecure connection
+    insecure: true
+    # Headers to include
+    headers: {}
+    
+# Semantic conventions
+semantic_conventions:
+  # Use OpenTelemetry semantic conventions for database attributes
+  use_otel_semconv: true
+  # Version of semantic conventions to use
+  semconv_version: "1.21.0"
+  
+# Process filtering
+process_filter:
+  # Auto-detect database processes
+  auto_detect: true
+  # Specific process names to trace
+  include:
+    - postgres
+    - postgresql
+    - mysqld
+    - mariadbd
+    - oracle
+    - sqlplus
+    - redis-server
+    - kafka
+  # Process names to exclude
+  exclude: []
+  # Trace only specific PIDs (empty = all)
+  pids: []

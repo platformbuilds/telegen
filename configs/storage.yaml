@@ -1,0 +1,114 @@
+# Telegen Storage Adapter Configuration
+# Enterprise storage array metrics collection
+
+storage:
+  # Enable/disable the storage metrics collection
+  enabled: true
+  
+  # Default collection interval (can be overridden per-collector)
+  collect_interval: 60s
+
+  # Dell PowerStore collectors
+  # REST API documentation: https://developer.dell.com/apis/powerstore
+  dell_powerstore:
+    - name: "powerstore-prod-01"
+      address: "https://10.0.10.100"
+      username: "monitor"
+      password: "${DELL_PASSWORD}"
+      verify_ssl: true
+      timeout: 30s
+      # Optional: cluster_id for multi-cluster setups
+      cluster_id: ""
+      # What to collect: capacity, performance, volumes, hosts
+      # If empty, collects everything
+      collect:
+        - capacity
+        - performance
+        - volumes
+        - hosts
+      # Additional labels to add to all metrics
+      labels:
+        environment: "production"
+        datacenter: "dc1"
+
+    - name: "powerstore-dr-01"
+      address: "https://10.0.20.100"
+      username: "monitor"
+      password: "${DELL_PASSWORD_DR}"
+      verify_ssl: true
+      collect:
+        - capacity
+        - volumes
+      labels:
+        environment: "dr"
+        datacenter: "dc2"
+
+  # HPE Primera/3PAR collectors
+  # WSAPI documentation: https://support.hpe.com/hpesc/public/docDisplay
+  hpe_primera:
+    - name: "primera-prod-01"
+      address: "https://10.0.10.110"
+      username: "monitor"
+      password: "${HPE_PASSWORD}"
+      verify_ssl: true
+      timeout: 30s
+      labels:
+        environment: "production"
+        datacenter: "dc1"
+
+  # Pure FlashArray collectors
+  # REST API v2 documentation: https://support.purestorage.com/FlashArray
+  pure_flasharray:
+    - name: "pure-prod-01"
+      address: "https://10.0.10.130"
+      api_token: "${PURE_TOKEN}"
+      api_version: "2.4"
+      verify_ssl: true
+      timeout: 30s
+      labels:
+        environment: "production"
+        datacenter: "dc1"
+
+    - name: "pure-prod-02"
+      address: "https://10.0.10.131"
+      api_token: "${PURE_TOKEN_02}"
+      api_version: "2.4"
+      verify_ssl: true
+      labels:
+        environment: "production"
+        datacenter: "dc1"
+
+  # NetApp ONTAP collectors
+  # ONTAP REST API documentation: https://docs.netapp.com/us-en/ontap-automation
+  netapp_ontap:
+    - name: "ontap-prod-01"
+      address: "https://10.0.10.140"
+      username: "monitor"
+      password: "${NETAPP_PASSWORD}"
+      verify_ssl: true
+      timeout: 30s
+      # Optional: specific cluster to collect from
+      cluster_id: ""
+      labels:
+        environment: "production"
+        datacenter: "dc1"
+
+  # OTLP export configuration
+  otlp:
+    enabled: true
+    # OTLP endpoint (without /v1/metrics path)
+    endpoint: "localhost:4317"
+    # Protocol: grpc or http
+    protocol: "grpc"
+    # Compression: gzip or none
+    compression: "gzip"
+    # Additional headers
+    headers:
+      # Authorization: "Bearer ${OTLP_TOKEN}"
+    # TLS configuration
+    tls:
+      enabled: false
+      insecure_skip_verify: false
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
