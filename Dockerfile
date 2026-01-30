@@ -4,8 +4,10 @@
 
 # =============================================================================
 # Stage 1: Generate eBPF bytecode
+# Uses BUILDPLATFORM to run natively on the build host
 # =============================================================================
-FROM ghcr.io/open-telemetry/obi-generator:0.2.6 AS bpf-gen
+ARG BUILDPLATFORM
+FROM --platform=$BUILDPLATFORM ghcr.io/open-telemetry/obi-generator:0.2.6 AS bpf-gen
 
 WORKDIR /src
 
@@ -15,13 +17,20 @@ COPY internal/ ./internal/
 COPY pkg/ ./pkg/
 COPY go.mod go.sum ./
 
-# Generate eBPF bytecode (CO-RE)
+# Generate eBPF bytecode (CO-RE) - architecture independent
 RUN go generate ./bpf/...
 
 # =============================================================================
 # Stage 2: Build Go binary
+# Uses BUILDPLATFORM to run natively, cross-compiles for TARGETPLATFORM
 # =============================================================================
-FROM golang:1.25-bookworm AS build
+ARG BUILDPLATFORM
+FROM --platform=$BUILDPLATFORM golang:1.25-bookworm AS build
+
+# These args are automatically set by Docker buildx
+ARG TARGETPLATFORM
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /src
 
@@ -37,14 +46,13 @@ COPY --from=bpf-gen /src/bpf/ ./bpf/
 COPY --from=bpf-gen /src/internal/ ./internal/
 COPY --from=bpf-gen /src/pkg/ ./pkg/
 
-# Build arguments
+# Build arguments for version info
 ARG VERSION=2.0.0
 ARG REVISION=unknown
 ARG BUILD_DATE
-ARG TARGETARCH=amd64
-ARG TARGETOS=linux
 
-# Build the binary
+# Build the binary - Go cross-compilation (no QEMU needed)
+# CGO_ENABLED=0 allows cross-compilation without C toolchain
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -trimpath \
     -ldflags="-s -w \
