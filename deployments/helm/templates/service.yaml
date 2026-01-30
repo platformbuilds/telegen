@@ -1,11 +1,40 @@
+# Telegen v2.0 Service
+# Task: DEP-008
 apiVersion: v1
 kind: Service
 metadata:
-  name: telegen
+  name: {{ include "telegen.fullname" . }}
+  namespace: {{ include "telegen.namespace" . }}
+  labels:
+    {{- include "telegen.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
+  type: {{ .Values.service.type }}
+  {{- if eq .Values.mode "agent" }}
+  clusterIP: None
+  {{- end }}
   selector:
-    app: telegen
+    {{- include "telegen.selectorLabels" . | nindent 4 }}
+    {{- if eq .Values.mode "agent" }}
+    app.kubernetes.io/component: agent
+    {{- else }}
+    app.kubernetes.io/component: collector
+    {{- end }}
   ports:
-    - name: http
-      port: 19090
-      targetPort: http
+    - name: http-metrics
+      port: {{ .Values.service.port }}
+      targetPort: http-metrics
+      protocol: TCP
+    - name: health
+      port: {{ .Values.service.healthPort }}
+      targetPort: health
+      protocol: TCP
+    {{- if and (eq .Values.mode "collector") .Values.collector.snmp.traps.enabled }}
+    - name: snmp-traps
+      port: 162
+      targetPort: {{ .Values.collector.snmp.traps.port }}
+      protocol: UDP
+    {{- end }}

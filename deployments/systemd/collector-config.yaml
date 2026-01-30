@@ -1,0 +1,381 @@
+# =============================================================================
+# Telegen v2.0 - Collector Mode Configuration (Fully Loaded)
+# =============================================================================
+# Task: DEP-012
+# Purpose: Comprehensive configuration for collector mode on bare-metal/systemd
+# Location: /etc/telegen/collector-config.yaml
+# =============================================================================
+
+# =============================================================================
+# CORE AGENT CONFIGURATION
+# =============================================================================
+agent:
+  # Deployment mode
+  mode: collector  # collector mode for SNMP/storage monitoring
+  
+  # Service identification
+  service_name: telegen-collector
+  instance_id: ${HOSTNAME:-collector}
+  deployment_environment: production
+  
+  # Logging configuration
+  log_level: INFO
+  log_format: json
+  log_output: stdout
+
+# =============================================================================
+# SELF TELEMETRY
+# =============================================================================
+selfTelemetry:
+  enabled: true
+  metrics:
+    port: 19091
+  health:
+    port: 8081
+
+# =============================================================================
+# INTERNAL METRICS
+# =============================================================================
+internal_metrics:
+  prometheus:
+    port: 19091
+    path: /metrics
+    namespace: telegen_collector
+
+# =============================================================================
+# SNMP RECEIVER - COMPREHENSIVE CONFIGURATION
+# =============================================================================
+snmp_receiver:
+  enabled: true
+  
+  # Trap receiver configuration
+  trap_receiver:
+    enabled: true
+    listen_address: 0.0.0.0:162
+    community: public
+    security:
+      v3_enabled: false
+      # v3_username: snmpuser
+      # v3_auth_protocol: SHA
+      # v3_auth_password: authpassword
+      # v3_priv_protocol: AES
+      # v3_priv_password: privpassword
+    
+  # SNMP polling configuration
+  polling:
+    interval: 60s
+    timeout: 30s
+    retries: 3
+    max_repetitions: 25
+    
+  # Polling targets
+  targets:
+    # Network switches
+    - name: core-switch-01
+      address: 192.168.1.10:161
+      version: v2c
+      community: public
+      modules:
+        - if_mib
+        - system_mib
+        - entity_mib
+      labels:
+        location: datacenter-1
+        role: core
+        
+    - name: access-switch-01
+      address: 192.168.1.11:161
+      version: v2c
+      community: public
+      modules:
+        - if_mib
+      labels:
+        location: datacenter-1
+        role: access
+        
+    # Routers
+    - name: router-01
+      address: 192.168.1.1:161
+      version: v3
+      security:
+        username: monitor
+        auth_protocol: SHA256
+        auth_password: ${SNMP_AUTH_PASSWORD}
+        priv_protocol: AES256
+        priv_password: ${SNMP_PRIV_PASSWORD}
+      modules:
+        - if_mib
+        - bgp4_mib
+        - ospf_mib
+      labels:
+        location: datacenter-1
+        role: border
+        
+    # Firewalls
+    - name: firewall-01
+      address: 192.168.1.254:161
+      version: v2c
+      community: public
+      modules:
+        - if_mib
+        - host_resources
+      labels:
+        location: datacenter-1
+        role: perimeter
+        
+  # Target discovery
+  discovery:
+    enabled: true
+    networks:
+      - 192.168.1.0/24
+      - 10.0.0.0/16
+    exclude:
+      - 192.168.1.100  # Skip management workstation
+    interval: 1h
+    port: 161
+    community: public
+    
+  # MIB modules configuration
+  mibs:
+    # System MIB
+    system_mib:
+      oids:
+        - oid: 1.3.6.1.2.1.1.1.0
+          name: sysDescr
+          type: DisplayString
+        - oid: 1.3.6.1.2.1.1.3.0
+          name: sysUpTime
+          type: TimeTicks
+        - oid: 1.3.6.1.2.1.1.5.0
+          name: sysName
+          type: DisplayString
+          
+    # Interface MIB
+    if_mib:
+      walk:
+        - 1.3.6.1.2.1.2.2.1      # ifTable
+        - 1.3.6.1.2.1.31.1.1.1   # ifXTable
+      metrics:
+        - name: ifInOctets
+          oid: 1.3.6.1.2.1.2.2.1.10
+          type: counter
+        - name: ifOutOctets
+          oid: 1.3.6.1.2.1.2.2.1.16
+          type: counter
+        - name: ifInErrors
+          oid: 1.3.6.1.2.1.2.2.1.14
+          type: counter
+        - name: ifOutErrors
+          oid: 1.3.6.1.2.1.2.2.1.20
+          type: counter
+        - name: ifHCInOctets
+          oid: 1.3.6.1.2.1.31.1.1.1.6
+          type: counter
+        - name: ifHCOutOctets
+          oid: 1.3.6.1.2.1.31.1.1.1.10
+          type: counter
+          
+    # Host resources MIB
+    host_resources:
+      walk:
+        - 1.3.6.1.2.1.25.2.3.1   # hrStorageTable
+        - 1.3.6.1.2.1.25.3.3.1   # hrProcessorTable
+      metrics:
+        - name: hrStorageUsed
+          oid: 1.3.6.1.2.1.25.2.3.1.6
+          type: gauge
+        - name: hrStorageSize
+          oid: 1.3.6.1.2.1.25.2.3.1.5
+          type: gauge
+        - name: hrProcessorLoad
+          oid: 1.3.6.1.2.1.25.3.3.1.2
+          type: gauge
+          
+    # Entity MIB
+    entity_mib:
+      walk:
+        - 1.3.6.1.2.1.47.1.1.1.1  # entPhysicalTable
+      metrics:
+        - name: entPhysicalClass
+          oid: 1.3.6.1.2.1.47.1.1.1.1.5
+          type: gauge
+          
+    # BGP MIB
+    bgp4_mib:
+      walk:
+        - 1.3.6.1.2.1.15.3.1  # bgpPeerTable
+      metrics:
+        - name: bgpPeerState
+          oid: 1.3.6.1.2.1.15.3.1.2
+          type: gauge
+        - name: bgpPeerInUpdates
+          oid: 1.3.6.1.2.1.15.3.1.10
+          type: counter
+        - name: bgpPeerOutUpdates
+          oid: 1.3.6.1.2.1.15.3.1.11
+          type: counter
+          
+    # OSPF MIB
+    ospf_mib:
+      walk:
+        - 1.3.6.1.2.1.14.10.1  # ospfNbrTable
+      metrics:
+        - name: ospfNbrState
+          oid: 1.3.6.1.2.1.14.10.1.6
+          type: gauge
+          
+  # Output configuration
+  output:
+    format: otlp
+    batch_size: 100
+    flush_interval: 30s
+
+# =============================================================================
+# STORAGE MONITORING - COMPREHENSIVE CONFIGURATION
+# =============================================================================
+storage:
+  enabled: true
+  
+  # Dell PowerStore
+  dell_powerstore:
+    enabled: false
+    endpoints:
+      - name: powerstore-cluster-1
+        address: https://powerstore.example.com
+        username: ${DELL_POWERSTORE_USER}
+        password: ${DELL_POWERSTORE_PASSWORD}
+        verify_ssl: true
+        ca_cert: /etc/telegen/certs/dell-ca.crt
+    polling_interval: 60s
+    metrics:
+      - capacity
+      - performance
+      - alerts
+      - hardware_health
+    collect_volumes: true
+    collect_hosts: true
+    collect_replication: true
+    
+  # HPE Primera/Alletra
+  hpe_primera:
+    enabled: false
+    endpoints:
+      - name: primera-array-1
+        address: https://primera.example.com
+        username: ${HPE_PRIMERA_USER}
+        password: ${HPE_PRIMERA_PASSWORD}
+        verify_ssl: true
+    polling_interval: 60s
+    metrics:
+      - capacity
+      - performance
+      - alerts
+    collect_volumes: true
+    collect_hosts: true
+    
+  # Pure Storage FlashArray
+  pure_flasharray:
+    enabled: false
+    endpoints:
+      - name: flasharray-1
+        address: https://pure.example.com
+        api_token: ${PURE_API_TOKEN}
+        verify_ssl: true
+    polling_interval: 60s
+    metrics:
+      - capacity
+      - performance
+      - alerts
+    collect_volumes: true
+    collect_hosts: true
+    collect_replication: true
+    
+  # NetApp ONTAP
+  netapp_ontap:
+    enabled: false
+    endpoints:
+      - name: ontap-cluster-1
+        address: https://ontap.example.com
+        username: ${NETAPP_USER}
+        password: ${NETAPP_PASSWORD}
+        verify_ssl: true
+    polling_interval: 60s
+    metrics:
+      - capacity
+      - performance
+      - alerts
+      - snapmirror
+    collect_volumes: true
+    collect_luns: true
+    collect_aggregates: true
+
+# =============================================================================
+# PIPELINES CONFIGURATION
+# =============================================================================
+pipelines:
+  # Metrics pipeline
+  metrics:
+    enabled: true
+    processors:
+      - resource_detection
+      - batch
+    exporters:
+      - otlp
+
+# =============================================================================
+# OTLP EXPORT CONFIGURATION
+# =============================================================================
+exports:
+  otlp:
+    enabled: true
+    endpoint: ${TELEGEN_OTLP_ENDPOINT:-otel-collector:4317}
+    protocol: grpc
+    timeout: 10s
+    insecure: true
+    gzip: true
+    headers: {}
+    send_mode: failover
+    
+    # TLS configuration
+    tls:
+      enabled: false
+      # ca_file: /etc/telegen/certs/ca.crt
+      # cert_file: /etc/telegen/certs/client.crt
+      # key_file: /etc/telegen/certs/client.key
+      # insecure_skip_verify: false
+
+# =============================================================================
+# QUEUE CONFIGURATION
+# =============================================================================
+queues:
+  metrics:
+    mem_limit: 128Mi
+    max_age: 5m
+    storage_enabled: false
+
+# =============================================================================
+# BACKOFF CONFIGURATION
+# =============================================================================
+backoff:
+  initial_interval: 500ms
+  max_interval: 30s
+  multiplier: 2.0
+  max_elapsed_time: 5m
+  jitter: 0.2
+
+# =============================================================================
+# ATTRIBUTES
+# =============================================================================
+attributes:
+  # Resource attributes
+  resource:
+    service.name: telegen-collector
+    service.namespace: infrastructure
+    deployment.environment: ${DEPLOYMENT_ENV:-production}
+    telegen.mode: collector
+    telegen.version: 2.0.0
+    
+  # Additional metadata
+  metadata:
+    team: platform
+    cost_center: infrastructure

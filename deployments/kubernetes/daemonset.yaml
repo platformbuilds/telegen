@@ -1,0 +1,224 @@
+# Telegen v2.0 DaemonSet - Agent Mode
+# Task: DEP-001, DEP-004, DEP-005
+# Deploys Telegen on every node for eBPF-based observability
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: telegen
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: telegen
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/part-of: observability
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: telegen
+      app.kubernetes.io/component: agent
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: telegen
+        app.kubernetes.io/component: agent
+        app.kubernetes.io/version: "2.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "19090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: telegen
+      hostPID: true
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      
+      # Tolerate all taints to run on every node
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+        - operator: Exists
+          effect: NoExecute
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      
+      # Prefer scheduling on nodes with more resources
+      priorityClassName: system-node-critical
+      
+      containers:
+        - name: telegen
+          image: ghcr.io/platformbuilds/telegen:v2.0.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--config=/etc/telegen/config.yaml"
+            - "--mode=agent"
+          
+          # DEP-004: Resource limits
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          
+          # Privileged container for eBPF
+          securityContext:
+            privileged: true
+            runAsUser: 0
+            runAsGroup: 0
+            capabilities:
+              add:
+                - SYS_ADMIN
+                - SYS_PTRACE
+                - SYS_RESOURCE
+                - NET_ADMIN
+                - NET_RAW
+                - BPF
+                - PERFMON
+                - DAC_READ_SEARCH
+          
+          ports:
+            - name: http-metrics
+              containerPort: 19090
+              protocol: TCP
+            - name: health
+              containerPort: 8080
+              protocol: TCP
+          
+          # DEP-005: Liveness and Readiness Probes
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+          
+          env:
+            - name: TELEGEN_MODE
+              value: "agent"
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: POD_SERVICE_ACCOUNT
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.serviceAccountName
+            # GOMAXPROCS tuning
+            - name: GOMAXPROCS
+              value: "4"
+          
+          volumeMounts:
+            # Configuration
+            - name: config
+              mountPath: /etc/telegen
+              readOnly: true
+            # Host filesystem access for eBPF
+            - name: sys
+              mountPath: /sys
+              readOnly: true
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+            # DEP-001: Mount /sys/kernel/debug for BPF
+            - name: debugfs
+              mountPath: /sys/kernel/debug
+            # BPF filesystem for pinned maps
+            - name: bpf
+              mountPath: /sys/fs/bpf
+            # Container logs
+            - name: varlog
+              mountPath: /var/log
+              readOnly: true
+            - name: varlibdockercontainers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+            # Persistent state
+            - name: telegen-data
+              mountPath: /var/lib/telegen
+            # Cgroups for container detection
+            - name: cgroup
+              mountPath: /sys/fs/cgroup
+              readOnly: true
+      
+      terminationGracePeriodSeconds: 30
+      
+      volumes:
+        - name: config
+          configMap:
+            name: telegen-config
+        - name: sys
+          hostPath:
+            path: /sys
+            type: Directory
+        - name: proc
+          hostPath:
+            path: /proc
+            type: Directory
+        - name: debugfs
+          hostPath:
+            path: /sys/kernel/debug
+            type: Directory
+        - name: bpf
+          hostPath:
+            path: /sys/fs/bpf
+            type: DirectoryOrCreate
+        - name: varlog
+          hostPath:
+            path: /var/log
+            type: Directory
+        - name: varlibdockercontainers
+          hostPath:
+            path: /var/lib/docker/containers
+            type: DirectoryOrCreate
+        - name: telegen-data
+          hostPath:
+            path: /var/lib/telegen
+            type: DirectoryOrCreate
+        - name: cgroup
+          hostPath:
+            path: /sys/fs/cgroup
+            type: Directory

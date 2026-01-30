@@ -1,0 +1,1048 @@
+# =============================================================================
+# Telegen v2.0 - Fully Loaded Configuration
+# =============================================================================
+# This is a comprehensive configuration file containing ALL available options
+# for the Telegen eBPF observability agent.
+#
+# Configuration Priority (highest to lowest):
+#   1. Environment variables
+#   2. Command-line flags
+#   3. Configuration file
+#   4. Default values
+#
+# Environment variable substitution is supported: ${VAR_NAME}
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Core Agent Configuration
+# -----------------------------------------------------------------------------
+agent:
+  # Service name for telemetry attribution
+  service_name: "telegen"
+  
+  # Unique instance identifier (defaults to hostname)
+  instance_id: ""
+  
+  # Operation mode: "agent" (eBPF) or "collector" (remote polling)
+  mode: agent
+  
+  # Log level: DEBUG, INFO, WARN, ERROR
+  log_level: INFO
+  
+  # Log format: json or text
+  log_format: json
+  
+  # Enable logging of configuration at startup: yaml, json, or empty to disable
+  log_config: ""
+  
+  # Timeout for graceful shutdown
+  shutdown_timeout: 10s
+  
+  # Check for required system capabilities and exit if missing
+  enforce_sys_caps: false
+
+# -----------------------------------------------------------------------------
+# Self-Telemetry Configuration
+# -----------------------------------------------------------------------------
+selfTelemetry:
+  # Prometheus metrics endpoint
+  listen: ":19090"
+  
+  # Health check endpoint
+  health_listen: ":8080"
+  
+  # Prometheus namespace prefix for metrics
+  prometheus_namespace: "telegen"
+  
+  # Enable pprof profiling endpoints
+  pprof_enabled: false
+  pprof_port: 6060
+
+# -----------------------------------------------------------------------------
+# Internal Metrics Configuration
+# -----------------------------------------------------------------------------
+internal_metrics:
+  # Exporter type: disabled, prometheus, otel
+  exporter: disabled
+  
+  prometheus:
+    port: 0
+    path: "/internal/metrics"
+  
+  # Interval for BPF metrics scraping
+  bpf_metric_scrape_interval: 15s
+
+# -----------------------------------------------------------------------------
+# eBPF Tracer Configuration
+# -----------------------------------------------------------------------------
+ebpf:
+  # Enable eBPF-based auto-instrumentation
+  enabled: true
+  
+  # Batch processing settings
+  batch_length: 100
+  batch_timeout: 1s
+  
+  # HTTP request timeout (0 = no timeout)
+  http_request_timeout: 0s
+  
+  # DNS request timeout
+  dns_request_timeout: 5s
+  
+  # Maximum transaction time before cleanup
+  max_transaction_time: 5m
+  
+  # TC (Traffic Control) backend: auto, tc, tcx
+  tc_backend: auto
+  
+  # Context propagation: disabled, traceparent, b3
+  context_propagation: disabled
+  
+  # eBPF buffer sizes (0 = auto)
+  buffer_sizes:
+    http: 0
+    mysql: 0
+    postgres: 0
+    kafka: 0
+  
+  # Ring buffer size in bytes (must be power of 2)
+  ringbuf_size: 262144
+  
+  # Per-CPU perf buffer size in bytes
+  perf_buffer_size: 8192
+  
+  # BPF filesystem mount point
+  bpf_fs: "/sys/fs/bpf"
+  
+  # Pin BPF objects for persistence across restarts
+  pin_objects: false
+  
+  # Cache sizes for various protocol parsers
+  mysql_prepared_statements_cache_size: 1024
+  postgres_prepared_statements_cache_size: 1024
+  mongo_requests_cache_size: 1024
+  kafka_topic_uuid_cache_size: 1024
+  couchbase_db_cache_size: 1024
+  
+  # Redis DB cache for RESP protocol parsing
+  redis_db_cache:
+    enabled: false
+    max_size: 1000
+  
+  # Override BPF loop optimization (advanced)
+  override_bpf_loop_enabled: false
+  
+  # Payload extraction configuration
+  payload_extraction:
+    http:
+      graphql:
+        enabled: false
+      elasticsearch:
+        enabled: false
+      aws:
+        enabled: false
+  
+  # Log enricher configuration (correlate logs with traces)
+  log_enricher:
+    cache_ttl: 30m
+    cache_size: 128
+    async_writer_workers: 8
+    async_writer_channel_len: 500
+
+# -----------------------------------------------------------------------------
+# Channel Configuration (Internal)
+# -----------------------------------------------------------------------------
+channel_buffer_len: 50
+channel_send_timeout: 1m
+channel_send_timeout_panic: false
+
+# -----------------------------------------------------------------------------
+# Network Observability Configuration
+# -----------------------------------------------------------------------------
+network:
+  # Enable network flow observability
+  enabled: true
+  
+  # Network flow capture settings
+  capture:
+    enabled: true
+    # Interfaces to monitor (empty = all)
+    interfaces: []
+    # Exclude loopback interface
+    exclude_loopback: true
+    # BPF filter expression
+    bpf_filter: ""
+  
+  # DNS tracking
+  dns:
+    enabled: true
+    # Cache size for DNS responses
+    cache_size: 10000
+    # Capture DNS queries
+    capture_queries: true
+    # Capture DNS responses
+    capture_responses: true
+  
+  # TCP connection tracking
+  tcp:
+    enabled: true
+    # Track TCP state transitions
+    state_tracking: true
+    # Track retransmissions
+    retransmissions: true
+    # Track round-trip time
+    rtt: true
+  
+  # Flow aggregation
+  aggregation:
+    # Aggregation interval
+    interval: 30s
+    # Maximum flows per interval
+    max_flows: 100000
+  
+  # Layer 7 protocol parsing
+  protocols:
+    http:
+      enabled: true
+      # Parse request/response headers
+      parse_headers: true
+      # Maximum body size to capture
+      max_body_size: 65536
+    grpc:
+      enabled: true
+    mysql:
+      enabled: true
+      capture_query: true
+    postgres:
+      enabled: true
+      capture_query: true
+    redis:
+      enabled: true
+      capture_command: true
+    mongodb:
+      enabled: true
+      capture_query: true
+    kafka:
+      enabled: true
+    rabbitmq:
+      enabled: true
+    mqtt:
+      enabled: true
+    dns:
+      enabled: true
+
+# -----------------------------------------------------------------------------
+# Discovery Configuration
+# -----------------------------------------------------------------------------
+discovery:
+  # Exclude services that are already instrumented with OpenTelemetry
+  exclude_otel_instrumented_services: true
+  
+  # Exclude span metrics generation for OTel-instrumented services
+  exclude_otel_instrumented_services_span_metrics: false
+  
+  # Default services to exclude from tracing (by regex path match)
+  # These are observability tools that should not be self-instrumented
+  default_exclude_services:
+    - path: "(?:^|/)(beyla$|alloy$|otelcol[^/]*$)"
+    - k8s_namespace: "^kube-system$|^kube-node-lease$|^monitoring$"
+  
+  # Instrumentation targeting
+  instrument:
+    # Glob patterns for executables to instrument
+    - path: "*"
+      # Can specify metadata conditions
+      # k8s_namespace: "production"
+  
+  # Minimum process age before discovery (avoid ephemeral processes)
+  min_process_age: 5s
+  
+  # Default OTLP gRPC port for applications
+  default_otlp_grpc_port: 4317
+  
+  # Route harvesting timeout
+  route_harvester_timeout: 10s
+  
+  # Disabled route harvesters
+  disabled_route_harvesters: []
+  
+  # Route harvester advanced configuration
+  route_harvester_advanced:
+    # Delay before harvesting routes from Java applications
+    java_harvest_delay: 60s
+
+# -----------------------------------------------------------------------------
+# Kubernetes Discovery Configuration
+# -----------------------------------------------------------------------------
+kubernetes:
+  # Enable Kubernetes metadata decoration
+  enable: true
+  
+  # Informers sync timeout
+  informers_sync_timeout: 30s
+  
+  # Informers resync period
+  informers_resync_period: 30m
+  
+  # Resource labels to include
+  resource_labels:
+    - app
+    - app.kubernetes.io/name
+    - app.kubernetes.io/component
+    - app.kubernetes.io/version
+
+# -----------------------------------------------------------------------------
+# Profiling Configuration
+# -----------------------------------------------------------------------------
+profiling:
+  # Enable continuous profiling
+  enabled: true
+  
+  # CPU profiling
+  cpu:
+    enabled: true
+    # Samples per second (99 avoids lock-step with system timers)
+    sample_rate: 99
+    # Maximum stack depth to capture
+    max_stack_depth: 127
+  
+  # Off-CPU profiling (time spent blocked)
+  off_cpu:
+    enabled: false
+    # Minimum blocking time to record (nanoseconds)
+    min_block_time_ns: 1000000  # 1ms
+  
+  # Memory profiling
+  memory:
+    enabled: false
+    # Minimum allocation size to track (bytes)
+    min_alloc_size: 1024
+  
+  # Mutex contention profiling
+  mutex:
+    enabled: false
+    # Minimum contention time to record (nanoseconds)
+    contention_threshold_ns: 1000000  # 1ms
+  
+  # Wall-clock profiling
+  wall:
+    enabled: false
+  
+  # Collection interval (how often to aggregate samples)
+  collection_interval: 10s
+  
+  # Filtering
+  target_pid: 0              # Specific PID (0 = all)
+  target_pids: []            # Multiple PIDs
+  target_container_ids: []   # Container IDs
+  exclude_kernel: false      # Exclude kernel stacks
+  exclude_user: false        # Exclude user stacks
+  
+  # Symbol resolution
+  symbols:
+    cache_size: 10000
+    debug_info_enabled: true    # Use DWARF debug info
+    demangling_enabled: true    # Demangle C++/Rust symbols
+    go_symbols: true            # Resolve Go symbols
+    kernel_symbols: true        # Resolve kernel symbols
+  
+  # Output format: pprof, folded, json
+  output_format: pprof
+  
+  # Aggregate identical stacks
+  aggregate_stacks: true
+  
+  # Upload interval for profile export
+  upload_interval: 60s
+
+# -----------------------------------------------------------------------------
+# Security Observability Configuration
+# -----------------------------------------------------------------------------
+security:
+  # Enable security observability features
+  enabled: true
+  
+  # Syscall auditing
+  syscall_audit:
+    enabled: true
+    # Specific syscalls to monitor (empty = security-sensitive only)
+    syscalls: []
+    # Processes to exclude by name
+    exclude_processes:
+      - telegen
+      - dockerd
+      - containerd
+    # User IDs to exclude
+    exclude_uids: []
+    # Capture syscall arguments
+    capture_args: true
+    # Capture execve command line arguments
+    capture_execve_args: true
+  
+  # File integrity monitoring
+  file_integrity:
+    enabled: true
+    # Paths to monitor (supports glob patterns)
+    sensitive_paths:
+      - /etc/passwd
+      - /etc/shadow
+      - /etc/group
+      - /etc/gshadow
+      - /etc/sudoers
+      - /etc/sudoers.d/*
+      - /etc/ssh/*
+      - /root/.ssh/*
+      - /home/*/.ssh/*
+      - /usr/bin/*
+      - /usr/sbin/*
+      - /bin/*
+      - /sbin/*
+    # Paths to exclude
+    exclude_paths:
+      - /etc/*.tmp
+      - /etc/*.bak
+    # Events to monitor
+    monitor_writes: true
+    monitor_deletes: true
+    monitor_renames: true
+    monitor_permissions: true
+    monitor_ownership: true
+  
+  # Container escape detection
+  container_escape:
+    enabled: true
+    # Alert on dangerous capabilities even outside containers
+    alert_on_all_caps: false
+    # Monitor mount operations in containers
+    monitor_mounts: true
+    # Monitor namespace operations
+    monitor_namespaces: true
+    # Monitor kernel module loading
+    monitor_modules: true
+    # Dangerous capabilities to monitor
+    dangerous_capabilities:
+      - CAP_SYS_ADMIN
+      - CAP_SYS_PTRACE
+      - CAP_SYS_RAWIO
+      - CAP_NET_ADMIN
+      - CAP_DAC_OVERRIDE
+      - CAP_DAC_READ_SEARCH
+  
+  # Alerting configuration
+  alerting:
+    # Minimum severity to trigger alerts: low, medium, high, critical
+    min_severity: high
+    # Alert destinations
+    destinations:
+      - type: log
+      # - type: webhook
+      #   url: "https://alerts.example.com/webhook"
+      # - type: slack
+      #   url: "${SLACK_WEBHOOK_URL}"
+    # Rate limiting
+    rate_limiting:
+      enabled: true
+      max_alerts_per_min: 100
+      burst_size: 20
+  
+  # Export configuration
+  export:
+    # Format: otlp_logs, json, syslog
+    format: otlp_logs
+    # Endpoint for OTLP export
+    endpoint: ""
+    # Batch size
+    batch_size: 100
+    # Flush interval (milliseconds)
+    flush_interval_ms: 5000
+
+# -----------------------------------------------------------------------------
+# Database Tracing Configuration
+# -----------------------------------------------------------------------------
+database_tracing:
+  # Enable database query tracing
+  enabled: true
+  
+  # PostgreSQL
+  postgresql:
+    enabled: true
+    capture_query: true
+    max_query_length: 2048
+    capture_errors: true
+    prune_sensitive: true
+    track_prepared: true
+    slow_query_threshold: 1s
+  
+  # MySQL/MariaDB
+  mysql:
+    enabled: true
+    capture_query: true
+    max_query_length: 2048
+    capture_errors: true
+    prune_sensitive: true
+    track_prepared: true
+    slow_query_threshold: 1s
+  
+  # Oracle
+  oracle:
+    enabled: true
+    capture_sql: true
+    capture_plsql: true
+    capture_wait_events: true
+    max_sql_length: 2048
+    slow_query_threshold: 2s
+  
+  # Kafka
+  kafka:
+    enabled: true
+    capture_headers: true
+    track_consumer_lag: true
+    capture_topic_info: true
+  
+  # Redis
+  redis:
+    enabled: true
+    capture_keys: true
+    max_key_length: 256
+    track_hot_keys: true
+    max_hot_keys: 10000
+    slow_command_threshold: 100ms
+
+# -----------------------------------------------------------------------------
+# Query Statistics Configuration
+# -----------------------------------------------------------------------------
+stats:
+  enabled: true
+  aggregation_interval: 10s
+  max_patterns: 10000
+  calculate_percentiles: true
+  percentiles: [50, 90, 95, 99]
+
+# -----------------------------------------------------------------------------
+# Slow Query Detection Configuration
+# -----------------------------------------------------------------------------
+slow_queries:
+  enabled: true
+  default_threshold: 1s
+  thresholds:
+    postgresql: 1s
+    mysql: 1s
+    oracle: 2s
+    redis: 100ms
+    kafka: 500ms
+  max_retained: 1000
+  alert_very_slow: true
+  alert_repeated: true
+  repeated_min_count: 5
+
+# -----------------------------------------------------------------------------
+# Language-Specific Instrumentation
+# -----------------------------------------------------------------------------
+# Node.js instrumentation
+nodejs:
+  enabled: true
+
+# Java agent instrumentation
+javaagent:
+  enabled: true
+  timeout: 10s
+
+# -----------------------------------------------------------------------------
+# Cloud Provider Configuration
+# -----------------------------------------------------------------------------
+cloud:
+  # Auto-detect cloud provider from environment
+  auto_detect: true
+  detection_timeout: 10s
+  detection_interval: 5m
+  
+  # Collect cloud-specific metrics
+  collect_metrics: true
+  metrics_interval: 30s
+  
+  # Discover cloud resources
+  discover_resources: true
+  resource_interval: 5m
+  
+  # AWS configuration
+  aws:
+    enabled: true
+    timeout: 200ms
+    refresh_interval: 15m
+    collect_tags: false
+    tag_allowlist: []
+    region: ""
+    imdsv2_only: true
+    imds_endpoint: ""
+    imds_timeout: 2s
+  
+  # GCP configuration
+  gcp:
+    enabled: false
+    project: ""
+    zone: ""
+    metadata_endpoint: ""
+    metadata_timeout: 2s
+  
+  # Azure configuration
+  azure:
+    enabled: false
+    subscription_id: ""
+    resource_group: ""
+    imds_endpoint: ""
+    imds_timeout: 2s
+  
+  # OpenStack configuration
+  openstack:
+    enabled: false
+    auth_url: ""
+    username: ""
+    password: "${OPENSTACK_PASSWORD}"
+    project_id: ""
+    project_name: ""
+    domain_id: ""
+    domain_name: ""
+    region: ""
+    all_projects: false
+    insecure: false
+    ca_cert: ""
+  
+  # VMware vSphere configuration
+  vmware:
+    enabled: false
+    address: ""
+    username: ""
+    password: "${VMWARE_PASSWORD}"
+    datacenter: ""
+    cluster: ""
+    insecure: false
+    timeout: 30s
+    session_keep_alive: 5m
+  
+  # Nutanix Prism configuration
+  nutanix:
+    enabled: false
+    endpoint: ""
+    username: ""
+    password: "${NUTANIX_PASSWORD}"
+    insecure: false
+    timeout: 30s
+    api_version: "v3"
+
+# -----------------------------------------------------------------------------
+# Attributes Configuration
+# -----------------------------------------------------------------------------
+attributes:
+  # Instance ID configuration
+  instance_id:
+    hostname_dns_resolution: true
+  
+  # Kubernetes decorator
+  kubernetes:
+    enable: true
+    informers_sync_timeout: 30s
+    informers_resync_period: 30m
+    resource_labels:
+      - app
+      - app.kubernetes.io/name
+      - app.kubernetes.io/component
+  
+  # Host ID configuration
+  host_id:
+    fetch_timeout: 500ms
+  
+  # Rename unresolved hosts
+  rename_unresolved_hosts: "unresolved"
+  rename_unresolved_hosts_outgoing: "outgoing"
+  rename_unresolved_hosts_incoming: "incoming"
+  
+  # Limit unique span names for metric aggregation
+  metric_span_name_aggregation_limit: 100
+
+# -----------------------------------------------------------------------------
+# Name Resolver Configuration
+# -----------------------------------------------------------------------------
+name_resolver:
+  # Sources for resolving service names: k8s, host, container
+  sources:
+    - k8s
+    - host
+  # Cache length
+  cache_len: 1024
+  # Cache TTL
+  cache_ttl: 5m
+
+# -----------------------------------------------------------------------------
+# Routes Configuration (URL Aggregation)
+# -----------------------------------------------------------------------------
+routes:
+  # What to do with unmatched routes: path, heuristic, unset, wildcard
+  unmatch: heuristic
+  # Wildcard character for aggregated routes
+  wildcard_char: "*"
+  # Maximum cardinality for path segments
+  max_path_segment_cardinality: 10
+  # Custom route patterns
+  patterns: []
+  #   - /api/users/{id}
+  #   - /api/orders/{order_id}/items/{item_id}
+
+# -----------------------------------------------------------------------------
+# Filter Configuration
+# -----------------------------------------------------------------------------
+filter:
+  # Application filters
+  application:
+    by_attribute: []
+    #   - key: service.name
+    #     value: my-service
+    #     match: equals  # equals, contains, regex
+    #     action: include  # include, exclude
+  
+  # Network filters
+  network:
+    by_attribute: []
+    #   - key: src.address
+    #     value: "192.168.*"
+    #     match: glob
+    #     action: exclude
+
+# -----------------------------------------------------------------------------
+# Queues Configuration (Internal Buffering)
+# -----------------------------------------------------------------------------
+queues:
+  traces:
+    mem_limit: "256Mi"
+    max_age: "6h"
+  logs:
+    mem_limit: "256Mi"
+    max_age: "24h"
+  metrics:
+    mem_limit: "128Mi"
+    max_age: "5m"
+
+# -----------------------------------------------------------------------------
+# Backoff Configuration (Retry Strategy)
+# -----------------------------------------------------------------------------
+backoff:
+  initial: "500ms"
+  max: "30s"
+  multiplier: 2.0
+  jitter: 0.2
+
+# -----------------------------------------------------------------------------
+# Pipelines Configuration
+# -----------------------------------------------------------------------------
+pipelines:
+  # Metrics pipeline
+  metrics:
+    enabled: true
+    also_expose_prometheus: true
+  
+  # Traces pipeline
+  traces:
+    enabled: true
+  
+  # Logs pipeline
+  logs:
+    enabled: true
+    filelog:
+      include:
+        - /var/log/*.log
+        - /var/log/*/*.log
+        - /var/log/containers/*.log
+        - /var/log/pods/**/*.log
+      exclude:
+        - /var/log/telegen/*.log
+        - /var/log/containers/*telegen*.log
+      position_file: /var/lib/telegen/positions.json
+      poll_interval: 500ms
+  
+  # JFR pipeline (Java Flight Recorder)
+  jfr:
+    enabled: false
+    input_dir: /var/log/jfr
+    output_dir: /var/log/jfr-json
+    poll_interval: 5s
+    sample_interval_ms: 10
+    jfr_command: jfr
+    workers: 2
+    pretty_json: false
+
+# -----------------------------------------------------------------------------
+# Export Configuration
+# -----------------------------------------------------------------------------
+exports:
+  # Prometheus Remote Write
+  remoteWrite:
+    # Mode: active, passive
+    mode: active
+    tls:
+      enable: false
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      insecure_skip_verify: false
+    endpoints:
+      - url: "http://prometheus:9090/api/v1/write"
+        timeout: "5s"
+        headers: {}
+        tenant: ""
+        compression: "gzip"
+  
+  # OTLP Export
+  otlp:
+    # Send mode: failover, parallel
+    send_mode: failover
+    tls:
+      enable: false
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      insecure_skip_verify: false
+    # gRPC endpoint
+    grpc:
+      enabled: true
+      endpoint: "otel-collector:4317"
+      headers: {}
+      insecure: true
+      gzip: true
+      timeout: "5s"
+    # HTTP endpoint
+    http:
+      enabled: false
+      endpoint: "http://otel-collector:4318"
+      traces_path: "/v1/traces"
+      logs_path: "/v1/logs"
+      metrics_path: "/v1/metrics"
+      headers: {}
+      gzip: true
+      timeout: "5s"
+
+# -----------------------------------------------------------------------------
+# OpenTelemetry Metrics Export Configuration
+# -----------------------------------------------------------------------------
+otel_metrics_export:
+  # Protocol: grpc, http, unset
+  protocol: unset
+  metrics_protocol: unset
+  
+  # OTLP export interval (milliseconds)
+  otel_interval_ms: 60000
+  
+  # Histogram buckets
+  buckets:
+    duration_histogram_buckets:
+      - 0.005
+      - 0.01
+      - 0.025
+      - 0.05
+      - 0.1
+      - 0.25
+      - 0.5
+      - 1
+      - 2.5
+      - 5
+      - 10
+    request_size_histogram_buckets:
+      - 0
+      - 100
+      - 1024
+      - 10240
+      - 102400
+      - 1048576
+  
+  # Reporters cache length
+  reporters_cache_len: 256
+  
+  # Histogram aggregation: explicit, exponential
+  histogram_aggregation: explicit
+  
+  # Instrumentations to include
+  instrumentations:
+    - all
+  
+  # Metrics TTL
+  ttl: 5m
+
+# -----------------------------------------------------------------------------
+# OpenTelemetry Traces Export Configuration
+# -----------------------------------------------------------------------------
+otel_traces_export:
+  # Protocol: grpc, http, unset
+  protocol: unset
+  traces_protocol: unset
+  
+  # Maximum queue size
+  max_queue_size: 4096
+  
+  # Batch timeout
+  batch_timeout: 15s
+  
+  # Reporters cache length
+  reporters_cache_len: 256
+  
+  # Instrumentations to include
+  instrumentations:
+    - http
+    - grpc
+    - sql
+    - redis
+    - kafka
+    - mqtt
+    - mongo
+
+# -----------------------------------------------------------------------------
+# Prometheus Export Configuration
+# -----------------------------------------------------------------------------
+prometheus_export:
+  # Enable Prometheus endpoint
+  enabled: true
+  # Path for metrics endpoint
+  path: /metrics
+  # Port (0 = use selfTelemetry.listen)
+  port: 0
+  # Buckets for histograms
+  buckets:
+    duration_histogram_buckets:
+      - 0.005
+      - 0.01
+      - 0.025
+      - 0.05
+      - 0.1
+      - 0.25
+      - 0.5
+      - 1
+      - 2.5
+      - 5
+      - 10
+  # Instrumentations to expose
+  instrumentations:
+    - all
+  # Metrics TTL
+  ttl: 5m
+  # Span metrics service cache size
+  span_metrics_service_cache_size: 10000
+
+# -----------------------------------------------------------------------------
+# Debug Configuration
+# -----------------------------------------------------------------------------
+trace_printer: disabled  # disabled, json, text
+
+# Profile port for development (0 = disabled)
+profile_port: 0
+
+# -----------------------------------------------------------------------------
+# SNMP Receiver Configuration (Collector Mode)
+# -----------------------------------------------------------------------------
+snmp_receiver:
+  enabled: false
+  
+  # Trap/Inform receiver
+  trap_receiver:
+    enabled: false
+    listen_address: "0.0.0.0:162"
+    community_strings:
+      - public
+    v3_users: []
+    #   - username: trapuser
+    #     auth_protocol: SHA256
+    #     auth_password: "${SNMP_AUTH_PASSWORD}"
+    #     priv_protocol: AES256
+    #     priv_password: "${SNMP_PRIV_PASSWORD}"
+  
+  # Polling configuration
+  polling:
+    enabled: true
+    default_interval: 60s
+    timeout: 10s
+    retries: 3
+    max_concurrent: 100
+  
+  # Device targets
+  targets: []
+  #   - name: core-switch-01
+  #     address: "10.0.1.1:161"
+  #     version: v2c
+  #     community: public
+  #     interval: 30s
+  #     modules:
+  #       - if_mib
+  #       - system
+  #     labels:
+  #       location: dc-east-1
+  #       role: core
+  
+  # Auto-discovery
+  discovery:
+    enabled: false
+    networks: []
+    interval: 1h
+    community_strings:
+      - public
+  
+  # MIB configuration
+  mibs:
+    search_paths:
+      - /usr/share/snmp/mibs
+      - /opt/telegen/mibs
+      - ./configs/mibs
+    load_standard: true
+    custom_mibs: []
+  
+  # Output configuration
+  output:
+    prometheus:
+      enabled: true
+      listen_address: ":9116"
+      path: /metrics
+    remote_write:
+      enabled: false
+      endpoints: []
+    otlp:
+      enabled: false
+      endpoint: ""
+      protocol: grpc
+      insecure: true
+
+# -----------------------------------------------------------------------------
+# Storage Metrics Configuration (Collector Mode)
+# -----------------------------------------------------------------------------
+storage:
+  enabled: false
+  collect_interval: 60s
+  
+  # Dell PowerStore collectors
+  dell_powerstore: []
+  #   - name: powerstore-prod-01
+  #     address: "https://10.0.10.100"
+  #     username: monitor
+  #     password: "${DELL_PASSWORD}"
+  #     verify_ssl: true
+  #     timeout: 30s
+  #     collect:
+  #       - capacity
+  #       - performance
+  #       - volumes
+  #       - hosts
+  #     labels:
+  #       environment: production
+  
+  # HPE Primera/3PAR collectors
+  hpe_primera: []
+  
+  # Pure FlashArray collectors
+  pure_flasharray: []
+  #   - name: pure-prod-01
+  #     address: "https://10.0.10.130"
+  #     api_token: "${PURE_TOKEN}"
+  #     api_version: "2.4"
+  #     verify_ssl: true
+  
+  # NetApp ONTAP collectors
+  netapp_ontap: []
+  
+  # OTLP export for storage metrics
+  otlp:
+    enabled: false
+    endpoint: "localhost:4317"

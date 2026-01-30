@@ -1,0 +1,347 @@
+# =============================================================================
+# Telegen v2.0 Collector Configuration for Docker Compose
+# Fully loaded configuration for remote device monitoring
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Core Collector Configuration
+# -----------------------------------------------------------------------------
+agent:
+  service_name: "telegen-collector"
+  instance_id: "${HOSTNAME}"
+  mode: collector
+  log_level: INFO
+  log_format: json
+  log_config: ""
+  shutdown_timeout: 10s
+  enforce_sys_caps: false
+
+# -----------------------------------------------------------------------------
+# Self-Telemetry Configuration
+# -----------------------------------------------------------------------------
+selfTelemetry:
+  listen: ":19090"
+  health_listen: ":8080"
+  prometheus_namespace: "telegen"
+  pprof_enabled: false
+  pprof_port: 6060
+
+# -----------------------------------------------------------------------------
+# Internal Metrics Configuration
+# -----------------------------------------------------------------------------
+internal_metrics:
+  exporter: disabled
+  prometheus:
+    port: 0
+    path: "/internal/metrics"
+  bpf_metric_scrape_interval: 15s
+
+# -----------------------------------------------------------------------------
+# Queues Configuration
+# -----------------------------------------------------------------------------
+queues:
+  traces:
+    mem_limit: "256Mi"
+    max_age: "6h"
+  logs:
+    mem_limit: "256Mi"
+    max_age: "24h"
+  metrics:
+    mem_limit: "128Mi"
+    max_age: "5m"
+
+# -----------------------------------------------------------------------------
+# Backoff Configuration
+# -----------------------------------------------------------------------------
+backoff:
+  initial: "500ms"
+  max: "30s"
+  multiplier: 2.0
+  jitter: 0.2
+
+# -----------------------------------------------------------------------------
+# SNMP Receiver Configuration
+# -----------------------------------------------------------------------------
+snmp_receiver:
+  enabled: true
+  
+  # Trap/Inform receiver
+  trap_receiver:
+    enabled: true
+    listen_address: "0.0.0.0:1162"
+    community_strings:
+      - public
+      - private
+    v3_users:
+      - username: trapuser
+        auth_protocol: SHA256
+        auth_password: "${SNMP_AUTH_PASSWORD}"
+        priv_protocol: AES256
+        priv_password: "${SNMP_PRIV_PASSWORD}"
+  
+  # Polling configuration
+  polling:
+    enabled: true
+    default_interval: 60s
+    timeout: 10s
+    retries: 3
+    max_concurrent: 100
+  
+  # Device targets
+  targets:
+    # Example: Core network switch
+    - name: core-switch-01
+      address: "10.0.1.1:161"
+      version: v2c
+      community: public
+      interval: 30s
+      modules:
+        - if_mib
+        - system
+      labels:
+        location: dc-east-1
+        role: core
+        vendor: cisco
+    
+    # Example: Distribution switch
+    - name: dist-switch-01
+      address: "10.0.1.10:161"
+      version: v2c
+      community: public
+      interval: 60s
+      modules:
+        - if_mib
+      labels:
+        location: dc-east-1
+        role: distribution
+    
+    # Example: UPS with SNMPv3
+    - name: ups-01
+      address: "10.0.2.100:161"
+      version: v3
+      security_level: authPriv
+      username: monitor
+      auth_protocol: SHA256
+      auth_password: "${SNMP_AUTH_PASSWORD}"
+      priv_protocol: AES256
+      priv_password: "${SNMP_PRIV_PASSWORD}"
+      interval: 120s
+      modules:
+        - ups_mib
+      labels:
+        device_type: ups
+        vendor: apc
+        location: dc-east-1
+    
+    # Example: Environmental sensors
+    - name: env-sensor-01
+      address: "10.0.3.50:161"
+      version: v2c
+      community: public
+      interval: 60s
+      modules:
+        - entity_sensor_mib
+      labels:
+        device_type: sensor
+        location: server-room-1
+  
+  # Auto-discovery
+  discovery:
+    enabled: false
+    networks:
+      - "10.0.0.0/16"
+    interval: 1h
+    community_strings:
+      - public
+  
+  # MIB configuration
+  mibs:
+    search_paths:
+      - /usr/share/snmp/mibs
+      - /opt/telegen/mibs
+      - ./configs/snmp_modules
+    load_standard: true
+    custom_mibs:
+      - CISCO-PROCESS-MIB
+      - UPS-MIB
+      - ENTITY-SENSOR-MIB
+  
+  # Output configuration
+  output:
+    prometheus:
+      enabled: true
+      listen_address: ":9116"
+      path: /metrics
+    remote_write:
+      enabled: false
+      endpoints:
+        - url: "http://prometheus:9090/api/v1/write"
+          timeout: 30s
+          batch_size: 1000
+    otlp:
+      enabled: true
+      endpoint: "otel-collector:4317"
+      protocol: grpc
+      insecure: true
+
+# -----------------------------------------------------------------------------
+# Storage Metrics Configuration
+# -----------------------------------------------------------------------------
+storage:
+  enabled: true
+  collect_interval: 60s
+  
+  # Dell PowerStore collectors
+  dell_powerstore:
+    - name: "powerstore-prod-01"
+      address: "https://10.0.10.100"
+      username: "monitor"
+      password: "${DELL_PASSWORD}"
+      verify_ssl: true
+      timeout: 30s
+      cluster_id: ""
+      collect:
+        - capacity
+        - performance
+        - volumes
+        - hosts
+      labels:
+        environment: "production"
+        datacenter: "dc1"
+  
+  # HPE Primera/3PAR collectors
+  hpe_primera:
+    - name: "primera-prod-01"
+      address: "https://10.0.10.110"
+      username: "monitor"
+      password: "${HPE_PASSWORD}"
+      verify_ssl: true
+      timeout: 30s
+      labels:
+        environment: "production"
+        datacenter: "dc1"
+  
+  # Pure FlashArray collectors
+  pure_flasharray:
+    - name: "pure-prod-01"
+      address: "https://10.0.10.130"
+      api_token: "${PURE_TOKEN}"
+      api_version: "2.4"
+      verify_ssl: true
+      timeout: 30s
+      labels:
+        environment: "production"
+        datacenter: "dc1"
+  
+  # NetApp ONTAP collectors
+  netapp_ontap:
+    - name: "ontap-prod-01"
+      address: "https://10.0.10.140"
+      username: "monitor"
+      password: "${NETAPP_PASSWORD}"
+      verify_ssl: true
+      timeout: 30s
+      cluster_id: ""
+      labels:
+        environment: "production"
+        datacenter: "dc1"
+  
+  # OTLP export for storage metrics
+  otlp:
+    enabled: true
+    endpoint: "otel-collector:4317"
+
+# -----------------------------------------------------------------------------
+# Cloud Provider Configuration (for metadata enrichment)
+# -----------------------------------------------------------------------------
+cloud:
+  auto_detect: true
+  detection_timeout: 10s
+  detection_interval: 5m
+  collect_metrics: false
+  metrics_interval: 30s
+  discover_resources: false
+  resource_interval: 5m
+  aws:
+    enabled: true
+    timeout: 200ms
+    refresh_interval: 15m
+    collect_tags: false
+    tag_allowlist: []
+    region: ""
+    imdsv2_only: true
+    imds_endpoint: ""
+    imds_timeout: 2s
+  gcp:
+    enabled: false
+  azure:
+    enabled: false
+
+# -----------------------------------------------------------------------------
+# Export Configuration
+# -----------------------------------------------------------------------------
+exports:
+  remoteWrite:
+    mode: active
+    tls:
+      enable: false
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      insecure_skip_verify: false
+    endpoints: []
+  otlp:
+    send_mode: failover
+    tls:
+      enable: false
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      insecure_skip_verify: false
+    grpc:
+      enabled: true
+      endpoint: "otel-collector:4317"
+      headers: {}
+      insecure: true
+      gzip: true
+      timeout: "10s"
+    http:
+      enabled: false
+      endpoint: "http://otel-collector:4318"
+      traces_path: "/v1/traces"
+      logs_path: "/v1/logs"
+      metrics_path: "/v1/metrics"
+      headers: {}
+      gzip: true
+      timeout: "10s"
+
+# -----------------------------------------------------------------------------
+# Prometheus Export Configuration
+# -----------------------------------------------------------------------------
+prometheus_export:
+  enabled: true
+  path: /metrics
+  port: 0
+  buckets:
+    duration_histogram_buckets:
+      - 0.005
+      - 0.01
+      - 0.025
+      - 0.05
+      - 0.1
+      - 0.25
+      - 0.5
+      - 1
+      - 2.5
+      - 5
+      - 10
+  instrumentations:
+    - all
+  ttl: 5m
+  span_metrics_service_cache_size: 10000
+
+# -----------------------------------------------------------------------------
+# Debug Configuration
+# -----------------------------------------------------------------------------
+trace_printer: disabled
+profile_port: 0
