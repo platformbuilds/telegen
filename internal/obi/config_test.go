@@ -18,7 +18,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/platformbuilds/telegen/internal/appolly/services"
+	"github.com/platformbuilds/telegen/internal/kube"
+	"github.com/platformbuilds/telegen/internal/kube/kubeflags"
+	"github.com/platformbuilds/telegen/internal/netolly/cidr"
 	"github.com/platformbuilds/telegen/internal/obiconfig"
+	"github.com/platformbuilds/telegen/internal/transform"
 	"github.com/platformbuilds/telegen/pkg/export"
 	"github.com/platformbuilds/telegen/pkg/export/attributes"
 	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
@@ -28,10 +32,6 @@ import (
 	"github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
 	"github.com/platformbuilds/telegen/pkg/export/otel/perapp"
 	"github.com/platformbuilds/telegen/pkg/export/prom"
-	"github.com/platformbuilds/telegen/internal/kube"
-	"github.com/platformbuilds/telegen/internal/kube/kubeflags"
-	"github.com/platformbuilds/telegen/internal/netolly/cidr"
-	"github.com/platformbuilds/telegen/internal/transform"
 )
 
 type envMap map[string]string

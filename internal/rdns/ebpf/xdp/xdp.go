@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/platformbuilds/telegen/internal/ebpf/common/dnsparser"
-	"github.com/platformbuilds/telegen/internal/ringbuf"
 	"github.com/platformbuilds/telegen/internal/rdns/store"
+	"github.com/platformbuilds/telegen/internal/ringbuf"
 )
 
 func log() *slog.Logger {

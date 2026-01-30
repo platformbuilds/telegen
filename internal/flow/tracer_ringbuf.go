@@ -31,8 +31,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/ringbuf"
 	"github.com/platformbuilds/telegen/internal/netollyebpf"
+	"github.com/platformbuilds/telegen/internal/ringbuf"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"
 	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
 )

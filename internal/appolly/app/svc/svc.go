@@ -8,10 +8,10 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 
 	"github.com/platformbuilds/telegen/internal/appolly/services"
-	"github.com/platformbuilds/telegen/pkg/export"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 	"github.com/platformbuilds/telegen/internal/route"
 	"github.com/platformbuilds/telegen/internal/route/clusterurl"
+	"github.com/platformbuilds/telegen/pkg/export"
+	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 )
 
 type InstrumentableType int

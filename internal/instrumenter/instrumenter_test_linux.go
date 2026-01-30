@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/platformbuilds/telegen/pkg/export"
 	"github.com/platformbuilds/telegen/internal/obi"
+	"github.com/platformbuilds/telegen/pkg/export"
 )
 
 // TestRunDontPanic tests the fix for https://github.com/grafana/beyla/issues/926

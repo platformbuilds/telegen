@@ -21,8 +21,11 @@ import (
 	"go.opentelemetry.io/collector/confmap"
 
 	"github.com/platformbuilds/telegen/internal/appolly/services"
-	"github.com/platformbuilds/telegen/internal/obiconfig"
 	"github.com/platformbuilds/telegen/internal/ebpf/tcmanager"
+	"github.com/platformbuilds/telegen/internal/kube"
+	"github.com/platformbuilds/telegen/internal/kube/kubeflags"
+	"github.com/platformbuilds/telegen/internal/obiconfig"
+	"github.com/platformbuilds/telegen/internal/transform"
 	"github.com/platformbuilds/telegen/pkg/export"
 	"github.com/platformbuilds/telegen/pkg/export/attributes"
 	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
@@ -34,9 +37,6 @@ import (
 	"github.com/platformbuilds/telegen/pkg/export/otel/perapp"
 	"github.com/platformbuilds/telegen/pkg/export/prom"
 	"github.com/platformbuilds/telegen/pkg/filter"
-	"github.com/platformbuilds/telegen/internal/kube"
-	"github.com/platformbuilds/telegen/internal/kube/kubeflags"
-	"github.com/platformbuilds/telegen/internal/transform"
 )
 
 type LogLevel string

@@ -11,11 +11,11 @@ import (
 	"syscall"
 
 	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/internal/discover/exec"
 	"github.com/platformbuilds/telegen/internal/appolly/services"
+	"github.com/platformbuilds/telegen/internal/discover/exec"
+	"github.com/platformbuilds/telegen/internal/procs"
 	"github.com/platformbuilds/telegen/pkg/export/attributes"
 	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	"github.com/platformbuilds/telegen/internal/procs"
 )
 
 const (

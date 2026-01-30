@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/internal/discover/exec"
 	"github.com/platformbuilds/telegen/internal/appolly/services"
+	"github.com/platformbuilds/telegen/internal/discover/exec"
 )
 
 // successfulExtractRoutes simulates a successful route extraction

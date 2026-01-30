@@ -28,8 +28,8 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 
 	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/pkg/buildinfo"
 	"github.com/platformbuilds/telegen/internal/obiconfig"
+	"github.com/platformbuilds/telegen/pkg/buildinfo"
 	"github.com/platformbuilds/telegen/pkg/export/attributes"
 	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 	"github.com/platformbuilds/telegen/pkg/export/expire"

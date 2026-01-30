@@ -20,9 +20,9 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
 	"github.com/platformbuilds/telegen/internal/kube/kubecache/meta"
 	"github.com/platformbuilds/telegen/internal/kube/kubeflags"
+	"github.com/platformbuilds/telegen/pkg/export/imetrics"
 )
 
 const (

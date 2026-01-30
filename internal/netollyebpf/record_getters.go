@@ -6,9 +6,9 @@ package ebpf // import "github.com/platformbuilds/telegen/internal/netollyebpf"
 import (
 	"go.opentelemetry.io/otel/attribute"
 
+	"github.com/platformbuilds/telegen/internal/flow/transport"
 	"github.com/platformbuilds/telegen/pkg/export/attributes"
 	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	"github.com/platformbuilds/telegen/internal/flow/transport"
 )
 
 const (

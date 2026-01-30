@@ -9,8 +9,8 @@ import (
 	"maps"
 	"slices"
 
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 	maps2 "github.com/platformbuilds/telegen/internal/helpers/maps"
+	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 )
 
 func alog() *slog.Logger {

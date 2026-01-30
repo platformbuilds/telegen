@@ -4,8 +4,8 @@
 package kube // import "github.com/platformbuilds/telegen/internal/kubei"
 
 import (
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
+	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 )
 
 // TopOwner assumes that the owners slice as returned by the informers' cache library,

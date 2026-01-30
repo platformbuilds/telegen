@@ -12,16 +12,16 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/platformbuilds/telegen/pkg/export/attributes"
-	"github.com/platformbuilds/telegen/pkg/export/connector"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
-	"github.com/platformbuilds/telegen/pkg/export/otel"
-	"github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
 	"github.com/platformbuilds/telegen/internal/appolly/core"
 	"github.com/platformbuilds/telegen/internal/kube"
 	"github.com/platformbuilds/telegen/internal/netolly/agent"
 	"github.com/platformbuilds/telegen/internal/netolly/flowdef"
 	"github.com/platformbuilds/telegen/internal/obi"
+	"github.com/platformbuilds/telegen/pkg/export/attributes"
+	"github.com/platformbuilds/telegen/pkg/export/connector"
+	"github.com/platformbuilds/telegen/pkg/export/imetrics"
+	"github.com/platformbuilds/telegen/pkg/export/otel"
+	"github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
 	"github.com/platformbuilds/telegen/pkg/pipe/global"
 )
 

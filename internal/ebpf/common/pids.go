@@ -10,9 +10,9 @@ import (
 	"github.com/platformbuilds/telegen/internal/appolly/app/request"
 	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
 	"github.com/platformbuilds/telegen/internal/appolly/services"
+	"github.com/platformbuilds/telegen/internal/procs"
 	"github.com/platformbuilds/telegen/pkg/export/imetrics"
 	"github.com/platformbuilds/telegen/pkg/export/otel/idgen"
-	"github.com/platformbuilds/telegen/internal/procs"
 )
 
 type PIDType uint8

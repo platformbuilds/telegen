@@ -8,10 +8,10 @@ package sigdef
 type SignalType string
 
 const (
-SignalTraces   SignalType = "traces"
-SignalMetrics  SignalType = "metrics"
-SignalLogs     SignalType = "logs"
-SignalProfiles SignalType = "profiles"
+	SignalTraces   SignalType = "traces"
+	SignalMetrics  SignalType = "metrics"
+	SignalLogs     SignalType = "logs"
+	SignalProfiles SignalType = "profiles"
 )
 
 // Signal represents a generic telemetry signal that can be routed

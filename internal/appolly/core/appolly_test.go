@@ -11,9 +11,9 @@ import (
 	"github.com/platformbuilds/telegen/internal/discover"
 	"github.com/platformbuilds/telegen/internal/discover/exec"
 	"github.com/platformbuilds/telegen/internal/ebpf"
+	"github.com/platformbuilds/telegen/internal/obi"
 	"github.com/platformbuilds/telegen/pkg/export/connector"
 	"github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
-	"github.com/platformbuilds/telegen/internal/obi"
 	"github.com/platformbuilds/telegen/pkg/pipe/global"
 )
 

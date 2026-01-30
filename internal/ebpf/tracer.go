@@ -15,9 +15,9 @@ import (
 	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
 	"github.com/platformbuilds/telegen/internal/discover/exec"
 	ebpfcommon "github.com/platformbuilds/telegen/internal/ebpf/common"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
-	"github.com/platformbuilds/telegen/internal/tracers/logenricher"
 	"github.com/platformbuilds/telegen/internal/goexec"
+	"github.com/platformbuilds/telegen/internal/tracers/logenricher"
+	"github.com/platformbuilds/telegen/pkg/export/imetrics"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"
 )
 
