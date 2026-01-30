@@ -89,6 +89,7 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/snappy v1.0.0
 	github.com/gosnmp/gosnmp v1.43.2
+	github.com/openconfig/gnmi v0.14.1
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.39.0
 	golang.org/x/time v0.14.0
 )
