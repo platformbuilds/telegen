@@ -5,6 +5,44 @@ All notable changes to Telegen will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-01-30
+
+### Security
+
+- Fixed 30 Dependabot security alerts by upgrading all dependencies
+- Updated OpenTelemetry Collector components v1.49.0 → v1.50.0
+- Updated Go crypto packages to latest secure versions
+
+### Changed
+
+- Upgraded OpenTelemetry SDK and exporters
+  - `go.opentelemetry.io/otel/exporters/otlp/otlplog` v0.5.0 → v0.15.0
+  - `go.opentelemetry.io/otel/log` v0.5.0 → v0.15.0
+  - `go.opentelemetry.io/otel/sdk/log` v0.5.0 → v0.15.0
+- Upgraded OpenTelemetry Collector to v0.144.0
+- Upgraded AWS SDK v2 components to latest versions
+- Upgraded Kubernetes client-go and controller-runtime to v0.23.1
+- Upgraded Prometheus client to v0.309.1
+- Upgraded MongoDB driver to v2.5.0
+- Upgraded compression libraries (klauspost/compress, lz4)
+- Upgraded gRPC gateway to v2.27.7
+- Upgraded golang.org/x packages (crypto, net, text, term)
+
+### Dependencies
+
+Key dependency updates:
+- `github.com/aws/aws-sdk-go-v2` v1.40.1 → v1.41.1
+- `github.com/klauspost/compress` v1.18.2 → v1.18.3
+- `github.com/pierrec/lz4/v4` v4.1.23 → v1.25
+- `go.mongodb.org/mongo-driver/v2` v2.4.1 → v2.5.0
+- `golang.org/x/crypto` v0.46.0 → v0.47.0
+- `golang.org/x/net` v0.48.0 → v0.49.0
+- `google.golang.org/genproto` updated to 2026-01-28 release
+- `k8s.io/apiextensions-apiserver` v0.34.1 → v0.35.0
+- `sigs.k8s.io/controller-runtime` v0.22.4 → v0.23.1
+
+---
+
 ## [1.0.0] - 2026-01-30
 
 ### Added
