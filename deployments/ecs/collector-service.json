@@ -1,0 +1,59 @@
+{
+  "serviceName": "telegen-collector",
+  "cluster": "${ECS_CLUSTER_NAME}",
+  "taskDefinition": "telegen-collector",
+  "desiredCount": 2,
+  "launchType": "FARGATE",
+  "schedulingStrategy": "REPLICA",
+  "deploymentConfiguration": {
+    "deploymentCircuitBreaker": {
+      "enable": true,
+      "rollback": true
+    },
+    "maximumPercent": 200,
+    "minimumHealthyPercent": 100
+  },
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "subnets": ["${SUBNET_1}", "${SUBNET_2}", "${SUBNET_3}"],
+      "securityGroups": ["${SECURITY_GROUP_ID}"],
+      "assignPublicIp": "DISABLED"
+    }
+  },
+  "loadBalancers": [
+    {
+      "targetGroupArn": "${SNMP_TARGET_GROUP_ARN}",
+      "containerName": "telegen-collector",
+      "containerPort": 162
+    }
+  ],
+  "serviceRegistries": [
+    {
+      "registryArn": "${SERVICE_DISCOVERY_ARN}",
+      "containerName": "telegen-collector",
+      "containerPort": 8080
+    }
+  ],
+  "platformVersion": "LATEST",
+  "enableECSManagedTags": true,
+  "propagateTags": "SERVICE",
+  "enableExecuteCommand": true,
+  "tags": [
+    {
+      "key": "Application",
+      "value": "telegen"
+    },
+    {
+      "key": "Component",
+      "value": "collector"
+    },
+    {
+      "key": "Environment",
+      "value": "${ENVIRONMENT}"
+    },
+    {
+      "key": "ManagedBy",
+      "value": "terraform"
+    }
+  ]
+}

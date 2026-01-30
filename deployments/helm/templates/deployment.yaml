@@ -1,0 +1,141 @@
+{{- if eq .Values.mode "collector" }}
+# Telegen v2.0 Collector Deployment
+# Task: DEP-008
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "telegen.fullname" . }}-collector
+  namespace: {{ include "telegen.namespace" . }}
+  labels:
+    {{- include "telegen.labels" . | nindent 4 }}
+    app.kubernetes.io/component: collector
+spec:
+  replicas: {{ .Values.collector.replicas }}
+  selector:
+    matchLabels:
+      {{- include "telegen.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: collector
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "telegen.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: collector
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "telegen.serviceAccountName" . }}
+      
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "telegen.selectorLabels" . | nindent 20 }}
+                    app.kubernetes.io/component: collector
+                topologyKey: kubernetes.io/hostname
+      
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - "--config=/etc/telegen/config.yaml"
+            - "--mode=collector"
+          
+          resources:
+            {{- toYaml .Values.collectorResources | nindent 12 }}
+          
+          securityContext:
+            {{- toYaml .Values.collectorSecurityContext | nindent 12 }}
+          
+          ports:
+            {{- if .Values.collector.snmp.traps.enabled }}
+            - name: snmp-traps
+              containerPort: {{ .Values.collector.snmp.traps.port }}
+              protocol: UDP
+            {{- end }}
+            - name: http-metrics
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+            - name: health
+              containerPort: {{ .Values.service.healthPort }}
+              protocol: TCP
+          
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.livenessProbe.httpGet.path }}
+              port: {{ .Values.livenessProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          {{- end }}
+          
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.readinessProbe.httpGet.path }}
+              port: {{ .Values.readinessProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          {{- end }}
+          
+          env:
+            - name: TELEGEN_MODE
+              value: "collector"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          
+          {{- with .Values.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          
+          volumeMounts:
+            - name: config
+              mountPath: /etc/telegen
+              readOnly: true
+            - name: telegen-data
+              mountPath: /var/lib/telegen
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "telegen.fullname" . }}-config
+        - name: telegen-data
+          emptyDir: {}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}

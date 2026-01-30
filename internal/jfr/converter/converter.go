@@ -1,0 +1,438 @@
+// Package converter provides JFR to JSON conversion functionality.
+package converter
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"go.uber.org/zap"
+)
+
+// Options configures the converter
+type Options struct {
+	ServiceName      string
+	PodName          string
+	Namespace        string
+	ContainerName    string
+	NodeName         string
+	SampleIntervalMs int
+	JFRCommand       string
+	PrettyJSON       bool
+	Logger           *zap.Logger
+}
+
+// Converter converts JFR files to JSON
+type Converter struct {
+	opts   Options
+	logger *zap.Logger
+}
+
+// New creates a new Converter
+func New(opts Options) *Converter {
+	if opts.SampleIntervalMs <= 0 {
+		opts.SampleIntervalMs = 10
+	}
+	if opts.JFRCommand == "" {
+		opts.JFRCommand = "jfr"
+	}
+	if opts.Logger == nil {
+		opts.Logger, _ = zap.NewProduction()
+	}
+	return &Converter{
+		opts:   opts,
+		logger: opts.Logger,
+	}
+}
+
+// ProfileEvent represents a single profiling event
+type ProfileEvent struct {
+	Timestamp        string `json:"timestamp"`
+	EventType        string `json:"eventType"`
+	ServiceName      string `json:"serviceName"`
+	ProfileType      string `json:"profileType"`
+	K8sPodName       string `json:"k8s_pod_name,omitempty"`
+	K8sNamespace     string `json:"k8s_namespace,omitempty"`
+	K8sContainerName string `json:"k8s_container_name,omitempty"`
+	K8sNodeName      string `json:"k8s_node_name,omitempty"`
+
+	// Thread info
+	ThreadName string `json:"threadName,omitempty"`
+	ThreadID   int64  `json:"threadId,omitempty"`
+
+	// Stack trace info
+	TopFunction string `json:"topFunction,omitempty"`
+	TopClass    string `json:"topClass,omitempty"`
+	TopMethod   string `json:"topMethod,omitempty"`
+	StackPath   string `json:"stackPath,omitempty"`
+	StackDepth  int    `json:"stackDepth,omitempty"`
+	StackTrace  string `json:"stackTrace,omitempty"` // JSON-encoded stack frames
+
+	// Timing
+	SampleWeight    int64   `json:"sampleWeight"`
+	DurationNs      int64   `json:"durationNs,omitempty"`
+	SelfTimeMs      int64   `json:"selfTimeMs,omitempty"`
+	SelfTimePercent float64 `json:"selfTimePercent,omitempty"`
+	TotalSamples    int64   `json:"totalSamples,omitempty"`
+
+	// Event-specific fields
+	State          string `json:"state,omitempty"`
+	AllocationSize int64  `json:"allocationSize,omitempty"`
+	TLABSize       int64  `json:"tlabSize,omitempty"`
+	ObjectClass    string `json:"objectClass,omitempty"`
+	MonitorClass   string `json:"monitorClass,omitempty"`
+	GCName         string `json:"gcName,omitempty"`
+	GCCause        string `json:"gcCause,omitempty"`
+}
+
+// StackFrame represents a single frame in the stack trace
+type StackFrame struct {
+	Class       string `json:"class"`
+	Method      string `json:"method"`
+	Line        int    `json:"line"`
+	BCI         int    `json:"bci"`
+	Depth       int    `json:"depth"`
+	File        string `json:"file,omitempty"`
+	SelfTimeMs  int64  `json:"selfTimeMs"`
+	TotalTimeMs int64  `json:"totalTimeMs"`
+}
+
+// JFR JSON structures (from jfr print --json)
+type jfrOutput struct {
+	Recording jfrRecording `json:"recording"`
+}
+
+type jfrRecording struct {
+	Events []jfrEvent `json:"events"`
+}
+
+type jfrEvent struct {
+	Type          string                 `json:"type"`
+	StartTime     string                 `json:"startTime"`
+	Duration      interface{}            `json:"duration"` // Can be int64 or string
+	StackTrace    *jfrStackTrace         `json:"stackTrace"`
+	SampledThread *jfrThread             `json:"sampledThread"`
+	EventThread   *jfrThread             `json:"eventThread"`
+	State         string                 `json:"state"`
+	Values        map[string]interface{} `json:"-"` // Catch-all for other fields
+}
+
+type jfrStackTrace struct {
+	Frames []jfrFrame `json:"frames"`
+}
+
+type jfrFrame struct {
+	Method        jfrMethod `json:"method"`
+	LineNumber    int       `json:"lineNumber"`
+	BytecodeIndex int       `json:"bytecodeIndex"`
+}
+
+type jfrMethod struct {
+	Name string  `json:"name"`
+	Type jfrType `json:"type"`
+}
+
+type jfrType struct {
+	Name       string `json:"name"`
+	SourceFile string `json:"sourceFile"`
+}
+
+type jfrThread struct {
+	OSName     string `json:"osName"`
+	JavaName   string `json:"javaName"`
+	OSThreadID int64  `json:"osThreadId"`
+}
+
+// ConvertResult holds the conversion result
+type ConvertResult struct {
+	Events       []*ProfileEvent
+	TotalSamples int64
+	Duration     time.Duration
+	Error        error
+}
+
+// Convert converts a JFR file to JSON profile events
+func (c *Converter) Convert(ctx context.Context, jfrPath string) (*ConvertResult, error) {
+	start := time.Now()
+
+	c.logger.Debug("Converting JFR file", zap.String("path", jfrPath))
+
+	// Run jfr print --json
+	rawJSON, err := c.runJFRCommand(ctx, jfrPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to run jfr command: %w", err)
+	}
+
+	// Parse JFR JSON
+	var jfrData jfrOutput
+	if err := json.Unmarshal(rawJSON, &jfrData); err != nil {
+		return nil, fmt.Errorf("failed to parse JFR JSON: %w", err)
+	}
+
+	// First pass: collect events and count samples
+	events := make([]*ProfileEvent, 0, len(jfrData.Recording.Events))
+	functionCounts := make(map[string]int64)
+	var totalSamples int64
+
+	for _, evt := range jfrData.Recording.Events {
+		if !c.isProfileEvent(evt.Type) {
+			continue
+		}
+
+		profileEvt := c.convertEvent(&evt)
+		if profileEvt != nil {
+			events = append(events, profileEvt)
+			if profileEvt.TopFunction != "" {
+				functionCounts[profileEvt.TopFunction]++
+				totalSamples++
+			}
+		}
+	}
+
+	// Second pass: calculate self-time percentages
+	for _, evt := range events {
+		if evt.TopFunction != "" && totalSamples > 0 {
+			count := functionCounts[evt.TopFunction]
+			evt.SelfTimePercent = float64(count) / float64(totalSamples) * 100
+			evt.SelfTimeMs = count * int64(c.opts.SampleIntervalMs)
+			evt.TotalSamples = totalSamples
+		}
+	}
+
+	c.logger.Info("Converted JFR file",
+		zap.String("path", jfrPath),
+		zap.Int("events", len(events)),
+		zap.Int64("totalSamples", totalSamples),
+		zap.Duration("duration", time.Since(start)),
+	)
+
+	return &ConvertResult{
+		Events:       events,
+		TotalSamples: totalSamples,
+		Duration:     time.Since(start),
+	}, nil
+}
+
+// WriteJSON writes events to a JSON lines file
+func (c *Converter) WriteJSON(events []*ProfileEvent, outputPath string) error {
+	// Write to temp file first for atomic rename
+	tempPath := outputPath + ".tmp"
+
+	f, err := os.Create(tempPath)
+	if err != nil {
+		return fmt.Errorf("failed to create output file: %w", err)
+	}
+
+	writer := bufio.NewWriter(f)
+	encoder := json.NewEncoder(writer)
+
+	if c.opts.PrettyJSON {
+		encoder.SetIndent("", "  ")
+	}
+
+	for _, evt := range events {
+		if err := encoder.Encode(evt); err != nil {
+			f.Close()
+			os.Remove(tempPath)
+			return fmt.Errorf("failed to encode event: %w", err)
+		}
+	}
+
+	if err := writer.Flush(); err != nil {
+		f.Close()
+		os.Remove(tempPath)
+		return fmt.Errorf("failed to flush writer: %w", err)
+	}
+
+	if err := f.Close(); err != nil {
+		os.Remove(tempPath)
+		return fmt.Errorf("failed to close file: %w", err)
+	}
+
+	// Atomic rename
+	if err := os.Rename(tempPath, outputPath); err != nil {
+		os.Remove(tempPath)
+		return fmt.Errorf("failed to rename temp file: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Converter) runJFRCommand(ctx context.Context, jfrPath string) ([]byte, error) {
+	// Find jfr command
+	jfrCmd := c.opts.JFRCommand
+	if jfrCmd == "jfr" {
+		// Try to find in JAVA_HOME
+		if javaHome := os.Getenv("JAVA_HOME"); javaHome != "" {
+			candidate := filepath.Join(javaHome, "bin", "jfr")
+			if _, err := os.Stat(candidate); err == nil {
+				jfrCmd = candidate
+			}
+		}
+	}
+
+	cmd := exec.CommandContext(ctx, jfrCmd, "print", "--json", jfrPath)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("jfr command failed: %w, stderr: %s", err, stderr.String())
+	}
+
+	return stdout.Bytes(), nil
+}
+
+func (c *Converter) isProfileEvent(eventType string) bool {
+	profileEvents := []string{
+		"jdk.ExecutionSample",
+		"jdk.NativeMethodSample",
+		"jdk.ObjectAllocationInNewTLAB",
+		"jdk.ObjectAllocationOutsideTLAB",
+		"jdk.JavaMonitorEnter",
+		"jdk.JavaMonitorWait",
+		"jdk.ThreadPark",
+		"jdk.GarbageCollection",
+	}
+
+	for _, pe := range profileEvents {
+		if strings.Contains(eventType, pe) || strings.Contains(pe, eventType) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Converter) convertEvent(evt *jfrEvent) *ProfileEvent {
+	pe := &ProfileEvent{
+		Timestamp:        evt.StartTime,
+		EventType:        evt.Type,
+		ServiceName:      c.opts.ServiceName,
+		K8sPodName:       c.opts.PodName,
+		K8sNamespace:     c.opts.Namespace,
+		K8sContainerName: c.opts.ContainerName,
+		K8sNodeName:      c.opts.NodeName,
+	}
+
+	// Thread info
+	thread := evt.SampledThread
+	if thread == nil {
+		thread = evt.EventThread
+	}
+	if thread != nil {
+		pe.ThreadName = thread.OSName
+		if pe.ThreadName == "" {
+			pe.ThreadName = thread.JavaName
+		}
+		pe.ThreadID = thread.OSThreadID
+	}
+
+	// Stack trace
+	if evt.StackTrace != nil && len(evt.StackTrace.Frames) > 0 {
+		frames := make([]StackFrame, 0, len(evt.StackTrace.Frames))
+		pathParts := make([]string, 0, 10)
+
+		for i, f := range evt.StackTrace.Frames {
+			frame := StackFrame{
+				Class:  f.Method.Type.Name,
+				Method: f.Method.Name,
+				Line:   f.LineNumber,
+				BCI:    f.BytecodeIndex,
+				Depth:  i,
+				File:   f.Method.Type.SourceFile,
+			}
+			frames = append(frames, frame)
+
+			// Build path (short class name + method)
+			shortClass := f.Method.Type.Name
+			if idx := strings.LastIndex(shortClass, "."); idx >= 0 {
+				shortClass = shortClass[idx+1:]
+			}
+			if len(pathParts) < 10 {
+				pathParts = append(pathParts, fmt.Sprintf("%s.%s", shortClass, f.Method.Name))
+			}
+		}
+
+		// Top frame
+		top := frames[0]
+		pe.TopClass = top.Class
+		pe.TopMethod = top.Method
+		pe.TopFunction = fmt.Sprintf("%s.%s", top.Class, top.Method)
+		pe.StackPath = strings.Join(pathParts, " > ")
+		pe.StackDepth = len(frames)
+
+		// Serialize stack trace
+		if stackJSON, err := json.Marshal(frames); err == nil {
+			pe.StackTrace = string(stackJSON)
+		}
+	}
+
+	// Event-specific fields
+	pe.ProfileType = c.getProfileType(evt.Type)
+	pe.State = evt.State
+
+	switch {
+	case strings.Contains(evt.Type, "ExecutionSample"), strings.Contains(evt.Type, "NativeMethodSample"):
+		pe.SampleWeight = 1
+		pe.DurationNs = int64(c.opts.SampleIntervalMs) * 1_000_000
+
+	case strings.Contains(evt.Type, "ObjectAllocation"):
+		// These fields would need to be extracted from the raw event
+		pe.SampleWeight = 1
+
+	case strings.Contains(evt.Type, "JavaMonitor"):
+		pe.DurationNs = c.parseDuration(evt.Duration)
+		pe.SampleWeight = pe.DurationNs
+
+	case strings.Contains(evt.Type, "GarbageCollection"):
+		pe.DurationNs = c.parseDuration(evt.Duration)
+		pe.SampleWeight = pe.DurationNs
+
+	default:
+		pe.SampleWeight = 1
+	}
+
+	return pe
+}
+
+func (c *Converter) getProfileType(eventType string) string {
+	switch {
+	case strings.Contains(eventType, "ExecutionSample"):
+		return "cpu"
+	case strings.Contains(eventType, "NativeMethodSample"):
+		return "cpu_native"
+	case strings.Contains(eventType, "ObjectAllocation"):
+		return "allocation"
+	case strings.Contains(eventType, "JavaMonitor"):
+		return "lock"
+	case strings.Contains(eventType, "GarbageCollection"):
+		return "gc"
+	default:
+		return "other"
+	}
+}
+
+func (c *Converter) parseDuration(d interface{}) int64 {
+	switch v := d.(type) {
+	case float64:
+		return int64(v)
+	case int64:
+		return v
+	case int:
+		return int64(v)
+	case string:
+		// Try parsing as duration
+		if dur, err := time.ParseDuration(v); err == nil {
+			return dur.Nanoseconds()
+		}
+	}
+	return 0
+}

@@ -1,0 +1,40 @@
+# Prometheus Configuration for Docker Compose
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'telegen-dev'
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+  
+  # OpenTelemetry Collector
+  - job_name: 'otel-collector'
+    static_configs:
+      - targets: ['otel-collector:8888']
+  
+  # OTel Collector Prometheus exporter (receives Telegen metrics)
+  - job_name: 'otel-prometheus-exporter'
+    static_configs:
+      - targets: ['otel-collector:8889']
+  
+  # Telegen Agent (direct scrape)
+  - job_name: 'telegen-agent'
+    static_configs:
+      - targets: ['host.docker.internal:19090']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'telegen-agent'
+  
+  # Jaeger
+  - job_name: 'jaeger'
+    static_configs:
+      - targets: ['jaeger:14269']
+
+# Remote write receiver (enabled in Prometheus startup)
+# Telegen can also push metrics via remote write

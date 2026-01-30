@@ -1,0 +1,232 @@
+{
+  "family": "telegen-agent",
+  "taskRoleArn": "${TASK_ROLE_ARN}",
+  "executionRoleArn": "${EXECUTION_ROLE_ARN}",
+  "networkMode": "host",
+  "requiresCompatibilities": ["EC2"],
+  "cpu": "512",
+  "memory": "1024",
+  "pidMode": "host",
+  "containerDefinitions": [
+    {
+      "name": "telegen-agent",
+      "image": "ghcr.io/platformbuilds/telegen:v2.0.0",
+      "cpu": 512,
+      "memory": 1024,
+      "memoryReservation": 256,
+      "essential": true,
+      "privileged": true,
+      "command": [
+        "--config=/etc/telegen/config.yaml",
+        "--mode=agent"
+      ],
+      "environment": [
+        {
+          "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
+          "value": "http://otel-collector.internal:4317"
+        },
+        {
+          "name": "TELEGEN_TRACING_ENABLED",
+          "value": "true"
+        },
+        {
+          "name": "TELEGEN_PROFILING_ENABLED",
+          "value": "true"
+        },
+        {
+          "name": "TELEGEN_SECURITY_ENABLED",
+          "value": "true"
+        },
+        {
+          "name": "TELEGEN_NETWORK_ENABLED",
+          "value": "true"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "${AWS_REGION}"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "OTEL_EXPORTER_OTLP_HEADERS",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:telegen/otlp-headers"
+        }
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "sys",
+          "containerPath": "/sys",
+          "readOnly": true
+        },
+        {
+          "sourceVolume": "proc",
+          "containerPath": "/host/proc",
+          "readOnly": true
+        },
+        {
+          "sourceVolume": "debugfs",
+          "containerPath": "/sys/kernel/debug",
+          "readOnly": false
+        },
+        {
+          "sourceVolume": "bpf",
+          "containerPath": "/sys/fs/bpf",
+          "readOnly": false
+        },
+        {
+          "sourceVolume": "varlog",
+          "containerPath": "/var/log",
+          "readOnly": true
+        },
+        {
+          "sourceVolume": "docker-containers",
+          "containerPath": "/var/lib/docker/containers",
+          "readOnly": true
+        },
+        {
+          "sourceVolume": "telegen-data",
+          "containerPath": "/var/lib/telegen",
+          "readOnly": false
+        },
+        {
+          "sourceVolume": "cgroup",
+          "containerPath": "/sys/fs/cgroup",
+          "readOnly": true
+        },
+        {
+          "sourceVolume": "config",
+          "containerPath": "/etc/telegen",
+          "readOnly": true
+        }
+      ],
+      "portMappings": [
+        {
+          "containerPort": 19090,
+          "hostPort": 19090,
+          "protocol": "tcp"
+        },
+        {
+          "containerPort": 8080,
+          "hostPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:8080/healthz || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "linuxParameters": {
+        "capabilities": {
+          "add": [
+            "SYS_ADMIN",
+            "SYS_PTRACE",
+            "SYS_RESOURCE",
+            "NET_ADMIN",
+            "NET_RAW"
+          ]
+        },
+        "initProcessEnabled": true
+      },
+      "ulimits": [
+        {
+          "name": "memlock",
+          "softLimit": -1,
+          "hardLimit": -1
+        },
+        {
+          "name": "nofile",
+          "softLimit": 65536,
+          "hardLimit": 65536
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/telegen-agent",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "telegen",
+          "awslogs-create-group": "true"
+        }
+      },
+      "dockerLabels": {
+        "app": "telegen",
+        "component": "agent",
+        "version": "2.0.0"
+      }
+    }
+  ],
+  "volumes": [
+    {
+      "name": "sys",
+      "host": {
+        "sourcePath": "/sys"
+      }
+    },
+    {
+      "name": "proc",
+      "host": {
+        "sourcePath": "/proc"
+      }
+    },
+    {
+      "name": "debugfs",
+      "host": {
+        "sourcePath": "/sys/kernel/debug"
+      }
+    },
+    {
+      "name": "bpf",
+      "host": {
+        "sourcePath": "/sys/fs/bpf"
+      }
+    },
+    {
+      "name": "varlog",
+      "host": {
+        "sourcePath": "/var/log"
+      }
+    },
+    {
+      "name": "docker-containers",
+      "host": {
+        "sourcePath": "/var/lib/docker/containers"
+      }
+    },
+    {
+      "name": "telegen-data",
+      "host": {
+        "sourcePath": "/var/lib/telegen"
+      }
+    },
+    {
+      "name": "cgroup",
+      "host": {
+        "sourcePath": "/sys/fs/cgroup"
+      }
+    },
+    {
+      "name": "config",
+      "host": {
+        "sourcePath": "/etc/telegen"
+      }
+    }
+  ],
+  "placementConstraints": [],
+  "tags": [
+    {
+      "key": "Application",
+      "value": "telegen"
+    },
+    {
+      "key": "Component",
+      "value": "agent"
+    },
+    {
+      "key": "ManagedBy",
+      "value": "terraform"
+    }
+  ]
+}

@@ -1,10 +1,54 @@
+# Telegen v2.0 Agent Mode systemd Service
+# Task: DEP-011
+# Install: sudo cp telegen.service /etc/systemd/system/
+#          sudo systemctl daemon-reload
+#          sudo systemctl enable --now telegen
+
 [Unit]
 Description=Telegen Observability Agent
-After=network.target
+Documentation=https://github.com/platformbuilds/telegen
+After=network-online.target
+Wants=network-online.target
 
 [Service]
-ExecStart=/usr/local/bin/telegen --config /etc/telegen/config.yaml
+Type=simple
+User=root
+Group=root
+
+# Environment file for configuration overrides
+EnvironmentFile=-/etc/telegen/telegen.env
+
+# Main binary
+ExecStart=/usr/local/bin/telegen --mode=agent --config=/etc/telegen/config.yaml
+
+# Restart policy
 Restart=always
+RestartSec=5
+
+# Resource limits for eBPF
+LimitNOFILE=65536
+LimitMEMLOCK=infinity
+LimitNPROC=65536
+
+# Capabilities for eBPF (when not running as root with CAP_ALL)
+AmbientCapabilities=CAP_SYS_ADMIN CAP_SYS_PTRACE CAP_SYS_RESOURCE CAP_NET_ADMIN CAP_NET_RAW CAP_BPF CAP_PERFMON CAP_DAC_READ_SEARCH
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_SYS_PTRACE CAP_SYS_RESOURCE CAP_NET_ADMIN CAP_NET_RAW CAP_BPF CAP_PERFMON CAP_DAC_READ_SEARCH
+
+# Security hardening (limited due to eBPF requirements)
+NoNewPrivileges=no
+ProtectSystem=no
+ProtectHome=read-only
+PrivateTmp=yes
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=telegen
+
+# Graceful shutdown
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
 
 [Install]
 WantedBy=multi-user.target

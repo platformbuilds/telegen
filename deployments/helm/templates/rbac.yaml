@@ -1,23 +1,147 @@
+# Telegen v2.0 RBAC
+# Task: DEP-008
+{{- if .Values.rbac.create }}
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: telegen
+  name: {{ include "telegen.serviceAccountName" . }}
+  namespace: {{ include "telegen.namespace" . }}
+  labels:
+    {{- include "telegen.labels" . | nindent 4 }}
+  {{- with .Values.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: telegen
-rules: []
+  name: {{ include "telegen.fullname" . }}
+  labels:
+    {{- include "telegen.labels" . | nindent 4 }}
+rules:
+  # Pod and node discovery
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - nodes
+      - nodes/proxy
+      - nodes/stats
+      - namespaces
+      - services
+      - endpoints
+      - configmaps
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+  # Deployment and replicaset discovery
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - replicasets
+      - daemonsets
+      - statefulsets
+    verbs:
+      - get
+      - list
+      - watch
+  # Jobs and cronjobs
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs:
+      - get
+      - list
+      - watch
+  # Ingress discovery
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+      - networkpolicies
+    verbs:
+      - get
+      - list
+      - watch
+  # Events for correlation
+  - apiGroups: [""]
+    resources:
+      - events
+    verbs:
+      - get
+      - list
+      - watch
+  # Metrics access
+  - apiGroups: ["metrics.k8s.io"]
+    resources:
+      - pods
+      - nodes
+    verbs:
+      - get
+      - list
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: telegen
+  name: {{ include "telegen.fullname" . }}
+  labels:
+    {{- include "telegen.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: telegen
+  name: {{ include "telegen.fullname" . }}
 subjects:
   - kind: ServiceAccount
-    name: telegen
-    namespace: default
+    name: {{ include "telegen.serviceAccountName" . }}
+    namespace: {{ include "telegen.namespace" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "telegen.fullname" . }}
+  namespace: {{ include "telegen.namespace" . }}
+  labels:
+    {{- include "telegen.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+  - apiGroups: ["coordination.k8s.io"]
+    resources:
+      - leases
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "telegen.fullname" . }}
+  namespace: {{ include "telegen.namespace" . }}
+  labels:
+    {{- include "telegen.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "telegen.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "telegen.serviceAccountName" . }}
+    namespace: {{ include "telegen.namespace" . }}
+{{- end }}
