@@ -32,7 +32,8 @@ type LogExporter interface {
 
 // Options configures the watcher
 type Options struct {
-	InputDir     string
+	InputDirs    []string // Directories to watch for JFR files
+	Recursive    bool     // Watch subdirectories recursively (default: true)
 	OutputDir    string
 	PollInterval time.Duration
 	Workers      int
@@ -48,6 +49,17 @@ type Options struct {
 	// Log export options
 	LogExportEnabled bool
 	LogExporter      LogExporter
+}
+
+// getInputDirs returns all configured input directories
+func (o Options) getInputDirs() []string {
+	var dirs []string
+	for _, d := range o.InputDirs {
+		if d != "" {
+			dirs = append(dirs, d)
+		}
+	}
+	return dirs
 }
 
 // Watcher watches for JFR files and processes them
@@ -94,9 +106,16 @@ func New(opts Options) *Watcher {
 
 // Run starts the watcher and blocks until context is cancelled
 func (w *Watcher) Run(ctx context.Context) error {
-	// Ensure input directory exists
-	if err := os.MkdirAll(w.opts.InputDir, 0755); err != nil {
-		return fmt.Errorf("failed to create input directory: %w", err)
+	inputDirs := w.opts.getInputDirs()
+	if len(inputDirs) == 0 {
+		return fmt.Errorf("no input directories configured")
+	}
+
+	// Ensure all input directories exist
+	for _, dir := range inputDirs {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create input directory %s: %w", dir, err)
+		}
 	}
 
 	// Only create output directory if we're writing files
@@ -107,7 +126,8 @@ func (w *Watcher) Run(ctx context.Context) error {
 	}
 
 	w.logger.Info("Watcher starting",
-		zap.String("inputDir", w.opts.InputDir),
+		zap.Strings("inputDirs", inputDirs),
+		zap.Bool("recursive", w.opts.Recursive),
 		zap.String("outputDir", w.opts.OutputDir),
 		zap.Duration("pollInterval", w.opts.PollInterval),
 		zap.Int("workers", w.opts.Workers),
@@ -143,16 +163,40 @@ func (w *Watcher) Run(ctx context.Context) error {
 }
 
 func (w *Watcher) scanForFiles() {
-	err := filepath.WalkDir(w.opts.InputDir, func(path string, d fs.DirEntry, err error) error {
+	inputDirs := w.opts.getInputDirs()
+
+	for _, inputDir := range inputDirs {
+		w.scanDirectory(inputDir)
+	}
+}
+
+func (w *Watcher) scanDirectory(inputDir string) {
+	w.logger.Debug("Scanning directory", zap.String("inputDir", inputDir), zap.Bool("recursive", w.opts.Recursive))
+
+	fileCount := 0
+	dirCount := 0
+
+	err := filepath.WalkDir(inputDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
+			w.logger.Debug("WalkDir error", zap.String("path", path), zap.Error(err))
 			return nil // Skip errors
 		}
 		if d.IsDir() {
+			dirCount++
+			// Skip subdirectories if recursive is disabled (but not the root dir)
+			if !w.opts.Recursive && path != inputDir {
+				w.logger.Debug("Skipping subdirectory (recursive disabled)", zap.String("path", path))
+				return filepath.SkipDir
+			}
+			w.logger.Debug("Entering directory", zap.String("path", path))
 			return nil
 		}
 		if !strings.HasSuffix(strings.ToLower(path), ".jfr") {
 			return nil
 		}
+
+		fileCount++
+		w.logger.Debug("Found JFR file", zap.String("path", path))
 
 		// Check if file is still being written (modified in last 2 seconds)
 		info, err := d.Info()
@@ -160,6 +204,7 @@ func (w *Watcher) scanForFiles() {
 			return nil
 		}
 		if time.Since(info.ModTime()) < 2*time.Second {
+			w.logger.Debug("Skipping file still being written", zap.String("path", path))
 			return nil
 		}
 
@@ -178,15 +223,18 @@ func (w *Watcher) scanForFiles() {
 		// Queue for processing
 		select {
 		case w.workQueue <- path:
-			w.logger.Debug("Queued file for processing", zap.String("path", path))
+			w.logger.Debug("Queued file for processing", zap.String("path", path), zap.String("inputDir", inputDir))
 		default:
 			w.logger.Warn("Work queue full, skipping file", zap.String("path", path))
 		}
 
 		return nil
 	})
+
+	w.logger.Debug("Scan complete", zap.String("inputDir", inputDir), zap.Int("dirsScanned", dirCount), zap.Int("jfrFilesFound", fileCount))
+
 	if err != nil {
-		w.logger.Error("Failed to scan directory", zap.Error(err))
+		w.logger.Error("Failed to scan directory", zap.String("dir", inputDir), zap.Error(err))
 	}
 }
 

@@ -776,7 +776,9 @@ pipelines:
       pollInterval: 500ms
   jfr:
     enabled: false
-    inputDir: /var/log/jfr
+    inputDirs:
+      - /var/log/jfr
+    recursive: true
     outputDir: /var/log/jfr-json
     pollInterval: 5s
     sampleIntervalMs: 10

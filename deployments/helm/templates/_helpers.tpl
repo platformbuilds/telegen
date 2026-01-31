@@ -547,7 +547,8 @@ pipelines:
       poll_interval: {{ .Values.pipelines.logs.filelog.pollInterval | default "500ms" }}
   jfr:
     enabled: {{ .Values.pipelines.jfr.enabled | default false }}
-    input_dir: {{ .Values.pipelines.jfr.inputDir | default "/var/log/jfr" }}
+    input_dirs: {{ .Values.pipelines.jfr.inputDirs | default (list "/var/log/jfr") | toJson }}
+    recursive: {{ .Values.pipelines.jfr.recursive | default true }}
     output_dir: {{ .Values.pipelines.jfr.outputDir | default "/var/log/jfr-json" }}
     poll_interval: {{ .Values.pipelines.jfr.pollInterval | default "5s" }}
     sample_interval_ms: {{ .Values.pipelines.jfr.sampleIntervalMs | default 10 }}
@@ -565,6 +566,14 @@ pipelines:
       skip_file_output: {{ .Values.pipelines.jfr.directExport.skipFileOutput | default false }}
       log_export:
         enabled: {{ .Values.pipelines.jfr.directExport.logExport.enabled | default false }}
+        # Output destinations (can enable multiple simultaneously)
+        stdout_enabled: {{ .Values.pipelines.jfr.directExport.logExport.stdoutEnabled | default false }}
+        stdout_format: {{ .Values.pipelines.jfr.directExport.logExport.stdoutFormat | default "json" | quote }}
+        disk_enabled: {{ .Values.pipelines.jfr.directExport.logExport.diskEnabled | default false }}
+        disk_path: {{ .Values.pipelines.jfr.directExport.logExport.diskPath | default "/var/log/telegen/jfr-logs.json" | quote }}
+        disk_rotate_size: {{ .Values.pipelines.jfr.directExport.logExport.diskRotateSize | default "100MB" | quote }}
+        disk_max_files: {{ .Values.pipelines.jfr.directExport.logExport.diskMaxFiles | default 5 }}
+        otlp_enabled: {{ .Values.pipelines.jfr.directExport.logExport.otlpEnabled | default true }}
         endpoint: {{ .Values.pipelines.jfr.directExport.logExport.endpoint | default "" | quote }}
         headers: {{ .Values.pipelines.jfr.directExport.logExport.headers | default dict | toJson }}
         compression: {{ .Values.pipelines.jfr.directExport.logExport.compression | default "gzip" }}

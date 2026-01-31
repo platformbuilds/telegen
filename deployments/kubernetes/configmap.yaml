@@ -535,7 +535,12 @@ data:
           poll_interval: 500ms
       jfr:
         enabled: false
-        input_dir: /var/log/jfr
+        # Directories to watch for JFR files
+        input_dirs:
+          - /var/log/jfr
+          # - /opt/app/jfr-data
+        # Watch subdirectories recursively (default: true)
+        recursive: true
         output_dir: /var/log/jfr-json
         poll_interval: 5s
         sample_interval_ms: 10
@@ -560,6 +565,14 @@ data:
           # OTLP Logs export for JFR events as JSON
           log_export:
             enabled: false
+            # Output destinations (can enable multiple simultaneously)
+            stdout_enabled: false
+            stdout_format: json  # json or text
+            disk_enabled: false
+            disk_path: /var/log/telegen/jfr-logs.json
+            disk_rotate_size: 100MB
+            disk_max_files: 5
+            otlp_enabled: true  # default when enabled=true
             endpoint: ""  # e.g., "http://otel-collector:4318/v1/logs"
             headers: {}
             compression: gzip

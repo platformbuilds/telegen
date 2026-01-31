@@ -180,10 +180,6 @@ func (p *Pipeline) startJFRPipeline(ctx context.Context) {
 	jfrCfg := p.cfg.Pipelines.JFR
 
 	// Set defaults
-	inputDir := jfrCfg.InputDir
-	if inputDir == "" {
-		inputDir = "/var/log/jfr"
-	}
 	outputDir := jfrCfg.OutputDir
 	if outputDir == "" {
 		outputDir = "/var/log/jfr-json"
@@ -230,9 +226,21 @@ func (p *Pipeline) startJFRPipeline(ctx context.Context) {
 		Logger:           zapLogger,
 	})
 
+	// Get all input directories
+	inputDirs := jfrCfg.GetInputDirs()
+	if len(inputDirs) == 0 {
+		inputDirs = []string{"/var/log/jfr"} // Default if none configured
+	}
+
+	// Use IsRecursive() which defaults to true if not explicitly set
+	recursive := jfrCfg.IsRecursive()
+
+	log.Printf("jfr: recursive scanning = %v, inputDirs = %v", recursive, inputDirs)
+
 	// Build watcher options
 	watcherOpts := watcher.Options{
-		InputDir:     inputDir,
+		InputDirs:    inputDirs,
+		Recursive:    recursive,
 		OutputDir:    outputDir,
 		PollInterval: jfrCfg.PollIntervalDuration(),
 		Workers:      workers,
@@ -272,8 +280,8 @@ func (p *Pipeline) startJFRPipeline(ctx context.Context) {
 	// Create watcher
 	w := watcher.New(watcherOpts)
 
-	log.Printf("jfr: starting pipeline (input=%s, output=%s, workers=%d, directExport=%v, logExport=%v)",
-		inputDir, outputDir, workers, jfrCfg.DirectExport.Enabled, jfrCfg.DirectExport.LogExport.Enabled)
+	log.Printf("jfr: starting pipeline (inputDirs=%v, recursive=%v, output=%s, workers=%d, directExport=%v, logExport=%v)",
+		inputDirs, recursive, outputDir, workers, jfrCfg.DirectExport.Enabled, jfrCfg.DirectExport.LogExport.Enabled)
 
 	// Run watcher in background
 	go func() {
@@ -316,18 +324,18 @@ func (p *Pipeline) createJFRProfileExporter(cfg config.DirectExportConfig, zapLo
 	return otlp.NewProfileExporter(exporter, profileCfg, slogger), nil
 }
 
-// createJFRLogExporter creates an OTLP log exporter for JFR events
+// createJFRLogExporter creates a multi-destination log exporter for JFR events
 func (p *Pipeline) createJFRLogExporter(cfg config.LogExportConfig, podName, namespace, containerName, nodeName string, zapLogger *zap.Logger) (watcher.LogExporter, error) {
 	slogger := slogFromZap(zapLogger)
 
-	// Determine endpoint
+	// Determine OTLP endpoint
 	endpoint := cfg.Endpoint
 	if endpoint == "" {
 		endpoint = "http://localhost:4318/v1/logs"
 	}
 
-	// Build exporter config
-	exporterCfg := converter.OTLPLogExporterConfig{
+	// Build OTLP config
+	otlpCfg := converter.OTLPLogExporterConfig{
 		Endpoint:          endpoint,
 		Headers:           cfg.Headers,
 		Compression:       cfg.Compression,
@@ -344,14 +352,58 @@ func (p *Pipeline) createJFRLogExporter(cfg config.LogExportConfig, podName, nam
 	}
 
 	// Set defaults
-	if exporterCfg.BatchSize <= 0 {
-		exporterCfg.BatchSize = 100
+	if otlpCfg.BatchSize <= 0 {
+		otlpCfg.BatchSize = 100
 	}
-	if exporterCfg.Compression == "" {
-		exporterCfg.Compression = "gzip"
+	if otlpCfg.Compression == "" {
+		otlpCfg.Compression = "gzip"
 	}
 
-	return converter.NewOTLPLogExporter(exporterCfg, slogger)
+	// Build multi-exporter config
+	multiCfg := converter.MultiLogExporterConfig{
+		// Stdout output
+		StdoutEnabled: cfg.StdoutEnabled,
+		StdoutFormat:  cfg.StdoutFormat,
+
+		// Disk output
+		DiskEnabled:    cfg.DiskEnabled,
+		DiskPath:       cfg.DiskPath,
+		DiskRotateSize: cfg.DiskRotateSizeBytes(),
+		DiskMaxFiles:   cfg.DiskMaxFiles,
+
+		// OTLP output
+		OTLPEnabled: cfg.IsOTLPEnabled(),
+		OTLPConfig:  otlpCfg,
+
+		// Common settings
+		BatchSize:     otlpCfg.BatchSize,
+		FlushInterval: otlpCfg.FlushInterval,
+
+		// Service metadata
+		ServiceName:   p.cfg.Agent.ServiceName,
+		Namespace:     namespace,
+		PodName:       podName,
+		ContainerName: containerName,
+		NodeName:      nodeName,
+	}
+
+	// Set default disk max files
+	if multiCfg.DiskMaxFiles <= 0 {
+		multiCfg.DiskMaxFiles = 5
+	}
+
+	// Set default stdout format
+	if multiCfg.StdoutFormat == "" {
+		multiCfg.StdoutFormat = "json"
+	}
+
+	// Log enabled outputs
+	log.Printf("jfr: log export destinations - stdout=%v, disk=%v (path=%s), otlp=%v (endpoint=%s)",
+		multiCfg.StdoutEnabled,
+		multiCfg.DiskEnabled, multiCfg.DiskPath,
+		multiCfg.OTLPEnabled, endpoint)
+
+	return converter.NewMultiLogExporter(multiCfg, slogger)
 }
 
 // slogFromZap creates a basic slog.Logger (adapter pattern)

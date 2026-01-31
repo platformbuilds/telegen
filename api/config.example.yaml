@@ -122,7 +122,9 @@ pipelines:
       position_file: "/var/lib/telegen/positions.json"
   jfr:
     enabled: false
-    input_dir: "/var/log/jfr"
+    input_dirs:
+      - "/var/log/jfr"
+    recursive: true
     output_dir: "/var/log/jfr-json"
     poll_interval: "5s"
     sample_interval_ms: 10

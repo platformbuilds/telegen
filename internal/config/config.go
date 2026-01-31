@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -108,11 +109,12 @@ type NetworkFlowsConfig struct {
 
 // JFRConfig holds Java Flight Recorder pipeline configuration
 type JFRConfig struct {
-	Enabled          bool   `yaml:"enabled"`
-	InputDir         string `yaml:"input_dir"`
-	OutputDir        string `yaml:"output_dir"`
-	PollInterval     string `yaml:"poll_interval"`
-	SampleIntervalMs int    `yaml:"sample_interval_ms"`
+	Enabled          bool     `yaml:"enabled"`
+	InputDirs        []string `yaml:"input_dirs"` // Directories to watch for JFR files
+	Recursive        *bool    `yaml:"recursive"`  // Watch subdirectories recursively (default: true)
+	OutputDir        string   `yaml:"output_dir"`
+	PollInterval     string   `yaml:"poll_interval"`
+	SampleIntervalMs int      `yaml:"sample_interval_ms"`
 	// UseNativeParser uses the built-in Go JFR parser instead of external jfr command.
 	// This eliminates the JDK dependency. Default: true
 	UseNativeParser bool   `yaml:"use_native_parser"`
@@ -121,6 +123,25 @@ type JFRConfig struct {
 	PrettyJSON      bool   `yaml:"pretty_json"`
 	// Direct OTLP export configuration
 	DirectExport DirectExportConfig `yaml:"direct_export"`
+}
+
+// IsRecursive returns whether recursive scanning is enabled (defaults to true)
+func (j JFRConfig) IsRecursive() bool {
+	if j.Recursive == nil {
+		return true // Default to true
+	}
+	return *j.Recursive
+}
+
+// GetInputDirs returns all configured input directories
+func (j JFRConfig) GetInputDirs() []string {
+	var dirs []string
+	for _, d := range j.InputDirs {
+		if d != "" {
+			dirs = append(dirs, d)
+		}
+	}
+	return dirs
 }
 
 // DirectExportConfig holds configuration for direct OTLP profile export
@@ -150,6 +171,24 @@ type DirectExportConfig struct {
 type LogExportConfig struct {
 	// Enabled enables exporting JFR profile data as OTLP Logs
 	Enabled bool `yaml:"enabled"`
+
+	// Output destinations (can enable multiple simultaneously)
+	// StdoutEnabled prints JFR logs to stdout in JSON format
+	StdoutEnabled bool `yaml:"stdout_enabled"`
+	// StdoutFormat is the format for stdout output (json, text)
+	StdoutFormat string `yaml:"stdout_format"`
+
+	// DiskEnabled writes JFR logs to a file on disk
+	DiskEnabled bool `yaml:"disk_enabled"`
+	// DiskPath is the path to write log files (e.g., /var/log/telegen/jfr-logs.json)
+	DiskPath string `yaml:"disk_path"`
+	// DiskRotateSize is the max file size before rotation (e.g., 100MB)
+	DiskRotateSize string `yaml:"disk_rotate_size"`
+	// DiskMaxFiles is the maximum number of rotated files to keep
+	DiskMaxFiles int `yaml:"disk_max_files"`
+
+	// OTLPEnabled enables shipping logs to OTLP collector (default: true when Enabled is true)
+	OTLPEnabled bool `yaml:"otlp_enabled"`
 	// Endpoint is the OTLP logs endpoint (e.g., http://localhost:4318/v1/logs)
 	// If empty, uses the main OTLP endpoint with /v1/logs path
 	Endpoint string `yaml:"endpoint"`
@@ -167,6 +206,49 @@ type LogExportConfig struct {
 	IncludeStackTrace bool `yaml:"include_stack_trace"`
 	// IncludeRawJSON includes the full JSON representation in log body
 	IncludeRawJSON bool `yaml:"include_raw_json"`
+}
+
+// IsOTLPEnabled returns true if OTLP export should be enabled
+// For backward compatibility: if OTLPEnabled is not explicitly set but Enabled is true, OTLP is enabled
+func (l LogExportConfig) IsOTLPEnabled() bool {
+	// Explicit setting takes precedence
+	if l.OTLPEnabled {
+		return true
+	}
+	// Backward compat: if none of the new outputs are explicitly enabled, default to OTLP
+	if l.Enabled && !l.StdoutEnabled && !l.DiskEnabled {
+		return true
+	}
+	return false
+}
+
+// DiskRotateSizeBytes returns the disk rotation size in bytes
+func (l LogExportConfig) DiskRotateSizeBytes() int64 {
+	if l.DiskRotateSize == "" {
+		return 100 * 1024 * 1024 // 100MB default
+	}
+	size := l.DiskRotateSize
+	var multiplier int64 = 1
+	if len(size) > 2 {
+		suffix := size[len(size)-2:]
+		switch suffix {
+		case "KB", "kb":
+			multiplier = 1024
+			size = size[:len(size)-2]
+		case "MB", "mb":
+			multiplier = 1024 * 1024
+			size = size[:len(size)-2]
+		case "GB", "gb":
+			multiplier = 1024 * 1024 * 1024
+			size = size[:len(size)-2]
+		}
+	}
+	var val int64
+	fmt.Sscanf(size, "%d", &val)
+	if val <= 0 {
+		return 100 * 1024 * 1024
+	}
+	return val * multiplier
 }
 
 // TimeoutDuration returns the log export timeout as a time.Duration
