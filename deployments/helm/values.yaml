@@ -759,6 +759,11 @@ pipelines:
     outputDir: /var/log/jfr-json
     pollInterval: 5s
     sampleIntervalMs: 10
+    # Use native Go JFR parser (no JDK dependency required)
+    # Set to true to use built-in parser, false to use external jfr command
+    useNativeParser: true
+    # Path to jfr command (JDK 11+). Only used if useNativeParser is false.
+    # Examples: /usr/lib/jvm/java-17-openjdk-amd64/bin/jfr, /usr/lib/jvm/java-21-amazon-corretto/bin/jfr
     jfrCommand: jfr
     workers: 2
     prettyJson: false
