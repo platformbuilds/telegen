@@ -6,6 +6,8 @@
 package sigdef
 
 import (
+	"sync"
+
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -30,6 +32,77 @@ const (
 	// AttrCollectorType is the type of collector (ebpf, jfr, snmp, api, procfs, nvml)
 	AttrCollectorType = "telegen.collector.type"
 )
+
+// MetadataFieldsConfig controls which metadata fields are exported with signals.
+// Each field can be independently enabled/disabled to reduce storage costs.
+type MetadataFieldsConfig struct {
+	// EnableCategory exports telegen.signal.category / telegen_signal_category
+	EnableCategory bool `yaml:"enable_category" env:"TELEGEN_METADATA_CATEGORY"`
+
+	// EnableSubCategory exports telegen.signal.subcategory / telegen_signal_subcategory
+	EnableSubCategory bool `yaml:"enable_subcategory" env:"TELEGEN_METADATA_SUBCATEGORY"`
+
+	// EnableSourceModule exports telegen.source.module / telegen_source_module
+	EnableSourceModule bool `yaml:"enable_source_module" env:"TELEGEN_METADATA_SOURCE_MODULE"`
+
+	// EnableBPFComponent exports telegen.bpf.component / telegen_bpf_component
+	EnableBPFComponent bool `yaml:"enable_bpf_component" env:"TELEGEN_METADATA_BPF_COMPONENT"`
+
+	// EnableDescription exports telegen.signal.description / telegen_signal_description
+	EnableDescription bool `yaml:"enable_description" env:"TELEGEN_METADATA_DESCRIPTION"`
+
+	// EnableCollectorType exports telegen.collector.type / telegen_collector_type
+	EnableCollectorType bool `yaml:"enable_collector_type" env:"TELEGEN_METADATA_COLLECTOR_TYPE"`
+}
+
+// DefaultMetadataFieldsConfig returns the default configuration with all fields enabled
+func DefaultMetadataFieldsConfig() MetadataFieldsConfig {
+	return MetadataFieldsConfig{
+		EnableCategory:      true,
+		EnableSubCategory:   true,
+		EnableSourceModule:  true,
+		EnableBPFComponent:  true,
+		EnableDescription:   false, // Disabled by default - descriptions are verbose
+		EnableCollectorType: true,
+	}
+}
+
+// MinimalMetadataFieldsConfig returns a minimal configuration for cost-sensitive environments
+func MinimalMetadataFieldsConfig() MetadataFieldsConfig {
+	return MetadataFieldsConfig{
+		EnableCategory:      true,
+		EnableSubCategory:   false,
+		EnableSourceModule:  false,
+		EnableBPFComponent:  false,
+		EnableDescription:   false,
+		EnableCollectorType: false,
+	}
+}
+
+// DisabledMetadataFieldsConfig returns a configuration with all fields disabled
+func DisabledMetadataFieldsConfig() MetadataFieldsConfig {
+	return MetadataFieldsConfig{}
+}
+
+// Global metadata config with thread-safe access
+var (
+	globalMetadataConfig   = DefaultMetadataFieldsConfig()
+	globalMetadataConfigMu sync.RWMutex
+)
+
+// SetGlobalMetadataConfig sets the global metadata fields configuration
+func SetGlobalMetadataConfig(cfg MetadataFieldsConfig) {
+	globalMetadataConfigMu.Lock()
+	defer globalMetadataConfigMu.Unlock()
+	globalMetadataConfig = cfg
+}
+
+// GetGlobalMetadataConfig returns the current global metadata fields configuration
+func GetGlobalMetadataConfig() MetadataFieldsConfig {
+	globalMetadataConfigMu.RLock()
+	defer globalMetadataConfigMu.RUnlock()
+	return globalMetadataConfig
+}
 
 // CollectorType represents the type of data collector
 type CollectorType string
@@ -68,53 +141,66 @@ type SignalMetadata struct {
 	SignalType SignalType
 }
 
-// ToAttributes converts SignalMetadata to OTel attributes for export
+// ToAttributes converts SignalMetadata to OTel attributes for export.
+// Respects the global MetadataFieldsConfig to control which fields are exported.
 func (m *SignalMetadata) ToAttributes() []attribute.KeyValue {
+	return m.ToAttributesWithConfig(GetGlobalMetadataConfig())
+}
+
+// ToAttributesWithConfig converts SignalMetadata to OTel attributes using the provided config.
+// Use this for explicit control over which fields are exported.
+func (m *SignalMetadata) ToAttributesWithConfig(cfg MetadataFieldsConfig) []attribute.KeyValue {
 	attrs := make([]attribute.KeyValue, 0, 6)
 
-	if m.Category != "" {
+	if cfg.EnableCategory && m.Category != "" {
 		attrs = append(attrs, attribute.String(AttrSignalCategory, m.Category))
 	}
-	if m.SubCategory != "" {
+	if cfg.EnableSubCategory && m.SubCategory != "" {
 		attrs = append(attrs, attribute.String(AttrSignalSubCategory, m.SubCategory))
 	}
-	if m.SourceModule != "" {
+	if cfg.EnableSourceModule && m.SourceModule != "" {
 		attrs = append(attrs, attribute.String(AttrSourceModule, m.SourceModule))
 	}
-	if m.BPFComponent != "" {
+	if cfg.EnableBPFComponent && m.BPFComponent != "" {
 		attrs = append(attrs, attribute.String(AttrBPFComponent, m.BPFComponent))
 	}
-	if m.Description != "" {
+	if cfg.EnableDescription && m.Description != "" {
 		attrs = append(attrs, attribute.String(AttrSignalDescription, m.Description))
 	}
-	if m.CollectorType != "" {
+	if cfg.EnableCollectorType && m.CollectorType != "" {
 		attrs = append(attrs, attribute.String(AttrCollectorType, string(m.CollectorType)))
 	}
 
 	return attrs
 }
 
-// ToPrometheusLabels converts SignalMetadata to Prometheus-compatible labels
-// for Remote Write to OTel Collector's prometheusreceiver
+// ToPrometheusLabels converts SignalMetadata to Prometheus-compatible labels.
+// Respects the global MetadataFieldsConfig to control which fields are exported.
 func (m *SignalMetadata) ToPrometheusLabels() map[string]string {
+	return m.ToPrometheusLabelsWithConfig(GetGlobalMetadataConfig())
+}
+
+// ToPrometheusLabelsWithConfig converts SignalMetadata to Prometheus-compatible labels
+// using the provided config. Use this for explicit control over which fields are exported.
+func (m *SignalMetadata) ToPrometheusLabelsWithConfig(cfg MetadataFieldsConfig) map[string]string {
 	labels := make(map[string]string, 6)
 
-	if m.Category != "" {
+	if cfg.EnableCategory && m.Category != "" {
 		labels["telegen_signal_category"] = m.Category
 	}
-	if m.SubCategory != "" {
+	if cfg.EnableSubCategory && m.SubCategory != "" {
 		labels["telegen_signal_subcategory"] = m.SubCategory
 	}
-	if m.SourceModule != "" {
+	if cfg.EnableSourceModule && m.SourceModule != "" {
 		labels["telegen_source_module"] = m.SourceModule
 	}
-	if m.BPFComponent != "" {
+	if cfg.EnableBPFComponent && m.BPFComponent != "" {
 		labels["telegen_bpf_component"] = m.BPFComponent
 	}
-	if m.Description != "" {
+	if cfg.EnableDescription && m.Description != "" {
 		labels["telegen_signal_description"] = m.Description
 	}
-	if m.CollectorType != "" {
+	if cfg.EnableCollectorType && m.CollectorType != "" {
 		labels["telegen_collector_type"] = string(m.CollectorType)
 	}
 

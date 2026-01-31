@@ -195,6 +195,16 @@ data:
         enabled: false
     
     exports:
+      # Signal metadata for indexing (can be disabled to reduce storage costs)
+      include_signal_metadata: true
+      metadata_fields:
+        enable_category: true
+        enable_subcategory: true
+        enable_source_module: true
+        enable_bpf_component: true
+        enable_description: false
+        enable_collector_type: true
+
       otlp:
         grpc:
           enabled: true

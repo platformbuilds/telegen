@@ -40,6 +40,24 @@ exports:
   # Include signal metadata in all exports for indexing
   include_signal_metadata: true
   
+  # Control which metadata fields are exported (to reduce storage costs)
+  # Each field can be independently enabled/disabled
+  # Can also be set via environment variables:
+  #   TELEGEN_METADATA_CATEGORY, TELEGEN_METADATA_SUBCATEGORY, etc.
+  metadata_fields:
+    # Top-level category (e.g., "Host Metrics", "Database Traces")
+    enable_category: true
+    # Sub-category (e.g., "CPU Utilization", "PostgreSQL")
+    enable_subcategory: true
+    # Go source module path
+    enable_source_module: true
+    # eBPF component file path
+    enable_bpf_component: true
+    # Human-readable description (verbose, disabled by default)
+    enable_description: false
+    # Collector type (ebpf, jfr, snmp, api, procfs, nvml)
+    enable_collector_type: true
+  
   # Prometheus Remote Write - compatible with OTel Collector prometheusremotewritereceiver
   remoteWrite:
     mode: "active"
