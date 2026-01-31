@@ -322,6 +322,11 @@ func (p *Pipeline) createJFRProfileExporter(cfg config.DirectExportConfig, zapLo
 		return nil, fmt.Errorf("failed to create OTLP exporter: %w", err)
 	}
 
+	// Start the exporter to initialize the transport
+	if err := exporter.Start(context.Background()); err != nil {
+		return nil, fmt.Errorf("failed to start OTLP exporter: %w", err)
+	}
+
 	// Create the profile exporter wrapper
 	profileCfg := otlp.DefaultProfileExporterConfig()
 	if cfg.BatchSize > 0 {
