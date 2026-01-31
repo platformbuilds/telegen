@@ -512,6 +512,27 @@ pipelines:
     jfr_command: jfr
     workers: 2
     pretty_json: false
+    # Direct OTLP export for JFR profiles
+    direct_export:
+      enabled: false
+      endpoint: ""  # e.g., "http://otel-collector:4318/v1/profiles"
+      headers: {}
+      compression: gzip
+      timeout: 30s
+      batch_size: 100
+      flush_interval: 10s
+      skip_file_output: false
+      # OTLP Logs export for JFR events as JSON
+      log_export:
+        enabled: false
+        endpoint: ""  # e.g., "http://otel-collector:4318/v1/logs"
+        headers: {}
+        compression: gzip
+        timeout: 30s
+        batch_size: 100
+        flush_interval: 10s
+        include_stack_trace: true
+        include_raw_json: false
 
 # -----------------------------------------------------------------------------
 # Export Configuration

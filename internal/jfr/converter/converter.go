@@ -52,6 +52,26 @@ func New(opts Options) *Converter {
 	}
 }
 
+// ServiceName returns the configured service name
+func (c *Converter) ServiceName() string {
+	return c.opts.ServiceName
+}
+
+// PodName returns the configured pod name
+func (c *Converter) PodName() string {
+	return c.opts.PodName
+}
+
+// Namespace returns the configured namespace
+func (c *Converter) Namespace() string {
+	return c.opts.Namespace
+}
+
+// NodeName returns the configured node name
+func (c *Converter) NodeName() string {
+	return c.opts.NodeName
+}
+
 // ProfileEvent represents a single profiling event
 type ProfileEvent struct {
 	Timestamp        string `json:"timestamp"`

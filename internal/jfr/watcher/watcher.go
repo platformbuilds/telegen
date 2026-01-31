@@ -4,6 +4,7 @@ package watcher
 import (
 	"context"
 	"crypto/md5"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -12,9 +13,22 @@ import (
 	"sync"
 	"time"
 
+	"github.com/platformbuilds/telegen/internal/exporters/otlp/profiles"
 	"github.com/platformbuilds/telegen/internal/jfr/converter"
 	"go.uber.org/zap"
 )
+
+// ProfileExporter interface for exporting profiles directly
+type ProfileExporter interface {
+	ExportProfiles(ctx context.Context, profs []*profiles.Profile) error
+	Flush(ctx context.Context) error
+}
+
+// LogExporter interface for exporting JFR events as logs
+type LogExporter interface {
+	ExportBatch(ctx context.Context, events []*converter.ProfileEvent) error
+	Flush(ctx context.Context) error
+}
 
 // Options configures the watcher
 type Options struct {
@@ -24,6 +38,16 @@ type Options struct {
 	Workers      int
 	Converter    *converter.Converter
 	Logger       *zap.Logger
+
+	// Direct export options
+	DirectExport   bool
+	SkipFileOutput bool
+	Exporter       ProfileExporter
+	ProfileChan    chan<- *profiles.Profile // Optional channel for streaming profiles
+
+	// Log export options
+	LogExportEnabled bool
+	LogExporter      LogExporter
 }
 
 // Watcher watches for JFR files and processes them
@@ -32,6 +56,7 @@ type Watcher struct {
 	logger         *zap.Logger
 	processedFiles sync.Map // map[string]string (path -> hash)
 	workQueue      chan string
+	jfrConverter   *profiles.JFRConverter
 }
 
 // New creates a new Watcher
@@ -45,21 +70,40 @@ func New(opts Options) *Watcher {
 	if opts.Logger == nil {
 		opts.Logger, _ = zap.NewProduction()
 	}
+
+	// Create JFR converter for direct export
+	var jfrConv *profiles.JFRConverter
+	if opts.DirectExport {
+		convOpts := profiles.JFRConverterOptions{}
+		if opts.Converter != nil {
+			convOpts.ServiceName = opts.Converter.ServiceName()
+			convOpts.PodName = opts.Converter.PodName()
+			convOpts.Namespace = opts.Converter.Namespace()
+			convOpts.NodeName = opts.Converter.NodeName()
+		}
+		jfrConv = profiles.NewJFRConverterWithOptions(convOpts)
+	}
+
 	return &Watcher{
-		opts:      opts,
-		logger:    opts.Logger,
-		workQueue: make(chan string, 100),
+		opts:         opts,
+		logger:       opts.Logger,
+		workQueue:    make(chan string, 100),
+		jfrConverter: jfrConv,
 	}
 }
 
 // Run starts the watcher and blocks until context is cancelled
 func (w *Watcher) Run(ctx context.Context) error {
-	// Ensure directories exist
+	// Ensure input directory exists
 	if err := os.MkdirAll(w.opts.InputDir, 0755); err != nil {
 		return fmt.Errorf("failed to create input directory: %w", err)
 	}
-	if err := os.MkdirAll(w.opts.OutputDir, 0755); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
+
+	// Only create output directory if we're writing files
+	if !w.opts.SkipFileOutput || !w.opts.DirectExport {
+		if err := os.MkdirAll(w.opts.OutputDir, 0755); err != nil {
+			return fmt.Errorf("failed to create output directory: %w", err)
+		}
 	}
 
 	w.logger.Info("Watcher starting",
@@ -67,6 +111,8 @@ func (w *Watcher) Run(ctx context.Context) error {
 		zap.String("outputDir", w.opts.OutputDir),
 		zap.Duration("pollInterval", w.opts.PollInterval),
 		zap.Int("workers", w.opts.Workers),
+		zap.Bool("directExport", w.opts.DirectExport),
+		zap.Bool("skipFileOutput", w.opts.SkipFileOutput),
 	)
 
 	// Start workers
@@ -181,15 +227,39 @@ func (w *Watcher) processFile(ctx context.Context, jfrPath string) {
 		return
 	}
 
-	// Generate output filename
-	baseName := strings.TrimSuffix(filepath.Base(jfrPath), ".jfr")
-	timestamp := time.Now().Format("20060102_150405")
-	outputPath := filepath.Join(w.opts.OutputDir, fmt.Sprintf("%s_%s.json", baseName, timestamp))
+	var outputPath string
+	var exportedProfiles int
+	var exportedLogs int
 
-	// Write JSON
-	if err := w.opts.Converter.WriteJSON(result.Events, outputPath); err != nil {
-		logger.Error("Failed to write JSON output", zap.Error(err))
-		return
+	// Direct export to OTLP Profiles if enabled
+	if w.opts.DirectExport && w.jfrConverter != nil {
+		exportedProfiles, err = w.exportProfilesDirect(ctx, result, logger)
+		if err != nil {
+			logger.Error("Failed to export profiles directly", zap.Error(err))
+			// Fall through to file output if not skipping
+		}
+	}
+
+	// Export as OTLP Logs if enabled
+	if w.opts.LogExportEnabled && w.opts.LogExporter != nil {
+		exportedLogs, err = w.exportLogsOTLP(ctx, result, logger)
+		if err != nil {
+			logger.Error("Failed to export logs", zap.Error(err))
+		}
+	}
+
+	// Write JSON file output (unless skipped)
+	if !w.opts.SkipFileOutput || !w.opts.DirectExport {
+		// Generate output filename
+		baseName := strings.TrimSuffix(filepath.Base(jfrPath), ".jfr")
+		timestamp := time.Now().Format("20060102_150405")
+		outputPath = filepath.Join(w.opts.OutputDir, fmt.Sprintf("%s_%s.json", baseName, timestamp))
+
+		// Write JSON
+		if err := w.opts.Converter.WriteJSON(result.Events, outputPath); err != nil {
+			logger.Error("Failed to write JSON output", zap.Error(err))
+			return
+		}
 	}
 
 	// Mark as processed
@@ -201,8 +271,140 @@ func (w *Watcher) processFile(ctx context.Context, jfrPath string) {
 		zap.Int("events", len(result.Events)),
 		zap.Int64("samples", result.TotalSamples),
 		zap.String("output", outputPath),
+		zap.Int("exportedProfiles", exportedProfiles),
+		zap.Int("exportedLogs", exportedLogs),
+		zap.Bool("directExport", w.opts.DirectExport),
+		zap.Bool("logExport", w.opts.LogExportEnabled),
 		zap.Duration("duration", time.Since(start)),
 	)
+}
+
+// exportLogsOTLP exports profile events as OTLP Logs
+func (w *Watcher) exportLogsOTLP(ctx context.Context, result *converter.ConvertResult, logger *zap.Logger) (int, error) {
+	if w.opts.LogExporter == nil {
+		return 0, fmt.Errorf("log exporter not initialized")
+	}
+
+	if len(result.Events) == 0 {
+		return 0, nil
+	}
+
+	// Export events as logs
+	if err := w.opts.LogExporter.ExportBatch(ctx, result.Events); err != nil {
+		return 0, fmt.Errorf("failed to export logs: %w", err)
+	}
+
+	logger.Debug("Exported JFR events as OTLP logs",
+		zap.Int("eventCount", len(result.Events)),
+	)
+
+	return len(result.Events), nil
+}
+
+// exportProfilesDirect converts events to OTLP profiles and exports them
+func (w *Watcher) exportProfilesDirect(ctx context.Context, result *converter.ConvertResult, logger *zap.Logger) (int, error) {
+	if w.jfrConverter == nil {
+		return 0, fmt.Errorf("JFR converter not initialized")
+	}
+
+	// Convert ProfileEvents to JFREvents for the OTLP converter
+	jfrEvents := make([]*profiles.JFREvent, 0, len(result.Events))
+	for _, evt := range result.Events {
+		jfrEvent := convertProfileEventToJFREvent(evt)
+		if jfrEvent != nil {
+			jfrEvents = append(jfrEvents, jfrEvent)
+		}
+	}
+
+	if len(jfrEvents) == 0 {
+		return 0, nil
+	}
+
+	// Convert to OTLP profiles
+	otlpProfiles, err := w.jfrConverter.ConvertEvents(jfrEvents)
+	if err != nil {
+		return 0, fmt.Errorf("failed to convert to OTLP profiles: %w", err)
+	}
+
+	if len(otlpProfiles) == 0 {
+		return 0, nil
+	}
+
+	// Stream to channel if configured
+	if w.opts.ProfileChan != nil {
+		for _, p := range otlpProfiles {
+			select {
+			case w.opts.ProfileChan <- p:
+			case <-ctx.Done():
+				return 0, ctx.Err()
+			}
+		}
+	}
+
+	// Export via exporter if configured
+	if w.opts.Exporter != nil {
+		if err := w.opts.Exporter.ExportProfiles(ctx, otlpProfiles); err != nil {
+			return 0, fmt.Errorf("failed to export profiles: %w", err)
+		}
+	}
+
+	logger.Debug("Exported profiles directly",
+		zap.Int("profileCount", len(otlpProfiles)),
+		zap.Int("eventCount", len(jfrEvents)),
+	)
+
+	return len(otlpProfiles), nil
+}
+
+// convertProfileEventToJFREvent converts a converter.ProfileEvent to profiles.JFREvent
+func convertProfileEventToJFREvent(evt *converter.ProfileEvent) *profiles.JFREvent {
+	if evt == nil {
+		return nil
+	}
+
+	jfrEvent := &profiles.JFREvent{
+		Type:         evt.EventType,
+		ProfileType:  evt.ProfileType,
+		ThreadName:   evt.ThreadName,
+		ThreadID:     evt.ThreadID,
+		SampleWeight: evt.SampleWeight,
+		DurationNs:   evt.DurationNs,
+		State:        evt.State,
+	}
+
+	// Parse timestamp
+	if t, err := time.Parse(time.RFC3339Nano, evt.Timestamp); err == nil {
+		jfrEvent.StartTime = t
+	} else {
+		jfrEvent.StartTime = time.Now()
+	}
+
+	// Parse stack trace from JSON
+	if evt.StackTrace != "" {
+		var frames []converter.StackFrame
+		if err := parseStackTrace(evt.StackTrace, &frames); err == nil && len(frames) > 0 {
+			jfrEvent.StackFrames = make([]profiles.JFRStackFrame, 0, len(frames))
+			for _, f := range frames {
+				jfrEvent.StackFrames = append(jfrEvent.StackFrames, profiles.JFRStackFrame{
+					Class:  f.Class,
+					Method: f.Method,
+					File:   f.File,
+					Line:   f.Line,
+					BCI:    f.BCI,
+				})
+			}
+		}
+	}
+
+	return jfrEvent
+}
+
+// parseStackTrace parses the JSON stack trace string
+func parseStackTrace(stackJSON string, frames *[]converter.StackFrame) error {
+	if stackJSON == "" {
+		return nil
+	}
+	return json.Unmarshal([]byte(stackJSON), frames)
 }
 
 func (w *Watcher) fileHash(path string) (string, error) {

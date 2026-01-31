@@ -762,6 +762,27 @@ pipelines:
     jfrCommand: jfr
     workers: 2
     prettyJson: false
+    # Direct OTLP export for JFR profiles
+    directExport:
+      enabled: false
+      endpoint: ""  # e.g., "http://otel-collector:4318/v1/profiles"
+      headers: {}
+      compression: gzip
+      timeout: 30s
+      batchSize: 100
+      flushInterval: 10s
+      skipFileOutput: false
+      # OTLP Logs export for JFR events as JSON
+      logExport:
+        enabled: false
+        endpoint: ""  # e.g., "http://otel-collector:4318/v1/logs"
+        headers: {}
+        compression: gzip
+        timeout: 30s
+        batchSize: 100
+        flushInterval: 10s
+        includeStackTrace: true
+        includeRawJson: false
 
 # =============================================================================
 # Remote Write Configuration
