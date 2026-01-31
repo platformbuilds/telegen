@@ -138,6 +138,34 @@ func (p *NativeParser) Parse(jfrPath string) (*ConvertResult, error) {
 	}, nil
 }
 
+// ticksToTimestamp converts JFR event ticks to an absolute timestamp using the chunk header.
+// JFR events store StartTime as ticks relative to the chunk's internal clock, not absolute nanoseconds.
+// The formula is: absoluteNanos = chunkStartNanos + ((eventTicks - chunkStartTicks) * 1e9 / ticksPerSecond)
+func (p *NativeParser) ticksToTimestamp(parser *jfrparser.Parser, eventTicks uint64) string {
+	header := parser.ChunkHeader()
+	if header.TicksPerSecond == 0 {
+		// Fallback: if no tick info, use current time (shouldn't happen with valid JFR)
+		return time.Now().Format(time.RFC3339Nano)
+	}
+
+	// Calculate delta in ticks from chunk start
+	var ticksDelta int64
+	if eventTicks >= header.StartTicks {
+		ticksDelta = int64(eventTicks - header.StartTicks)
+	} else {
+		// Handle wrap-around (unlikely but safe)
+		ticksDelta = -int64(header.StartTicks - eventTicks)
+	}
+
+	// Convert ticks delta to nanoseconds
+	nanosDelta := ticksDelta * int64(time.Second) / int64(header.TicksPerSecond)
+
+	// Add to chunk start time (which is already in nanoseconds since epoch)
+	absoluteNanos := int64(header.StartNanos) + nanosDelta
+
+	return time.Unix(0, absoluteNanos).Format(time.RFC3339Nano)
+}
+
 func (p *NativeParser) convertExecutionSample(parser *jfrparser.Parser) *ProfileEvent {
 	sample := &parser.ExecutionSample
 	evt := p.baseEvent("jdk.ExecutionSample", "cpu")
@@ -151,7 +179,7 @@ func (p *NativeParser) convertExecutionSample(parser *jfrparser.Parser) *Profile
 	// Get stack trace
 	p.resolveStackTrace(parser, sample.StackTrace, evt)
 
-	evt.Timestamp = time.Unix(0, int64(sample.StartTime)).Format(time.RFC3339Nano)
+	evt.Timestamp = p.ticksToTimestamp(parser, sample.StartTime)
 	evt.SampleWeight = 1
 
 	return evt
@@ -164,7 +192,7 @@ func (p *NativeParser) convertWallClockSample(parser *jfrparser.Parser) *Profile
 	// Get stack trace
 	p.resolveStackTrace(parser, sample.StackTrace, evt)
 
-	evt.Timestamp = time.Unix(0, int64(sample.StartTime)).Format(time.RFC3339Nano)
+	evt.Timestamp = p.ticksToTimestamp(parser, sample.StartTime)
 	evt.SampleWeight = int64(sample.Samples)
 
 	return evt
@@ -187,7 +215,7 @@ func (p *NativeParser) convertAllocInNewTLAB(parser *jfrparser.Parser) *ProfileE
 		evt.ObjectClass = parser.GetSymbolString(class.Name)
 	}
 
-	evt.Timestamp = time.Unix(0, int64(sample.StartTime)).Format(time.RFC3339Nano)
+	evt.Timestamp = p.ticksToTimestamp(parser, sample.StartTime)
 	evt.SampleWeight = int64(sample.AllocationSize)
 
 	return evt
@@ -209,7 +237,7 @@ func (p *NativeParser) convertAllocOutsideTLAB(parser *jfrparser.Parser) *Profil
 		evt.ObjectClass = parser.GetSymbolString(class.Name)
 	}
 
-	evt.Timestamp = time.Unix(0, int64(sample.StartTime)).Format(time.RFC3339Nano)
+	evt.Timestamp = p.ticksToTimestamp(parser, sample.StartTime)
 	evt.SampleWeight = int64(sample.AllocationSize)
 
 	return evt
@@ -228,7 +256,7 @@ func (p *NativeParser) convertMonitorEnter(parser *jfrparser.Parser) *ProfileEve
 		evt.MonitorClass = parser.GetSymbolString(class.Name)
 	}
 
-	evt.Timestamp = time.Unix(0, int64(sample.StartTime)).Format(time.RFC3339Nano)
+	evt.Timestamp = p.ticksToTimestamp(parser, sample.StartTime)
 	evt.DurationNs = int64(sample.Duration)
 	evt.SampleWeight = int64(sample.Duration)
 
@@ -248,7 +276,7 @@ func (p *NativeParser) convertThreadPark(parser *jfrparser.Parser) *ProfileEvent
 		evt.MonitorClass = parser.GetSymbolString(class.Name)
 	}
 
-	evt.Timestamp = time.Unix(0, int64(sample.StartTime)).Format(time.RFC3339Nano)
+	evt.Timestamp = p.ticksToTimestamp(parser, sample.StartTime)
 	evt.DurationNs = int64(sample.Duration)
 	evt.SampleWeight = int64(sample.Duration)
 

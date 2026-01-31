@@ -523,9 +523,9 @@ pipelines:
     jfr_command: jfr
     workers: 2
     pretty_json: false
-    # Direct OTLP export for JFR profiles
+    # Direct OTLP export for JFR profiles (experimental - requires profiles-capable collector)
     direct_export:
-      enabled: true
+      enabled: false  # Disabled - use log_export instead for standard OTel Collector
       endpoint: "http://127.0.0.1:4318/v1/profiles"  # e.g., "http://127.0.0.1:4318/v1/profiles"
       headers: {}
       compression: gzip
