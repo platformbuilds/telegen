@@ -554,7 +554,7 @@ pipelines:
         headers: {}
         compression: gzip
         timeout: 30s
-        batch_size: 100
+        batch_size: 10
         flush_interval: 10s
         include_stack_trace: true
         include_raw_json: false
