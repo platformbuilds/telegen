@@ -554,6 +554,25 @@ pipelines:
     jfr_command: {{ .Values.pipelines.jfr.jfrCommand | default "jfr" }}
     workers: {{ .Values.pipelines.jfr.workers | default 2 }}
     pretty_json: {{ .Values.pipelines.jfr.prettyJson | default false }}
+    direct_export:
+      enabled: {{ .Values.pipelines.jfr.directExport.enabled | default false }}
+      endpoint: {{ .Values.pipelines.jfr.directExport.endpoint | default "" | quote }}
+      headers: {{ .Values.pipelines.jfr.directExport.headers | default dict | toJson }}
+      compression: {{ .Values.pipelines.jfr.directExport.compression | default "gzip" }}
+      timeout: {{ .Values.pipelines.jfr.directExport.timeout | default "30s" }}
+      batch_size: {{ .Values.pipelines.jfr.directExport.batchSize | default 100 }}
+      flush_interval: {{ .Values.pipelines.jfr.directExport.flushInterval | default "10s" }}
+      skip_file_output: {{ .Values.pipelines.jfr.directExport.skipFileOutput | default false }}
+      log_export:
+        enabled: {{ .Values.pipelines.jfr.directExport.logExport.enabled | default false }}
+        endpoint: {{ .Values.pipelines.jfr.directExport.logExport.endpoint | default "" | quote }}
+        headers: {{ .Values.pipelines.jfr.directExport.logExport.headers | default dict | toJson }}
+        compression: {{ .Values.pipelines.jfr.directExport.logExport.compression | default "gzip" }}
+        timeout: {{ .Values.pipelines.jfr.directExport.logExport.timeout | default "30s" }}
+        batch_size: {{ .Values.pipelines.jfr.directExport.logExport.batchSize | default 100 }}
+        flush_interval: {{ .Values.pipelines.jfr.directExport.logExport.flushInterval | default "10s" }}
+        include_stack_trace: {{ .Values.pipelines.jfr.directExport.logExport.includeStackTrace | default true }}
+        include_raw_json: {{ .Values.pipelines.jfr.directExport.logExport.includeRawJson | default false }}
 
 # -----------------------------------------------------------------------------
 # Export Configuration

@@ -2,7 +2,9 @@ package pipeline
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"time"
 
@@ -228,17 +230,50 @@ func (p *Pipeline) startJFRPipeline(ctx context.Context) {
 		Logger:           zapLogger,
 	})
 
-	// Create watcher
-	w := watcher.New(watcher.Options{
+	// Build watcher options
+	watcherOpts := watcher.Options{
 		InputDir:     inputDir,
 		OutputDir:    outputDir,
 		PollInterval: jfrCfg.PollIntervalDuration(),
 		Workers:      workers,
 		Converter:    conv,
 		Logger:       zapLogger,
-	})
+	}
 
-	log.Printf("jfr: starting pipeline (input=%s, output=%s, workers=%d)", inputDir, outputDir, workers)
+	// Configure direct export if enabled
+	if jfrCfg.DirectExport.Enabled {
+		watcherOpts.DirectExport = true
+		watcherOpts.SkipFileOutput = jfrCfg.DirectExport.SkipFileOutput
+
+		// Create profile exporter for direct OTLP export
+		if jfrCfg.DirectExport.Endpoint != "" {
+			profileExporter, err := p.createJFRProfileExporter(jfrCfg.DirectExport, zapLogger)
+			if err != nil {
+				log.Printf("jfr: failed to create profile exporter: %v", err)
+			} else {
+				watcherOpts.Exporter = profileExporter
+				log.Printf("jfr: direct OTLP export enabled (endpoint=%s)", jfrCfg.DirectExport.Endpoint)
+			}
+		}
+
+		// Configure log export if enabled
+		if jfrCfg.DirectExport.LogExport.Enabled {
+			logExporter, err := p.createJFRLogExporter(jfrCfg.DirectExport.LogExport, podName, namespace, containerName, nodeName, zapLogger)
+			if err != nil {
+				log.Printf("jfr: failed to create log exporter: %v", err)
+			} else {
+				watcherOpts.LogExportEnabled = true
+				watcherOpts.LogExporter = logExporter
+				log.Printf("jfr: OTLP log export enabled (endpoint=%s)", jfrCfg.DirectExport.LogExport.Endpoint)
+			}
+		}
+	}
+
+	// Create watcher
+	w := watcher.New(watcherOpts)
+
+	log.Printf("jfr: starting pipeline (input=%s, output=%s, workers=%d, directExport=%v, logExport=%v)",
+		inputDir, outputDir, workers, jfrCfg.DirectExport.Enabled, jfrCfg.DirectExport.LogExport.Enabled)
 
 	// Run watcher in background
 	go func() {
@@ -246,6 +281,82 @@ func (p *Pipeline) startJFRPipeline(ctx context.Context) {
 			log.Printf("jfr: watcher error: %v", err)
 		}
 	}()
+}
+
+// createJFRProfileExporter creates an OTLP profile exporter for JFR
+func (p *Pipeline) createJFRProfileExporter(cfg config.DirectExportConfig, zapLogger *zap.Logger) (watcher.ProfileExporter, error) {
+	slogger := slogFromZap(zapLogger)
+
+	// Create the base OTLP exporter
+	exporterCfg := otlp.Config{
+		Endpoint: cfg.Endpoint,
+		Headers:  cfg.Headers,
+		Timeout:  cfg.TimeoutDuration(),
+		Profiles: otlp.SignalConfig{
+			Enabled: true,
+		},
+	}
+
+	if cfg.Compression == "gzip" {
+		exporterCfg.Compression = "gzip"
+	}
+
+	exporter, err := otlp.NewExporter(exporterCfg, slogger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create OTLP exporter: %w", err)
+	}
+
+	// Create the profile exporter wrapper
+	profileCfg := otlp.DefaultProfileExporterConfig()
+	if cfg.BatchSize > 0 {
+		profileCfg.BatchSize = cfg.BatchSize
+	}
+	profileCfg.FlushInterval = cfg.FlushIntervalDuration()
+
+	return otlp.NewProfileExporter(exporter, profileCfg, slogger), nil
+}
+
+// createJFRLogExporter creates an OTLP log exporter for JFR events
+func (p *Pipeline) createJFRLogExporter(cfg config.LogExportConfig, podName, namespace, containerName, nodeName string, zapLogger *zap.Logger) (watcher.LogExporter, error) {
+	slogger := slogFromZap(zapLogger)
+
+	// Determine endpoint
+	endpoint := cfg.Endpoint
+	if endpoint == "" {
+		endpoint = "http://localhost:4318/v1/logs"
+	}
+
+	// Build exporter config
+	exporterCfg := converter.OTLPLogExporterConfig{
+		Endpoint:          endpoint,
+		Headers:           cfg.Headers,
+		Compression:       cfg.Compression,
+		Timeout:           cfg.TimeoutDuration(),
+		BatchSize:         cfg.BatchSize,
+		FlushInterval:     cfg.FlushIntervalDuration(),
+		IncludeStackTrace: cfg.IncludeStackTrace,
+		IncludeRawJSON:    cfg.IncludeRawJSON,
+		ServiceName:       p.cfg.Agent.ServiceName,
+		Namespace:         namespace,
+		PodName:           podName,
+		ContainerName:     containerName,
+		NodeName:          nodeName,
+	}
+
+	// Set defaults
+	if exporterCfg.BatchSize <= 0 {
+		exporterCfg.BatchSize = 100
+	}
+	if exporterCfg.Compression == "" {
+		exporterCfg.Compression = "gzip"
+	}
+
+	return converter.NewOTLPLogExporter(exporterCfg, slogger)
+}
+
+// slogFromZap creates a basic slog.Logger (adapter pattern)
+func slogFromZap(zapLogger *zap.Logger) *slog.Logger {
+	return slog.Default()
 }
 
 func (p *Pipeline) Close() { close(p.stop) }

@@ -116,6 +116,102 @@ type JFRConfig struct {
 	JFRCommand       string `yaml:"jfr_command"`
 	Workers          int    `yaml:"workers"`
 	PrettyJSON       bool   `yaml:"pretty_json"`
+	// Direct OTLP export configuration
+	DirectExport DirectExportConfig `yaml:"direct_export"`
+}
+
+// DirectExportConfig holds configuration for direct OTLP profile export
+type DirectExportConfig struct {
+	// Enabled enables streaming profiles directly to OTLP endpoint
+	Enabled bool `yaml:"enabled"`
+	// Endpoint is the OTLP profiles endpoint (e.g., http://localhost:4318/v1/profiles)
+	Endpoint string `yaml:"endpoint"`
+	// Headers to include in OTLP requests
+	Headers map[string]string `yaml:"headers"`
+	// Compression type (gzip, none)
+	Compression string `yaml:"compression"`
+	// Timeout for OTLP requests
+	Timeout string `yaml:"timeout"`
+	// BatchSize is the number of profiles to batch before sending
+	BatchSize int `yaml:"batch_size"`
+	// FlushInterval is how often to flush profiles even if batch is not full
+	FlushInterval string `yaml:"flush_interval"`
+	// SkipFileOutput skips writing JSON files when direct export is enabled
+	SkipFileOutput bool `yaml:"skip_file_output"`
+
+	// LogExport configures exporting JFR data as OTLP Logs
+	LogExport LogExportConfig `yaml:"log_export"`
+}
+
+// LogExportConfig holds configuration for exporting JFR data as OTLP Logs
+type LogExportConfig struct {
+	// Enabled enables exporting JFR profile data as OTLP Logs
+	Enabled bool `yaml:"enabled"`
+	// Endpoint is the OTLP logs endpoint (e.g., http://localhost:4318/v1/logs)
+	// If empty, uses the main OTLP endpoint with /v1/logs path
+	Endpoint string `yaml:"endpoint"`
+	// Headers to include in OTLP log requests
+	Headers map[string]string `yaml:"headers"`
+	// Compression type (gzip, none)
+	Compression string `yaml:"compression"`
+	// Timeout for OTLP log requests
+	Timeout string `yaml:"timeout"`
+	// BatchSize is the number of log records to batch before sending
+	BatchSize int `yaml:"batch_size"`
+	// FlushInterval is how often to flush logs even if batch is not full
+	FlushInterval string `yaml:"flush_interval"`
+	// IncludeStackTrace includes full stack trace in log body
+	IncludeStackTrace bool `yaml:"include_stack_trace"`
+	// IncludeRawJSON includes the full JSON representation in log body
+	IncludeRawJSON bool `yaml:"include_raw_json"`
+}
+
+// TimeoutDuration returns the log export timeout as a time.Duration
+func (l LogExportConfig) TimeoutDuration() time.Duration {
+	if l.Timeout == "" {
+		return 30 * time.Second
+	}
+	dur, err := time.ParseDuration(l.Timeout)
+	if err != nil {
+		return 30 * time.Second
+	}
+	return dur
+}
+
+// FlushIntervalDuration returns the log export flush interval as a time.Duration
+func (l LogExportConfig) FlushIntervalDuration() time.Duration {
+	if l.FlushInterval == "" {
+		return 10 * time.Second
+	}
+	dur, err := time.ParseDuration(l.FlushInterval)
+	if err != nil {
+		return 10 * time.Second
+	}
+	return dur
+}
+
+// TimeoutDuration returns the timeout as a time.Duration
+func (d DirectExportConfig) TimeoutDuration() time.Duration {
+	if d.Timeout == "" {
+		return 30 * time.Second
+	}
+	dur, err := time.ParseDuration(d.Timeout)
+	if err != nil {
+		return 30 * time.Second
+	}
+	return dur
+}
+
+// FlushIntervalDuration returns the flush interval as a time.Duration
+func (d DirectExportConfig) FlushIntervalDuration() time.Duration {
+	if d.FlushInterval == "" {
+		return 10 * time.Second
+	}
+	dur, err := time.ParseDuration(d.FlushInterval)
+	if err != nil {
+		return 10 * time.Second
+	}
+	return dur
 }
 
 // PollIntervalDuration returns the poll interval as a time.Duration
