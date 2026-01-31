@@ -11,7 +11,7 @@ agent:
   service_name: "telegen"
   instance_id: "${HOSTNAME}"
   mode: agent
-  log_level: INFO
+  log_level: DEBUG
   log_format: json
   log_config: ""
   shutdown_timeout: 10s
@@ -504,8 +504,14 @@ pipelines:
       position_file: /var/lib/telegen/positions.json
       poll_interval: 500ms
   jfr:
-    enabled: false
-    input_dir: /home/vboxuser/miradorstack-playground/appserver/jfr-recordings
+    enabled: true
+    # Directories to watch for JFR files
+    input_dirs:
+      - /home/vboxuser/miradorstack-playground/appserver/jfr-recordings
+      # - /opt/app/jfr-data
+      # - /var/log/java/jfr
+    # Watch subdirectories recursively (default: true)
+    recursive: true
     output_dir: /home/vboxuser/miradorstack-playground/appserver/jfr-json
     poll_interval: 5s
     sample_interval_ms: 10
@@ -524,12 +530,26 @@ pipelines:
       headers: {}
       compression: gzip
       timeout: 30s
-      batch_size: 100
+      batch_size: 5
       flush_interval: 10s
       skip_file_output: false
       # OTLP Logs export for JFR events as JSON
       log_export:
-        enabled: false
+        enabled: true
+        
+        # Output destinations (can enable multiple simultaneously)
+        # 1. STDOUT - print JFR logs to console
+        stdout_enabled: false
+        stdout_format: json  # json or text
+        
+        # 2. DISK - write JFR logs to file
+        disk_enabled: false
+        disk_path: /var/log/telegen/jfr-logs.json
+        disk_rotate_size: 100MB  # max file size before rotation
+        disk_max_files: 5        # number of rotated files to keep
+        
+        # 3. OTLP - ship to OpenTelemetry Collector (default)
+        otlp_enabled: true
         endpoint: "http://127.0.0.1:4318/v1/logs"  # e.g., "http://127.0.0.1:4318/v1/logs"
         headers: {}
         compression: gzip

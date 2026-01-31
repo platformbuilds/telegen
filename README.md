@@ -46,7 +46,9 @@ The JFR pipeline watches for Java Flight Recorder files and converts them to JSO
 pipelines:
   jfr:
     enabled: true
-    input_dir: "/var/log/jfr"       # Directory to watch for .jfr files
+    input_dirs:                      # Directories to watch for .jfr files
+      - "/var/log/jfr"
+    recursive: true                  # Scan subdirectories (default: true)
     output_dir: "/var/log/jfr-json" # Where to write converted JSON files
     poll_interval: "5s"              # How often to scan for new files
     workers: 2                       # Number of parallel conversion workers
