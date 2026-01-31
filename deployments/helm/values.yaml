@@ -33,6 +33,27 @@ otlp:
     endpoint: ""
 
 # =============================================================================
+# Signal Metadata Configuration
+# =============================================================================
+# Controls which telegen.* metadata attributes are exported with signals.
+# Disable fields to reduce storage costs on observability platforms.
+signalMetadata:
+  enabled: true
+  fields:
+    # Top-level category (e.g., "Host Metrics", "Database Traces")
+    category: true
+    # Sub-category (e.g., "CPU Utilization", "PostgreSQL")
+    subcategory: true
+    # Go source module path
+    sourceModule: true
+    # eBPF component file path
+    bpfComponent: true
+    # Human-readable description (verbose, disabled by default)
+    description: false
+    # Collector type (ebpf, jfr, snmp, api, procfs, nvml)
+    collectorType: true
+
+# =============================================================================
 # Image Configuration
 # =============================================================================
 image:
