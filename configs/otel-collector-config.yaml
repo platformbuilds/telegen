@@ -1,0 +1,247 @@
+# =============================================================================
+# OTel Collector Configuration for Telegen
+# =============================================================================
+# This configuration file sets up an OpenTelemetry Collector to receive
+# telemetry signals from Telegen and export them to various backends.
+#
+# Usage:
+#   otelcol-contrib --config otel-collector-config.yaml
+#
+# Telegen exports:
+#   - Traces via OTLP gRPC (port 4317) or HTTP (port 4318)
+#   - Logs via OTLP gRPC (port 4317) or HTTP (port 4318)
+#   - Metrics via OTLP gRPC (port 4317) or Prometheus Remote Write (port 19291)
+# =============================================================================
+
+receivers:
+  # OTLP receiver for traces, metrics, and logs from Telegen
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+
+  # Prometheus Remote Write receiver for metrics from Telegen
+  # Telegen can send metrics via Remote Write with signal metadata labels
+  prometheusremotewrite:
+    endpoint: "0.0.0.0:19291"
+
+processors:
+  # Batch processor for better throughput
+  batch:
+    send_batch_size: 1000
+    send_batch_max_size: 1500
+    timeout: 10s
+
+  # Memory limiter to prevent OOM
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 1024
+    spike_limit_mib: 256
+
+  # Resource detection for additional metadata
+  resourcedetection:
+    detectors:
+      - env
+      - system
+      - docker
+    system:
+      hostname_sources: ["os", "dns"]
+    timeout: 5s
+    override: false
+
+  # Attributes processor to normalize Telegen metadata
+  # This ensures telegen.* attributes are properly indexed
+  attributes/telegen:
+    actions:
+      # Ensure signal metadata is included in resource attributes
+      - key: telegen.signal.category
+        action: upsert
+        from_attribute: telegen.signal.category
+      - key: telegen.signal.subcategory
+        action: upsert
+        from_attribute: telegen.signal.subcategory
+      - key: telegen.source.module
+        action: upsert
+        from_attribute: telegen.source.module
+      - key: telegen.bpf.component
+        action: upsert
+        from_attribute: telegen.bpf.component
+      - key: telegen.collector.type
+        action: upsert
+        from_attribute: telegen.collector.type
+
+  # Transform processor to add computed attributes
+  transform:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          # Add signal type attribute for traces
+          - set(attributes["telegen.signal.type"], "traces")
+    log_statements:
+      - context: log
+        statements:
+          # Add signal type attribute for logs
+          - set(attributes["telegen.signal.type"], "logs")
+    metric_statements:
+      - context: datapoint
+        statements:
+          # Add signal type attribute for metrics
+          - set(attributes["telegen.signal.type"], "metrics")
+
+exporters:
+  # Debug exporter for development
+  debug:
+    verbosity: detailed
+
+  # OTLP exporter to downstream collectors or backends
+  otlp:
+    endpoint: "downstream-collector:4317"
+    tls:
+      insecure: true
+    headers:
+      X-Telegen-Source: "true"
+
+  # Prometheus exporter for Prometheus scraping
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: "telegen"
+    resource_to_telemetry_conversion:
+      enabled: true
+    enable_open_metrics: true
+
+  # Prometheus Remote Write for Grafana Cloud, Thanos, Cortex, etc.
+  prometheusremotewrite:
+    endpoint: "${PROMETHEUS_REMOTE_WRITE_ENDPOINT}"
+    tls:
+      insecure: true
+    headers:
+      Authorization: "Bearer ${PROMETHEUS_REMOTE_WRITE_TOKEN}"
+    resource_to_telemetry_conversion:
+      enabled: true
+    # Include all Telegen metadata labels
+    external_labels:
+      collector: "otel-collector"
+
+  # Loki exporter for logs
+  loki:
+    endpoint: "${LOKI_ENDPOINT}"
+    tls:
+      insecure: true
+    headers:
+      X-Scope-OrgID: "${LOKI_TENANT_ID}"
+    # Include Telegen metadata as labels
+    labels:
+      resource:
+        telegen.signal.category: ""
+        telegen.signal.subcategory: ""
+        telegen.source.module: ""
+        telegen.collector.type: ""
+        service.name: ""
+        k8s.namespace.name: ""
+        k8s.pod.name: ""
+
+  # Tempo exporter for traces
+  otlp/tempo:
+    endpoint: "${TEMPO_ENDPOINT}"
+    tls:
+      insecure: true
+    headers:
+      X-Scope-OrgID: "${TEMPO_TENANT_ID}"
+
+  # Jaeger exporter for traces
+  otlp/jaeger:
+    endpoint: "${JAEGER_ENDPOINT}"
+    tls:
+      insecure: true
+
+extensions:
+  # Health check extension
+  health_check:
+    endpoint: "0.0.0.0:13133"
+    path: "/health"
+    check_collector_pipeline:
+      enabled: true
+      interval: "5s"
+      exporter_failure_threshold: 5
+
+  # pprof extension for profiling
+  pprof:
+    endpoint: "0.0.0.0:1777"
+
+  # zpages extension for debugging
+  zpages:
+    endpoint: "0.0.0.0:55679"
+
+service:
+  extensions:
+    - health_check
+    - pprof
+    - zpages
+
+  pipelines:
+    # Traces pipeline
+    traces:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resourcedetection
+        - attributes/telegen
+        - transform
+        - batch
+      exporters:
+        - debug
+        # - otlp/tempo
+        # - otlp/jaeger
+
+    # Metrics pipeline from OTLP
+    metrics:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resourcedetection
+        - attributes/telegen
+        - transform
+        - batch
+      exporters:
+        - debug
+        - prometheus
+        # - prometheusremotewrite
+
+    # Metrics pipeline from Prometheus Remote Write
+    metrics/remotewrite:
+      receivers:
+        - prometheusremotewrite
+      processors:
+        - memory_limiter
+        - batch
+      exporters:
+        - debug
+        - prometheus
+        # - prometheusremotewrite
+
+    # Logs pipeline
+    logs:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resourcedetection
+        - attributes/telegen
+        - transform
+        - batch
+      exporters:
+        - debug
+        # - loki
+
+  telemetry:
+    logs:
+      level: info
+      development: false
+    metrics:
+      level: detailed
+      address: "0.0.0.0:8888"

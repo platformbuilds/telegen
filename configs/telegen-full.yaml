@@ -765,9 +765,35 @@ pipelines:
     output_dir: /var/log/jfr-json
     poll_interval: 5s
     sample_interval_ms: 10
+    # Use native Go JFR parser (no JDK dependency required)
+    # Set to true to use built-in parser, false to use external jfr command
+    use_native_parser: true
+    # Path to jfr command (JDK 11+). Only used if use_native_parser is false.
+    # Examples: /usr/lib/jvm/java-17-openjdk-amd64/bin/jfr, /usr/lib/jvm/java-21-amazon-corretto/bin/jfr
     jfr_command: jfr
     workers: 2
     pretty_json: false
+    # Direct OTLP export for JFR profiles
+    direct_export:
+      enabled: false
+      endpoint: ""  # e.g., "http://otel-collector:4318/v1/profiles"
+      headers: {}
+      compression: gzip
+      timeout: 30s
+      batch_size: 100
+      flush_interval: 10s
+      skip_file_output: false
+      # OTLP Logs export for JFR events as JSON
+      log_export:
+        enabled: false
+        endpoint: ""  # e.g., "http://otel-collector:4318/v1/logs"
+        headers: {}
+        compression: gzip
+        timeout: 30s
+        batch_size: 100
+        flush_interval: 10s
+        include_stack_trace: true
+        include_raw_json: false
 
 # -----------------------------------------------------------------------------
 # Export Configuration

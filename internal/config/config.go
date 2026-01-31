@@ -113,9 +113,12 @@ type JFRConfig struct {
 	OutputDir        string `yaml:"output_dir"`
 	PollInterval     string `yaml:"poll_interval"`
 	SampleIntervalMs int    `yaml:"sample_interval_ms"`
-	JFRCommand       string `yaml:"jfr_command"`
-	Workers          int    `yaml:"workers"`
-	PrettyJSON       bool   `yaml:"pretty_json"`
+	// UseNativeParser uses the built-in Go JFR parser instead of external jfr command.
+	// This eliminates the JDK dependency. Default: true
+	UseNativeParser bool   `yaml:"use_native_parser"`
+	JFRCommand      string `yaml:"jfr_command"`
+	Workers         int    `yaml:"workers"`
+	PrettyJSON      bool   `yaml:"pretty_json"`
 	// Direct OTLP export configuration
 	DirectExport DirectExportConfig `yaml:"direct_export"`
 }

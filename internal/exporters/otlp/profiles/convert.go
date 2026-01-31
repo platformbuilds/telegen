@@ -467,16 +467,16 @@ func (c *PprofConverter) Convert(pprofData []byte, profileType ProfileType) (*Pr
 
 // ConvertJFRToOTLP converts JFR format to OTLP.
 type JFRConverter struct {
-	builder      *OTLPProfileBuilder
-	stringTable  map[string]int64
-	functionMap  map[string]uint64
-	locationMap  map[string]uint64
-	nextFuncID   uint64
-	nextLocID    uint64
-	serviceName  string
-	podName      string
-	namespace    string
-	nodeName     string
+	builder     *OTLPProfileBuilder
+	stringTable map[string]int64
+	functionMap map[string]uint64
+	locationMap map[string]uint64
+	nextFuncID  uint64
+	nextLocID   uint64
+	serviceName string
+	podName     string
+	namespace   string
+	nodeName    string
 }
 
 // JFRConverterOptions holds options for JFR conversion.

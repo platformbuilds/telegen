@@ -24,21 +24,47 @@ backoff:
   multiplier: 2.0
   jitter: 0.2
 
+# =============================================================================
+# Export Configuration - OTel Collector Compatible
+# =============================================================================
+# All signals include telegen.* metadata attributes for indexing:
+#   - telegen.signal.category
+#   - telegen.signal.subcategory
+#   - telegen.source.module
+#   - telegen.bpf.component
+#   - telegen.signal.description
+#   - telegen.collector.type
+# =============================================================================
+
 exports:
+  # Include signal metadata in all exports for indexing
+  include_signal_metadata: true
+  
+  # Prometheus Remote Write - compatible with OTel Collector prometheusremotewritereceiver
   remoteWrite:
     mode: "active"
+    # OTel Collector prometheusremotewritereceiver endpoint
+    endpoints:
+      - url: "http://otel-collector:19291/api/v1/push"
+        timeout: "30s"
+        headers: {}
+        tenant: ""
+        # snappy is standard for Prometheus Remote Write
+        compression: "snappy"
     tls:
       enable: false
       ca_file: ""
       cert_file: ""
       key_file: ""
       insecure_skip_verify: false
-    endpoints:
-      - url: "http://localhost:9009/api/v1/push"
-        timeout: "5s"
-        headers: {}
-        tenant: ""
-        compression: "gzip"
+    batch:
+      size: 1000
+      flush_interval: "15s"
+    retry:
+      max_retries: 3
+      backoff: "1s"
+
+  # OTLP export - compatible with OTel Collector otlpreceiver
   otlp:
     send_mode: "failover"
     tls:
@@ -47,21 +73,24 @@ exports:
       cert_file: ""
       key_file: ""
       insecure_skip_verify: false
+    # gRPC endpoint for traces, metrics, and logs
     grpc:
-      enabled: false
+      enabled: true
       endpoint: "otel-collector:4317"
       headers: {}
       insecure: true
-      gzip: true
-      timeout: "5s"
+      compression: "gzip"
+      timeout: "30s"
+    # HTTP endpoint (alternative to gRPC)
     http:
-      enabled: true
-      endpoint: "localhost:4318"
+      enabled: false
+      endpoint: "otel-collector:4318"
       traces_path: "/v1/traces"
       logs_path: "/v1/logs"
+      metrics_path: "/v1/metrics"
       headers: {}
-      gzip: true
-      timeout: "5s"
+      compression: "gzip"
+      timeout: "30s"
 
 pipelines:
   metrics:

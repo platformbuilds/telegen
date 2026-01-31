@@ -24,15 +24,18 @@ type Options struct {
 	ContainerName    string
 	NodeName         string
 	SampleIntervalMs int
-	JFRCommand       string
+	JFRCommand       string // Path to jfr command. If empty or "native", uses built-in Go parser
 	PrettyJSON       bool
+	UseNativeParser  bool // Use native Go parser instead of jfr command (default: true)
 	Logger           *zap.Logger
 }
 
 // Converter converts JFR files to JSON
 type Converter struct {
-	opts   Options
-	logger *zap.Logger
+	opts         Options
+	logger       *zap.Logger
+	nativeParser *NativeParser
+	useNative    bool
 }
 
 // New creates a new Converter
@@ -40,16 +43,45 @@ func New(opts Options) *Converter {
 	if opts.SampleIntervalMs <= 0 {
 		opts.SampleIntervalMs = 10
 	}
-	if opts.JFRCommand == "" {
-		opts.JFRCommand = "jfr"
-	}
 	if opts.Logger == nil {
 		opts.Logger, _ = zap.NewProduction()
 	}
-	return &Converter{
-		opts:   opts,
-		logger: opts.Logger,
+
+	// Determine if we should use native parser
+	// Use native by default unless explicitly disabled or jfr command is specified
+	useNative := opts.UseNativeParser || opts.JFRCommand == "" || opts.JFRCommand == "native" || opts.JFRCommand == "jfr"
+
+	// If jfr command is explicitly set to a path, use external parser
+	if opts.JFRCommand != "" && opts.JFRCommand != "native" && opts.JFRCommand != "jfr" {
+		// Check if it's a valid path
+		if _, err := os.Stat(opts.JFRCommand); err == nil {
+			useNative = false
+		}
 	}
+
+	// Force native if jfr command not found
+	if !useNative && opts.JFRCommand != "" {
+		if _, err := exec.LookPath(opts.JFRCommand); err != nil {
+			opts.Logger.Info("jfr command not found, falling back to native parser",
+				zap.String("jfr_command", opts.JFRCommand))
+			useNative = true
+		}
+	}
+
+	c := &Converter{
+		opts:      opts,
+		logger:    opts.Logger,
+		useNative: useNative,
+	}
+
+	if useNative {
+		c.nativeParser = NewNativeParser(opts)
+		opts.Logger.Info("Using native Go JFR parser (no external jfr command required)")
+	} else {
+		opts.Logger.Info("Using external jfr command", zap.String("command", opts.JFRCommand))
+	}
+
+	return c
 }
 
 // ServiceName returns the configured service name
@@ -180,9 +212,20 @@ type ConvertResult struct {
 
 // Convert converts a JFR file to JSON profile events
 func (c *Converter) Convert(ctx context.Context, jfrPath string) (*ConvertResult, error) {
+	// Use native parser if enabled
+	if c.useNative && c.nativeParser != nil {
+		return c.nativeParser.Parse(jfrPath)
+	}
+
+	// Fall back to external jfr command
+	return c.convertWithExternalCommand(ctx, jfrPath)
+}
+
+// convertWithExternalCommand uses the external jfr command to parse JFR files
+func (c *Converter) convertWithExternalCommand(ctx context.Context, jfrPath string) (*ConvertResult, error) {
 	start := time.Now()
 
-	c.logger.Debug("Converting JFR file", zap.String("path", jfrPath))
+	c.logger.Debug("Converting JFR file with external command", zap.String("path", jfrPath))
 
 	// Run jfr print --json
 	rawJSON, err := c.runJFRCommand(ctx, jfrPath)
@@ -287,15 +330,9 @@ func (c *Converter) WriteJSON(events []*ProfileEvent, outputPath string) error {
 
 func (c *Converter) runJFRCommand(ctx context.Context, jfrPath string) ([]byte, error) {
 	// Find jfr command
-	jfrCmd := c.opts.JFRCommand
-	if jfrCmd == "jfr" {
-		// Try to find in JAVA_HOME
-		if javaHome := os.Getenv("JAVA_HOME"); javaHome != "" {
-			candidate := filepath.Join(javaHome, "bin", "jfr")
-			if _, err := os.Stat(candidate); err == nil {
-				jfrCmd = candidate
-			}
-		}
+	jfrCmd, err := c.findJFRCommand()
+	if err != nil {
+		return nil, err
 	}
 
 	cmd := exec.CommandContext(ctx, jfrCmd, "print", "--json", jfrPath)
@@ -309,6 +346,89 @@ func (c *Converter) runJFRCommand(ctx context.Context, jfrPath string) ([]byte, 
 	}
 
 	return stdout.Bytes(), nil
+}
+
+// findJFRCommand locates the jfr executable
+func (c *Converter) findJFRCommand() (string, error) {
+	// If custom command is specified, use it directly
+	if c.opts.JFRCommand != "" && c.opts.JFRCommand != "jfr" {
+		if _, err := os.Stat(c.opts.JFRCommand); err == nil {
+			return c.opts.JFRCommand, nil
+		}
+		// Try to find in PATH
+		if path, err := exec.LookPath(c.opts.JFRCommand); err == nil {
+			return path, nil
+		}
+		return "", fmt.Errorf("configured jfr_command '%s' not found", c.opts.JFRCommand)
+	}
+
+	// Try PATH first
+	if path, err := exec.LookPath("jfr"); err == nil {
+		return path, nil
+	}
+
+	// Try JAVA_HOME/bin/jfr
+	if javaHome := os.Getenv("JAVA_HOME"); javaHome != "" {
+		candidate := filepath.Join(javaHome, "bin", "jfr")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+
+	// Try common JDK installation paths
+	commonPaths := []string{
+		// Linux paths
+		"/usr/lib/jvm/java-17-openjdk/bin/jfr",
+		"/usr/lib/jvm/java-17-openjdk-amd64/bin/jfr",
+		"/usr/lib/jvm/java-21-openjdk/bin/jfr",
+		"/usr/lib/jvm/java-21-openjdk-amd64/bin/jfr",
+		"/usr/lib/jvm/default-java/bin/jfr",
+		"/usr/lib/jvm/java/bin/jfr",
+		// Alpine/musl
+		"/usr/lib/jvm/java-17-openjdk/bin/jfr",
+		// Amazon Linux / RHEL
+		"/usr/lib/jvm/java-17-amazon-corretto/bin/jfr",
+		"/usr/lib/jvm/java-21-amazon-corretto/bin/jfr",
+		// macOS paths
+		"/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home/bin/jfr",
+		"/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home/bin/jfr",
+		"/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home/bin/jfr",
+		"/Library/Java/JavaVirtualMachines/zulu-21.jdk/Contents/Home/bin/jfr",
+	}
+
+	for _, path := range commonPaths {
+		if _, err := os.Stat(path); err == nil {
+			c.logger.Info("Found jfr command", zap.String("path", path))
+			return path, nil
+		}
+	}
+
+	// Try to find any jfr in /usr/lib/jvm
+	jvmDirs := []string{"/usr/lib/jvm", "/Library/Java/JavaVirtualMachines"}
+	for _, jvmDir := range jvmDirs {
+		if entries, err := os.ReadDir(jvmDir); err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					candidate := filepath.Join(jvmDir, entry.Name(), "bin", "jfr")
+					if _, err := os.Stat(candidate); err == nil {
+						c.logger.Info("Found jfr command", zap.String("path", candidate))
+						return candidate, nil
+					}
+					// macOS structure
+					candidate = filepath.Join(jvmDir, entry.Name(), "Contents", "Home", "bin", "jfr")
+					if _, err := os.Stat(candidate); err == nil {
+						c.logger.Info("Found jfr command", zap.String("path", candidate))
+						return candidate, nil
+					}
+				}
+			}
+		}
+	}
+
+	return "", fmt.Errorf("jfr command not found. Please ensure JDK 11+ is installed and either: " +
+		"1) Add JAVA_HOME/bin to PATH, " +
+		"2) Set JAVA_HOME environment variable, or " +
+		"3) Configure 'jfr_command' in pipelines.jfr config with the full path to jfr executable")
 }
 
 func (c *Converter) isProfileEvent(eventType string) bool {
