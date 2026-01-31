@@ -160,6 +160,33 @@ func (e *OTLPLogExporter) flush(ctx context.Context, events []*ProfileEvent) err
 		return nil
 	}
 
+	// Split into smaller batches to avoid request body too large errors
+	batchSize := e.config.BatchSize
+	if batchSize <= 0 {
+		batchSize = 10 // Default to 10 events per batch
+	}
+
+	for i := 0; i < len(events); i += batchSize {
+		end := i + batchSize
+		if end > len(events) {
+			end = len(events)
+		}
+		chunk := events[i:end]
+
+		if err := e.flushChunk(ctx, chunk); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// flushChunk exports a single chunk of profile events as OTLP logs
+func (e *OTLPLogExporter) flushChunk(ctx context.Context, events []*ProfileEvent) error {
+	if len(events) == 0 {
+		return nil
+	}
+
 	e.log.Debug("exporting JFR events as OTLP logs", "count", len(events))
 
 	// Convert to OTLP Logs format
