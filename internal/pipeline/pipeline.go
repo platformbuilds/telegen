@@ -6,6 +6,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/platformbuilds/telegen/internal/config"
@@ -295,9 +296,16 @@ func (p *Pipeline) startJFRPipeline(ctx context.Context) {
 func (p *Pipeline) createJFRProfileExporter(cfg config.DirectExportConfig, zapLogger *zap.Logger) (watcher.ProfileExporter, error) {
 	slogger := slogFromZap(zapLogger)
 
+	// Determine protocol from endpoint URL
+	protocol := otlp.ProtocolGRPC
+	if strings.HasPrefix(cfg.Endpoint, "http://") || strings.HasPrefix(cfg.Endpoint, "https://") {
+		protocol = otlp.ProtocolHTTPProtobuf
+	}
+
 	// Create the base OTLP exporter
 	exporterCfg := otlp.Config{
 		Endpoint: cfg.Endpoint,
+		Protocol: protocol,
 		Headers:  cfg.Headers,
 		Timeout:  cfg.TimeoutDuration(),
 		Profiles: otlp.SignalConfig{
@@ -306,7 +314,7 @@ func (p *Pipeline) createJFRProfileExporter(cfg config.DirectExportConfig, zapLo
 	}
 
 	if cfg.Compression == "gzip" {
-		exporterCfg.Compression = "gzip"
+		exporterCfg.Compression = otlp.CompressionGzip
 	}
 
 	exporter, err := otlp.NewExporter(exporterCfg, slogger)
