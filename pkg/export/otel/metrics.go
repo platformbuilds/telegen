@@ -18,6 +18,7 @@ import (
 	"github.com/platformbuilds/telegen/internal/appolly/app/request"
 	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
 	"github.com/platformbuilds/telegen/internal/discover/exec"
+	"github.com/platformbuilds/telegen/internal/sigdef"
 	"github.com/platformbuilds/telegen/pkg/export/attributes"
 	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 	"github.com/platformbuilds/telegen/pkg/export/imetrics"
@@ -818,6 +819,39 @@ func otelSpanMetricsAccepted(span *request.Span) bool {
 		!span.Service.ExportsOTelMetricsSpan()
 }
 
+// getSignalMetadataForMetric returns telegen signal metadata attributes for a span type
+func getSignalMetadataForMetric(span *request.Span) []attribute.KeyValue {
+	var metadata *sigdef.SignalMetadata
+	switch span.Type {
+	case request.EventTypeHTTP:
+		metadata = sigdef.HTTPServerDurationMetrics
+	case request.EventTypeGRPC:
+		metadata = sigdef.GRPCServerDurationMetrics
+	case request.EventTypeHTTPClient:
+		metadata = sigdef.HTTPClientDurationMetrics
+	case request.EventTypeGRPCClient:
+		metadata = sigdef.GRPCClientDurationMetrics
+	case request.EventTypeSQLClient:
+		metadata = sigdef.DBClientDurationMetrics
+	case request.EventTypeRedisClient, request.EventTypeRedisServer:
+		metadata = sigdef.DBClientDurationMetrics
+	case request.EventTypeMongoClient, request.EventTypeCouchbaseClient:
+		metadata = sigdef.DBClientDurationMetrics
+	case request.EventTypeKafkaClient, request.EventTypeKafkaServer:
+		metadata = sigdef.MessagingDurationMetrics
+	case request.EventTypeMQTTClient, request.EventTypeMQTTServer:
+		metadata = sigdef.MessagingDurationMetrics
+	case request.EventTypeGPUKernelLaunch, request.EventTypeGPUMalloc, request.EventTypeGPUMemcpy:
+		metadata = sigdef.GPUKernelMetrics
+	default:
+		return nil
+	}
+	if metadata == nil {
+		return nil
+	}
+	return metadata.ToAttributes()
+}
+
 //nolint:cyclop
 func (r *Metrics) record(span *request.Span, mr *MetricsReporter) {
 	t := span.Timings()
@@ -825,53 +859,56 @@ func (r *Metrics) record(span *request.Span, mr *MetricsReporter) {
 
 	ctx := trace.ContextWithSpanContext(r.ctx, trace.SpanContext{}.WithTraceID(span.TraceID).WithSpanID(span.SpanID).WithTraceFlags(trace.TraceFlags(span.TraceFlags)))
 
+	// Get signal metadata attributes for this span type
+	signalMeta := getSignalMetadataForMetric(span)
+
 	if otelMetricsAccepted(span) {
 		switch span.Type {
 		case request.EventTypeHTTP:
 			if mr.is.HTTPEnabled() {
 				// TODO: for more accuracy, there must be a way to set the metric time from the actual span end time
 				httpDuration, attrs := r.httpDuration.ForRecord(span)
-				httpDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs))
+				httpDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 
 				httpRequestSize, attrs := r.httpRequestSize.ForRecord(span)
-				httpRequestSize.Record(ctx, float64(span.RequestBodyLength()), instrument.WithAttributeSet(attrs))
+				httpRequestSize.Record(ctx, float64(span.RequestBodyLength()), instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 
 				httpResponseSize, attrs := r.httpResponseSize.ForRecord(span)
-				httpResponseSize.Record(ctx, float64(span.ResponseBodyLength()), instrument.WithAttributeSet(attrs))
+				httpResponseSize.Record(ctx, float64(span.ResponseBodyLength()), instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 			}
 		case request.EventTypeGRPC:
 			if mr.is.GRPCEnabled() {
 				grpcDuration, attrs := r.grpcDuration.ForRecord(span)
-				grpcDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs))
+				grpcDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 			}
 		case request.EventTypeGRPCClient:
 			if mr.is.GRPCEnabled() {
 				grpcClientDuration, attrs := r.grpcClientDuration.ForRecord(span)
-				grpcClientDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs))
+				grpcClientDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 			}
 		case request.EventTypeHTTPClient:
 			if mr.is.HTTPEnabled() {
 				httpClientDuration, attrs := r.httpClientDuration.ForRecord(span)
-				httpClientDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs))
+				httpClientDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 				httpClientRequestSize, attrs := r.httpClientRequestSize.ForRecord(span)
-				httpClientRequestSize.Record(ctx, float64(span.RequestBodyLength()), instrument.WithAttributeSet(attrs))
+				httpClientRequestSize.Record(ctx, float64(span.RequestBodyLength()), instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 				httpClientResponseSize, attrs := r.httpClientResponseSize.ForRecord(span)
-				httpClientResponseSize.Record(ctx, float64(span.ResponseBodyLength()), instrument.WithAttributeSet(attrs))
+				httpClientResponseSize.Record(ctx, float64(span.ResponseBodyLength()), instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 			}
 		case request.EventTypeRedisServer, request.EventTypeRedisClient, request.EventTypeSQLClient, request.EventTypeMongoClient, request.EventTypeCouchbaseClient:
 			if mr.is.DBEnabled() {
 				dbClientDuration, attrs := r.dbClientDuration.ForRecord(span)
-				dbClientDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs))
+				dbClientDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 			}
 		case request.EventTypeKafkaClient, request.EventTypeKafkaServer:
 			if mr.is.KafkaEnabled() {
 				switch span.Method {
 				case request.MessagingPublish:
 					msgPublishDuration, attrs := r.msgPublishDuration.ForRecord(span)
-					msgPublishDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs))
+					msgPublishDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 				case request.MessagingProcess:
 					msgProcessDuration, attrs := r.msgProcessDuration.ForRecord(span)
-					msgProcessDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs))
+					msgProcessDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 				}
 			}
 		case request.EventTypeMQTTClient, request.EventTypeMQTTServer:
@@ -879,37 +916,37 @@ func (r *Metrics) record(span *request.Span, mr *MetricsReporter) {
 				switch span.Method {
 				case request.MessagingPublish:
 					msgPublishDuration, attrs := r.msgPublishDuration.ForRecord(span)
-					msgPublishDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs))
+					msgPublishDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 				case request.MessagingProcess:
 					msgProcessDuration, attrs := r.msgProcessDuration.ForRecord(span)
-					msgProcessDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs))
+					msgProcessDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 				}
 			}
 		case request.EventTypeGPUKernelLaunch:
 			if mr.is.GPUEnabled() {
 				gcalls, attrs := r.gpuKernelCallsTotal.ForRecord(span)
-				gcalls.Add(ctx, 1, instrument.WithAttributeSet(attrs))
+				gcalls.Add(ctx, 1, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 
 				ggrid, attrs := r.gpuKernelGridSize.ForRecord(span)
-				ggrid.Record(ctx, float64(span.ContentLength), instrument.WithAttributeSet(attrs))
+				ggrid.Record(ctx, float64(span.ContentLength), instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 
 				gblock, attrs := r.gpuKernelBlockSize.ForRecord(span)
-				gblock.Record(ctx, float64(span.SubType), instrument.WithAttributeSet(attrs))
+				gblock.Record(ctx, float64(span.SubType), instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 			}
 		case request.EventTypeGPUMalloc:
 			if mr.is.GPUEnabled() {
 				gmem, attrs := r.gpuMemoryAllocsTotal.ForRecord(span)
-				gmem.Add(ctx, span.ContentLength, instrument.WithAttributeSet(attrs))
+				gmem.Add(ctx, span.ContentLength, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 			}
 		case request.EventTypeGPUMemcpy:
 			if mr.is.GPUEnabled() {
 				gmem, attrs := r.gpuMemoryCopySize.ForRecord(span)
-				gmem.Record(r.ctx, float64(span.ContentLength), instrument.WithAttributeSet(attrs))
+				gmem.Record(r.ctx, float64(span.ContentLength), instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 			}
 		case request.EventTypeDNS:
 			if mr.is.DNSEnabled() {
 				dnsDuration, attrs := r.dnsLookupDuration.ForRecord(span)
-				dnsDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs))
+				dnsDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 			}
 		}
 	}
@@ -925,18 +962,18 @@ func (r *Metrics) record(span *request.Span, mr *MetricsReporter) {
 
 		if span.Service.Features.SpanMetrics() {
 			sml, attrs := r.spanMetricsLatency.ForRecord(span)
-			sml.Record(ctx, duration, instrument.WithAttributeSet(attrs))
+			sml.Record(ctx, duration, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 
 			smct, attrs := r.spanMetricsCallsTotal.ForRecord(span)
-			smct.Add(ctx, 1, instrument.WithAttributeSet(attrs))
+			smct.Add(ctx, 1, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 		}
 
 		if span.Service.Features.SpanSizes() {
 			smst, attrs := r.spanMetricsRequestSizeTotal.ForRecord(span)
-			smst.Add(ctx, float64(span.RequestBodyLength()), instrument.WithAttributeSet(attrs))
+			smst.Add(ctx, float64(span.RequestBodyLength()), instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
 
 			smst, attr := r.spanMetricsResponseSizeTotal.ForRecord(span)
-			smst.Add(ctx, float64(span.ResponseBodyLength()), instrument.WithAttributeSet(attr))
+			smst.Add(ctx, float64(span.ResponseBodyLength()), instrument.WithAttributeSet(attr), instrument.WithAttributes(signalMeta...))
 		}
 	}
 }

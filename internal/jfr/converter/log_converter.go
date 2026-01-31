@@ -10,6 +10,8 @@ import (
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
+
+	"github.com/platformbuilds/telegen/internal/sigdef"
 )
 
 // LogExportConfig holds configuration for log export
@@ -282,6 +284,20 @@ func (c *LogConverter) profileEventToLogRecord(event *ProfileEvent, lr plog.LogR
 	}
 	if event.K8sNodeName != "" {
 		attrs.PutStr("k8s.node.name", event.K8sNodeName)
+	}
+
+	// Add telegen signal metadata
+	addSignalMetadataToLogRecord(sigdef.JFREventLogs, attrs)
+}
+
+// addSignalMetadataToLogRecord adds telegen signal metadata to log record attributes
+func addSignalMetadataToLogRecord(metadata *sigdef.SignalMetadata, attrs pcommon.Map) {
+	if metadata == nil {
+		return
+	}
+	metadataAttrs := metadata.ToAttributes()
+	for _, attr := range metadataAttrs {
+		attrs.PutStr(string(attr.Key), attr.Value.AsString())
 	}
 }
 
