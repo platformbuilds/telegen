@@ -505,8 +505,8 @@ pipelines:
       poll_interval: 500ms
   jfr:
     enabled: false
-    input_dir: /var/log/jfr
-    output_dir: /var/log/jfr-json
+    input_dir: /home/vboxuser/miradorstack-playground/appserver/jfr-recordings
+    output_dir: /home/vboxuser/miradorstack-playground/appserver/jfr-json
     poll_interval: 5s
     sample_interval_ms: 10
     # Use native Go JFR parser (no JDK dependency required)
@@ -519,8 +519,8 @@ pipelines:
     pretty_json: false
     # Direct OTLP export for JFR profiles
     direct_export:
-      enabled: false
-      endpoint: ""  # e.g., "http://otel-collector:4318/v1/profiles"
+      enabled: true
+      endpoint: "http://127.0.0.1:4318/v1/profiles"  # e.g., "http://127.0.0.1:4318/v1/profiles"
       headers: {}
       compression: gzip
       timeout: 30s
@@ -530,7 +530,7 @@ pipelines:
       # OTLP Logs export for JFR events as JSON
       log_export:
         enabled: false
-        endpoint: ""  # e.g., "http://otel-collector:4318/v1/logs"
+        endpoint: "http://127.0.0.1:4318/v1/logs"  # e.g., "http://127.0.0.1:4318/v1/logs"
         headers: {}
         compression: gzip
         timeout: 30s
@@ -572,14 +572,14 @@ exports:
       insecure_skip_verify: false
     grpc:
       enabled: true
-      endpoint: "otel-collector:4317"
+      endpoint: "127.0.0.1:4317"
       headers: {}
       insecure: true
       gzip: true
       timeout: "10s"
     http:
       enabled: false
-      endpoint: "http://otel-collector:4318"
+      endpoint: "http://127.0.0.1:4318"
       traces_path: "/v1/traces"
       logs_path: "/v1/logs"
       metrics_path: "/v1/metrics"
