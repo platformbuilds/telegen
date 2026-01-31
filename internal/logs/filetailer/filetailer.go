@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/log"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
+
+	"github.com/platformbuilds/telegen/internal/sigdef"
 )
 
 type Tailer struct {
@@ -43,6 +46,16 @@ func (t *Tailer) Run(stop <-chan struct{}) error {
 	}
 }
 
+// getSignalMetadata returns the appropriate signal metadata based on the file path
+func (t *Tailer) getSignalMetadata(path string) *sigdef.SignalMetadata {
+	// Check if it's a container log path
+	if strings.Contains(path, "/containers/") || strings.Contains(path, "/pods/") {
+		return sigdef.ContainerLogs
+	}
+	// Default to file log tailing
+	return sigdef.FileLogTailing
+}
+
 func (t *Tailer) tailOnce(path string) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -56,6 +69,17 @@ func (t *Tailer) tailOnce(path string) {
 	sc := bufio.NewScanner(f)
 	logger := t.lp.Logger("filelog")
 	ctx := context.Background()
+
+	// Get signal metadata for this log source
+	metadata := t.getSignalMetadata(path)
+	metadataAttrs := metadata.ToAttributes()
+
+	// Convert OTel attribute.KeyValue to log.KeyValue
+	logMetadataAttrs := make([]log.KeyValue, 0, len(metadataAttrs))
+	for _, attr := range metadataAttrs {
+		logMetadataAttrs = append(logMetadataAttrs, log.String(string(attr.Key), attr.Value.AsString()))
+	}
+
 	for sc.Scan() {
 		line := sc.Text()
 		var rec log.Record
@@ -68,6 +92,10 @@ func (t *Tailer) tailOnce(path string) {
 			rec.AddAttributes(log.String("body.format", "text"))
 		}
 		rec.AddAttributes(log.String("file.path", path))
+
+		// Add telegen signal metadata attributes
+		rec.AddAttributes(logMetadataAttrs...)
+
 		logger.Emit(ctx, rec)
 	}
 }

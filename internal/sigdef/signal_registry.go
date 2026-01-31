@@ -246,6 +246,89 @@ var (
 )
 
 // =============================================================================
+// METRICS - Application RED Metrics
+// =============================================================================
+
+var (
+	// HTTPServerDurationMetrics metadata
+	HTTPServerDurationMetrics = &SignalMetadata{
+		Category:      "Application Metrics",
+		SubCategory:   "HTTP Server Duration",
+		SourceModule:  "internal/tracers/generictracer",
+		BPFComponent:  "bpf/generictracer/protocol_http.h",
+		Description:   "HTTP server request duration (http.server.duration)",
+		CollectorType: CollectorTypeEBPF,
+		SignalType:    SignalMetrics,
+	}
+
+	// HTTPClientDurationMetrics metadata
+	HTTPClientDurationMetrics = &SignalMetadata{
+		Category:      "Application Metrics",
+		SubCategory:   "HTTP Client Duration",
+		SourceModule:  "internal/tracers/generictracer",
+		BPFComponent:  "bpf/generictracer/protocol_http.h",
+		Description:   "HTTP client request duration (http.client.duration)",
+		CollectorType: CollectorTypeEBPF,
+		SignalType:    SignalMetrics,
+	}
+
+	// GRPCServerDurationMetrics metadata
+	GRPCServerDurationMetrics = &SignalMetadata{
+		Category:      "Application Metrics",
+		SubCategory:   "gRPC Server Duration",
+		SourceModule:  "internal/tracers/generictracer",
+		BPFComponent:  "bpf/generictracer/http2_grpc.h",
+		Description:   "gRPC server request duration (rpc.server.duration)",
+		CollectorType: CollectorTypeEBPF,
+		SignalType:    SignalMetrics,
+	}
+
+	// GRPCClientDurationMetrics metadata
+	GRPCClientDurationMetrics = &SignalMetadata{
+		Category:      "Application Metrics",
+		SubCategory:   "gRPC Client Duration",
+		SourceModule:  "internal/tracers/generictracer",
+		BPFComponent:  "bpf/generictracer/http2_grpc.h",
+		Description:   "gRPC client request duration (rpc.client.duration)",
+		CollectorType: CollectorTypeEBPF,
+		SignalType:    SignalMetrics,
+	}
+
+	// DBClientDurationMetrics metadata
+	DBClientDurationMetrics = &SignalMetadata{
+		Category:      "Application Metrics",
+		SubCategory:   "Database Client Duration",
+		SourceModule:  "internal/database",
+		BPFComponent:  "bpf/database/*_tracer.c",
+		Description:   "Database client operation duration (db.client.duration)",
+		CollectorType: CollectorTypeEBPF,
+		SignalType:    SignalMetrics,
+	}
+
+	// MessagingDurationMetrics metadata
+	MessagingDurationMetrics = &SignalMetadata{
+		Category:      "Application Metrics",
+		SubCategory:   "Messaging Duration",
+		SourceModule:  "internal/tracers",
+		BPFComponent:  "bpf/database/kafka_tracer.c",
+		Description:   "Messaging publish/process duration",
+		CollectorType: CollectorTypeEBPF,
+		SignalType:    SignalMetrics,
+	}
+
+	// GPUKernelMetrics metadata
+	GPUKernelMetrics = &SignalMetadata{
+		Category:      "Application Metrics",
+		SubCategory:   "GPU Kernel Operations",
+		SourceModule:  "internal/aiml",
+		BPFComponent:  "bpf/aiml/cuda_tracer.c",
+		Description:   "GPU kernel launches, grid/block sizes, memory ops",
+		CollectorType: CollectorTypeEBPF,
+		SignalType:    SignalMetrics,
+	}
+)
+
+// =============================================================================
 // METRICS - SNMP Metrics
 // =============================================================================
 
@@ -490,6 +573,17 @@ var (
 		SourceModule:  "internal/tracers/generictracer",
 		BPFComponent:  "bpf/gotracer/go_mongo.c",
 		Description:   "MongoDB collection, operation",
+		CollectorType: CollectorTypeEBPF,
+		SignalType:    SignalTraces,
+	}
+
+	// CouchbaseTraces metadata
+	CouchbaseTraces = &SignalMetadata{
+		Category:      "Database Traces",
+		SubCategory:   "Couchbase",
+		SourceModule:  "internal/tracers/generictracer",
+		BPFComponent:  "bpf/generictracer/protocol_tcp.h",
+		Description:   "Couchbase key-value operations",
 		CollectorType: CollectorTypeEBPF,
 		SignalType:    SignalTraces,
 	}

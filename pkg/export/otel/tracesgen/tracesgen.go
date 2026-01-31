@@ -25,6 +25,7 @@ import (
 	"github.com/platformbuilds/telegen/internal/appolly/app/request"
 	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
 	"github.com/platformbuilds/telegen/internal/ebpf/common/dnsparser"
+	"github.com/platformbuilds/telegen/internal/sigdef"
 	"github.com/platformbuilds/telegen/pkg/export/attributes"
 	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
 	"github.com/platformbuilds/telegen/pkg/export/instrumentations"
@@ -546,6 +547,11 @@ func TraceAttributesSelector(span *request.Span, optionalAttrs map[attr.Name]str
 		attrs = append(attrs, spanMetricsSkip)
 	}
 
+	// Add telegen signal metadata
+	if signalMeta := getSignalMetadataForSpan(span); signalMeta != nil {
+		attrs = append(attrs, signalMeta.ToAttributes()...)
+	}
+
 	return attrs
 }
 
@@ -606,4 +612,36 @@ func manualSpanAttributes(span *request.Span) []attribute.KeyValue {
 	}
 
 	return attrs
+}
+
+// getSignalMetadataForSpan returns the appropriate signal metadata for a span based on its type
+func getSignalMetadataForSpan(span *request.Span) *sigdef.SignalMetadata {
+	switch span.Type {
+	case request.EventTypeHTTP:
+		return sigdef.HTTPTraces
+	case request.EventTypeGRPC:
+		return sigdef.HTTP2GRPCTraces
+	case request.EventTypeHTTPClient:
+		return sigdef.HTTPTraces
+	case request.EventTypeGRPCClient:
+		return sigdef.HTTP2GRPCTraces
+	case request.EventTypeSQLClient:
+		return sigdef.PostgreSQLTraces // Generic SQL, could be refined
+	case request.EventTypeRedisClient, request.EventTypeRedisServer:
+		return sigdef.RedisTraces
+	case request.EventTypeKafkaClient, request.EventTypeKafkaServer:
+		return sigdef.KafkaTraces
+	case request.EventTypeMQTTClient, request.EventTypeMQTTServer:
+		return sigdef.RabbitMQTraces // Using RabbitMQ for MQTT as closest match
+	case request.EventTypeMongoClient:
+		return sigdef.MongoDBTraces
+	case request.EventTypeCouchbaseClient:
+		return sigdef.CouchbaseTraces
+	case request.EventTypeGPUKernelLaunch, request.EventTypeGPUMalloc, request.EventTypeGPUMemcpy:
+		return sigdef.CUDAKernelTraces
+	case request.EventTypeDNS:
+		return sigdef.DNSTraces
+	default:
+		return nil
+	}
 }

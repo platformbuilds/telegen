@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/plog"
 
 	"github.com/platformbuilds/telegen/internal/security/rules"
+	"github.com/platformbuilds/telegen/internal/sigdef"
 )
 
 // Processor processes security events from eBPF and exports them as OTel logs
@@ -443,6 +444,9 @@ func (p *Processor) syscallToLogRecord(event *SyscallEvent, lr plog.LogRecord) {
 		attrs.PutStr("k8s.namespace.name", event.PodNamespace)
 	}
 
+	// Add telegen signal metadata
+	addSignalMetadataToLogRecord(sigdef.SyscallAuditLogs, attrs)
+
 	lr.Body().SetStr(fmt.Sprintf("Syscall %s by process %s (PID: %d)",
 		event.SyscallName, event.ProcessName, event.PID))
 }
@@ -479,6 +483,9 @@ func (p *Processor) execveToLogRecord(event *ExecveEvent, lr plog.LogRecord) {
 		attrs.PutStr("k8s.pod.name", event.PodName)
 		attrs.PutStr("k8s.namespace.name", event.PodNamespace)
 	}
+
+	// Add telegen signal metadata
+	addSignalMetadataToLogRecord(sigdef.ExecveLogs, attrs)
 
 	lr.Body().SetStr(fmt.Sprintf("Process execution: %s (PID: %d, Parent: %d)",
 		event.Filename, event.PID, event.PPID))
@@ -519,6 +526,9 @@ func (p *Processor) fileToLogRecord(event *FileEvent, lr plog.LogRecord) {
 		attrs.PutStr("k8s.namespace.name", event.PodNamespace)
 	}
 
+	// Add telegen signal metadata
+	addSignalMetadataToLogRecord(sigdef.FileIntegrityLogs, attrs)
+
 	lr.Body().SetStr(fmt.Sprintf("File %s: %s by %s (PID: %d)",
 		event.Operation.String(), event.Filename, event.ProcessName, event.PID))
 }
@@ -558,6 +568,9 @@ func (p *Processor) escapeToLogRecord(event *EscapeEvent, lr plog.LogRecord) {
 		attrs.PutStr("k8s.namespace.name", event.PodNamespace)
 	}
 
+	// Add telegen signal metadata
+	addSignalMetadataToLogRecord(sigdef.ContainerEscapeLogs, attrs)
+
 	lr.Body().SetStr(fmt.Sprintf("Container escape attempt: %s by %s (PID: %d)",
 		event.EscapeType.String(), event.ProcessName, event.PID))
 }
@@ -592,5 +605,16 @@ func severityToOtel(s Severity) plog.SeverityNumber {
 		return plog.SeverityNumberFatal
 	default:
 		return plog.SeverityNumberInfo
+	}
+}
+
+// addSignalMetadataToLogRecord adds telegen signal metadata attributes to a log record
+func addSignalMetadataToLogRecord(metadata *sigdef.SignalMetadata, attrs pcommon.Map) {
+	if metadata == nil {
+		return
+	}
+	metadataAttrs := metadata.ToAttributes()
+	for _, attr := range metadataAttrs {
+		attrs.PutStr(string(attr.Key), attr.Value.AsString())
 	}
 }
