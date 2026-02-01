@@ -99,6 +99,7 @@ type SampleInfo struct {
 // ResourceInfo contains resource attributes following OTel semantic conventions
 type ResourceInfo struct {
 	ServiceName      string `json:"service.name,omitempty"`
+	ServiceVersion   string `json:"service.version,omitempty"`
 	ServiceNamespace string `json:"service.namespace,omitempty"`
 	K8sPodName       string `json:"k8s.pod.name,omitempty"`
 	K8sNamespaceName string `json:"k8s.namespace.name,omitempty"`
@@ -115,7 +116,17 @@ func (c *LogConverter) ConvertToLogs(events []*ProfileEvent) plog.Logs {
 	}
 
 	rl := logs.ResourceLogs().AppendEmpty()
-	c.setResourceAttributes(rl.Resource())
+
+	// Use service name/version from events if available (inferred from JFR file)
+	serviceName := c.config.ServiceName
+	serviceVersion := ""
+	if len(events) > 0 && events[0].ServiceName != "" {
+		serviceName = events[0].ServiceName
+	}
+	if len(events) > 0 && events[0].ServiceVersion != "" {
+		serviceVersion = events[0].ServiceVersion
+	}
+	c.setResourceAttributesWithVersion(rl.Resource(), serviceName, serviceVersion)
 
 	sl := rl.ScopeLogs().AppendEmpty()
 	sl.Scope().SetName("telegen.jfr")
@@ -164,6 +175,37 @@ func (c *LogConverter) setResourceAttributes(resource pcommon.Resource) {
 
 	if c.config.ServiceName != "" {
 		attrs.PutStr("service.name", c.config.ServiceName)
+	}
+	if c.config.Namespace != "" {
+		attrs.PutStr("service.namespace", c.config.Namespace)
+	}
+	if c.config.PodName != "" {
+		attrs.PutStr("k8s.pod.name", c.config.PodName)
+	}
+	if c.config.ContainerName != "" {
+		attrs.PutStr("k8s.container.name", c.config.ContainerName)
+	}
+	if c.config.NodeName != "" {
+		attrs.PutStr("k8s.node.name", c.config.NodeName)
+	}
+	if c.config.ClusterName != "" {
+		attrs.PutStr("k8s.cluster.name", c.config.ClusterName)
+	}
+
+	// Set telemetry SDK attributes
+	attrs.PutStr("telemetry.sdk.name", "telegen")
+	attrs.PutStr("telemetry.sdk.language", "java")
+	attrs.PutStr("telemetry.sdk.version", "1.0.0")
+}
+
+func (c *LogConverter) setResourceAttributesWithVersion(resource pcommon.Resource, serviceName, serviceVersion string) {
+	attrs := resource.Attributes()
+
+	if serviceName != "" {
+		attrs.PutStr("service.name", serviceName)
+	}
+	if serviceVersion != "" {
+		attrs.PutStr("service.version", serviceVersion)
 	}
 	if c.config.Namespace != "" {
 		attrs.PutStr("service.namespace", c.config.Namespace)
