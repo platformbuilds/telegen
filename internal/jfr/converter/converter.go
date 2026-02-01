@@ -109,6 +109,7 @@ type ProfileEvent struct {
 	Timestamp        string `json:"timestamp"`
 	EventType        string `json:"eventType"`
 	ServiceName      string `json:"serviceName"`
+	ServiceVersion   string `json:"serviceVersion,omitempty"` // JAR/app version if detected
 	ProfileType      string `json:"profileType"`
 	K8sPodName       string `json:"k8s_pod_name,omitempty"`
 	K8sNamespace     string `json:"k8s_namespace,omitempty"`
