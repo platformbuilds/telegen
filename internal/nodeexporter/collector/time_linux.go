@@ -6,7 +6,6 @@
 package collector
 
 import (
-	"fmt"
 	"log/slog"
 	"time"
 

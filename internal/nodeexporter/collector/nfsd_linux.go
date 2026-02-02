@@ -17,11 +17,15 @@
 package collector
 
 import (
+	"bufio"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/procfs"
 )
 
 const nfsdCollectorName = "nfsd"
@@ -32,14 +36,11 @@ func init() {
 
 // nfsdCollector exports NFS server (daemon) statistics.
 type nfsdCollector struct {
-	threadsDesc        *prometheus.Desc
-	readAheadCacheDesc *prometheus.Desc
-	connectionsDesc    *prometheus.Desc
-	inputOutputDesc    *prometheus.Desc
-	rpcOperationsDesc  *prometheus.Desc
-	proceduresDesc     *prometheus.Desc
-	logger             *slog.Logger
-	procPath           string
+	threadsDesc       *prometheus.Desc
+	rpcOperationsDesc *prometheus.Desc
+	inputOutputDesc   *prometheus.Desc
+	logger            *slog.Logger
+	procPath          string
 }
 
 // NewNFSdCollector returns a new NFS server collector.
@@ -52,30 +53,15 @@ func NewNFSdCollector(config CollectorConfig) (Collector, error) {
 			"Number of NFS daemon threads.",
 			nil, nil,
 		),
-		readAheadCacheDesc: prometheus.NewDesc(
-			prometheus.BuildFQName(Namespace, subsystem, "read_ahead_cache_size_blocks"),
-			"Size of read ahead cache in 1024-byte blocks.",
-			nil, nil,
-		),
-		connectionsDesc: prometheus.NewDesc(
-			prometheus.BuildFQName(Namespace, subsystem, "connections_total"),
-			"Total number of connections.",
+		rpcOperationsDesc: prometheus.NewDesc(
+			prometheus.BuildFQName(Namespace, subsystem, "rpc_operations_total"),
+			"Total number of RPC operations.",
 			nil, nil,
 		),
 		inputOutputDesc: prometheus.NewDesc(
 			prometheus.BuildFQName(Namespace, subsystem, "io_bytes_total"),
 			"Number of bytes read or written.",
 			[]string{"direction"}, nil,
-		),
-		rpcOperationsDesc: prometheus.NewDesc(
-			prometheus.BuildFQName(Namespace, subsystem, "rpc_operations_total"),
-			"Total number of RPC operations.",
-			nil, nil,
-		),
-		proceduresDesc: prometheus.NewDesc(
-			prometheus.BuildFQName(Namespace, subsystem, "requests_total"),
-			"Number of NFS server requests by method and version.",
-			[]string{"version", "method"}, nil,
 		),
 		logger:   config.Logger,
 		procPath: config.Paths.ProcPath,
@@ -84,66 +70,52 @@ func NewNFSdCollector(config CollectorConfig) (Collector, error) {
 
 // Update implements Collector and exposes NFS server metrics.
 func (c *nfsdCollector) Update(ch chan<- prometheus.Metric) error {
-	fs, err := procfs.NewFS(c.procPath)
+	nfsdPath := filepath.Join(c.procPath, "net", "rpc", "nfsd")
+	file, err := os.Open(nfsdPath)
 	if err != nil {
-		return fmt.Errorf("failed to open procfs: %w", err)
+		if os.IsNotExist(err) {
+			c.logger.Debug("NFS server stats not available", "path", nfsdPath)
+			return ErrNoData
+		}
+		return fmt.Errorf("failed to open %s: %w", nfsdPath, err)
 	}
+	defer file.Close()
 
-	nfsdStats, err := fs.NFSdServerRPCStats()
-	if err != nil {
-		c.logger.Debug("NFS server stats not available", "err", err)
-		return ErrNoData
-	}
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.Fields(line)
+		if len(parts) < 2 {
+			continue
+		}
 
-	// Thread info
-	ch <- prometheus.MustNewConstMetric(
-		c.threadsDesc,
-		prometheus.GaugeValue,
-		float64(nfsdStats.Threads),
-	)
-
-	// Read ahead cache
-	ch <- prometheus.MustNewConstMetric(
-		c.readAheadCacheDesc,
-		prometheus.GaugeValue,
-		float64(nfsdStats.ReadAheadCache.CacheSize),
-	)
-
-	// I/O bytes
-	ch <- prometheus.MustNewConstMetric(
-		c.inputOutputDesc,
-		prometheus.CounterValue,
-		float64(nfsdStats.InputOutput.Read),
-		"read",
-	)
-	ch <- prometheus.MustNewConstMetric(
-		c.inputOutputDesc,
-		prometheus.CounterValue,
-		float64(nfsdStats.InputOutput.Write),
-		"write",
-	)
-
-	// RPC operations
-	ch <- prometheus.MustNewConstMetric(
-		c.rpcOperationsDesc,
-		prometheus.CounterValue,
-		float64(nfsdStats.ServerRPC.RPCCount),
-	)
-
-	// Per-version procedure stats
-	for version, procs := range map[string]map[string]uint64{
-		"3": nfsdStats.V3Stats.Procedures,
-		"4": nfsdStats.V4Stats.Procedures,
-	} {
-		for method, count := range procs {
-			ch <- prometheus.MustNewConstMetric(
-				c.proceduresDesc,
-				prometheus.CounterValue,
-				float64(count),
-				version, method,
-			)
+		switch parts[0] {
+		case "th":
+			// th <threads> <fullcnt> ...
+			if len(parts) >= 2 {
+				if threads, err := strconv.ParseFloat(parts[1], 64); err == nil {
+					ch <- prometheus.MustNewConstMetric(c.threadsDesc, prometheus.GaugeValue, threads)
+				}
+			}
+		case "rpc":
+			// rpc <count> <badcnt> <badfmt> <badauth> <badcInt>
+			if len(parts) >= 2 {
+				if rpcCount, err := strconv.ParseFloat(parts[1], 64); err == nil {
+					ch <- prometheus.MustNewConstMetric(c.rpcOperationsDesc, prometheus.CounterValue, rpcCount)
+				}
+			}
+		case "io":
+			// io <read> <write>
+			if len(parts) >= 3 {
+				if readBytes, err := strconv.ParseFloat(parts[1], 64); err == nil {
+					ch <- prometheus.MustNewConstMetric(c.inputOutputDesc, prometheus.CounterValue, readBytes, "read")
+				}
+				if writeBytes, err := strconv.ParseFloat(parts[2], 64); err == nil {
+					ch <- prometheus.MustNewConstMetric(c.inputOutputDesc, prometheus.CounterValue, writeBytes, "write")
+				}
+			}
 		}
 	}
 
-	return nil
+	return scanner.Err()
 }
