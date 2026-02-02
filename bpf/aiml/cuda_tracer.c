@@ -2,65 +2,19 @@
 // SPDX-License-Identifier: Apache-2.0
 // Task: ML-014 - CUDA Kernel Tracer eBPF
 
+//go:build obi_bpf_ignore
+
 #include "../bpfcore/vmlinux.h"
 #include "../bpfcore/bpf_helpers.h"
 #include "../bpfcore/bpf_tracing.h"
 #include "../bpfcore/bpf_core_read.h"
 #include "../common/common.h"
 
-// CUDA event types
-#define CUDA_EVENT_KERNEL_LAUNCH     0
-#define CUDA_EVENT_KERNEL_COMPLETE   1
-#define CUDA_EVENT_MEMCPY_START      2
-#define CUDA_EVENT_MEMCPY_COMPLETE   3
-#define CUDA_EVENT_MALLOC            4
-#define CUDA_EVENT_FREE              5
-#define CUDA_EVENT_SYNC              6
-#define CUDA_EVENT_STREAM_CREATE     7
-#define CUDA_EVENT_STREAM_DESTROY    8
+#include "cuda_tracer.h"
 
-// Memory copy direction
-#define CUDA_MEMCPY_HOST_TO_HOST     0
-#define CUDA_MEMCPY_HOST_TO_DEVICE   1
-#define CUDA_MEMCPY_DEVICE_TO_HOST   2
-#define CUDA_MEMCPY_DEVICE_TO_DEVICE 3
-#define CUDA_MEMCPY_DEFAULT          4
-
-#define CUDA_MAX_KERNEL_NAME 128
-
-// CUDA kernel event structure
-struct cuda_event {
-    u64 timestamp_ns;        // Event timestamp
-    u64 duration_ns;         // Duration (for completion events)
-    u32 pid;                 // Process ID
-    u32 tid;                 // Thread ID
-    u32 event_type;          // Event type
-    u32 gpu_id;              // GPU device ID
-    u64 stream_id;           // CUDA stream ID
-    
-    // Kernel launch info
-    u32 grid_dim_x;
-    u32 grid_dim_y;
-    u32 grid_dim_z;
-    u32 block_dim_x;
-    u32 block_dim_y;
-    u32 block_dim_z;
-    u32 shared_mem_bytes;
-    u8 kernel_name[CUDA_MAX_KERNEL_NAME];
-    
-    // Memory operation info
-    u64 src_ptr;
-    u64 dst_ptr;
-    u64 bytes;
-    u32 memcpy_kind;
-    
-    // Memory allocation info
-    u64 alloc_ptr;
-    u64 alloc_size;
-    
-    // Error info
-    u32 cuda_error;
-};
+// Force bpf2go to include these types
+const cuda_event_t *unused_cuda_event __attribute__((unused));
+const cuda_mem_stats_t *unused_cuda_mem_stats __attribute__((unused));
 
 // Active kernel tracking
 struct cuda_kernel_info {
@@ -113,21 +67,12 @@ struct {
     __uint(max_entries, 1 << 21);  // 2MB buffer
 } cuda_events SEC(".maps");
 
-// Per-process GPU memory tracking
-struct cuda_mem_stats {
-    u64 total_allocated;
-    u64 total_freed;
-    u64 peak_usage;
-    u64 current_usage;
-    u64 alloc_count;
-    u64 free_count;
-};
-
+// Per-process GPU memory tracking - use typedef from header
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 4096);
     __type(key, u32);  // PID
-    __type(value, struct cuda_mem_stats);
+    __type(value, cuda_mem_stats_t);
 } cuda_mem_per_process SEC(".maps");
 
 // Kernel name cache
@@ -139,8 +84,8 @@ struct {
 } cuda_kernel_names SEC(".maps");
 
 // Submit a CUDA event to the ring buffer
-static __always_inline int submit_cuda_event(struct cuda_event *event) {
-    struct cuda_event *e = bpf_ringbuf_reserve(&cuda_events, sizeof(*event), 0);
+static __always_inline int submit_cuda_event(cuda_event_t *event) {
+    cuda_event_t *e = bpf_ringbuf_reserve(&cuda_events, sizeof(*event), 0);
     if (!e) {
         return -1;
     }
@@ -191,7 +136,7 @@ int BPF_UPROBE(cudaLaunchKernel,
     bpf_map_update_elem(&cuda_active_kernels, &kernel_id, &info, BPF_ANY);
     
     // Submit launch event
-    struct cuda_event event = {};
+    cuda_event_t event = {};
     event.timestamp_ns = now;
     event.pid = pid;
     event.tid = tid;
@@ -233,7 +178,7 @@ int BPF_UPROBE(cudaMemcpy, void *dst, void *src, u64 count, u32 kind) {
     bpf_map_update_elem(&cuda_active_memops, &memop_id, &info, BPF_ANY);
     
     // Submit start event
-    struct cuda_event event = {};
+    cuda_event_t event = {};
     event.timestamp_ns = now;
     event.pid = pid;
     event.tid = tid;
@@ -269,7 +214,7 @@ int BPF_UPROBE(cudaMemcpyAsync, void *dst, void *src, u64 count, u32 kind, void 
     u64 memop_id = (pid_tgid << 16) | (now & 0xFFFF);
     bpf_map_update_elem(&cuda_active_memops, &memop_id, &info, BPF_ANY);
     
-    struct cuda_event event = {};
+    cuda_event_t event = {};
     event.timestamp_ns = now;
     event.pid = pid;
     event.tid = tid;
@@ -293,7 +238,7 @@ int BPF_UPROBE(cudaMalloc, void **devPtr, u64 size) {
     u32 tid = pid_tgid;
     u64 now = bpf_ktime_get_ns();
     
-    struct cuda_event event = {};
+    cuda_event_t event = {};
     event.timestamp_ns = now;
     event.pid = pid;
     event.tid = tid;
@@ -303,7 +248,7 @@ int BPF_UPROBE(cudaMalloc, void **devPtr, u64 size) {
     submit_cuda_event(&event);
     
     // Update memory statistics
-    struct cuda_mem_stats *stats = bpf_map_lookup_elem(&cuda_mem_per_process, &pid);
+    cuda_mem_stats_t *stats = bpf_map_lookup_elem(&cuda_mem_per_process, &pid);
     if (stats) {
         __sync_fetch_and_add(&stats->total_allocated, size);
         __sync_fetch_and_add(&stats->current_usage, size);
@@ -314,7 +259,7 @@ int BPF_UPROBE(cudaMalloc, void **devPtr, u64 size) {
             stats->peak_usage = stats->current_usage;
         }
     } else {
-        struct cuda_mem_stats new_stats = {};
+        cuda_mem_stats_t new_stats = {};
         new_stats.total_allocated = size;
         new_stats.current_usage = size;
         new_stats.peak_usage = size;
@@ -333,7 +278,7 @@ int BPF_UPROBE(cudaFree, void *devPtr) {
     u32 tid = pid_tgid;
     u64 now = bpf_ktime_get_ns();
     
-    struct cuda_event event = {};
+    cuda_event_t event = {};
     event.timestamp_ns = now;
     event.pid = pid;
     event.tid = tid;
@@ -343,7 +288,7 @@ int BPF_UPROBE(cudaFree, void *devPtr) {
     submit_cuda_event(&event);
     
     // Update memory statistics
-    struct cuda_mem_stats *stats = bpf_map_lookup_elem(&cuda_mem_per_process, &pid);
+    cuda_mem_stats_t *stats = bpf_map_lookup_elem(&cuda_mem_per_process, &pid);
     if (stats) {
         __sync_fetch_and_add(&stats->free_count, 1);
         // Note: We don't know the size being freed without tracking allocations
@@ -360,7 +305,7 @@ int BPF_UPROBE(cudaDeviceSynchronize) {
     u32 tid = pid_tgid;
     u64 now = bpf_ktime_get_ns();
     
-    struct cuda_event event = {};
+    cuda_event_t event = {};
     event.timestamp_ns = now;
     event.pid = pid;
     event.tid = tid;
@@ -379,7 +324,7 @@ int BPF_UPROBE(cudaStreamCreate, void **pStream) {
     u32 tid = pid_tgid;
     u64 now = bpf_ktime_get_ns();
     
-    struct cuda_event event = {};
+    cuda_event_t event = {};
     event.timestamp_ns = now;
     event.pid = pid;
     event.tid = tid;
@@ -398,7 +343,7 @@ int BPF_UPROBE(cudaStreamDestroy, void *stream) {
     u32 tid = pid_tgid;
     u64 now = bpf_ktime_get_ns();
     
-    struct cuda_event event = {};
+    cuda_event_t event = {};
     event.timestamp_ns = now;
     event.pid = pid;
     event.tid = tid;
@@ -422,7 +367,7 @@ int BPF_URETPROBE(cudaLaunchKernel_ret, int ret) {
     // True kernel completion tracking requires CUPTI or synchronization tracking
     
     if (ret != 0) {
-        struct cuda_event event = {};
+        cuda_event_t event = {};
         event.timestamp_ns = now;
         event.pid = pid;
         event.tid = tid;
@@ -443,7 +388,7 @@ int BPF_URETPROBE(cudaMemcpy_ret, int ret) {
     u32 tid = pid_tgid;
     u64 now = bpf_ktime_get_ns();
     
-    struct cuda_event event = {};
+    cuda_event_t event = {};
     event.timestamp_ns = now;
     event.pid = pid;
     event.tid = tid;
