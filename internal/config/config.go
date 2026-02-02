@@ -59,6 +59,10 @@ type Config struct {
 			Filelog struct {
 				Include      []string `yaml:"include"`
 				PositionFile string   `yaml:"position_file"`
+				// ShipHistoricalEvents controls whether to ship log entries that existed before Telegen started.
+				// When false (default), only new log entries written after Telegen's start time are shipped.
+				// Set to true to ship all existing log content (useful for backfilling).
+				ShipHistoricalEvents bool `yaml:"ship_historical_events"`
 			} `yaml:"filelog"`
 		} `yaml:"logs"`
 		JFR JFRConfig `yaml:"jfr"`
@@ -121,6 +125,10 @@ type JFRConfig struct {
 	JFRCommand      string `yaml:"jfr_command"`
 	Workers         int    `yaml:"workers"`
 	PrettyJSON      bool   `yaml:"pretty_json"`
+	// ShipHistoricalEvents controls whether to ship events that occurred before Telegen started.
+	// When false (default), only events with timestamps after Telegen's start time are shipped.
+	// Set to true to ship all events including historical data (useful for backfilling).
+	ShipHistoricalEvents bool `yaml:"ship_historical_events"`
 	// Direct OTLP export configuration
 	DirectExport DirectExportConfig `yaml:"direct_export"`
 }
