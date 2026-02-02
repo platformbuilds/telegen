@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/platformbuilds/telegen/internal/config"
+	"github.com/platformbuilds/telegen/internal/nodeexporter"
 	"github.com/platformbuilds/telegen/internal/pipeline"
 	"github.com/platformbuilds/telegen/internal/selftelemetry"
 	"github.com/platformbuilds/telegen/internal/version"
+	"github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
 )
 
 func main() {
@@ -55,9 +57,47 @@ func main() {
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
+
+	// Start node_exporter if enabled
+	var nodeExp *nodeexporter.Exporter
+	if cfg.NodeExporter.Enabled {
+		var err error
+		nodeExp, err = nodeexporter.New(cfg.NodeExporter)
+		if err != nil {
+			log.Fatalf("node_exporter: %v", err)
+		}
+		go func() {
+			log.Printf("  node_exporter: enabled on :%d%s", cfg.NodeExporter.Endpoint.Port, cfg.NodeExporter.Endpoint.Path)
+			if err := nodeExp.Run(ctx); err != nil && err != http.ErrServerClosed {
+				log.Printf("node_exporter: %v", err)
+			}
+		}()
+	}
+
 	pl := pipeline.New(cfg, st)
 	if err := pl.Start(ctx); err != nil {
 		log.Fatalf("start: %v", err)
+	}
+
+	// Wire up node_exporter OTLP streaming if enabled
+	if nodeExp != nil && cfg.NodeExporter.Export.Enabled && cfg.NodeExporter.Export.UseOTLP {
+		// Create a MetricsExporterInstancer for node exporter metrics
+		// Uses the EBPF OTELMetrics config if available, or can be extended for standalone config
+		if cfg.EBPF.OTELMetrics.EndpointEnabled() {
+			meInstancer := &otelcfg.MetricsExporterInstancer{Cfg: &cfg.EBPF.OTELMetrics}
+			exporter, err := meInstancer.Instantiate(ctx)
+			if err != nil {
+				log.Printf("node_exporter: failed to create OTLP exporter: %v", err)
+			} else {
+				if err := nodeExp.ConfigureOTLPStreaming(ctx, exporter); err != nil {
+					log.Printf("node_exporter: failed to configure OTLP streaming: %v", err)
+				} else {
+					log.Printf("  node_exporter: OTLP streaming enabled (interval: %s)", cfg.NodeExporter.Export.Interval)
+				}
+			}
+		} else {
+			log.Printf("  node_exporter: OTLP streaming configured but no OTEL endpoint available")
+		}
 	}
 
 	sig := make(chan os.Signal, 1)
@@ -66,5 +106,8 @@ func main() {
 	log.Println("telegen: shutting down…")
 	cancel()
 	pl.Close()
+	if nodeExp != nil {
+		_ = nodeExp.Shutdown(context.Background())
+	}
 	_ = srv.Shutdown(context.Background())
 }

@@ -59,6 +59,207 @@ selfTelemetry:
   pprof_port: 6060
 
 # -----------------------------------------------------------------------------
+# Node Exporter Configuration (node_exporter compatible system metrics)
+# -----------------------------------------------------------------------------
+# Provides Prometheus node_exporter compatible metrics on a separate port.
+# This makes telegen a drop-in replacement for node_exporter.
+node_exporter:
+  # Enable node_exporter compatible metrics
+  enabled: false
+  
+  # Metric namespace (default: "node" for node_exporter compatibility)
+  namespace: "node"
+  
+  # Filesystem paths for reading system metrics
+  paths:
+    procfs: "/proc"
+    sysfs: "/sys"
+    rootfs: "/"
+    udev_data: "/run/udev/data"
+  
+  # HTTP endpoint configuration
+  endpoint:
+    # Port for the metrics endpoint (default: 9100 for node_exporter compatibility)
+    port: 9100
+    # Path for the metrics endpoint
+    path: "/metrics"
+    # TLS configuration (optional)
+    # tls:
+    #   enabled: false
+    #   cert_file: "/path/to/cert.pem"
+    #   key_file: "/path/to/key.pem"
+  
+  # Scrape configuration
+  scrape:
+    # Timeout for individual collector scrapes
+    timeout: 20s
+  
+  # Streaming export configuration (push metrics to OTLP)
+  # This enables telegen-compliant metric streaming at a configurable interval
+  export:
+    # Enable streaming metrics to OTLP endpoint
+    enabled: false
+    # Collection and export interval (how often metrics are pushed)
+    interval: 15s
+    # Use telegen's configured OTLP exporter for sending metrics
+    use_otlp: true
+    # Batch size for export (number of metrics to batch before sending)
+    batch_size: 1000
+    # Flush timeout (max time to wait before flushing a partial batch)
+    flush_timeout: 5s
+  
+  # Environment detection configuration
+  # Automatically detects bare metal, virtual machine, Kubernetes, or container
+  environment:
+    # Environment type: "auto", "bare_metal", "virtual_machine", "kubernetes", "container"
+    type: "auto"
+    # Enable automatic environment detection
+    auto_detect: true
+    # Kubernetes-specific configuration (populated automatically when running in K8s)
+    kubernetes:
+      # Kubernetes node name (from NODE_NAME env or downward API)
+      node_name: ""
+      # Kubernetes namespace (from POD_NAMESPACE env or downward API)
+      namespace: ""
+      # Kubernetes pod name (from POD_NAME or HOSTNAME env)
+      pod_name: ""
+      # Kubernetes cluster name (from CLUSTER_NAME env)
+      cluster_name: ""
+      # Include Kubernetes node labels as metric labels
+      include_node_labels: false
+      # Include pod labels as metric labels
+      include_pod_labels: false
+    # Additional labels to add to all metrics
+    labels: {}
+    #   environment: "production"
+    #   datacenter: "us-west-2"
+  
+  # Collector-specific configuration
+  collectors:
+    # CPU metrics
+    cpu:
+      enabled: true
+      enable_guest: false
+      enable_info: true
+      # flags_include: ""  # Regex for CPU flags to include
+      # bugs_include: ""   # Regex for CPU bugs to include
+    
+    # Memory information
+    meminfo: true
+    
+    # System load averages
+    loadavg: true
+    
+    # Disk I/O statistics
+    diskstats:
+      enabled: true
+      # ignored_devices: "^(ram|loop|fd|(h|s|v|xv)d[a-z]|nvme\\d+n\\d+p)\\d+$"
+      # accept_devices: ""
+    
+    # Filesystem usage
+    filesystem:
+      enabled: true
+      # mount_points_exclude: "^/(dev|proc|run/credentials/.+|sys|var/lib/docker/.+|var/lib/containers/storage/.+)($|/)"
+      # fs_types_exclude: "^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$"
+      mount_timeout: 5s
+      stat_workers: 4
+    
+    # Network device statistics
+    netdev:
+      enabled: true
+      # device_exclude: ""
+      # device_include: ""
+    
+    # System statistics (boot time, context switches, etc.)
+    stat:
+      enabled: true
+      softirq: false
+    
+    # System information (uname)
+    uname: true
+    
+    # System time
+    time: true
+    
+    # Connection tracking (netfilter)
+    conntrack: true
+    
+    # Virtual memory statistics
+    vmstat: true
+    
+    # Network protocol statistics
+    netstat: true
+    
+    # Hardware monitoring sensors
+    hwmon: false
+    
+    # Thermal zones
+    thermal: true
+    
+    # Power supply information
+    power_supply: false
+    
+    # PSI (Pressure Stall Information)
+    pressure: true
+    
+    # Process information
+    processes: false
+    
+    # ARP table
+    arp: false
+    
+    # Entropy pool
+    entropy: true
+    
+    # EDAC (Error Detection and Correction)
+    edac: false
+    
+    # Fibre Channel
+    fibrechannel: false
+    
+    # InfiniBand
+    infiniband: false
+    
+    # IPVS (IP Virtual Server)
+    ipvs: false
+    
+    # NFS client
+    nfs: false
+    
+    # NFS server
+    nfsd: false
+    
+    # NVMe devices
+    nvme: false
+    
+    # RAPL (Running Average Power Limit)
+    rapl: false
+    
+    # Scheduler statistics
+    schedstat: false
+    
+    # Socket statistics
+    sockstat: true
+    
+    # Soft network statistics
+    softnet: false
+    
+    # Tape statistics
+    tapestats: false
+    
+    # Textfile collector for custom metrics
+    textfile:
+      enabled: false
+      directory: "/var/lib/node_exporter/textfile_collector"
+      mtime_metric: true
+    
+    # XFS filesystem
+    xfs: false
+    
+    # ZFS filesystem
+    zfs: false
+
+# -----------------------------------------------------------------------------
 # Internal Metrics Configuration
 # -----------------------------------------------------------------------------
 internal_metrics:

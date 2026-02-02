@@ -8,6 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/platformbuilds/telegen/internal/appolly/services"
+	"github.com/platformbuilds/telegen/internal/nodeexporter"
 	obiconfig "github.com/platformbuilds/telegen/internal/obiconfig"
 	"github.com/platformbuilds/telegen/internal/transform"
 	"github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
@@ -70,6 +71,9 @@ type Config struct {
 
 	// eBPF instrumentation configuration (OBI integration)
 	EBPF EBPFConfig `yaml:"ebpf"`
+
+	// NodeExporter provides Prometheus node_exporter compatible system metrics
+	NodeExporter nodeexporter.Config `yaml:"node_exporter"`
 }
 
 // EBPFConfig holds configuration for eBPF-based auto-instrumentation (from OBI)

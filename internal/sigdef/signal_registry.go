@@ -218,6 +218,155 @@ var (
 )
 
 // =============================================================================
+// METRICS - Node Exporter Metrics (Prometheus-compatible host metrics)
+// =============================================================================
+
+var (
+	// NodeExporterCPUMetrics metadata
+	NodeExporterCPUMetrics = &SignalMetadata{
+		Category:      "Node Exporter",
+		SubCategory:   "CPU",
+		SourceModule:  "internal/nodeexporter/collector",
+		BPFComponent:  "",
+		Description:   "Per-CPU and aggregate CPU usage metrics (node_cpu_seconds_total)",
+		CollectorType: CollectorTypeProcFS,
+		SignalType:    SignalMetrics,
+	}
+
+	// NodeExporterMemoryMetrics metadata
+	NodeExporterMemoryMetrics = &SignalMetadata{
+		Category:      "Node Exporter",
+		SubCategory:   "Memory",
+		SourceModule:  "internal/nodeexporter/collector",
+		BPFComponent:  "",
+		Description:   "Memory and swap metrics (node_memory_*, node_vmstat_*)",
+		CollectorType: CollectorTypeProcFS,
+		SignalType:    SignalMetrics,
+	}
+
+	// NodeExporterDiskMetrics metadata
+	NodeExporterDiskMetrics = &SignalMetadata{
+		Category:      "Node Exporter",
+		SubCategory:   "Disk",
+		SourceModule:  "internal/nodeexporter/collector",
+		BPFComponent:  "",
+		Description:   "Block device and disk I/O metrics (node_disk_*)",
+		CollectorType: CollectorTypeProcFS,
+		SignalType:    SignalMetrics,
+	}
+
+	// NodeExporterFilesystemMetrics metadata
+	NodeExporterFilesystemMetrics = &SignalMetadata{
+		Category:      "Node Exporter",
+		SubCategory:   "Filesystem",
+		SourceModule:  "internal/nodeexporter/collector",
+		BPFComponent:  "",
+		Description:   "Filesystem size and usage metrics (node_filesystem_*)",
+		CollectorType: CollectorTypeProcFS,
+		SignalType:    SignalMetrics,
+	}
+
+	// NodeExporterNetworkMetrics metadata
+	NodeExporterNetworkMetrics = &SignalMetadata{
+		Category:      "Node Exporter",
+		SubCategory:   "Network",
+		SourceModule:  "internal/nodeexporter/collector",
+		BPFComponent:  "",
+		Description:   "Network interface metrics (node_network_*)",
+		CollectorType: CollectorTypeProcFS,
+		SignalType:    SignalMetrics,
+	}
+
+	// NodeExporterLoadMetrics metadata
+	NodeExporterLoadMetrics = &SignalMetadata{
+		Category:      "Node Exporter",
+		SubCategory:   "Load",
+		SourceModule:  "internal/nodeexporter/collector",
+		BPFComponent:  "",
+		Description:   "System load averages (node_load1, node_load5, node_load15)",
+		CollectorType: CollectorTypeProcFS,
+		SignalType:    SignalMetrics,
+	}
+
+	// NodeExporterTimeMetrics metadata
+	NodeExporterTimeMetrics = &SignalMetadata{
+		Category:      "Node Exporter",
+		SubCategory:   "Time",
+		SourceModule:  "internal/nodeexporter/collector",
+		BPFComponent:  "",
+		Description:   "System time and NTP metrics (node_time_*, node_timex_*)",
+		CollectorType: CollectorTypeProcFS,
+		SignalType:    SignalMetrics,
+	}
+
+	// NodeExporterEntropyMetrics metadata
+	NodeExporterEntropyMetrics = &SignalMetadata{
+		Category:      "Node Exporter",
+		SubCategory:   "Entropy",
+		SourceModule:  "internal/nodeexporter/collector",
+		BPFComponent:  "",
+		Description:   "Kernel entropy pool metrics (node_entropy_*)",
+		CollectorType: CollectorTypeProcFS,
+		SignalType:    SignalMetrics,
+	}
+
+	// NodeExporterHardwareMetrics metadata (bonding, edac, mdadm, hwmon, thermal)
+	NodeExporterHardwareMetrics = &SignalMetadata{
+		Category:      "Node Exporter",
+		SubCategory:   "Hardware",
+		SourceModule:  "internal/nodeexporter/collector",
+		BPFComponent:  "",
+		Description:   "Hardware monitoring metrics (bonding, EDAC, RAID, thermal)",
+		CollectorType: CollectorTypeProcFS,
+		SignalType:    SignalMetrics,
+	}
+
+	// NodeExporterZFSMetrics metadata
+	NodeExporterZFSMetrics = &SignalMetadata{
+		Category:      "Node Exporter",
+		SubCategory:   "ZFS",
+		SourceModule:  "internal/nodeexporter/collector",
+		BPFComponent:  "",
+		Description:   "ZFS ARC and pool statistics (node_zfs_*)",
+		CollectorType: CollectorTypeProcFS,
+		SignalType:    SignalMetrics,
+	}
+
+	// NodeExporterNFSMetrics metadata
+	NodeExporterNFSMetrics = &SignalMetadata{
+		Category:      "Node Exporter",
+		SubCategory:   "NFS",
+		SourceModule:  "internal/nodeexporter/collector",
+		BPFComponent:  "",
+		Description:   "NFS client and server metrics (node_nfs_*, node_nfsd_*)",
+		CollectorType: CollectorTypeProcFS,
+		SignalType:    SignalMetrics,
+	}
+
+	// NodeExporterSystemMetrics metadata (uname, os, boot time)
+	NodeExporterSystemMetrics = &SignalMetadata{
+		Category:      "Node Exporter",
+		SubCategory:   "System",
+		SourceModule:  "internal/nodeexporter/collector",
+		BPFComponent:  "",
+		Description:   "System information metrics (node_uname_info, node_boot_time_seconds)",
+		CollectorType: CollectorTypeProcFS,
+		SignalType:    SignalMetrics,
+	}
+
+	// NodeExporterProcessMetrics metadata (processes, procs)
+	NodeExporterProcessMetrics = &SignalMetadata{
+		Category:      "Node Exporter",
+		SubCategory:   "Processes",
+		SourceModule:  "internal/nodeexporter/collector",
+		BPFComponent:  "",
+		Description:   "Process state and stats metrics (node_procs_*, node_forks_total)",
+		CollectorType: CollectorTypeProcFS,
+		SignalType:    SignalMetrics,
+	}
+)
+
+// =============================================================================
 // METRICS - Database Metrics
 // =============================================================================
 
