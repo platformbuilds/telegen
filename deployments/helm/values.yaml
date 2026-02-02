@@ -774,6 +774,9 @@ pipelines:
         - /var/log/containers/*telegen*.log
       positionFile: /var/lib/telegen/positions.json
       pollInterval: 500ms
+      # Ship log entries that existed before Telegen started (default: false)
+      # When false, only new log entries written after Telegen starts are shipped
+      shipHistoricalEvents: false
   jfr:
     enabled: false
     inputDirs:
@@ -790,6 +793,9 @@ pipelines:
     jfrCommand: jfr
     workers: 2
     prettyJson: false
+    # Ship JFR events that occurred before Telegen started (default: false)
+    # When false, only events with timestamps after Telegen's start time are shipped
+    shipHistoricalEvents: false
     # Direct OTLP export for JFR profiles
     directExport:
       enabled: false

@@ -545,6 +545,7 @@ pipelines:
         {{- end }}
       position_file: {{ .Values.pipelines.logs.filelog.positionFile | default "/var/lib/telegen/positions.json" }}
       poll_interval: {{ .Values.pipelines.logs.filelog.pollInterval | default "500ms" }}
+      ship_historical_events: {{ .Values.pipelines.logs.filelog.shipHistoricalEvents | default false }}
   jfr:
     enabled: {{ .Values.pipelines.jfr.enabled | default false }}
     input_dirs: {{ .Values.pipelines.jfr.inputDirs | default (list "/var/log/jfr") | toJson }}
@@ -555,6 +556,7 @@ pipelines:
     jfr_command: {{ .Values.pipelines.jfr.jfrCommand | default "jfr" }}
     workers: {{ .Values.pipelines.jfr.workers | default 2 }}
     pretty_json: {{ .Values.pipelines.jfr.prettyJson | default false }}
+    ship_historical_events: {{ .Values.pipelines.jfr.shipHistoricalEvents | default false }}
     direct_export:
       enabled: {{ .Values.pipelines.jfr.directExport.enabled | default false }}
       endpoint: {{ .Values.pipelines.jfr.directExport.endpoint | default "" | quote }}

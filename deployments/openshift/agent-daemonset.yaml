@@ -616,6 +616,9 @@ data:
             - /var/log/containers/*telegen*.log
           position_file: /var/lib/telegen/positions.json
           poll_interval: 500ms
+          # Ship log entries that existed before Telegen started (default: false)
+          # When false, only new log entries written after Telegen starts are shipped
+          ship_historical_events: false
       jfr:
         enabled: false
         # Directories to watch for JFR files
