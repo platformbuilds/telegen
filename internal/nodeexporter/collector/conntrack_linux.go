@@ -6,9 +6,12 @@
 package collector
 
 import (
-	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/procfs"
@@ -87,12 +90,22 @@ func NewConntrackCollector(config CollectorConfig) (Collector, error) {
 	}, nil
 }
 
+// readConntrackValue reads a single uint64 value from a proc file.
+func (c *conntrackCollector) readConntrackValue(filename string) (uint64, error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64)
+}
+
 // Update implements Collector and exposes conntrack statistics.
 func (c *conntrackCollector) Update(ch chan<- prometheus.Metric) error {
-	// Get current entries count
-	current, err := c.fs.ConntrackCount()
+	// Get current entries count from /proc/sys/net/netfilter/nf_conntrack_count
+	countPath := filepath.Join("/proc", "sys/net/netfilter/nf_conntrack_count")
+	current, err := c.readConntrackValue(countPath)
 	if err != nil {
-		if errors.Is(err, procfs.ErrFileNotFound) {
+		if os.IsNotExist(err) {
 			c.logger.Debug("conntrack count file not found")
 			return ErrNoData
 		}
@@ -100,10 +113,11 @@ func (c *conntrackCollector) Update(ch chan<- prometheus.Metric) error {
 	}
 	ch <- prometheus.MustNewConstMetric(c.current, prometheus.GaugeValue, float64(current))
 
-	// Get max entries
-	limit, err := c.fs.ConntrackMax()
+	// Get max entries from /proc/sys/net/netfilter/nf_conntrack_max
+	maxPath := filepath.Join("/proc", "sys/net/netfilter/nf_conntrack_max")
+	limit, err := c.readConntrackValue(maxPath)
 	if err != nil {
-		if errors.Is(err, procfs.ErrFileNotFound) {
+		if os.IsNotExist(err) {
 			c.logger.Debug("conntrack max file not found")
 		} else {
 			return fmt.Errorf("couldn't get conntrack max: %w", err)
@@ -115,7 +129,7 @@ func (c *conntrackCollector) Update(ch chan<- prometheus.Metric) error {
 	// Get conntrack stats
 	stats, err := c.fs.ConntrackStat()
 	if err != nil {
-		if errors.Is(err, procfs.ErrFileNotFound) {
+		if os.IsNotExist(err) {
 			c.logger.Debug("conntrack stat file not found")
 			return nil
 		}
