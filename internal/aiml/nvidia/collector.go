@@ -198,7 +198,7 @@ func (c *Collector) collectLoop(ctx context.Context) {
 	defer ticker.Stop()
 
 	// Initial collection
-	c.Collect()
+	_ = c.Collect()
 
 	for {
 		select {
@@ -207,7 +207,7 @@ func (c *Collector) collectLoop(ctx context.Context) {
 		case <-c.done:
 			return
 		case <-ticker.C:
-			c.Collect()
+			_ = c.Collect()
 		}
 	}
 }

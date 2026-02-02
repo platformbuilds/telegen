@@ -46,7 +46,7 @@ type cpuProfilerConfig struct {
 	SampleRateHz  uint32
 	CaptureKernel uint8
 	CaptureUser   uint8
-	_pad          [2]byte
+	_pad          [2]byte //nolint:unused // padding for struct alignment
 }
 
 // NewCPUProfiler creates a new CPU profiler
@@ -311,10 +311,10 @@ type OffCPUProfiler struct {
 
 	// eBPF objects
 	coll   *ebpf.Collection
-	stacks *ebpf.Map
+	stacks *ebpf.Map //nolint:unused // used by eBPF
 	counts *ebpf.Map
-	starts *ebpf.Map
-	events *ebpf.Map
+	starts *ebpf.Map //nolint:unused // used by eBPF
+	events *ebpf.Map //nolint:unused // used by eBPF
 
 	// Tracepoint links
 	schedLink link.Link
@@ -474,11 +474,11 @@ type MemoryProfiler struct {
 	log    *slog.Logger
 
 	// eBPF objects
-	stacks    *ebpf.Map
-	pending   *ebpf.Map
+	stacks    *ebpf.Map //nolint:unused // used by eBPF
+	pending   *ebpf.Map //nolint:unused // used by eBPF
 	liveAlloc *ebpf.Map
-	stats     *ebpf.Map
-	events    *ebpf.Map
+	stats     *ebpf.Map //nolint:unused // used by eBPF
+	events    *ebpf.Map //nolint:unused // used by eBPF
 
 	// State
 	mu      sync.RWMutex
@@ -552,11 +552,11 @@ type MutexProfiler struct {
 	log    *slog.Logger
 
 	// eBPF objects
-	stacks  *ebpf.Map
-	states  *ebpf.Map
-	pending *ebpf.Map
+	stacks  *ebpf.Map //nolint:unused // used by eBPF
+	states  *ebpf.Map //nolint:unused // used by eBPF
+	pending *ebpf.Map //nolint:unused // used by eBPF
 	stats   *ebpf.Map
-	events  *ebpf.Map
+	events  *ebpf.Map //nolint:unused // used by eBPF
 
 	// State
 	mu      sync.RWMutex

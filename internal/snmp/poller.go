@@ -495,6 +495,8 @@ var builtinModules = map[string]*Module{
 }
 
 // extractIndex extracts the index from an OID based on a base OID
+//
+//nolint:unused // reserved for SNMP table index extraction
 func extractIndex(fullOID, baseOID string) string {
 	if !strings.HasPrefix(fullOID, baseOID) {
 		return ""

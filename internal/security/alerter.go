@@ -24,7 +24,7 @@ type Alerter struct {
 	rateLimiter  *rate.Limiter
 	httpClient   *http.Client
 	destinations []alertDestination
-	mu           sync.RWMutex
+	mu           sync.RWMutex //nolint:unused // reserved for thread-safe destination management
 }
 
 type alertDestination interface {
