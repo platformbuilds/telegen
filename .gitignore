@@ -3,3 +3,6 @@ cmd/*
 bin/*
 obj/*
 .tools/telegen
+
+# Binary output
+telegen
