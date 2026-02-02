@@ -105,7 +105,7 @@ CMD ["--config", "/etc/telegen/config.yaml"]
 # =============================================================================
 # Stage 4: Debug image with shell (Alpine-based)
 # =============================================================================
-FROM alpine:3.19 AS debug
+FROM alpine:3.23 AS debug
 
 RUN apk add --no-cache \
     ca-certificates \
