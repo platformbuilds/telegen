@@ -304,7 +304,7 @@ func (p *Poller) Close() error {
 	defer p.mu.Unlock()
 
 	for key, conn := range p.conns {
-		conn.Conn.Close()
+		_ = conn.Conn.Close()
 		delete(p.conns, key)
 	}
 

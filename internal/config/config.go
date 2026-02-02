@@ -256,7 +256,7 @@ func (l LogExportConfig) DiskRotateSizeBytes() int64 {
 		}
 	}
 	var val int64
-	fmt.Sscanf(size, "%d", &val)
+	_, _ = fmt.Sscanf(size, "%d", &val)
 	if val <= 0 {
 		return 100 * 1024 * 1024
 	}

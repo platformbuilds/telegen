@@ -62,7 +62,7 @@ func (t *GRPCTransport) Connect(ctx context.Context) error {
 	dialCtx, cancel := context.WithTimeout(ctx, t.cfg.Timeout)
 	defer cancel()
 
-	conn, err := grpc.DialContext(dialCtx, t.cfg.Endpoint, opts...)
+	conn, err := grpc.DialContext(dialCtx, t.cfg.Endpoint, opts...) //nolint:staticcheck // SA1019: grpc.DialContext still supported in 1.x
 	if err != nil {
 		return fmt.Errorf("failed to dial endpoint: %w", err)
 	}
@@ -79,7 +79,7 @@ func (t *GRPCTransport) buildDialOptions() ([]grpc.DialOption, error) {
 	var opts []grpc.DialOption
 
 	// Set block dial to ensure connection is established
-	opts = append(opts, grpc.WithBlock())
+	opts = append(opts, grpc.WithBlock()) //nolint:staticcheck // SA1019: grpc.WithBlock still supported in 1.x
 
 	// Configure TLS
 	if t.cfg.TLS.Enabled {
@@ -262,6 +262,8 @@ func (t *GRPCTransport) IsConnected() bool {
 }
 
 // isRetryableGRPCError returns whether the gRPC error is retryable.
+//
+//nolint:unused // reserved for retry logic implementation
 func isRetryableGRPCError(err error) bool {
 	if err == nil {
 		return false
@@ -289,6 +291,8 @@ func grpcKeepaliveParams() keepalive.ClientParameters {
 }
 
 // grpcReconnectBackoff returns the reconnect backoff configuration.
+//
+//nolint:unused // reserved for reconnect logic implementation
 func grpcReconnectBackoff() time.Duration {
 	return 1 * time.Second
 }

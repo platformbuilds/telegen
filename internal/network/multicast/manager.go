@@ -454,7 +454,7 @@ func (m *Manager) GetRecentBroadcasts(n int) []BroadcastEvent {
 }
 
 // GetMetrics returns multicast/broadcast metrics
-func (m *Manager) GetMetrics() MulticastMetrics {
+func (m *Manager) GetMetrics() *MulticastMetrics {
 	stats := m.metrics.GetStats()
 
 	// Count active groups
@@ -465,7 +465,7 @@ func (m *Manager) GetMetrics() MulticastMetrics {
 	})
 	stats.ActiveGroups = count
 
-	return stats
+	return &stats
 }
 
 // GetIGMPState returns current IGMP state

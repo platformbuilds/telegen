@@ -218,13 +218,13 @@ func setTracesProtocol(cfg *TracesConfig) {
 		return
 	}
 	if cfg.TracesProtocol != "" {
-		os.Setenv(envTracesProtocol, string(cfg.TracesProtocol))
+		_ = os.Setenv(envTracesProtocol, string(cfg.TracesProtocol))
 		return
 	}
 	if cfg.Protocol != "" {
-		os.Setenv(envProtocol, string(cfg.Protocol))
+		_ = os.Setenv(envProtocol, string(cfg.Protocol))
 		return
 	}
 	// unset. Guessing it
-	os.Setenv(envTracesProtocol, string(cfg.guessProtocol()))
+	_ = os.Setenv(envTracesProtocol, string(cfg.guessProtocol()))
 }

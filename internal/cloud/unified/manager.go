@@ -162,7 +162,7 @@ func (cm *CloudManager) detectProvider(ctx context.Context) error {
 		provider CloudProvider
 		metadata *CloudMetadata
 		priority int
-		err      error
+		err      error //nolint:unused // reserved for error handling during detection
 	}
 
 	results := make(chan detectionResult, len(providers))

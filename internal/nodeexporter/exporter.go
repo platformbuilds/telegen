@@ -246,7 +246,7 @@ func (e *Exporter) Serve() error {
 	mux.HandleFunc("/live", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK\n"))
+		_, _ = w.Write([]byte("OK\n"))
 	})
 
 	// Readiness endpoint - returns OK if collectors are initialized
@@ -254,19 +254,19 @@ func (e *Exporter) Serve() error {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		if len(e.collectors) == 0 {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			w.Write([]byte("Not Ready: no collectors initialized\n"))
+			_, _ = w.Write([]byte("Not Ready: no collectors initialized\n"))
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Ready\n"))
+		_, _ = w.Write([]byte("Ready\n"))
 	})
 
 	// Health endpoint - detailed health status
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"status":"healthy","collectors":%d,"namespace":"%s"}`, len(e.collectors), e.config.Namespace)
-		w.Write([]byte("\n"))
+		_, _ = fmt.Fprintf(w, `{"status":"healthy","collectors":%d,"namespace":"%s"}`, len(e.collectors), e.config.Namespace)
+		_, _ = w.Write([]byte("\n"))
 	})
 
 	// Root endpoint - landing page
@@ -277,7 +277,7 @@ func (e *Exporter) Serve() error {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `<!DOCTYPE html>
+		_, _ = fmt.Fprintf(w, `<!DOCTYPE html>
 <html>
 <head><title>Telegen Node Exporter</title></head>
 <body>
@@ -319,7 +319,7 @@ func (e *Exporter) Run(ctx context.Context) error {
 	mux.HandleFunc("/live", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK\n"))
+		_, _ = w.Write([]byte("OK\n"))
 	})
 
 	// Readiness endpoint
@@ -327,19 +327,19 @@ func (e *Exporter) Run(ctx context.Context) error {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		if len(e.collectors) == 0 {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			w.Write([]byte("Not Ready: no collectors initialized\n"))
+			_, _ = w.Write([]byte("Not Ready: no collectors initialized\n"))
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Ready\n"))
+		_, _ = w.Write([]byte("Ready\n"))
 	})
 
 	// Health endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"status":"healthy","collectors":%d,"namespace":"%s"}`, len(e.collectors), e.config.Namespace)
-		w.Write([]byte("\n"))
+		_, _ = fmt.Fprintf(w, `{"status":"healthy","collectors":%d,"namespace":"%s"}`, len(e.collectors), e.config.Namespace)
+		_, _ = w.Write([]byte("\n"))
 	})
 
 	// Root endpoint
@@ -350,7 +350,7 @@ func (e *Exporter) Run(ctx context.Context) error {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `<!DOCTYPE html>
+		_, _ = fmt.Fprintf(w, `<!DOCTYPE html>
 <html>
 <head><title>Telegen Node Exporter</title></head>
 <body>
@@ -380,7 +380,7 @@ func (e *Exporter) Run(ctx context.Context) error {
 	// Watch for context cancellation
 	go func() {
 		<-ctx.Done()
-		e.Shutdown(context.Background())
+		_ = e.Shutdown(context.Background())
 	}()
 
 	return e.server.ListenAndServe()

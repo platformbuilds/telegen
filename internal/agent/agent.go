@@ -113,7 +113,7 @@ type Agent struct {
 	cfg     Config
 	log     *slog.Logger
 	state   atomic.Int32
-	stateMu sync.RWMutex
+	stateMu sync.RWMutex //nolint:unused // reserved for future state transitions
 
 	// Core components
 	pipelineManager *pipeline.Manager
@@ -341,20 +341,20 @@ func (a *Agent) handleHealth(w http.ResponseWriter, r *http.Request) {
 	state := a.State()
 	if state == StateRunning || state == StateStarting {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"status":"healthy","state":"%s"}`, state)
+		_, _ = fmt.Fprintf(w, `{"status":"healthy","state":"%s"}`, state)
 		return
 	}
 	w.WriteHeader(http.StatusServiceUnavailable)
-	fmt.Fprintf(w, `{"status":"unhealthy","state":"%s"}`, state)
+	_, _ = fmt.Fprintf(w, `{"status":"unhealthy","state":"%s"}`, state)
 }
 
 // handleReady handles readiness probe requests
 func (a *Agent) handleReady(w http.ResponseWriter, r *http.Request) {
 	if a.State() == StateRunning {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ready"}`))
+		_, _ = w.Write([]byte(`{"status":"ready"}`))
 		return
 	}
 	w.WriteHeader(http.StatusServiceUnavailable)
-	w.Write([]byte(`{"status":"not ready"}`))
+	_, _ = w.Write([]byte(`{"status":"not ready"}`))
 }

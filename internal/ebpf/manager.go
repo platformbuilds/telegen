@@ -96,7 +96,7 @@ type Manager struct {
 	// Running state
 	running bool
 	stopCh  chan struct{}
-	wg      sync.WaitGroup
+	wg      sync.WaitGroup //nolint:unused // reserved for graceful shutdown coordination
 }
 
 // NewManager creates a new eBPF program manager

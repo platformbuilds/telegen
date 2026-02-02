@@ -294,7 +294,7 @@ func (e *RouteExtractor) extractNextJSRoutesFromManifest(dir string) error {
 		}
 		return fmt.Errorf("open next.js routes-manifest %q: %w", manifestPath, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var manifest nextRoutesManifest
 	if err := json.NewDecoder(f).Decode(&manifest); err != nil {
@@ -345,7 +345,7 @@ func (e *RouteExtractor) scanFile(filePath string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	lineNum := 0

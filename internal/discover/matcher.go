@@ -349,7 +349,7 @@ func FindingCriteria(cfg *obi.Config) []services.Selector {
 			finderCriteria = slices.Clone(cfg.Discovery.Services)
 			finderCriteria = append(finderCriteria, services.RegexSelector{
 				Name:      cfg.ServiceName,
-				Namespace: cfg.ServiceNamespace,
+				Namespace: cfg.ServiceNamespace, //nolint:staticcheck // SA1019: legacy compatibility
 				Path:      cfg.Exec,
 				OpenPorts: cfg.Port,
 			})
@@ -363,7 +363,7 @@ func FindingCriteria(cfg *obi.Config) []services.Selector {
 			finderCriteria = slices.Clone(cfg.Discovery.Instrument)
 			finderCriteria = append(finderCriteria, services.GlobAttributes{
 				Name:      cfg.ServiceName,
-				Namespace: cfg.ServiceNamespace,
+				Namespace: cfg.ServiceNamespace, //nolint:staticcheck // SA1019: legacy compatibility
 				Path:      cfg.AutoTargetExe,
 				OpenPorts: cfg.Port,
 			})
@@ -378,7 +378,7 @@ func FindingCriteria(cfg *obi.Config) []services.Selector {
 		return []services.Selector{
 			&services.GlobAttributes{
 				Name:      cfg.ServiceName,
-				Namespace: cfg.ServiceNamespace,
+				Namespace: cfg.ServiceNamespace, //nolint:staticcheck // SA1019: legacy compatibility
 				Path:      cfg.AutoTargetExe,
 				OpenPorts: cfg.Port,
 			},
@@ -388,7 +388,7 @@ func FindingCriteria(cfg *obi.Config) []services.Selector {
 	return []services.Selector{
 		&services.RegexSelector{
 			Name:      cfg.ServiceName,
-			Namespace: cfg.ServiceNamespace,
+			Namespace: cfg.ServiceNamespace, //nolint:staticcheck // SA1019: legacy compatibility
 			Path:      cfg.Exec,
 			OpenPorts: cfg.Port,
 		},

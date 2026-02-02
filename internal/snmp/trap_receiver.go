@@ -279,7 +279,7 @@ func (r *TrapReceiver) SendInformResponse(addr *net.UDPAddr, requestID uint32) e
 	if err := conn.Connect(); err != nil {
 		return fmt.Errorf("failed to connect for inform response: %w", err)
 	}
-	defer conn.Conn.Close()
+	defer func() { _ = conn.Conn.Close() }()
 
 	// Send response (GetResponse with same request ID)
 	// This is a simplified implementation

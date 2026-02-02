@@ -136,10 +136,7 @@ func (c *MetricConverter) convertWithMIB(pdu gosnmp.SnmpPDU, timestamp time.Time
 	}
 
 	// Try to resolve OID
-	oid := pdu.Name
-	if strings.HasPrefix(oid, ".") {
-		oid = oid[1:]
-	}
+	oid := strings.TrimPrefix(pdu.Name, ".")
 
 	if obj, ok := c.mibResolver.Resolve(oid); ok {
 		metric.Name = c.sanitizeMetricName(obj.Name)

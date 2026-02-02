@@ -72,7 +72,7 @@ func (c *Collector) appendCPU(wr *prompb.WriteRequest) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		line := sc.Text()
@@ -102,7 +102,7 @@ func (c *Collector) appendMem(wr *prompb.WriteRequest) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var memTotal, memAvail float64
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
@@ -125,7 +125,7 @@ func (c *Collector) appendNet(wr *prompb.WriteRequest) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	sc := bufio.NewScanner(f)
 	for i := 0; i < 2 && sc.Scan(); i++ {
 	}
@@ -145,4 +145,4 @@ func (c *Collector) appendNet(wr *prompb.WriteRequest) {
 		appendPoint(wr, "system_network_transmit_bytes_total", c.baseLabels(labels.Label{Name: "device", Value: strings.TrimSpace(iface)}), tx)
 	}
 }
-func atof(s string) float64 { var v float64; fmt.Sscanf(s, "%f", &v); return v }
+func atof(s string) float64 { var v float64; _, _ = fmt.Sscanf(s, "%f", &v); return v }

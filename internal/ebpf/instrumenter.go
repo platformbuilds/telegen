@@ -36,7 +36,7 @@ func ilog() *slog.Logger {
 
 func closeAll(closers []io.Closer) {
 	for i := range closers {
-		closers[i].Close()
+		_ = closers[i].Close()
 	}
 }
 
@@ -531,7 +531,7 @@ func gatherOffsets(instrPath string, probes map[string][]*ebpfcommon.ProbeDesc, 
 		return fmt.Errorf("failed to open elf file %s: %w", instrPath, err)
 	}
 
-	defer elfFile.Close()
+	defer func() { _ = elfFile.Close() }()
 
 	return gatherOffsetsImpl(elfFile, probes, instrPath, log)
 }

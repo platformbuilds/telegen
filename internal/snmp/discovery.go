@@ -269,7 +269,7 @@ func (d *Discovery) tryConnect(ctx context.Context, address, community string) (
 	if err := conn.Connect(); err != nil {
 		return nil, err
 	}
-	defer conn.Conn.Close()
+	defer func() { _ = conn.Conn.Close() }()
 
 	// Query system MIB
 	oids := []string{

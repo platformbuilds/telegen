@@ -55,7 +55,7 @@ func (c *VMwareCollector) Authenticate(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to authenticate: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -110,7 +110,7 @@ func (c *VMwareCollector) checkSession(ctx context.Context) bool {
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	return resp.StatusCode == http.StatusOK
 }
@@ -711,7 +711,7 @@ func (c *VMwareCollector) doRequest(ctx context.Context, path string) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -743,7 +743,7 @@ func (c *VMwareCollector) Logout(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	c.sessionMu.Lock()
 	c.sessionID = ""

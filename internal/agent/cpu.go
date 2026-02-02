@@ -55,7 +55,7 @@ type CPULimiter struct {
 	cpuPercent   atomic.Int64 // stored as percent * 100 for precision
 
 	// Lifecycle
-	mu     sync.RWMutex
+	mu     sync.RWMutex //nolint:unused // reserved for future thread-safe access
 	stopCh chan struct{}
 	wg     sync.WaitGroup
 }

@@ -91,7 +91,7 @@ func (c *nfsCollector) Update(ch chan<- prometheus.Metric) error {
 		}
 		return fmt.Errorf("failed to open %s: %w", nfsPath, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {

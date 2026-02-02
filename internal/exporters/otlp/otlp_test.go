@@ -37,15 +37,15 @@ func TestConfigFromEnv(t *testing.T) {
 	origProtocol := os.Getenv("OTEL_EXPORTER_OTLP_PROTOCOL")
 	origCompression := os.Getenv("OTEL_EXPORTER_OTLP_COMPRESSION")
 	defer func() {
-		os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", origEndpoint)
-		os.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", origProtocol)
-		os.Setenv("OTEL_EXPORTER_OTLP_COMPRESSION", origCompression)
+		_ = os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", origEndpoint)
+		_ = os.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", origProtocol)
+		_ = os.Setenv("OTEL_EXPORTER_OTLP_COMPRESSION", origCompression)
 	}()
 
 	// Set test env
-	os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4318")
-	os.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
-	os.Setenv("OTEL_EXPORTER_OTLP_COMPRESSION", "gzip")
+	_ = os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4318")
+	_ = os.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
+	_ = os.Setenv("OTEL_EXPORTER_OTLP_COMPRESSION", "gzip")
 
 	cfg := ConfigFromEnv()
 
@@ -329,7 +329,7 @@ func TestBatcherMaxBatchSize(t *testing.T) {
 		t.Error("expected batch to be exported when max size reached")
 	}
 
-	batcher.Stop(ctx)
+	_ = batcher.Stop(ctx)
 }
 
 func TestBatcherTimeout(t *testing.T) {
@@ -362,7 +362,7 @@ func TestBatcherTimeout(t *testing.T) {
 		t.Error("expected batch to be exported on timeout")
 	}
 
-	batcher.Stop(ctx)
+	_ = batcher.Stop(ctx)
 }
 
 // ConfigError represents a configuration error.

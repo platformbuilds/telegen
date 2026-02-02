@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"io/ioutil"
+	"os"
 	"time"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
@@ -148,7 +148,7 @@ func New(ctx context.Context, o TraceOpts, res *resource.Resource) (*Clients, er
 func buildTLS(ca, cert, key string, insecure bool) (credentials.TransportCredentials, error) {
 	cfg := &tls.Config{InsecureSkipVerify: insecure}
 	if ca != "" {
-		b, err := ioutil.ReadFile(ca)
+		b, err := os.ReadFile(ca)
 		if err != nil {
 			return nil, err
 		}

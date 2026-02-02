@@ -124,7 +124,7 @@ func (fcs *fakeCacheService) Start() {
 
 func (fcs *fakeCacheService) Restart() {
 	fcs.server.Stop()
-	fcs.listener.Close()
+	_ = fcs.listener.Close()
 	fcs.Start()
 }
 

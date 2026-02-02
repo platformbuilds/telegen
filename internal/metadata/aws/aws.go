@@ -162,7 +162,7 @@ func (p *Provider) getToken(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		return "", errors.New("imds token failed")
 	}
@@ -179,7 +179,7 @@ func (p *Provider) get(ctx context.Context, token, url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		return nil, errors.New(resp.Status)
 	}

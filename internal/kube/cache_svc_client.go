@@ -96,7 +96,7 @@ func (sc *cacheSvcClient) connect(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("did not connect: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := informer.NewEventStreamServiceClient(conn)
 

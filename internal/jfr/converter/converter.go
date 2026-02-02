@@ -303,26 +303,26 @@ func (c *Converter) WriteJSON(events []*ProfileEvent, outputPath string) error {
 
 	for _, evt := range events {
 		if err := encoder.Encode(evt); err != nil {
-			f.Close()
-			os.Remove(tempPath)
+			_ = f.Close()
+			_ = os.Remove(tempPath)
 			return fmt.Errorf("failed to encode event: %w", err)
 		}
 	}
 
 	if err := writer.Flush(); err != nil {
-		f.Close()
-		os.Remove(tempPath)
+		_ = f.Close()
+		_ = os.Remove(tempPath)
 		return fmt.Errorf("failed to flush writer: %w", err)
 	}
 
 	if err := f.Close(); err != nil {
-		os.Remove(tempPath)
+		_ = os.Remove(tempPath)
 		return fmt.Errorf("failed to close file: %w", err)
 	}
 
 	// Atomic rename
 	if err := os.Rename(tempPath, outputPath); err != nil {
-		os.Remove(tempPath)
+		_ = os.Remove(tempPath)
 		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 

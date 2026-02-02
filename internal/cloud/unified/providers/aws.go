@@ -216,7 +216,7 @@ func (p *AWSProvider) getToken(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("failed to get token: status %d", resp.StatusCode)
@@ -277,7 +277,7 @@ func (p *AWSProvider) getInstanceIdentityDocument(ctx context.Context) (*awsInst
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to get identity document: status %d", resp.StatusCode)
@@ -310,7 +310,7 @@ func (p *AWSProvider) getMetadataValue(ctx context.Context, path string) string 
 	if err != nil {
 		return ""
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return ""

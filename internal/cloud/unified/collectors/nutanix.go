@@ -18,7 +18,7 @@ import (
 type NutanixCollector struct {
 	config unified.NutanixConfig
 	client *http.Client
-	baseMu sync.RWMutex
+	baseMu sync.RWMutex //nolint:unused // reserved for thread-safe base URL updates
 }
 
 // NewNutanixCollector creates a new Nutanix Prism collector.
@@ -772,7 +772,7 @@ func (c *NutanixCollector) doRequest(ctx context.Context, path string, body map[
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)

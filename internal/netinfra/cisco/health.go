@@ -42,7 +42,7 @@ func (c *HealthCollector) CollectFabricHealth(ctx context.Context) ([]*types.Net
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status: %d", resp.StatusCode)
@@ -96,7 +96,7 @@ func (c *HealthCollector) collectPodHealth(ctx context.Context) ([]*types.Networ
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status: %d", resp.StatusCode)
@@ -173,7 +173,7 @@ func (c *HealthCollector) collectCapacity(ctx context.Context) ([]*types.Network
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status: %d", resp.StatusCode)

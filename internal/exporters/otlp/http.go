@@ -155,7 +155,7 @@ func (t *HTTPTransport) Send(ctx context.Context, signal SignalType, data []byte
 			Retryable: true,
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Handle response
 	return t.handleResponse(resp)

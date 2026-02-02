@@ -246,6 +246,8 @@ func detectHypervisorFromDMI(s string) string {
 }
 
 // int8SliceToString converts a C-style int8 array to a Go string.
+//
+//nolint:unused // reserved for future platform-specific implementations
 func int8SliceToString(s []int8) string {
 	var buf strings.Builder
 	for _, c := range s {

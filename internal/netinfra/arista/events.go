@@ -88,7 +88,7 @@ func (e *EventSubscriber) Stop() {
 	e.cancel()
 
 	if e.conn != nil {
-		e.conn.Close()
+		_ = e.conn.Close()
 	}
 
 	e.wg.Wait()
@@ -148,7 +148,7 @@ func (e *EventSubscriber) subscribe() error {
 		return fmt.Errorf("failed to connect to event stream: %w", err)
 	}
 	e.conn = conn
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Send subscription message
 	subscribeMsg := map[string]interface{}{
@@ -210,7 +210,7 @@ func (e *EventSubscriber) GetConfigChanges(ctx context.Context, since time.Time)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result struct {
 		Data []ConfigChangeEvent `json:"data"`

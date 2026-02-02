@@ -20,7 +20,7 @@ import (
 
 	"github.com/platformbuilds/telegen/internal/appolly/app/request"
 	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/internal/obiconfig"
+	config "github.com/platformbuilds/telegen/internal/obiconfig"
 	"github.com/platformbuilds/telegen/internal/ringbuf"
 )
 
@@ -75,10 +75,10 @@ func TestTCPReqParsing(t *testing.T) {
 	assert.Equal(t, request.Span{}, span)
 	assert.True(t, ignore)
 
-	pipeW.Close()
+	_ = pipeW.Close()
 	os.Stdout = stdout
 	<-done
-	pipeR.Close()
+	_ = pipeR.Close()
 
 	assert.Contains(t, output.String(), "![>]")
 	assert.Contains(t, output.String(), "![<]")

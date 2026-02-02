@@ -81,7 +81,7 @@ func (p *GCPProvider) Detect(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Check for GCP-specific header
 	if resp.Header.Get("Metadata-Flavor") != gcpMetadataFlavor {
@@ -277,7 +277,7 @@ func (p *GCPProvider) getMetadataValue(ctx context.Context, path string) string 
 	if err != nil {
 		return ""
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return ""

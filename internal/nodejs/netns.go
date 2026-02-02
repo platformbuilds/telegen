@@ -25,14 +25,14 @@ func withNetNS(hostPid int, fn func() error) error {
 		return fmt.Errorf("open self netns: %w", err)
 	}
 
-	defer selfNS.Close()
+	defer func() { _ = selfNS.Close() }()
 
 	targetNS, err := os.Open(fmt.Sprintf("/proc/%d/ns/net", hostPid))
 	if err != nil {
 		return fmt.Errorf("open target netns: %w", err)
 	}
 
-	defer targetNS.Close()
+	defer func() { _ = targetNS.Close() }()
 
 	if err := unix.Setns(int(targetNS.Fd()), unix.CLONE_NEWNET); err != nil {
 		return fmt.Errorf("join target ns: %w", err)

@@ -25,7 +25,7 @@ import (
 
 	"github.com/platformbuilds/telegen/internal/appolly/app/request"
 	"github.com/platformbuilds/telegen/internal/ebpf/common/dnsparser"
-	"github.com/platformbuilds/telegen/internal/obiconfig"
+	config "github.com/platformbuilds/telegen/internal/obiconfig"
 	"github.com/platformbuilds/telegen/internal/parsers/kafkaparser"
 	"github.com/platformbuilds/telegen/internal/ringbuf"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"
@@ -414,7 +414,7 @@ func KernelLockdownMode() KernelLockdown {
 			return KernelLockdownIntegrity
 		}
 
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		scanner := bufio.NewScanner(f)
 		if scanner.Scan() {
 			lockdown := scanner.Text()

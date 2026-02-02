@@ -173,7 +173,7 @@ func (c *netDevCollector) netlinkStats() (netDevStats, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	links, err := conn.Link.List()
 	if err != nil {
@@ -351,36 +351,16 @@ func (c *netDevCollector) legacy(devStats map[string]uint64) {
 		delete(devStats, "receive_length_errors")
 		_ = rx
 	}
-	if _, ok := devStats["receive_over_errors"]; ok {
-		delete(devStats, "receive_over_errors")
-	}
-	if _, ok := devStats["receive_crc_errors"]; ok {
-		delete(devStats, "receive_crc_errors")
-	}
-	if _, ok := devStats["receive_frame_errors"]; ok {
-		delete(devStats, "receive_frame_errors")
-	}
-	if _, ok := devStats["receive_fifo_errors"]; ok {
-		delete(devStats, "receive_fifo_errors")
-	}
-	if _, ok := devStats["receive_missed_errors"]; ok {
-		delete(devStats, "receive_missed_errors")
-	}
-	if _, ok := devStats["transmit_aborted_errors"]; ok {
-		delete(devStats, "transmit_aborted_errors")
-	}
-	if _, ok := devStats["transmit_carrier_errors"]; ok {
-		delete(devStats, "transmit_carrier_errors")
-	}
-	if _, ok := devStats["transmit_fifo_errors"]; ok {
-		delete(devStats, "transmit_fifo_errors")
-	}
-	if _, ok := devStats["transmit_heartbeat_errors"]; ok {
-		delete(devStats, "transmit_heartbeat_errors")
-	}
-	if _, ok := devStats["transmit_window_errors"]; ok {
-		delete(devStats, "transmit_window_errors")
-	}
+	delete(devStats, "receive_over_errors")
+	delete(devStats, "receive_crc_errors")
+	delete(devStats, "receive_frame_errors")
+	delete(devStats, "receive_fifo_errors")
+	delete(devStats, "receive_missed_errors")
+	delete(devStats, "transmit_aborted_errors")
+	delete(devStats, "transmit_carrier_errors")
+	delete(devStats, "transmit_fifo_errors")
+	delete(devStats, "transmit_heartbeat_errors")
+	delete(devStats, "transmit_window_errors")
 }
 
 type addrInfo struct {

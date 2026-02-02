@@ -67,7 +67,7 @@ func findLanguageFromElf(filePath string) svc.InstrumentableType {
 		return svc.InstrumentableGeneric
 	}
 
-	defer ctx.Close()
+	defer func() { _ = ctx.Close() }()
 
 	if ctx.HasSection(".gopclntab") {
 		return svc.InstrumentableGolang

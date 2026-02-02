@@ -51,7 +51,7 @@ func TestBondingCollector(t *testing.T) {
 	}
 
 	ch := make(chan prometheus.Metric, 100)
-	err = collector.Update(ch)
+	_ = collector.Update(ch)
 	close(ch)
 
 	// Count metrics
@@ -92,7 +92,7 @@ func TestEdacCollector(t *testing.T) {
 	}
 
 	ch := make(chan prometheus.Metric, 100)
-	err = collector.Update(ch)
+	_ = collector.Update(ch)
 	close(ch)
 
 	// Count metrics

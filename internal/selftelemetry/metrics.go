@@ -37,11 +37,14 @@ func NewRegistry(namespace string) *Registry {
 func InstallHandlers(mux *http.ServeMux, listen string) *Registry {
 	r := NewRegistry("telegen")
 	mux.Handle("/metrics", promhttp.Handler())
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK); w.Write([]byte("ok")) })
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
 		if r.ready.Load() {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("ready"))
+			_, _ = w.Write([]byte("ready"))
 		} else {
 			http.Error(w, "not ready", http.StatusServiceUnavailable)
 		}

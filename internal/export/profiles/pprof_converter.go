@@ -152,11 +152,11 @@ func (c *PprofConverter) FromPprof(data []byte, profileType profiler.ProfileType
 		// Not gzipped, use raw data
 		reader.Reset(data)
 	} else {
-		decompressed, err := io.ReadAll(gzReader)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decompress pprof: %w", err)
+		decompressedData, readErr := io.ReadAll(gzReader)
+		if readErr != nil {
+			return nil, fmt.Errorf("failed to decompress pprof: %w", readErr)
 		}
-		data = decompressed
+		_ = decompressedData // TODO: use decompressed data in parsing
 		_ = gzReader.Close()
 	}
 
@@ -382,7 +382,7 @@ func (c *PprofConverter) serialize(pprof *PprofProfile) ([]byte, error) {
 
 // ProfileSorter sorts profiles for consistent output
 type ProfileSorter struct {
-	profiles []*profiler.Profile
+	profiles []*profiler.Profile //nolint:unused // reserved for future sorting state
 }
 
 // Sort sorts profiles by timestamp

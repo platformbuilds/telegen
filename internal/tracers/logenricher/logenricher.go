@@ -68,7 +68,7 @@ func New(cfg *obi.Config) *Tracer {
 		log: logger,
 		cfg: cfg,
 		fdCache: expirable.NewLRU[string, *os.File](cfg.EBPF.LogEnricher.CacheSize, func(_ string, f *os.File) {
-			f.Close()
+			_ = f.Close()
 		}, cfg.EBPF.LogEnricher.CacheTTL),
 		pids: make(map[uint32][]uint32),
 	}

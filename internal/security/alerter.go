@@ -190,7 +190,7 @@ func (d *webhookDestination) Send(ctx context.Context, alert *Alert) error {
 	if err != nil {
 		return fmt.Errorf("failed to send webhook: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("webhook returned status %d", resp.StatusCode)
@@ -274,7 +274,7 @@ func (d *slackDestination) Send(ctx context.Context, alert *Alert) error {
 	if err != nil {
 		return fmt.Errorf("failed to send to slack: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("slack returned status %d", resp.StatusCode)

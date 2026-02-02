@@ -73,7 +73,7 @@ func (c *filefdCollector) readFileNr() (allocated, maximum uint64, err error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	if scanner.Scan() {

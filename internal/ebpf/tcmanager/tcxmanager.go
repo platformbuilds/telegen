@@ -220,7 +220,7 @@ func (tcx *tcxManager) onInterfaceRemoved(iface *ifaces.Interface) {
 func (tcx *tcxManager) closeLinksLocked(iface *ifaces.Interface) {
 	closeLinks := func(link *ifaceLink) {
 		if link.iface == iface.Index {
-			link.Close()
+			_ = link.Close()
 		}
 	}
 

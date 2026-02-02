@@ -151,7 +151,7 @@ func (h *HealthChecker) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Write JSON response
-	fmt.Fprintf(w, `{"status":"%s","uptime":"%s","timestamp":"%s"}`,
+	_, _ = fmt.Fprintf(w, `{"status":"%s","uptime":"%s","timestamp":"%s"}`,
 		status.Status, status.Uptime, status.Timestamp.Format(time.RFC3339))
 }
 
@@ -159,10 +159,10 @@ func (h *HealthChecker) handleHealthz(w http.ResponseWriter, r *http.Request) {
 func (h *HealthChecker) handleReadyz(w http.ResponseWriter, r *http.Request) {
 	if h.IsReady() {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ready"}`))
+		_, _ = w.Write([]byte(`{"status":"ready"}`))
 	} else {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte(`{"status":"not ready"}`))
+		_, _ = w.Write([]byte(`{"status":"not ready"}`))
 	}
 }
 
@@ -170,9 +170,9 @@ func (h *HealthChecker) handleReadyz(w http.ResponseWriter, r *http.Request) {
 func (h *HealthChecker) handleLivez(w http.ResponseWriter, r *http.Request) {
 	if h.IsLive() {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"live"}`))
+		_, _ = w.Write([]byte(`{"status":"live"}`))
 	} else {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte(`{"status":"not live"}`))
+		_, _ = w.Write([]byte(`{"status":"not live"}`))
 	}
 }

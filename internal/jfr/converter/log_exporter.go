@@ -232,7 +232,7 @@ func (e *OTLPLogExporter) flushChunk(ctx context.Context, events []*ProfileEvent
 	if err != nil {
 		return fmt.Errorf("failed to send OTLP logs request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
@@ -305,7 +305,7 @@ func (e *OTLPLogExporter) ExportLogs(ctx context.Context, logs plog.Logs) error 
 	if err != nil {
 		return fmt.Errorf("failed to send OTLP logs request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(resp.Body)

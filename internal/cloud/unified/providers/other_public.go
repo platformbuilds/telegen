@@ -51,7 +51,7 @@ func (p *AlibabaProvider) Detect(ctx context.Context) bool {
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	return resp.StatusCode == http.StatusOK
 }
@@ -147,7 +147,7 @@ func (p *AlibabaProvider) getMetadataValue(ctx context.Context, path string) (st
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("metadata request failed: %s", resp.Status)
@@ -197,7 +197,7 @@ func (p *AlibabaProvider) HealthCheck(ctx context.Context) unified.HealthCheckRe
 			Latency:   time.Since(start),
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	return unified.HealthCheckResult{
 		Healthy:   resp.StatusCode == http.StatusOK,
@@ -248,7 +248,7 @@ func (p *OracleProvider) Detect(ctx context.Context) bool {
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	return resp.StatusCode == http.StatusOK
 }
@@ -296,7 +296,7 @@ func (p *OracleProvider) getInstanceData(ctx context.Context) (*ociInstanceData,
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("IMDS request failed: %s", resp.Status)
@@ -356,7 +356,7 @@ func (p *OracleProvider) HealthCheck(ctx context.Context) unified.HealthCheckRes
 			Latency:   time.Since(start),
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	return unified.HealthCheckResult{
 		Healthy:   resp.StatusCode == http.StatusOK,
@@ -405,7 +405,7 @@ func (p *DigitalOceanProvider) Detect(ctx context.Context) bool {
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	return resp.StatusCode == http.StatusOK
 }
@@ -472,7 +472,7 @@ func (p *DigitalOceanProvider) getMetadataValue(ctx context.Context, path string
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("metadata request failed: %s", resp.Status)
@@ -497,7 +497,7 @@ func (p *DigitalOceanProvider) getDropletData(ctx context.Context) (*doDropletDa
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("metadata request failed: %s", resp.Status)
@@ -583,7 +583,7 @@ func (p *DigitalOceanProvider) HealthCheck(ctx context.Context) unified.HealthCh
 			Latency:   time.Since(start),
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	return unified.HealthCheckResult{
 		Healthy:   resp.StatusCode == http.StatusOK,

@@ -220,13 +220,13 @@ func (i *JavaInjector) copyAgent(ie *ebpf.Instrumentable) (string, error) {
 		return "", fmt.Errorf("unable to access OBI java agent: %w", err)
 	}
 
-	defer source.Close()
+	defer func() { _ = source.Close() }()
 	// Create file with read permissions for owner, group, and others (0644)
 	target, err := os.OpenFile(agentPathHost, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return "", fmt.Errorf("unable to create target OBI java agent: %w", err)
 	}
-	defer target.Close()
+	defer func() { _ = target.Close() }()
 	if _, err = target.ReadFrom(source); err != nil {
 		return "", fmt.Errorf("error writing java agent to target location: %w", err)
 	}
@@ -276,7 +276,7 @@ func (i *JavaInjector) attachJDKAgent(attacher *jvm.JAttacher, pid int32, path s
 		return err
 	}
 
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	reader := bufio.NewReader(out)
 	buf := bytes.Buffer{}

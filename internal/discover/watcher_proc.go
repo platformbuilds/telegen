@@ -23,8 +23,8 @@ import (
 	"github.com/platformbuilds/telegen/internal/appolly/services"
 	"github.com/platformbuilds/telegen/internal/ebpf"
 	ebpfcommon "github.com/platformbuilds/telegen/internal/ebpf/common"
-	"github.com/platformbuilds/telegen/internal/ebpflogger"
-	"github.com/platformbuilds/telegen/internal/ebpfwatcher"
+	logger "github.com/platformbuilds/telegen/internal/ebpflogger"
+	watcher "github.com/platformbuilds/telegen/internal/ebpfwatcher"
 	"github.com/platformbuilds/telegen/internal/obi"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"
 	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
@@ -405,7 +405,7 @@ func (r *procStatReader) getProcStatField(pid int32, field int) string {
 		return ""
 	}
 
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	nbytes, err := f.Read(r.buf[:])
 	if err != nil {

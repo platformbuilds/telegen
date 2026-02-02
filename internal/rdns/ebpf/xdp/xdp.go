@@ -40,7 +40,7 @@ func StartDNSPacketInspector(ctx context.Context, storage storage) error {
 }
 
 func tracerLoop(ctx context.Context, storage storage, tracer *tracer) {
-	defer tracer.Close()
+	defer func() { _ = tracer.Close() }()
 
 	log := log()
 

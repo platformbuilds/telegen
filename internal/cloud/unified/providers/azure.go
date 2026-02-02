@@ -82,7 +82,7 @@ func (p *AzureProvider) Detect(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	return resp.StatusCode == http.StatusOK, nil
 }
@@ -343,7 +343,7 @@ func (p *AzureProvider) getInstanceMetadata(ctx context.Context) (*azureInstance
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

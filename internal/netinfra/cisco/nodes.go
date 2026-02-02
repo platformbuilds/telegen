@@ -91,7 +91,7 @@ func (c *NodeCollector) getNodes(ctx context.Context) ([]FabricNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status: %d", resp.StatusCode)
@@ -130,7 +130,7 @@ func (c *NodeCollector) getNodeHealth(ctx context.Context) (map[string]NodeHealt
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status: %d", resp.StatusCode)

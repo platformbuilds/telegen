@@ -43,7 +43,7 @@ func TestGatherOffsets(t *testing.T) {
 
 	elfFile, err := elf.NewFile(reader)
 	require.NoError(t, err)
-	defer elfFile.Close()
+	defer func() { _ = elfFile.Close() }()
 
 	err = gatherOffsetsImpl(elfFile, probes, "libbsd.so", slog.Default())
 	require.NoError(t, err)

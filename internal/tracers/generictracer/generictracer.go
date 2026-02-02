@@ -606,7 +606,7 @@ func (p *Tracer) runIterator(it *ebpfcommon.Iter) error {
 	if err != nil {
 		return fmt.Errorf("open iterator: %w", err)
 	}
-	defer rd.Close()
+	defer func() { _ = rd.Close() }()
 
 	scanner := bufio.NewScanner(rd)
 	for scanner.Scan() {

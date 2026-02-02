@@ -215,13 +215,13 @@ func (e *MultiLogExporter) Close() error {
 	// Close disk file
 	if e.diskFile != nil {
 		e.diskMu.Lock()
-		e.diskFile.Close()
+		_ = e.diskFile.Close()
 		e.diskMu.Unlock()
 	}
 
 	// Close OTLP exporter
 	if e.otlpExporter != nil {
-		e.otlpExporter.Close()
+		_ = e.otlpExporter.Close()
 	}
 
 	return nil
@@ -325,15 +325,15 @@ func (e *MultiLogExporter) rotateDiskFile() error {
 	for i := e.config.DiskMaxFiles - 1; i > 0; i-- {
 		oldPath := fmt.Sprintf("%s.%d", e.config.DiskPath, i)
 		newPath := fmt.Sprintf("%s.%d", e.config.DiskPath, i+1)
-		os.Rename(oldPath, newPath)
+		_ = os.Rename(oldPath, newPath)
 	}
 
 	// Rename current file to .1
-	os.Rename(e.config.DiskPath, e.config.DiskPath+".1")
+	_ = os.Rename(e.config.DiskPath, e.config.DiskPath+".1")
 
 	// Delete oldest file if over limit
 	oldestPath := fmt.Sprintf("%s.%d", e.config.DiskPath, e.config.DiskMaxFiles+1)
-	os.Remove(oldestPath)
+	_ = os.Remove(oldestPath)
 
 	// Create new file
 	f, err := os.OpenFile(e.config.DiskPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)

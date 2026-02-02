@@ -120,7 +120,7 @@ func (d *ProcessDetector) parseStatusFile(basePath string, proc *ProcessInfo) {
 	if err != nil {
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -298,7 +298,7 @@ func (d *ProcessDetector) getProcessPorts(pid int) []int {
 	if err != nil {
 		return ports
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	scanner.Scan() // Skip header

@@ -44,7 +44,7 @@ const (
 func testKubeMatch(t *testing.T, m Event[ProcessMatch], name string, pid int32) {
 	assert.Equal(t, EventCreated, m.Type)
 	require.Len(t, m.Obj.Criteria, 1)
-	assert.Equal(t, name, m.Obj.Criteria[0].GetName())
+	assert.Equal(t, name, m.Obj.Criteria[0].GetName()) //nolint:staticcheck // SA1019: testing deprecated API
 	assert.Equal(t, pid, m.Obj.Process.Pid)
 }
 

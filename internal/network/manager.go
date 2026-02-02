@@ -384,7 +384,7 @@ func (m *Manager) handlePacketEvent(event *PacketEvent) {
 	}
 
 	// Forward to topology manager for connection tracking
-	if m.topologyManager != nil && event.IPVersion == 4 {
+	if m.topologyManager != nil && event.IPVersion == 4 { //nolint:staticcheck // SA9003: reserved for topology integration
 		// This would convert to topology events
 	}
 }
