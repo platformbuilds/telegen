@@ -139,7 +139,7 @@ func (c *SystemCollector) collectCPUMemory(ctx context.Context) ([]*types.Networ
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status: %d", resp.StatusCode)
@@ -203,7 +203,7 @@ func (c *SystemCollector) collectTemperature(ctx context.Context) ([]*types.Netw
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status: %d", resp.StatusCode)
@@ -266,7 +266,7 @@ func (c *SystemCollector) collectPowerSupply(ctx context.Context) ([]*types.Netw
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status: %d", resp.StatusCode)
@@ -320,7 +320,7 @@ func (c *SystemCollector) collectFans(ctx context.Context) ([]*types.NetworkMetr
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status: %d", resp.StatusCode)

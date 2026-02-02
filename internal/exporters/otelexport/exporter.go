@@ -258,7 +258,7 @@ func (e *Exporter) initGRPC(ctx context.Context) error {
 	dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	conn, err := grpc.DialContext(dialCtx, e.cfg.Endpoint, opts...)
+	conn, err := grpc.DialContext(dialCtx, e.cfg.Endpoint, opts...) //nolint:staticcheck // SA1019: grpc.DialContext still supported in 1.x
 	if err != nil {
 		return fmt.Errorf("failed to dial OTel Collector: %w", err)
 	}

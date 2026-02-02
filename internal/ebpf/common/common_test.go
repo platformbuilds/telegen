@@ -29,8 +29,8 @@ func TestLockdownParsing(t *testing.T) {
 	require.NoError(t, err)
 	notPath, err := filepath.Abs(noFile.Name())
 	require.NoError(t, err)
-	noFile.Close()
-	os.Remove(noFile.Name())
+	_ = noFile.Close()
+	_ = os.Remove(noFile.Name())
 
 	// Setup for testing file that doesn't exist
 	lockdownPath = notPath
@@ -40,9 +40,9 @@ func TestLockdownParsing(t *testing.T) {
 	require.NoError(t, err)
 	path, err := filepath.Abs(tempFile.Name())
 	require.NoError(t, err)
-	tempFile.Close()
+	_ = tempFile.Close()
 
-	defer os.Remove(tempFile.Name())
+	defer func() { _ = os.Remove(tempFile.Name()) }()
 	// Setup for testing
 	lockdownPath = path
 

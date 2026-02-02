@@ -23,11 +23,11 @@ func mockIMDSServer() *httptest.Server {
 			return
 		}
 		w.WriteHeader(200)
-		w.Write([]byte("tkn"))
+		_, _ = w.Write([]byte("tkn"))
 	})
 	mux.HandleFunc("/latest/dynamic/instance-identity/document", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"accountId":        "123456789012",
 			"region":           "us-west-2",
 			"instanceId":       "i-abc123",
@@ -43,7 +43,7 @@ func mockIMDSServer() *httptest.Server {
 //nolint:unused // test helper for remote write mock server
 func mockRemoteWrite(t *testing.T, ch chan<- *prompb.WriteRequest) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
+		defer func() { _ = r.Body.Close() }()
 		var wr prompb.WriteRequest
 		b, _ := io.ReadAll(r.Body)
 		if err := wr.Unmarshal(b); err != nil {
@@ -62,7 +62,7 @@ func TestPipelineE2E_RemoteWriteAWSLabels(t *testing.T) {
 	base := strings.TrimRight(imds.URL, "/") + "/latest"
 	got := make(chan *prompb.WriteRequest, 1)
 	rw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
+		defer func() { _ = r.Body.Close() }()
 		var wr prompb.WriteRequest
 		b, _ := io.ReadAll(r.Body)
 		if err := wr.Unmarshal(b); err != nil {

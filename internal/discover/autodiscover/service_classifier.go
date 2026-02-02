@@ -62,7 +62,7 @@ func (c *ServiceClassifier) getListeningPorts() []ListeningPort {
 	if err != nil {
 		return ports
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	scanner.Scan() // Skip header

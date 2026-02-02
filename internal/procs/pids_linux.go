@@ -20,7 +20,7 @@ func FindNamespace(pid int32) (uint32, error) {
 		return 0, fmt.Errorf("failed to open(/proc/%d/ns/pid): %w", pid, err)
 	}
 
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// read the value of the symbolic link
 	buf := make([]byte, syscall.PathMax)
@@ -56,7 +56,7 @@ func FindNamespacedPids(pid int32) ([]uint32, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open(/proc/%d/status): %w", pid, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {

@@ -163,7 +163,7 @@ func (h *JavaRoutes) ExtractRoutes(pid int32) (*RouteHarvesterResult, error) {
 		return &RouteHarvesterResult{Routes: nil, Kind: PartialRoutes}, nil
 	}
 
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	reader := bufio.NewReader(out)
 	for {

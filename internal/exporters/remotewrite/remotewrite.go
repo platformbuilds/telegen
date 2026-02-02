@@ -7,8 +7,8 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/prometheus/prometheus/prompb"
@@ -43,7 +43,7 @@ func (c *Client) WithTLS(t TLSConfig) error {
 	}
 	cfg := &tls.Config{InsecureSkipVerify: t.InsecureSkipVerify}
 	if t.CAFile != "" {
-		b, err := ioutil.ReadFile(t.CAFile)
+		b, err := os.ReadFile(t.CAFile)
 		if err != nil {
 			return err
 		}
@@ -99,7 +99,7 @@ func (c *Client) Send(ctx context.Context, wr *prompb.WriteRequest, ep Endpoint)
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode/100 == 2 {
 		return nil
 	}

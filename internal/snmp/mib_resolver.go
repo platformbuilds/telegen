@@ -220,7 +220,7 @@ func (r *MIBResolver) loadMIBFile(path string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	module := &MIBModule{
 		File:    path,

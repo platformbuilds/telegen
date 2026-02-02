@@ -104,7 +104,7 @@ func (c *ContractCollector) getContracts(ctx context.Context) ([]Contract, error
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status: %d", resp.StatusCode)
@@ -143,7 +143,7 @@ func (c *ContractCollector) getContractStats(ctx context.Context) (map[string]Co
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status: %d", resp.StatusCode)
@@ -237,7 +237,7 @@ func (c *ContractCollector) GetFilterEntries(ctx context.Context, contractDN str
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status: %d", resp.StatusCode)

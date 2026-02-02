@@ -53,7 +53,7 @@ func (c *FaultCollector) Collect(ctx context.Context) ([]*types.NetworkMetric, e
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status: %d", resp.StatusCode)
@@ -190,7 +190,7 @@ func (c *FaultCollector) GetActiveFaults(ctx context.Context) ([]Fault, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status: %d", resp.StatusCode)
@@ -230,7 +230,7 @@ func (c *FaultCollector) GetFaultsBySeverity(ctx context.Context, severity strin
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status: %d", resp.StatusCode)

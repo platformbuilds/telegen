@@ -244,13 +244,13 @@ func setMetricsProtocol(cfg *MetricsConfig) {
 		return
 	}
 	if cfg.MetricsProtocol != "" {
-		os.Setenv(envMetricsProtocol, string(cfg.MetricsProtocol))
+		_ = os.Setenv(envMetricsProtocol, string(cfg.MetricsProtocol))
 		return
 	}
 	if cfg.Protocol != "" {
-		os.Setenv(envProtocol, string(cfg.Protocol))
+		_ = os.Setenv(envProtocol, string(cfg.Protocol))
 		return
 	}
 	// unset. Guessing it
-	os.Setenv(envMetricsProtocol, string(cfg.GuessProtocol()))
+	_ = os.Setenv(envMetricsProtocol, string(cfg.GuessProtocol()))
 }

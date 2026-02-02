@@ -34,9 +34,9 @@ func imdsServer() *httptest.Server {
 	})
 	mux.HandleFunc("/latest/meta-data/public-ipv4", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("54.1.2.3")) })
 	mux.HandleFunc("/latest/meta-data/network/interfaces/macs/", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("aa:bb:cc:dd:ee:ff/\n")) })
-	mux.HandleFunc("/latest/meta-data/network/interfaces/macs/aa:bb:cc:dd:ee:ff/vpc-id", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("vpc-123")) })
-	mux.HandleFunc("/latest/meta-data/tags/instance", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("env\nignored\n")) })
-	mux.HandleFunc("/latest/meta-data/tags/instance/env", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("prod")) })
+	mux.HandleFunc("/latest/meta-data/network/interfaces/macs/aa:bb:cc:dd:ee:ff/vpc-id", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("vpc-123")) })
+	mux.HandleFunc("/latest/meta-data/tags/instance", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("env\nignored\n")) })
+	mux.HandleFunc("/latest/meta-data/tags/instance/env", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("prod")) })
 	return httptest.NewServer(mux)
 }
 

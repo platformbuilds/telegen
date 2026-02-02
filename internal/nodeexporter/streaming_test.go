@@ -205,7 +205,7 @@ func TestStreamingExporterStats(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	exporter.Start(ctx)
+	exporter.Start(ctx) //nolint:errcheck // test ignores error
 	time.Sleep(150 * time.Millisecond)
 	exporter.Stop()
 
@@ -348,10 +348,10 @@ func TestMetricCacheInvalidate(t *testing.T) {
 	cache := NewMetricCache(registry, 1*time.Hour, slog.Default())
 
 	// First gather
-	cache.Gather()
+	_, _ = cache.Gather()
 
 	// Second gather should hit cache
-	cache.Gather()
+	_, _ = cache.Gather()
 
 	stats := cache.Stats()
 	if stats.Hits != 1 {
@@ -367,7 +367,7 @@ func TestMetricCacheInvalidate(t *testing.T) {
 	}
 
 	// Next gather should be a miss
-	cache.Gather()
+	_, _ = cache.Gather()
 
 	stats = cache.Stats()
 	if stats.Misses != 2 {
@@ -393,20 +393,20 @@ func TestMetricCacheHitRate(t *testing.T) {
 	}
 
 	// 1 miss
-	cache.Gather()
+	_, _ = cache.Gather()
 	if rate := cache.HitRate(); rate != 0 {
 		t.Errorf("expected hit rate 0 after 1 miss, got %f", rate)
 	}
 
 	// 1 hit (total: 1 miss + 1 hit = 50%)
-	cache.Gather()
+	_, _ = cache.Gather()
 	if rate := cache.HitRate(); rate != 50 {
 		t.Errorf("expected hit rate 50%%, got %f%%", rate)
 	}
 
 	// 2 more hits (total: 1 miss + 3 hits = 75%)
-	cache.Gather()
-	cache.Gather()
+	_, _ = cache.Gather()
+	_, _ = cache.Gather()
 	if rate := cache.HitRate(); rate != 75 {
 		t.Errorf("expected hit rate 75%%, got %f%%", rate)
 	}
@@ -427,7 +427,7 @@ func TestBatchProcessor(t *testing.T) {
 	mtype := dto.MetricType_GAUGE
 
 	// Add 2 metrics - shouldn't flush yet
-	processor.Add(context.Background(), []*dto.MetricFamily{
+	_ = processor.Add(context.Background(), []*dto.MetricFamily{
 		{Name: &name, Type: &mtype},
 		{Name: &name, Type: &mtype},
 	})
@@ -437,7 +437,7 @@ func TestBatchProcessor(t *testing.T) {
 	}
 
 	// Add 2 more - should flush (4 >= batch size 3)
-	processor.Add(context.Background(), []*dto.MetricFamily{
+	_ = processor.Add(context.Background(), []*dto.MetricFamily{
 		{Name: &name, Type: &mtype},
 		{Name: &name, Type: &mtype},
 	})
@@ -447,10 +447,10 @@ func TestBatchProcessor(t *testing.T) {
 	}
 
 	// Manual flush
-	processor.Add(context.Background(), []*dto.MetricFamily{
+	_ = processor.Add(context.Background(), []*dto.MetricFamily{
 		{Name: &name, Type: &mtype},
 	})
-	processor.Flush(context.Background())
+	_ = processor.Flush(context.Background())
 
 	if flushed.Load() != 5 {
 		t.Errorf("expected 5 total flushed, got %d", flushed.Load())

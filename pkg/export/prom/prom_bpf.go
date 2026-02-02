@@ -208,7 +208,7 @@ func (bc *BPFCollector) getProbeMetrics() []ProbeMetrics {
 			bc.log.Debug("failed to load program", "ID", id, "error", err)
 			continue
 		}
-		defer program.Close()
+		defer func() { _ = program.Close() }()
 
 		info, err := program.Info()
 		if err != nil {
@@ -291,7 +291,7 @@ func (bc *BPFCollector) getMapMetrics() []BpfMapMetrics {
 			bc.log.Debug("failed to load map", "ID", id, "error", err)
 			continue
 		}
-		defer m.Close()
+		defer func() { _ = m.Close() }()
 
 		info, err := m.Info()
 		if err != nil {

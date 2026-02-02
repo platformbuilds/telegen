@@ -161,7 +161,7 @@ func (c *zfsCollector) parseKstat(path string) (map[string]float64, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	stats := make(map[string]float64)
 	scanner := bufio.NewScanner(file)

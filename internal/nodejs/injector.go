@@ -67,24 +67,24 @@ func connect(addr string, port int) (net.Conn, error) {
 	}
 
 	if err := syscall.Connect(fd, sa); err != nil {
-		syscall.Close(fd)
+		_ = syscall.Close(fd)
 		return nil, fmt.Errorf("connect: %w", err)
 	}
 
 	file := os.NewFile(uintptr(fd), fmt.Sprintf("tcp:%s:%d", addr, port))
 
 	if file == nil {
-		syscall.Close(fd)
+		_ = syscall.Close(fd)
 		return nil, errors.New("failed to create os.File from fd")
 	}
 
 	conn, err := net.FileConn(file)
 	if err != nil {
-		file.Close()
+		_ = file.Close()
 		return nil, fmt.Errorf("fileconn: %w", err)
 	}
 
-	file.Close()
+	_ = file.Close()
 
 	return conn, nil
 }
@@ -123,7 +123,7 @@ func httpGet(conn net.Conn, path string) ([]byte, error) {
 		return []byte{}, fmt.Errorf("error reading response: %w", err)
 	}
 
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -240,7 +240,7 @@ func (i *NodeInjector) injectFile() error {
 
 	wsURL, err := i.requestDebuggerURL(conn)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return err
 	}
 
@@ -248,7 +248,7 @@ func (i *NodeInjector) injectFile() error {
 
 	wsConn, _, err := upgradeConn(conn, wsURL)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return fmt.Errorf("failed to connect to inspector WebSocket: %w", err)
 	}
 

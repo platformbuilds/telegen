@@ -553,7 +553,7 @@ func TestTerminatesOnBadPromPort(t *testing.T) {
 
 	// Grab the port we just allocated for something else
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "Hello, %v, http: %v\n", r.URL.Path, r.TLS == nil)
+		_, _ = fmt.Fprintf(w, "Hello, %v, http: %v\n", r.URL.Path, r.TLS == nil)
 	})
 	server := http.Server{Addr: fmt.Sprintf(":%d", openPort), Handler: handler}
 

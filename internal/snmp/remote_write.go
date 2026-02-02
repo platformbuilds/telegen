@@ -260,7 +260,7 @@ func (ep *RemoteWriteEndpoint) send(ctx context.Context, req *prompb.WriteReques
 		ep.lastError = err
 		return fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Check response
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {

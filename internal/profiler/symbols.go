@@ -221,7 +221,7 @@ func (r *SymbolResolver) parseProcMaps(pid uint32) ([]MemoryMapping, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var mappings []MemoryMapping
 	scanner := bufio.NewScanner(file)
@@ -271,7 +271,7 @@ func (r *SymbolResolver) loadV8PerfMap(pid uint32) (*V8PerfMap, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	v8Map := &V8PerfMap{
 		PID:     pid,
@@ -358,7 +358,7 @@ func (r *SymbolResolver) loadELFSymbols(path string) (*ELFSymbolInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	info := &ELFSymbolInfo{
 		Path:    path,

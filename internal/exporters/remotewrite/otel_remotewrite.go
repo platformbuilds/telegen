@@ -347,7 +347,7 @@ func (w *OTelRemoteWriter) send(ctx context.Context, wr *prompb.WriteRequest) er
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Check response
 	if resp.StatusCode/100 != 2 {

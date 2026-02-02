@@ -162,7 +162,7 @@ func (d *PublicCloudDetector) checkEndpoint(ctx context.Context, ep PublicCloudE
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Drain body to allow connection reuse
 	_, _ = io.Copy(io.Discard, resp.Body)

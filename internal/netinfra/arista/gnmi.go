@@ -71,7 +71,7 @@ func (c *GNMIClient) Start(ctx context.Context) error {
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
-	conn, err := grpc.DialContext(c.ctx, c.config.GNMI.Address, opts...)
+	conn, err := grpc.DialContext(c.ctx, c.config.GNMI.Address, opts...) //nolint:staticcheck // SA1019: grpc.DialContext still supported in 1.x
 	if err != nil {
 		return fmt.Errorf("failed to connect to gNMI server: %w", err)
 	}
@@ -102,7 +102,7 @@ func (c *GNMIClient) Stop() {
 	c.wg.Wait()
 
 	if c.conn != nil {
-		c.conn.Close()
+		_ = c.conn.Close()
 	}
 
 	close(c.metrics)
@@ -314,7 +314,7 @@ func extractValue(val *gnmi.TypedValue) *float64 {
 	case *gnmi.TypedValue_UintVal:
 		result = float64(v.UintVal)
 	case *gnmi.TypedValue_FloatVal:
-		result = float64(v.FloatVal)
+		result = float64(v.FloatVal) //nolint:staticcheck // SA1019: FloatVal still used by some gNMI servers
 	case *gnmi.TypedValue_DoubleVal:
 		result = v.DoubleVal
 	default:

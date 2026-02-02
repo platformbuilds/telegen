@@ -72,8 +72,8 @@ func httpInfoToSpanLegacy(info *HTTPInfo) request.Span {
 }
 
 func httpRequestResponseToSpan(parseCtx *EBPFParseContext, event *BPFHTTPInfo, req *http.Request, resp *http.Response) request.Span {
-	defer req.Body.Close()
-	defer resp.Body.Close()
+	defer func() { _ = req.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }()
 
 	peer, host := (*BPFConnInfo)(&event.ConnInfo).reqHostInfo()
 

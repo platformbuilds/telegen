@@ -97,11 +97,11 @@ func (t *typer) makeServiceAttrs(processMatch *ProcessMatch) svc.Attrs {
 	svcFeatures := t.cfg.Metrics.Features
 
 	for _, s := range processMatch.Criteria {
-		if n := s.GetName(); n != "" {
+		if n := s.GetName(); n != "" { //nolint:staticcheck // SA1019: legacy compatibility
 			name = n
 		}
 
-		if n := s.GetNamespace(); n != "" {
+		if n := s.GetNamespace(); n != "" { //nolint:staticcheck // SA1019: legacy compatibility
 			namespace = n
 		}
 

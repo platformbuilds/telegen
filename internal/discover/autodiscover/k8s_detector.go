@@ -140,7 +140,7 @@ func (d *K8sDetector) enrichFromServiceAccount(info *K8sInfo) {
 	}
 
 	// Check for token presence (indicates we can potentially call the API)
-	if _, err := os.Stat(filepath.Join(saPath, "token")); err == nil {
+	if _, err := os.Stat(filepath.Join(saPath, "token")); err == nil { //nolint:staticcheck // SA9003: reserved for API auth
 		// Token exists, we could authenticate with the API server
 	}
 }

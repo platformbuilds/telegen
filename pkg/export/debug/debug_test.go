@@ -83,14 +83,14 @@ func traceFuncHelper(t *testing.T, tracePrinter TracePrinter) string {
 	f := resolvePrinterFunc(tracePrinter, spanCh)
 	go func() {
 		f(t.Context())
-		w.Close()
+		_ = w.Close()
 	}()
 
 	spanCh.Send([]request.Span{fakeSpan})
 	spanCh.Close()
 
 	funcOutput, err := io.ReadAll(r)
-	r.Close()
+	_ = r.Close()
 
 	require.NoError(t, err)
 

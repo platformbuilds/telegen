@@ -64,7 +64,7 @@ func (c *BGPCollector) Collect(ctx context.Context) ([]*types.NetworkMetric, err
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch BGP sessions: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("BGP request failed with status: %d", resp.StatusCode)
@@ -179,7 +179,7 @@ func (c *BGPCollector) GetSessionsByDevice(ctx context.Context, deviceID string)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status: %d", resp.StatusCode)

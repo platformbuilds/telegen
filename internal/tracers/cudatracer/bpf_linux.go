@@ -87,7 +87,7 @@ func (o *BpfObjects) Close() error {
 
 	for _, closer := range closers {
 		if closer != nil {
-			closer.Close()
+			_ = closer.Close()
 		}
 	}
 

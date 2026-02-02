@@ -440,7 +440,7 @@ func getUdevDeviceProperties(pathConfig PathConfig, major, minor uint32) (udevIn
 	if err != nil {
 		return nil, err
 	}
-	defer data.Close()
+	defer func() { _ = data.Close() }()
 
 	info := make(udevInfo)
 

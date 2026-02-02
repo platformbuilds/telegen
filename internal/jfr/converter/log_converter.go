@@ -170,6 +170,7 @@ func (c *LogConverter) ConvertToJSONString(events []*ProfileEvent) (string, erro
 	return result, nil
 }
 
+//nolint:unused // reserved for resource attribute injection
 func (c *LogConverter) setResourceAttributes(resource pcommon.Resource) {
 	attrs := resource.Attributes()
 

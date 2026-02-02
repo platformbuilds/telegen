@@ -26,18 +26,18 @@ type tracer struct {
 
 func (t *tracer) Close() error {
 	if t.bpfObjects != nil {
-		t.bpfObjects.Close()
+		_ = t.bpfObjects.Close()
 		t.bpfObjects = nil
 	}
 
 	for _, link := range t.links {
-		(*link).Close()
+		_ = (*link).Close()
 	}
 
 	t.links = nil
 
 	if t.ringbuf != nil {
-		t.ringbuf.Close()
+		_ = t.ringbuf.Close()
 	}
 
 	return nil

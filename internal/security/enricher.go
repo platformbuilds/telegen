@@ -131,16 +131,14 @@ func (e *Enricher) lookupContainerInfo(pid uint32) *ContainerInfo {
 
 // getContainerIDFromCgroup extracts container ID from cgroup
 func (e *Enricher) getContainerIDFromCgroup(pid uint32) string {
-	cgroupPath := "/proc/" + string(rune(pid)) + "/cgroup"
-
 	// Use proper integer formatting
-	cgroupPath = "/proc/" + itoa(pid) + "/cgroup"
+	cgroupPath := "/proc/" + itoa(pid) + "/cgroup"
 
 	file, err := os.Open(cgroupPath)
 	if err != nil {
 		return ""
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {

@@ -22,8 +22,8 @@ func testMatch(t *testing.T, m Event[ProcessMatch], name string,
 ) {
 	assert.Equal(t, EventCreated, m.Type)
 	require.Len(t, m.Obj.Criteria, 1)
-	assert.Equal(t, name, m.Obj.Criteria[0].GetName())
-	assert.Equal(t, namespace, m.Obj.Criteria[0].GetNamespace())
+	assert.Equal(t, name, m.Obj.Criteria[0].GetName())           //nolint:staticcheck // SA1019: testing deprecated API
+	assert.Equal(t, namespace, m.Obj.Criteria[0].GetNamespace()) //nolint:staticcheck // SA1019: testing deprecated API
 	assert.Equal(t, proc, *m.Obj.Process)
 }
 

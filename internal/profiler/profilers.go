@@ -105,7 +105,7 @@ func (p *CPUProfiler) Stop() error {
 
 	// Detach perf event links
 	for _, l := range p.links {
-		l.Close()
+		_ = l.Close()
 	}
 	p.links = nil
 
@@ -262,7 +262,7 @@ func (p *CPUProfiler) attachPerfEvents() error {
 
 		// Note: In production, we'd attach the BPF program here
 		// For now, just close the fd since we don't have the actual program
-		unix.Close(fd)
+		_ = unix.Close(fd)
 	}
 
 	return nil
@@ -368,7 +368,7 @@ func (p *OffCPUProfiler) Stop() error {
 	close(p.stopCh)
 
 	if p.schedLink != nil {
-		p.schedLink.Close()
+		_ = p.schedLink.Close()
 	}
 
 	if p.coll != nil {

@@ -59,7 +59,7 @@ func (i *InventoryCollector) Collect(ctx context.Context) ([]*types.NetworkMetri
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch inventory: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("inventory request failed with status: %d", resp.StatusCode)
@@ -186,7 +186,7 @@ func (i *InventoryCollector) GetDevices(ctx context.Context) ([]Device, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status: %d", resp.StatusCode)

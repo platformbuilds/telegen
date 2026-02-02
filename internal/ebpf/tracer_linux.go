@@ -102,7 +102,7 @@ func unloadInternalMaps(eventContext *common.EBPFEventContext) {
 	defer eventContext.MapsLock.Unlock()
 
 	for _, v := range eventContext.EBPFMaps {
-		v.Close()
+		_ = v.Close()
 	}
 
 	eventContext.EBPFMaps = make(map[string]*ebpf.Map)

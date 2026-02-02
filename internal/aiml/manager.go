@@ -7,6 +7,7 @@ package aiml
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -250,21 +251,21 @@ func (m *Manager) Start(ctx context.Context) error {
 	// Start GPU collector
 	if m.gpuCollector != nil {
 		if err := m.gpuCollector.Start(ctx); err != nil {
-			// Log warning but continue
+			slog.Warn("failed to start GPU collector", "error", err)
 		}
 	}
 
 	// Start token collector
 	if m.tokenCollector != nil {
 		if err := m.tokenCollector.Start(ctx); err != nil {
-			// Log warning but continue
+			slog.Warn("failed to start token collector", "error", err)
 		}
 	}
 
 	// Start framework profiler
 	if m.profiler != nil {
 		if err := m.profiler.Start(ctx); err != nil {
-			// Log warning but continue
+			slog.Warn("failed to start profiler", "error", err)
 		}
 	}
 

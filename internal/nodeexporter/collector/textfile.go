@@ -157,7 +157,7 @@ func (c *textFileCollector) processFile(path string) (*time.Time, map[string]*dt
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open textfile %q: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	parser := expfmt.NewTextParser(model.LegacyValidation)
 	families, err := parser.TextToMetricFamilies(f)

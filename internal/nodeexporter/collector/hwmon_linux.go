@@ -95,7 +95,7 @@ func (c *hwMonCollector) updateHwmon(ch chan<- prometheus.Metric, dir string) er
 	// Also check device subdirectory
 	deviceDir := filepath.Join(dir, "device")
 	if _, err := os.Stat(deviceDir); err == nil {
-		c.collectSensorData(deviceDir, data)
+		_ = c.collectSensorData(deviceDir, data)
 	}
 
 	// Export chip name metadata
@@ -262,7 +262,7 @@ func (c *hwMonCollector) sysReadFile(file string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	b := make([]byte, 128)
 	n, err := unix.Read(int(f.Fd()), b)

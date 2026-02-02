@@ -82,7 +82,7 @@ func FindNetworkNamespace(pid int32) (string, error) {
 		return "", fmt.Errorf("failed to open(/proc/%d/ns/net): %w", pid, err)
 	}
 
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// read the value of the symbolic link
 	buf := make([]byte, syscall.PathMax)

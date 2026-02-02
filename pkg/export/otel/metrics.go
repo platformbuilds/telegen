@@ -952,11 +952,11 @@ func (r *Metrics) record(span *request.Span, mr *MetricsReporter) {
 	}
 
 	if otelSpanMetricsAccepted(span) {
-		var extraAttrs []attribute.KeyValue
+		var extraAttrs []attribute.KeyValue //nolint:staticcheck // SA4010: reserved for future attribute injection
 
 		for _, l := range mr.spanExtraAttrs {
 			if v, ok := span.Service.Metadata[l]; ok {
-				extraAttrs = append(extraAttrs, l.OTEL().String(v))
+				extraAttrs = append(extraAttrs, l.OTEL().String(v)) //nolint:staticcheck // SA4010: reserved for future attribute injection
 			}
 		}
 

@@ -234,13 +234,13 @@ func NewElfContextFromFile(filePath string) (*ElfContext, error) {
 
 	info, err := file.Stat()
 	if err != nil {
-		file.Close()
+		_ = file.Close()
 		return nil, fmt.Errorf("failed to stat %s: %w", filePath, err)
 	}
 
 	ctx, err := NewElfContextFromFileHandle(file, info.Size())
 	if err != nil {
-		file.Close()
+		_ = file.Close()
 		return nil, err
 	}
 

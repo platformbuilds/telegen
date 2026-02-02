@@ -12,8 +12,7 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/link"
-
-	"github.com/platformbuilds/telegen/internal/obiconfig"
+	config "github.com/platformbuilds/telegen/internal/obiconfig"
 )
 
 type AttachmentType uint8
@@ -85,7 +84,7 @@ var IsTCXSupported = sync.OnceValue(func() bool {
 		return false
 	}
 
-	defer prog.Close()
+	defer func() { _ = prog.Close() }()
 
 	l, err := link.AttachTCX(link.TCXOptions{
 		Program:   prog,

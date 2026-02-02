@@ -267,7 +267,7 @@ func (e *UnifiedExporter) Shutdown(ctx context.Context) error {
 
 	if e.remoteWriter != nil {
 		if err := e.remoteWriter.Shutdown(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("Remote Write shutdown: %w", err))
+			errs = append(errs, fmt.Errorf("remote write shutdown: %w", err))
 		}
 	}
 

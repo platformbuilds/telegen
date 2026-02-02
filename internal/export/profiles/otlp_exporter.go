@@ -162,7 +162,7 @@ func (e *OTLPExporter) flush(ctx context.Context, profiles []*profiler.Profile) 
 	if err != nil {
 		return fmt.Errorf("failed to send profiles: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
