@@ -169,6 +169,8 @@ func (n *NodeCollector) execute(name string, c Collector, ch chan<- prometheus.M
 }
 
 // pushMetric helps construct and convert a variety of value types into Prometheus float64 metrics.
+//
+//nolint:unused // utility function reserved for future collectors
 func pushMetric(ch chan<- prometheus.Metric, fieldDesc *prometheus.Desc, name string, value interface{}, valueType prometheus.ValueType, labelValues ...string) {
 	var fVal float64
 	switch val := value.(type) {

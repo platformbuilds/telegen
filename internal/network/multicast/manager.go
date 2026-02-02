@@ -236,7 +236,7 @@ type MulticastMetrics struct {
 	TotalBroadcastPackets uint64
 	TotalBroadcastBytes   uint64
 	ActiveGroups          int
-	mu                    sync.RWMutex
+	mu                    sync.RWMutex //nolint:unused // reserved for thread-safe metrics access
 }
 
 // RecordMulticast records a multicast packet

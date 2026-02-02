@@ -339,6 +339,8 @@ func (b *OTLPBridge) convertSummary(name, help string, metrics []*dto.Metric, ti
 }
 
 // convertLabels converts Prometheus labels to OTEL attribute set.
+//
+//nolint:unused // helper method for direct label conversion without metadata
 func (b *OTLPBridge) convertLabels(labels []*dto.LabelPair) attribute.Set {
 	if len(labels) == 0 {
 		return attribute.NewSet()

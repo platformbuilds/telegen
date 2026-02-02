@@ -303,7 +303,7 @@ func NewElfContextFromData(data []byte) (*ElfContext, error) {
 
 func (ctx *ElfContext) Close() error {
 	if ctx.file != nil {
-		defer ctx.file.Close()
+		defer func() { _ = ctx.file.Close() }()
 	}
 
 	if ctx.ownsData {

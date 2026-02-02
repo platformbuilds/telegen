@@ -25,7 +25,7 @@ type pressureCollector struct {
 	logger *slog.Logger
 
 	cpuSome    *prometheus.Desc
-	cpuFull    *prometheus.Desc
+	cpuFull    *prometheus.Desc //nolint:unused // CPU full pressure metric descriptor, reserved for comprehensive PSI support
 	memorySome *prometheus.Desc
 	memoryFull *prometheus.Desc
 	ioSome     *prometheus.Desc

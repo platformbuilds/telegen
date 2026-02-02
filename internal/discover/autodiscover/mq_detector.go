@@ -284,7 +284,7 @@ func (d *MQDetector) getProcessListeningPort(pid int) int {
 	if err != nil {
 		return 0
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	scanner.Scan()

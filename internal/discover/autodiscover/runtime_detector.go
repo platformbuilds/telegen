@@ -43,7 +43,7 @@ func (d *RuntimeDetector) Detect(ctx context.Context) (any, error) {
 	if err != nil {
 		return runtimes, nil
 	}
-	defer procDir.Close()
+	defer func() { _ = procDir.Close() }()
 
 	entries, err := procDir.Readdirnames(-1)
 	if err != nil {

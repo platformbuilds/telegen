@@ -115,7 +115,7 @@ func (c *ServiceClassifier) findProcessByInode(inode uint64) (int, string) {
 	if err != nil {
 		return 0, ""
 	}
-	defer procDir.Close()
+	defer func() { _ = procDir.Close() }()
 
 	entries, err := procDir.Readdirnames(-1)
 	if err != nil {

@@ -108,10 +108,10 @@ func (c *Collector) appendMem(wr *prompb.WriteRequest) {
 	for sc.Scan() {
 		line := sc.Text()
 		if strings.HasPrefix(line, "MemTotal:") {
-			fmt.Sscanf(line, "MemTotal: %f kB", &memTotal)
+			_, _ = fmt.Sscanf(line, "MemTotal: %f kB", &memTotal)
 		}
 		if strings.HasPrefix(line, "MemAvailable:") {
-			fmt.Sscanf(line, "MemAvailable: %f kB", &memAvail)
+			_, _ = fmt.Sscanf(line, "MemAvailable: %f kB", &memAvail)
 		}
 	}
 	if memTotal > 0 {

@@ -40,6 +40,7 @@ func mockIMDSServer() *httptest.Server {
 	return httptest.NewServer(mux)
 }
 
+//nolint:unused // test helper for remote write mock server
 func mockRemoteWrite(t *testing.T, ch chan<- *prompb.WriteRequest) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
