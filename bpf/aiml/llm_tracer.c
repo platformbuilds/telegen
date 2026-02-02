@@ -2,54 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // Task: ML-011 - LLM Request Interceptor eBPF Tracer
 
+//go:build obi_bpf_ignore
+
 #include "../bpfcore/vmlinux.h"
 #include "../bpfcore/bpf_helpers.h"
 #include "../bpfcore/bpf_tracing.h"
 #include "../bpfcore/bpf_core_read.h"
 #include "../common/common.h"
 
-// Maximum size for captured request/response data
-#define LLM_MAX_CAPTURE_SIZE 4096
-#define LLM_MAX_PROVIDER_LEN 64
-#define LLM_MAX_MODEL_LEN 128
-#define LLM_MAX_ENDPOINT_LEN 256
+#include "llm_tracer.h"
 
-// LLM request event type
-#define LLM_EVENT_REQUEST_START  0
-#define LLM_EVENT_REQUEST_END    1
-#define LLM_EVENT_FIRST_TOKEN    2
-#define LLM_EVENT_STREAM_CHUNK   3
-#define LLM_EVENT_ERROR          4
-
-// LLM provider types
-#define LLM_PROVIDER_UNKNOWN     0
-#define LLM_PROVIDER_OPENAI      1
-#define LLM_PROVIDER_ANTHROPIC   2
-#define LLM_PROVIDER_AZURE       3
-#define LLM_PROVIDER_GOOGLE      4
-#define LLM_PROVIDER_COHERE      5
-#define LLM_PROVIDER_MISTRAL     6
-#define LLM_PROVIDER_LOCAL       7
-
-// LLM event structure
-struct llm_event {
-    u64 timestamp_ns;       // Event timestamp
-    u64 duration_ns;        // Duration (for end events)
-    u64 ttft_ns;           // Time to first token (for streaming)
-    u32 pid;               // Process ID
-    u32 tid;               // Thread ID
-    u32 event_type;        // Event type
-    u32 provider;          // LLM provider
-    u32 prompt_tokens;     // Input token count
-    u32 completion_tokens; // Output token count
-    u32 status_code;       // HTTP status code
-    u32 is_streaming;      // Streaming request flag
-    u32 chunk_index;       // Stream chunk index
-    u8 request_id[36];     // Request ID (UUID)
-    u8 model[LLM_MAX_MODEL_LEN];      // Model name
-    u8 endpoint[LLM_MAX_ENDPOINT_LEN]; // API endpoint
-    u8 error_msg[256];     // Error message
-};
+// Force bpf2go to include these types
+const llm_event_t *unused_llm_event __attribute__((unused));
 
 // Request tracking structure
 struct llm_request {
@@ -137,8 +101,8 @@ static __always_inline void generate_request_id(u8 *id) {
 }
 
 // Submit an LLM event to the ring buffer
-static __always_inline int submit_llm_event(struct llm_event *event) {
-    struct llm_event *e = bpf_ringbuf_reserve(&llm_events, sizeof(*event), 0);
+static __always_inline int submit_llm_event(llm_event_t *event) {
+    llm_event_t *e = bpf_ringbuf_reserve(&llm_events, sizeof(*event), 0);
     if (!e) {
         return -1;
     }
@@ -167,7 +131,7 @@ int BPF_UPROBE(http2_write_frame, void *ctx) {
     bpf_map_update_elem(&llm_active_requests, &conn_id, &req, BPF_ANY);
     
     // Submit request start event
-    struct llm_event event = {};
+    llm_event_t event = {};
     event.timestamp_ns = req.start_time;
     event.pid = pid;
     event.tid = tid;
@@ -193,7 +157,7 @@ int BPF_UPROBE(http_read_response, void *resp) {
     u64 now = bpf_ktime_get_ns();
     u64 duration = now - req->start_time;
     
-    struct llm_event event = {};
+    llm_event_t event = {};
     event.timestamp_ns = now;
     event.duration_ns = duration;
     event.pid = req->pid;
@@ -234,7 +198,7 @@ int BPF_UPROBE(sse_event, void *data, int len) {
     if (req->chunk_count == 0) {
         req->first_token_time = now;
         
-        struct llm_event event = {};
+        llm_event_t event = {};
         event.timestamp_ns = now;
         event.ttft_ns = now - req->start_time;
         event.pid = req->pid;
@@ -268,7 +232,7 @@ int BPF_UPROBE(python_openai_create, void *self, void *kwargs) {
     u64 conn_id = pid_tgid;
     bpf_map_update_elem(&llm_active_requests, &conn_id, &req, BPF_ANY);
     
-    struct llm_event event = {};
+    llm_event_t event = {};
     event.timestamp_ns = req.start_time;
     event.pid = pid;
     event.tid = tid;
@@ -298,7 +262,7 @@ int BPF_UPROBE(python_anthropic_create, void *self, void *kwargs) {
     u64 conn_id = pid_tgid;
     bpf_map_update_elem(&llm_active_requests, &conn_id, &req, BPF_ANY);
     
-    struct llm_event event = {};
+    llm_event_t event = {};
     event.timestamp_ns = req.start_time;
     event.pid = pid;
     event.tid = tid;

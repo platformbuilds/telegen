@@ -26,6 +26,7 @@ import (
 
 	"github.com/platformbuilds/telegen/internal/appolly/app/request"
 	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
+	"github.com/platformbuilds/telegen/internal/sigdef"
 	"github.com/platformbuilds/telegen/internal/sqlprune"
 	"github.com/platformbuilds/telegen/pkg/export/attributes"
 	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
@@ -284,6 +285,12 @@ func TestGenerateTraces(t *testing.T) {
 }
 
 func TestGenerateTracesAttributes(t *testing.T) {
+	// Disable signal metadata for this test to avoid adding extra attributes
+	// that are not part of the core trace attribute testing
+	originalConfig := sigdef.GetGlobalMetadataConfig()
+	sigdef.SetGlobalMetadataConfig(sigdef.DisabledMetadataFieldsConfig())
+	defer sigdef.SetGlobalMetadataConfig(originalConfig)
+
 	t.Run("test SQL trace generation, no statement", func(t *testing.T) {
 		span := makeSQLRequestSpan("SELECT password FROM credentials WHERE username=\"bill\"")
 		tAttrs := tracesgen.TraceAttributesSelector(&span, map[attr.Name]struct{}{})
