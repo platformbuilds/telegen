@@ -173,6 +173,93 @@ selfTelemetry:
   pprofPort: 6060
 
 # =============================================================================
+# Node Exporter Configuration (Prometheus node_exporter compatible)
+# =============================================================================
+nodeExporter:
+  # Enable node_exporter compatible system metrics
+  enabled: true
+  
+  # Metric namespace (default: "node" for node_exporter compatibility)
+  namespace: "node"
+  
+  # Filesystem paths (container paths for K8s, native for VM/bare metal)
+  paths:
+    procfs: "/host/proc"
+    sysfs: "/host/sys"
+    rootfs: "/host/root"
+    udevData: "/host/run/udev/data"
+  
+  # HTTP endpoint for Prometheus scraping
+  endpoint:
+    port: 9100
+    path: "/metrics"
+  
+  # Scrape settings
+  scrape:
+    timeout: "20s"
+  
+  # Streaming export configuration (push to OTLP)
+  export:
+    # Enable streaming metrics to OTLP endpoint
+    enabled: true
+    # Collection and export interval
+    interval: "15s"
+    # Use telegen's configured OTLP exporter
+    useOTLP: true
+    # Batch size for export
+    batchSize: 1000
+    # Flush timeout
+    flushTimeout: "5s"
+  
+  # Environment detection configuration
+  environment:
+    # auto, bare_metal, virtual_machine, kubernetes, container
+    type: "auto"
+    autoDetect: true
+    kubernetes:
+      # Set via downward API in DaemonSet
+      nodeName: ""
+      namespace: ""
+      podName: ""
+      clusterName: ""
+      includeNodeLabels: false
+      includePodLabels: false
+    labels: {}
+  
+  # Collectors configuration
+  collectors:
+    cpu:
+      enabled: true
+      enableGuest: false
+      enableInfo: true
+    meminfo: true
+    loadavg: true
+    diskstats:
+      enabled: true
+    filesystem:
+      enabled: true
+      mountTimeout: "5s"
+      statWorkers: 4
+    netdev:
+      enabled: true
+    stat:
+      enabled: true
+      softirq: false
+    uname: true
+    time: true
+    vmstat: true
+    netstat: true
+    conntrack: true
+    pressure: true
+    entropy: true
+    sockstat: true
+    thermal: true
+    hwmon: false
+    textfile:
+      enabled: false
+      directory: "/var/lib/node_exporter/textfile_collector"
+
+# =============================================================================
 # Internal Metrics Configuration
 # =============================================================================
 internalMetrics:

@@ -27,6 +27,85 @@ selfTelemetry:
   pprof_port: 6060
 
 # -----------------------------------------------------------------------------
+# Node Exporter Configuration (Prometheus node_exporter compatible)
+# -----------------------------------------------------------------------------
+node_exporter:
+  # Enable node_exporter compatible system metrics
+  enabled: true
+  
+  # Metric namespace (default: "node" for node_exporter compatibility)
+  namespace: "node"
+  
+  # Filesystem paths (container paths for Docker)
+  paths:
+    procfs: "/host/proc"
+    sysfs: "/sys"
+    rootfs: "/"
+    udev_data: "/run/udev/data"
+  
+  # HTTP endpoint for Prometheus scraping
+  endpoint:
+    port: 9100
+    path: "/metrics"
+  
+  # Scrape settings
+  scrape:
+    timeout: 20s
+  
+  # Streaming export configuration (push to OTLP)
+  export:
+    # Enable streaming metrics to OTLP endpoint
+    enabled: true
+    # Collection and export interval
+    interval: 15s
+    # Use telegen's configured OTLP exporter
+    use_otlp: true
+    # Batch size for export
+    batch_size: 1000
+    # Flush timeout
+    flush_timeout: 5s
+  
+  # Environment detection (container-aware)
+  environment:
+    type: "auto"
+    auto_detect: true
+    labels:
+      deployment: "docker-compose"
+  
+  # Collectors configuration
+  collectors:
+    cpu:
+      enabled: true
+      enable_guest: false
+      enable_info: true
+    meminfo: true
+    loadavg: true
+    diskstats:
+      enabled: true
+    filesystem:
+      enabled: true
+      mount_timeout: 5s
+      stat_workers: 4
+    netdev:
+      enabled: true
+    stat:
+      enabled: true
+      softirq: false
+    uname: true
+    time: true
+    vmstat: true
+    netstat: true
+    conntrack: true
+    pressure: true
+    entropy: true
+    sockstat: true
+    thermal: true
+    hwmon: false
+    textfile:
+      enabled: false
+      directory: "/var/lib/node_exporter/textfile_collector"
+
+# -----------------------------------------------------------------------------
 # Internal Metrics Configuration
 # -----------------------------------------------------------------------------
 internal_metrics:
