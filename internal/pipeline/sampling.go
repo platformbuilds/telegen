@@ -217,7 +217,7 @@ type rateLimiter struct {
 	rate      float64
 	tokens    float64
 	maxTokens float64
-	lastTime  int64
+	lastTime  int64 //nolint:unused // reserved for time-based token refill
 }
 
 func newRateLimiter(rate float64) *rateLimiter {

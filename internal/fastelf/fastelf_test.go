@@ -17,14 +17,14 @@ func writeTempFile(data []byte) (name string, cleanup func(), err error) {
 	}
 
 	if _, err := tmpFile.Write(data); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpFile.Name())
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
 		return "", nil, err
 	}
 
 	cleanup = func() {
-		tmpFile.Close()
-		os.Remove(tmpFile.Name())
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
 	}
 
 	return tmpFile.Name(), cleanup, nil

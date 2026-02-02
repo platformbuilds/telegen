@@ -276,6 +276,8 @@ type Tracer struct {
 }
 
 // streamKey identifies a unique stream
+//
+//nolint:unused // reserved for stream tracking
 type streamKey struct {
 	pid      uint32
 	fd       uint32

@@ -147,7 +147,7 @@ func (d *NetworkDetector) parseProcNet(path, protocol string, ipv6 bool, topolog
 	if err != nil {
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 
@@ -345,7 +345,7 @@ func (d *NetworkDetector) discoverGateway(topology *NetworkTopology) {
 	if err != nil {
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 

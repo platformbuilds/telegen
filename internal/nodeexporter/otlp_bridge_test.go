@@ -14,16 +14,20 @@ import (
 )
 
 // mockExporter implements sdkmetric.Exporter for testing.
+//
+//nolint:unused // test mock reserved for integration tests
 type mockExporter struct {
 	exported  []*mockResourceMetrics
 	exportErr error
 }
 
+//nolint:unused // test mock
 type mockResourceMetrics struct {
 	metricsCount int
 	timestamp    time.Time
 }
 
+//nolint:unused // test mock method
 func (m *mockExporter) Export(ctx context.Context, rm interface{}) error {
 	if m.exportErr != nil {
 		return m.exportErr
@@ -34,18 +38,22 @@ func (m *mockExporter) Export(ctx context.Context, rm interface{}) error {
 	return nil
 }
 
+//nolint:unused // test mock method
 func (m *mockExporter) Temporality(kind interface{}) interface{} {
 	return nil
 }
 
+//nolint:unused // test mock method
 func (m *mockExporter) Aggregation(kind interface{}) interface{} {
 	return nil
 }
 
+//nolint:unused // test mock method
 func (m *mockExporter) ForceFlush(ctx context.Context) error {
 	return nil
 }
 
+//nolint:unused // test mock method
 func (m *mockExporter) Shutdown(ctx context.Context) error {
 	return nil
 }

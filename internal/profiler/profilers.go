@@ -28,7 +28,7 @@ type CPUProfiler struct {
 	coll   *ebpf.Collection
 	stacks *ebpf.Map
 	counts *ebpf.Map
-	events *ebpf.Map
+	events *ebpf.Map //nolint:unused // used by eBPF
 	cfgMap *ebpf.Map
 
 	// Perf event links (one per CPU)

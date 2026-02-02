@@ -431,8 +431,8 @@ type Manager struct {
 	ciliumClient  *CiliumClient
 
 	services  sync.Map // map[string]*MeshService
-	endpoints sync.Map // map[string]*MeshEndpoint
-	policies  sync.Map // map[string]*MeshPolicy
+	endpoints sync.Map //nolint:unused // map[string]*MeshEndpoint - reserved for endpoint tracking
+	policies  sync.Map //nolint:unused // map[string]*MeshPolicy - reserved for policy management
 	sidecars  sync.Map // map[string]*SidecarInfo
 
 	ctx    context.Context

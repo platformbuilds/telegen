@@ -47,7 +47,7 @@ func hasCiliumTCX() bool {
 			continue
 		}
 
-		defer prog.Close()
+		defer func() { _ = prog.Close() }()
 
 		progInfo, err := prog.Info()
 		if err != nil {
