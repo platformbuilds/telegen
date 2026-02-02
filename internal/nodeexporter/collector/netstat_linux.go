@@ -8,6 +8,7 @@ package collector
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/procfs"
@@ -40,154 +41,58 @@ func NewNetstatCollector(config CollectorConfig) (Collector, error) {
 
 // Update implements Collector and exposes netstat stats.
 func (c *netstatCollector) Update(ch chan<- prometheus.Metric) error {
-	// Get netstat metrics
+	// Get netstat metrics - NetStat() returns []NetStat
 	netStats, err := c.fs.NetStat()
 	if err != nil {
 		return fmt.Errorf("couldn't get netstat: %w", err)
 	}
 
-	for protocol, stats := range netStats {
-		for name, value := range stats {
-			ch <- prometheus.MustNewConstMetric(
-				prometheus.NewDesc(
-					prometheus.BuildFQName(Namespace, "netstat", protocol+"_"+name),
-					fmt.Sprintf("Statistic %s_%s.", protocol, name),
-					nil, nil,
-				),
-				prometheus.UntypedValue,
-				value,
-			)
+	// Each NetStat has Filename and Stats map[string][]uint64
+	for _, ns := range netStats {
+		// Extract protocol from filename (e.g., "netstat" -> "TcpExt", "snmp" -> "Ip", "Tcp", etc.)
+		protocol := extractProtocol(ns.Filename)
+
+		for statName, values := range ns.Stats {
+			// Take first value if available
+			if len(values) > 0 {
+				metricName := sanitizeMetricName(protocol + "_" + statName)
+				ch <- prometheus.MustNewConstMetric(
+					prometheus.NewDesc(
+						prometheus.BuildFQName(Namespace, "netstat", metricName),
+						fmt.Sprintf("Statistic %s from %s.", statName, ns.Filename),
+						nil, nil,
+					),
+					prometheus.UntypedValue,
+					float64(values[0]),
+				)
+			}
 		}
 	}
 
-	// Get SNMP metrics
-	snmpStats, err := c.fs.Snmp()
-	if err != nil {
-		c.logger.Debug("couldn't get SNMP stats", "error", err)
-	} else {
-		// IP stats
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(Namespace, "netstat", "Ip_Forwarding"),
-				"IP forwarding status.",
-				nil, nil,
-			),
-			prometheus.GaugeValue,
-			float64(snmpStats.Ip.Forwarding),
-		)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(Namespace, "netstat", "Ip_InReceives"),
-				"IP packets received.",
-				nil, nil,
-			),
-			prometheus.CounterValue,
-			float64(snmpStats.Ip.InReceives),
-		)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(Namespace, "netstat", "Ip_OutRequests"),
-				"IP packets sent.",
-				nil, nil,
-			),
-			prometheus.CounterValue,
-			float64(snmpStats.Ip.OutRequests),
-		)
-
-		// TCP stats
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(Namespace, "netstat", "Tcp_ActiveOpens"),
-				"TCP active opens.",
-				nil, nil,
-			),
-			prometheus.CounterValue,
-			float64(snmpStats.Tcp.ActiveOpens),
-		)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(Namespace, "netstat", "Tcp_PassiveOpens"),
-				"TCP passive opens.",
-				nil, nil,
-			),
-			prometheus.CounterValue,
-			float64(snmpStats.Tcp.PassiveOpens),
-		)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(Namespace, "netstat", "Tcp_CurrEstab"),
-				"TCP current established connections.",
-				nil, nil,
-			),
-			prometheus.GaugeValue,
-			float64(snmpStats.Tcp.CurrEstab),
-		)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(Namespace, "netstat", "Tcp_InSegs"),
-				"TCP segments received.",
-				nil, nil,
-			),
-			prometheus.CounterValue,
-			float64(snmpStats.Tcp.InSegs),
-		)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(Namespace, "netstat", "Tcp_OutSegs"),
-				"TCP segments sent.",
-				nil, nil,
-			),
-			prometheus.CounterValue,
-			float64(snmpStats.Tcp.OutSegs),
-		)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(Namespace, "netstat", "Tcp_RetransSegs"),
-				"TCP segments retransmitted.",
-				nil, nil,
-			),
-			prometheus.CounterValue,
-			float64(snmpStats.Tcp.RetransSegs),
-		)
-
-		// UDP stats
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(Namespace, "netstat", "Udp_InDatagrams"),
-				"UDP datagrams received.",
-				nil, nil,
-			),
-			prometheus.CounterValue,
-			float64(snmpStats.Udp.InDatagrams),
-		)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(Namespace, "netstat", "Udp_OutDatagrams"),
-				"UDP datagrams sent.",
-				nil, nil,
-			),
-			prometheus.CounterValue,
-			float64(snmpStats.Udp.OutDatagrams),
-		)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(Namespace, "netstat", "Udp_NoPorts"),
-				"UDP packets received to unknown port.",
-				nil, nil,
-			),
-			prometheus.CounterValue,
-			float64(snmpStats.Udp.NoPorts),
-		)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(Namespace, "netstat", "Udp_InErrors"),
-				"UDP receive errors.",
-				nil, nil,
-			),
-			prometheus.CounterValue,
-			float64(snmpStats.Udp.InErrors),
-		)
-	}
-
 	return nil
+}
+
+// extractProtocol extracts a protocol prefix from the filename.
+func extractProtocol(filename string) string {
+	// Common file patterns: /proc/net/netstat, /proc/net/snmp, etc.
+	parts := strings.Split(filename, "/")
+	if len(parts) > 0 {
+		return parts[len(parts)-1]
+	}
+	return "unknown"
+}
+
+// sanitizeMetricName cleans the name for prometheus compatibility.
+func sanitizeMetricName(name string) string {
+	// Replace any non-alphanumeric chars with underscore
+	result := make([]byte, 0, len(name))
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' {
+			result = append(result, c)
+		} else {
+			result = append(result, '_')
+		}
+	}
+	return string(result)
 }

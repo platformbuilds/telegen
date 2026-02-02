@@ -94,20 +94,29 @@ func (c *statCollector) Update(ch chan<- prometheus.Metric) error {
 	ch <- prometheus.MustNewConstMetric(c.procsRunning, prometheus.GaugeValue, float64(stat.ProcessesRunning))
 	ch <- prometheus.MustNewConstMetric(c.procsBlocked, prometheus.GaugeValue, float64(stat.ProcessesBlocked))
 
-	// Softirq stats
-	softirqNames := []string{
-		"hi", "timer", "net_tx", "net_rx", "block", "irq_poll",
-		"tasklet", "sched", "hrtimer", "rcu",
+	// Softirq stats - use individual fields from SoftIRQStat
+	softirqValues := []struct {
+		name  string
+		value uint64
+	}{
+		{"hi", stat.SoftIRQ.Hi},
+		{"timer", stat.SoftIRQ.Timer},
+		{"net_tx", stat.SoftIRQ.NetTx},
+		{"net_rx", stat.SoftIRQ.NetRx},
+		{"block", stat.SoftIRQ.Block},
+		{"irq_poll", stat.SoftIRQ.BlockIoPoll},
+		{"tasklet", stat.SoftIRQ.Tasklet},
+		{"sched", stat.SoftIRQ.Sched},
+		{"hrtimer", stat.SoftIRQ.Hrtimer},
+		{"rcu", stat.SoftIRQ.Rcu},
 	}
-	for i, name := range softirqNames {
-		if i < len(stat.SoftIRQ.All) {
-			ch <- prometheus.MustNewConstMetric(
-				c.softIRQ,
-				prometheus.CounterValue,
-				float64(stat.SoftIRQ.All[i]),
-				name,
-			)
-		}
+	for _, s := range softirqValues {
+		ch <- prometheus.MustNewConstMetric(
+			c.softIRQ,
+			prometheus.CounterValue,
+			float64(s.value),
+			s.name,
+		)
 	}
 
 	return nil

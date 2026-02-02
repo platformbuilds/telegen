@@ -6,11 +6,15 @@
 package collector
 
 import (
+	"bufio"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/procfs"
 )
 
 const filefdCollectorName = "filefd"
@@ -21,26 +25,21 @@ func init() {
 
 // filefdCollector exports file descriptor statistics.
 type filefdCollector struct {
-	fs     procfs.FS
-	logger *slog.Logger
+	procPath string
+	logger   *slog.Logger
 }
 
 // NewFilefdCollector returns a new Collector exposing file descriptor stats.
 func NewFilefdCollector(config CollectorConfig) (Collector, error) {
-	fs, err := procfs.NewFS(config.Paths.ProcPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open procfs: %w", err)
-	}
-
 	return &filefdCollector{
-		fs:     fs,
-		logger: config.Logger,
+		procPath: config.Paths.ProcPath,
+		logger:   config.Logger,
 	}, nil
 }
 
 // Update implements Collector and exposes file descriptor statistics.
 func (c *filefdCollector) Update(ch chan<- prometheus.Metric) error {
-	fileFDStat, err := c.fs.FileDescriptorsStats()
+	allocated, maximum, err := c.readFileNr()
 	if err != nil {
 		return fmt.Errorf("couldn't get file-nr: %w", err)
 	}
@@ -52,7 +51,7 @@ func (c *filefdCollector) Update(ch chan<- prometheus.Metric) error {
 			nil, nil,
 		),
 		prometheus.GaugeValue,
-		float64(fileFDStat.Allocated),
+		float64(allocated),
 	)
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
@@ -61,8 +60,35 @@ func (c *filefdCollector) Update(ch chan<- prometheus.Metric) error {
 			nil, nil,
 		),
 		prometheus.GaugeValue,
-		float64(fileFDStat.Maximum),
+		float64(maximum),
 	)
 
 	return nil
+}
+
+// readFileNr reads /proc/sys/fs/file-nr and returns allocated and maximum file descriptors.
+func (c *filefdCollector) readFileNr() (allocated, maximum uint64, err error) {
+	path := filepath.Join(c.procPath, "sys", "fs", "file-nr")
+	file, err := os.Open(path)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	if scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) >= 3 {
+			allocated, err = strconv.ParseUint(fields[0], 10, 64)
+			if err != nil {
+				return 0, 0, fmt.Errorf("failed to parse allocated: %w", err)
+			}
+			maximum, err = strconv.ParseUint(fields[2], 10, 64)
+			if err != nil {
+				return 0, 0, fmt.Errorf("failed to parse maximum: %w", err)
+			}
+		}
+	}
+
+	return allocated, maximum, scanner.Err()
 }

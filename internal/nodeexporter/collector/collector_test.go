@@ -226,9 +226,9 @@ func TestCPUCollector(t *testing.T) {
 // TestMemInfoCollector tests the meminfo collector.
 func TestMemInfoCollector(t *testing.T) {
 	cfg := testCollectorConfig("/proc", "/sys")
-	collector, err := NewMemInfoCollector(cfg)
+	collector, err := NewMeminfoCollector(cfg)
 	if err != nil {
-		t.Fatalf("NewMemInfoCollector failed: %v", err)
+		t.Fatalf("NewMeminfoCollector failed: %v", err)
 	}
 
 	ch := make(chan prometheus.Metric, 1000)

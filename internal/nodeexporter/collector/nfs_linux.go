@@ -17,11 +17,15 @@
 package collector
 
 import (
+	"bufio"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/procfs"
 )
 
 const nfsCollectorName = "nfs"
@@ -37,7 +41,6 @@ type nfsCollector struct {
 	nfsRPCOperationsDesc  *prometheus.Desc
 	nfsRPCRetransDesc     *prometheus.Desc
 	nfsRPCAuthRefreshDesc *prometheus.Desc
-	nfsProceduresDesc     *prometheus.Desc
 	logger                *slog.Logger
 	procPath              string
 }
@@ -72,11 +75,6 @@ func NewNFSCollector(config CollectorConfig) (Collector, error) {
 			"Number of RPC authentication refreshes.",
 			nil, nil,
 		),
-		nfsProceduresDesc: prometheus.NewDesc(
-			prometheus.BuildFQName(Namespace, subsystem, "requests_total"),
-			"Number of NFS requests by method and version.",
-			[]string{"version", "method"}, nil,
-		),
 		logger:   config.Logger,
 		procPath: config.Paths.ProcPath,
 	}, nil
@@ -84,60 +82,51 @@ func NewNFSCollector(config CollectorConfig) (Collector, error) {
 
 // Update implements Collector and exposes NFS client metrics.
 func (c *nfsCollector) Update(ch chan<- prometheus.Metric) error {
-	fs, err := procfs.NewFS(c.procPath)
+	nfsPath := filepath.Join(c.procPath, "net", "rpc", "nfs")
+	file, err := os.Open(nfsPath)
 	if err != nil {
-		return fmt.Errorf("failed to open procfs: %w", err)
+		if os.IsNotExist(err) {
+			c.logger.Debug("NFS client stats not available", "path", nfsPath)
+			return ErrNoData
+		}
+		return fmt.Errorf("failed to open %s: %w", nfsPath, err)
 	}
+	defer file.Close()
 
-	nfsStats, err := fs.NFSClientRPCStats()
-	if err != nil {
-		c.logger.Debug("NFS client stats not available", "err", err)
-		return ErrNoData
-	}
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.Fields(line)
+		if len(parts) < 2 {
+			continue
+		}
 
-	// Network stats
-	ch <- prometheus.MustNewConstMetric(
-		c.nfsNetReadsDesc,
-		prometheus.CounterValue,
-		float64(nfsStats.Network.NetCount),
-	)
-	ch <- prometheus.MustNewConstMetric(
-		c.nfsNetConnectionsDesc,
-		prometheus.CounterValue,
-		float64(nfsStats.Network.TCPConnect),
-	)
-
-	// RPC stats
-	ch <- prometheus.MustNewConstMetric(
-		c.nfsRPCOperationsDesc,
-		prometheus.CounterValue,
-		float64(nfsStats.ClientRPC.RPCCount),
-	)
-	ch <- prometheus.MustNewConstMetric(
-		c.nfsRPCRetransDesc,
-		prometheus.CounterValue,
-		float64(nfsStats.ClientRPC.Retransmissions),
-	)
-	ch <- prometheus.MustNewConstMetric(
-		c.nfsRPCAuthRefreshDesc,
-		prometheus.CounterValue,
-		float64(nfsStats.ClientRPC.AuthRefreshes),
-	)
-
-	// Per-version procedure stats
-	for version, procs := range map[string]map[string]uint64{
-		"3": nfsStats.V3Stats.Procedures,
-		"4": nfsStats.V4Stats.Procedures,
-	} {
-		for method, count := range procs {
-			ch <- prometheus.MustNewConstMetric(
-				c.nfsProceduresDesc,
-				prometheus.CounterValue,
-				float64(count),
-				version, method,
-			)
+		switch parts[0] {
+		case "net":
+			// net <netcount> <udpcount> <tcpcount> <tcpconnect>
+			if len(parts) >= 5 {
+				if netCount, err := strconv.ParseFloat(parts[1], 64); err == nil {
+					ch <- prometheus.MustNewConstMetric(c.nfsNetReadsDesc, prometheus.CounterValue, netCount)
+				}
+				if tcpConnect, err := strconv.ParseFloat(parts[4], 64); err == nil {
+					ch <- prometheus.MustNewConstMetric(c.nfsNetConnectionsDesc, prometheus.CounterValue, tcpConnect)
+				}
+			}
+		case "rpc":
+			// rpc <rpccount> <retrans> <authrefrsh>
+			if len(parts) >= 4 {
+				if rpcCount, err := strconv.ParseFloat(parts[1], 64); err == nil {
+					ch <- prometheus.MustNewConstMetric(c.nfsRPCOperationsDesc, prometheus.CounterValue, rpcCount)
+				}
+				if retrans, err := strconv.ParseFloat(parts[2], 64); err == nil {
+					ch <- prometheus.MustNewConstMetric(c.nfsRPCRetransDesc, prometheus.CounterValue, retrans)
+				}
+				if authRefresh, err := strconv.ParseFloat(parts[3], 64); err == nil {
+					ch <- prometheus.MustNewConstMetric(c.nfsRPCAuthRefreshDesc, prometheus.CounterValue, authRefresh)
+				}
+			}
 		}
 	}
 
-	return nil
+	return scanner.Err()
 }
