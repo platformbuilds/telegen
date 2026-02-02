@@ -15,7 +15,10 @@ fastify.get("/", async (request, reply) => {
 });
 
 fastify.post("/users", async (request, reply) => {
-  return { id: 123, ...request.body };
+  // Note: In production, validate and sanitize request.body before use
+  // This is a test fixture for route extraction, not a production endpoint
+  const { name, email } = request.body || {};
+  return { id: 123, name: String(name || ""), email: String(email || "") };
 });
 
 // Routes with parameters
