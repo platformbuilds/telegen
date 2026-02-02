@@ -49,6 +49,13 @@ type Options struct {
 	// Log export options
 	LogExportEnabled bool
 	LogExporter      LogExporter
+
+	// ShipHistoricalEvents controls whether to ship events that occurred before Telegen started.
+	// When false (default), only events with timestamps after StartTime are shipped.
+	ShipHistoricalEvents bool
+	// StartTime is when Telegen started. Events before this time are filtered out
+	// unless ShipHistoricalEvents is true.
+	StartTime time.Time
 }
 
 // getInputDirs returns all configured input directories
@@ -264,6 +271,19 @@ func (w *Watcher) processFile(ctx context.Context, jfrPath string) {
 	if err != nil {
 		logger.Error("Failed to convert JFR file", zap.Error(err))
 		return
+	}
+
+	// Filter out historical events if ShipHistoricalEvents is false
+	originalCount := len(result.Events)
+	if !w.opts.ShipHistoricalEvents && !w.opts.StartTime.IsZero() {
+		result.Events = w.filterHistoricalEvents(result.Events)
+		if filteredCount := originalCount - len(result.Events); filteredCount > 0 {
+			logger.Debug("Filtered out historical events",
+				zap.Int("filtered", filteredCount),
+				zap.Int("remaining", len(result.Events)),
+				zap.Time("startTime", w.opts.StartTime),
+			)
+		}
 	}
 
 	if len(result.Events) == 0 {
@@ -483,4 +503,34 @@ func (w *Watcher) GetStats() Stats {
 		ProcessedFiles: count,
 		QueuedFiles:    len(w.workQueue),
 	}
+}
+
+// filterHistoricalEvents filters out events that occurred before the watcher's start time.
+// This prevents shipping historical/stale JFR data when Telegen starts watching existing files.
+func (w *Watcher) filterHistoricalEvents(events []*converter.ProfileEvent) []*converter.ProfileEvent {
+	if w.opts.StartTime.IsZero() {
+		return events
+	}
+
+	filtered := make([]*converter.ProfileEvent, 0, len(events))
+	for _, evt := range events {
+		// Parse event timestamp
+		eventTime, err := time.Parse(time.RFC3339Nano, evt.Timestamp)
+		if err != nil {
+			// If we can't parse the timestamp, include the event (conservative approach)
+			w.logger.Debug("Could not parse event timestamp, including event",
+				zap.String("timestamp", evt.Timestamp),
+				zap.Error(err),
+			)
+			filtered = append(filtered, evt)
+			continue
+		}
+
+		// Only include events that occurred after the start time
+		if eventTime.After(w.opts.StartTime) || eventTime.Equal(w.opts.StartTime) {
+			filtered = append(filtered, evt)
+		}
+	}
+
+	return filtered
 }
