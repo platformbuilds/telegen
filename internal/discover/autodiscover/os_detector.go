@@ -64,7 +64,7 @@ func (d *OSDetector) Detect(ctx context.Context) (any, error) {
 func (d *OSDetector) detectLinuxDistro() (name, version, versionID, prettyName, distribution string) {
 	// Try /etc/os-release first (standard for modern distros)
 	if f, err := os.Open("/etc/os-release"); err == nil {
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		scanner := bufio.NewScanner(f)
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -96,7 +96,7 @@ func (d *OSDetector) detectLinuxDistro() (name, version, versionID, prettyName, 
 
 	// Try /etc/lsb-release (Ubuntu and derivatives)
 	if f, err := os.Open("/etc/lsb-release"); err == nil {
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		scanner := bufio.NewScanner(f)
 		for scanner.Scan() {
 			line := scanner.Text()

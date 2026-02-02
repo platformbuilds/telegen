@@ -39,7 +39,7 @@ func roundTripExample() {
 
 func main() {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "Hello, %v, http: %v\n", r.URL.Path, r.TLS == nil)
+		_, _ = fmt.Fprintf(w, "Hello, %v, http: %v\n", r.URL.Path, r.TLS == nil)
 	})
 
 	server := &http.Server{

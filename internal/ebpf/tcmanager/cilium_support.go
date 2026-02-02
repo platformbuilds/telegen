@@ -31,7 +31,7 @@ func hasCiliumTCX() bool {
 
 	for it.Next() {
 		link := it.Take()
-		defer link.Close()
+		defer func() { _ = link.Close() }()
 
 		info, err := link.Info()
 		if err != nil {

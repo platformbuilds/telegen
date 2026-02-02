@@ -157,7 +157,7 @@ func (c *PprofConverter) FromPprof(data []byte, profileType profiler.ProfileType
 			return nil, fmt.Errorf("failed to decompress pprof: %w", err)
 		}
 		data = decompressed
-		gzReader.Close()
+		_ = gzReader.Close()
 	}
 
 	// Parse pprof (simplified - full implementation would use proper proto parsing)
@@ -346,24 +346,24 @@ func (c *PprofConverter) serialize(pprof *PprofProfile) ([]byte, error) {
 	// In production, use proper protobuf encoding
 
 	// Write sample count
-	binary.Write(&buf, binary.LittleEndian, int32(len(pprof.Sample)))
+	_ = binary.Write(&buf, binary.LittleEndian, int32(len(pprof.Sample)))
 
 	// Write samples
 	for _, sample := range pprof.Sample {
-		binary.Write(&buf, binary.LittleEndian, int32(len(sample.LocationID)))
+		_ = binary.Write(&buf, binary.LittleEndian, int32(len(sample.LocationID)))
 		for _, locID := range sample.LocationID {
-			binary.Write(&buf, binary.LittleEndian, locID)
+			_ = binary.Write(&buf, binary.LittleEndian, locID)
 		}
-		binary.Write(&buf, binary.LittleEndian, int32(len(sample.Value)))
+		_ = binary.Write(&buf, binary.LittleEndian, int32(len(sample.Value)))
 		for _, val := range sample.Value {
-			binary.Write(&buf, binary.LittleEndian, val)
+			_ = binary.Write(&buf, binary.LittleEndian, val)
 		}
 	}
 
 	// Write string table
-	binary.Write(&buf, binary.LittleEndian, int32(len(pprof.StringTable)))
+	_ = binary.Write(&buf, binary.LittleEndian, int32(len(pprof.StringTable)))
 	for _, s := range pprof.StringTable {
-		binary.Write(&buf, binary.LittleEndian, int32(len(s)))
+		_ = binary.Write(&buf, binary.LittleEndian, int32(len(s)))
 		buf.WriteString(s)
 	}
 

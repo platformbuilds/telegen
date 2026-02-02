@@ -75,7 +75,7 @@ func (d *DatabaseDetector) parseProcNetForPorts(path, protocol string, ipv6 bool
 	if err != nil {
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	scanner.Scan() // Skip header
@@ -192,7 +192,7 @@ func (d *DatabaseDetector) detectDatabaseProcesses() []DatabaseInfo {
 	if err != nil {
 		return databases
 	}
-	defer procDir.Close()
+	defer func() { _ = procDir.Close() }()
 
 	entries, err := procDir.Readdirnames(-1)
 	if err != nil {
@@ -308,7 +308,7 @@ func (d *DatabaseDetector) getProcessListeningPort(pid int) int {
 	if err != nil {
 		return 0
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	scanner.Scan() // Skip header
@@ -402,6 +402,6 @@ func CheckDatabaseConnectivity(db *DatabaseInfo, timeout time.Duration) bool {
 	if err != nil {
 		return false
 	}
-	conn.Close()
+	_ = conn.Close()
 	return true
 }

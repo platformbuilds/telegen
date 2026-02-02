@@ -63,7 +63,7 @@ func regularGetRequest(ctx context.Context, url string) error {
 	if err != nil {
 		return err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	fmt.Printf("Status: %v\n", res.Status)
 
@@ -76,7 +76,7 @@ func useDatabaseSQL() error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Execute a query to trigger driverConn usage
 	_, err = db.Query("SELECT 1")
@@ -100,7 +100,7 @@ func main() {
 	}
 	// Register the Arith service.
 	arith := new(Arith)
-	rpc.Register(arith)
+	_ = rpc.Register(arith)
 	err = http.ListenAndServe(":8080", http.HandlerFunc(jsonrpcHandler))
 	if err != nil {
 		os.Exit(1)

@@ -22,7 +22,7 @@ import (
 type SymbolResolver struct {
 	log        *slog.Logger
 	cache      sync.Map // pid -> *ProcessSymbols
-	dwarfCache sync.Map // path -> *dwarf.Data
+	dwarfCache sync.Map //nolint:unused // path -> *dwarf.Data, reserved for DWARF support
 	v8MapCache sync.Map // pid -> *V8PerfMap
 }
 

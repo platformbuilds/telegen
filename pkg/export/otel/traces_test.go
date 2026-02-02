@@ -43,7 +43,7 @@ type InstrTest struct {
 	name       string
 	instr      []instrumentations.Instrumentation
 	expected   []string
-	unexpected []string
+	unexpected []string //nolint:unused // reserved for negative test cases
 }
 
 var cache = expirable2.NewLRU[svc.UID, []attribute.KeyValue](1024, nil, 5*time.Minute)

@@ -180,7 +180,7 @@ func (d *RuntimeDetector) detectCompiledLanguage(runtime *RuntimeInfo, binaryPat
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// Get symbols (both dynamic and regular)
 	symbols, _ := f.DynamicSymbols()

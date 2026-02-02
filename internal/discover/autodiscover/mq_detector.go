@@ -65,7 +65,7 @@ func (d *MQDetector) getListeningPorts() []ListeningPort {
 	if err != nil {
 		return ports
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	scanner.Scan() // Skip header
@@ -187,7 +187,7 @@ func (d *MQDetector) detectMQProcesses() []MQInfo {
 	if err != nil {
 		return queues
 	}
-	defer procDir.Close()
+	defer func() { _ = procDir.Close() }()
 
 	entries, err := procDir.Readdirnames(-1)
 	if err != nil {
