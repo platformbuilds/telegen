@@ -21,6 +21,7 @@ on:
 
 permissions:
   contents: read
+  security-events: write  # Required for uploading SARIF results to Code Scanning
 
 env:
   GO_VERSION: '1.25'
@@ -170,4 +171,9 @@ jobs:
       - name: Validate with kubeconform
         uses: docker://ghcr.io/yannh/kubeconform:latest
         with:
-          args: -summary -output json deployments/kubernetes/
+          args: >-
+            -summary
+            -output json
+            -schema-location default
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+            deployments/kubernetes/
