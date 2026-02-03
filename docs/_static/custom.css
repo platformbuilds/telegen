@@ -1,0 +1,45 @@
+/* Custom CSS for Telegen documentation */
+
+/* Code block styling */
+.highlight {
+    background: #f8f8f8;
+    border-radius: 4px;
+}
+
+/* Admonition styling */
+.admonition {
+    border-radius: 4px;
+}
+
+/* Table styling */
+table.docutils {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+table.docutils td, table.docutils th {
+    padding: 8px 12px;
+    border: 1px solid #e1e4e5;
+}
+
+/* Feature badges */
+.badge-completed {
+    background-color: #28a745;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.85em;
+}
+
+.badge-beta {
+    background-color: #ffc107;
+    color: black;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.85em;
+}
+
+/* Version selector enhancement */
+.rst-versions {
+    border-top: 1px solid #2980b9;
+}

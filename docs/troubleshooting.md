@@ -75,8 +75,9 @@ sudo bpftool map list | grep telegen
 # Verify network connectivity
 curl -I https://github.com
 
-# Try alternative download
-wget https://github.com/platformbuilds/telegen/releases/download/v2.0.0/telegen_linux_amd64
+# Download latest release manually
+VERSION=$(curl -s https://api.github.com/repos/platformbuilds/telegen/releases/latest | grep tag_name | cut -d '"' -f4)
+wget "https://github.com/platformbuilds/telegen/releases/download/${VERSION}/telegen-linux-amd64.tar.gz"
 
 # Check for proxy settings
 echo $http_proxy $https_proxy
