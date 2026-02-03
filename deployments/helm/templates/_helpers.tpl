@@ -247,6 +247,96 @@ discovery:
     java_harvest_delay: {{ .Values.discovery.routeHarvesterAdvanced.javaHarvestDelay | default "60s" }}
 
 # -----------------------------------------------------------------------------
+# Kubernetes Metrics Configuration (kube-state-metrics + cAdvisor equivalent)
+# -----------------------------------------------------------------------------
+kube_metrics:
+  enabled: {{ .Values.kubeMetrics.enabled | default true }}
+  auto_detect: {{ .Values.kubeMetrics.autoDetect | default true }}
+  listen_address: {{ .Values.kubeMetrics.listenAddress | default ":9443" | quote }}
+  metrics_path: {{ .Values.kubeMetrics.metricsPath | default "/metrics" | quote }}
+  separate_endpoints: {{ .Values.kubeMetrics.separateEndpoints | default true }}
+
+  kube_state:
+    enabled: {{ .Values.kubeMetrics.kubeState.enabled | default true }}
+    resources:
+      {{- range .Values.kubeMetrics.kubeState.resources | default (list "pods" "deployments" "statefulsets" "daemonsets" "replicasets" "nodes" "namespaces" "services" "endpoints" "jobs" "cronjobs" "persistentvolumes" "persistentvolumeclaims" "configmaps" "secrets" "horizontalpodautoscalers" "ingresses") }}
+      - {{ . }}
+      {{- end }}
+    namespaces: {{ .Values.kubeMetrics.kubeState.namespaces | default list | toJson }}
+    namespaces_exclude:
+      {{- range .Values.kubeMetrics.kubeState.namespacesExclude | default (list "kube-system") }}
+      - {{ . }}
+      {{- end }}
+    metric_allowlist: {{ .Values.kubeMetrics.kubeState.metricAllowlist | default list | toJson }}
+    metric_denylist: {{ .Values.kubeMetrics.kubeState.metricDenylist | default list | toJson }}
+    labels_allowlist:
+      {{- if .Values.kubeMetrics.kubeState.labelsAllowlist }}
+      {{- range $resource, $labels := .Values.kubeMetrics.kubeState.labelsAllowlist }}
+      {{ $resource }}:
+        {{- range $labels }}
+        - {{ . }}
+        {{- end }}
+      {{- end }}
+      {{- else }}
+      pods:
+        - app
+        - app.kubernetes.io/name
+        - app.kubernetes.io/instance
+        - app.kubernetes.io/component
+      deployments:
+        - app
+        - app.kubernetes.io/name
+      services:
+        - app
+        - app.kubernetes.io/name
+      {{- end }}
+    annotations_allowlist: {{ .Values.kubeMetrics.kubeState.annotationsAllowlist | default dict | toJson }}
+    kubeconfig: {{ .Values.kubeMetrics.kubeState.kubeconfig | default "" | quote }}
+    resync_period: {{ .Values.kubeMetrics.kubeState.resyncPeriod | default "5m" }}
+    shard: {{ .Values.kubeMetrics.kubeState.shard | default 0 }}
+    total_shards: {{ .Values.kubeMetrics.kubeState.totalShards | default 1 }}
+
+  cadvisor:
+    enabled: {{ .Values.kubeMetrics.cadvisor.enabled | default true }}
+    cgroup_root: {{ .Values.kubeMetrics.cadvisor.cgroupRoot | default "/sys/fs/cgroup" | quote }}
+    containerd_socket: {{ .Values.kubeMetrics.cadvisor.containerdSocket | default "/run/containerd/containerd.sock" | quote }}
+    collect_interval: {{ .Values.kubeMetrics.cadvisor.collectInterval | default "10s" }}
+    housekeeping_interval: {{ .Values.kubeMetrics.cadvisor.housekeepingInterval | default "1m" }}
+    namespaces: {{ .Values.kubeMetrics.cadvisor.namespaces | default list | toJson }}
+    namespaces_exclude: {{ .Values.kubeMetrics.cadvisor.namespacesExclude | default list | toJson }}
+    disabled_metrics: {{ .Values.kubeMetrics.cadvisor.disabledMetrics | default list | toJson }}
+    disk_io_enabled: {{ .Values.kubeMetrics.cadvisor.diskIOEnabled | default true }}
+    network_enabled: {{ .Values.kubeMetrics.cadvisor.networkEnabled | default true }}
+    per_cpu_enabled: {{ .Values.kubeMetrics.cadvisor.perCPUEnabled | default false }}
+
+  streaming:
+    enabled: {{ .Values.kubeMetrics.streaming.enabled | default true }}
+    interval: {{ .Values.kubeMetrics.streaming.interval | default "15s" }}
+    batch_size: {{ .Values.kubeMetrics.streaming.batchSize | default 1000 }}
+    flush_timeout: {{ .Values.kubeMetrics.streaming.flushTimeout | default "5s" }}
+    use_otlp: {{ .Values.kubeMetrics.streaming.useOTLP | default true }}
+
+  logs_streaming:
+    enabled: {{ .Values.kubeMetrics.logsStreaming.enabled | default false }}
+    buffer_size: {{ .Values.kubeMetrics.logsStreaming.bufferSize | default 1000 }}
+    flush_interval: {{ .Values.kubeMetrics.logsStreaming.flushInterval | default "5s" }}
+    event_types:
+      {{- range .Values.kubeMetrics.logsStreaming.eventTypes | default (list "Normal" "Warning") }}
+      - {{ . }}
+      {{- end }}
+    namespaces: {{ .Values.kubeMetrics.logsStreaming.namespaces | default list | toJson }}
+
+  signal_metadata:
+    enabled: {{ .Values.kubeMetrics.signalMetadata.enabled | default true }}
+    fields:
+      enable_category: {{ .Values.kubeMetrics.signalMetadata.fields.enableCategory | default true }}
+      enable_subcategory: {{ .Values.kubeMetrics.signalMetadata.fields.enableSubcategory | default true }}
+      enable_source_module: {{ .Values.kubeMetrics.signalMetadata.fields.enableSourceModule | default true }}
+      enable_collector_type: {{ .Values.kubeMetrics.signalMetadata.fields.enableCollectorType | default true }}
+      enable_bpf_component: {{ .Values.kubeMetrics.signalMetadata.fields.enableBPFComponent | default false }}
+      enable_description: {{ .Values.kubeMetrics.signalMetadata.fields.enableDescription | default false }}
+
+# -----------------------------------------------------------------------------
 # Kubernetes Attributes Configuration
 # -----------------------------------------------------------------------------
 attributes:

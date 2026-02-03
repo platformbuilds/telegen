@@ -8,9 +8,13 @@ package nodeexporter
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -22,13 +26,14 @@ import (
 
 // Exporter represents a node_exporter compatible metrics exporter.
 type Exporter struct {
-	config      *Config
-	collectors  map[string]collector.Collector
-	registry    *prometheus.Registry
-	logger      *slog.Logger
-	server      *http.Server
-	environment *DetectedEnvironment
-	streaming   *StreamingExporter
+	config            *Config
+	collectors        map[string]collector.Collector
+	registry          *prometheus.Registry
+	logger            *slog.Logger
+	server            *http.Server
+	environment       *DetectedEnvironment
+	streaming         *StreamingExporter
+	cardinalityFilter *CardinalityFilter // Cached cardinality filter handler
 }
 
 // New creates a new Exporter with the given configuration.
@@ -149,7 +154,7 @@ func (e *Exporter) isCollectorEnabled(name string, defaultEnabled bool) bool {
 
 // Handler returns an HTTP handler for the metrics endpoint.
 func (e *Exporter) Handler() http.Handler {
-	return promhttp.HandlerFor(
+	baseHandler := promhttp.HandlerFor(
 		e.registry,
 		promhttp.HandlerOpts{
 			ErrorLog:            slog.NewLogLogger(e.logger.Handler(), slog.LevelError),
@@ -159,6 +164,22 @@ func (e *Exporter) Handler() http.Handler {
 			EnableOpenMetrics:   true,
 		},
 	)
+
+	// If cardinality controls are enabled, wrap with filter
+	if e.config.Scrape.Cardinality.Enabled {
+		// Use cached filter if available, otherwise create one
+		if e.cardinalityFilter == nil {
+			filter, err := NewCardinalityFilter(baseHandler, e.config.Scrape.Cardinality, e.logger)
+			if err != nil {
+				e.logger.Error("failed to create cardinality filter, using unfiltered handler", "err", err)
+				return baseHandler
+			}
+			e.cardinalityFilter = filter
+		}
+		return e.cardinalityFilter
+	}
+
+	return baseHandler
 }
 
 // Collect runs all collectors and returns metrics.
@@ -235,6 +256,37 @@ func (e *Exporter) Close() error {
 	return nil
 }
 
+// buildTLSConfig creates a TLS configuration from the endpoint TLS settings.
+// If mTLS is configured (ClientCAFile is set), it requires client certificates.
+func (e *Exporter) buildTLSConfig() (*tls.Config, error) {
+	tlsCfg := e.config.Endpoint.TLS
+	if tlsCfg == nil || !tlsCfg.Enabled {
+		return nil, nil
+	}
+
+	config := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+
+	// If ClientCAFile is specified, enable mTLS
+	if tlsCfg.ClientCAFile != "" {
+		caCert, err := os.ReadFile(tlsCfg.ClientCAFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read client CA file: %w", err)
+		}
+
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			return nil, fmt.Errorf("failed to parse client CA certificate")
+		}
+
+		config.ClientCAs = caCertPool
+		config.ClientAuth = tls.RequireAndVerifyClientCert
+	}
+
+	return config, nil
+}
+
 // Serve starts an HTTP server for the metrics endpoint.
 func (e *Exporter) Serve() error {
 	mux := http.NewServeMux()
@@ -269,6 +321,9 @@ func (e *Exporter) Serve() error {
 		_, _ = w.Write([]byte("\n"))
 	})
 
+	// Metrics description endpoint - documents available metrics and OTEL mappings
+	mux.HandleFunc("/metrics/description", e.metricsDescriptionHandler)
+
 	// Root endpoint - landing page
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
@@ -283,6 +338,7 @@ func (e *Exporter) Serve() error {
 <body>
 <h1>Telegen Node Exporter</h1>
 <p><a href="%s">Metrics</a></p>
+<p><a href="/metrics/description">Metric Descriptions</a></p>
 <p><a href="/health">Health</a></p>
 <p><a href="/ready">Ready</a></p>
 <p><a href="/live">Live</a></p>
@@ -302,6 +358,22 @@ func (e *Exporter) Serve() error {
 		Handler:      mux,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 60 * time.Second,
+	}
+
+	// Check if TLS is enabled
+	tlsCfg := e.config.Endpoint.TLS
+	if tlsCfg != nil && tlsCfg.Enabled {
+		tlsConfig, err := e.buildTLSConfig()
+		if err != nil {
+			return fmt.Errorf("failed to build TLS config: %w", err)
+		}
+		server.TLSConfig = tlsConfig
+
+		e.logger.Info("TLS enabled for metrics endpoint",
+			"cert_file", tlsCfg.CertFile,
+			"mtls_enabled", tlsCfg.ClientCAFile != "")
+
+		return server.ListenAndServeTLS(tlsCfg.CertFile, tlsCfg.KeyFile)
 	}
 
 	return server.ListenAndServe()
@@ -342,6 +414,9 @@ func (e *Exporter) Run(ctx context.Context) error {
 		_, _ = w.Write([]byte("\n"))
 	})
 
+	// Metrics description endpoint - documents available metrics and OTEL mappings
+	mux.HandleFunc("/metrics/description", e.metricsDescriptionHandler)
+
 	// Root endpoint
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
@@ -356,6 +431,7 @@ func (e *Exporter) Run(ctx context.Context) error {
 <body>
 <h1>Telegen Node Exporter</h1>
 <p><a href="%s">Metrics</a></p>
+<p><a href="/metrics/description">Metric Descriptions</a></p>
 <p><a href="/health">Health</a></p>
 <p><a href="/ready">Ready</a></p>
 <p><a href="/live">Live</a></p>
@@ -383,6 +459,22 @@ func (e *Exporter) Run(ctx context.Context) error {
 		_ = e.Shutdown(context.Background())
 	}()
 
+	// Check if TLS is enabled
+	tlsCfg := e.config.Endpoint.TLS
+	if tlsCfg != nil && tlsCfg.Enabled {
+		tlsConfig, err := e.buildTLSConfig()
+		if err != nil {
+			return fmt.Errorf("failed to build TLS config: %w", err)
+		}
+		e.server.TLSConfig = tlsConfig
+
+		e.logger.Info("TLS enabled for metrics endpoint",
+			"cert_file", tlsCfg.CertFile,
+			"mtls_enabled", tlsCfg.ClientCAFile != "")
+
+		return e.server.ListenAndServeTLS(tlsCfg.CertFile, tlsCfg.KeyFile)
+	}
+
 	return e.server.ListenAndServe()
 }
 
@@ -408,4 +500,105 @@ func (e *Exporter) ConfigureOTLPStreaming(ctx context.Context, exporter sdkmetri
 	}
 
 	return e.StartStreaming(ctx, bridge)
+}
+
+// MetricDescriptionResponse represents the JSON response for the /metrics/description endpoint.
+type MetricDescriptionResponse struct {
+	Categories []MetricCategoryInfo `json:"categories"`
+	Total      int                  `json:"total"`
+	OTELInfo   OTELMappingInfo      `json:"otel_info"`
+}
+
+// MetricCategoryInfo contains metrics grouped by category.
+type MetricCategoryInfo struct {
+	Category string       `json:"category"`
+	Count    int          `json:"count"`
+	Metrics  []MetricInfo `json:"metrics"`
+}
+
+// MetricInfo describes a single metric with OTEL mapping.
+type MetricInfo struct {
+	Name           string            `json:"name"`
+	OTELName       string            `json:"otel_name,omitempty"`
+	Description    string            `json:"description"`
+	Unit           string            `json:"unit"`
+	Type           string            `json:"type"`
+	Labels         map[string]string `json:"labels,omitempty"`
+	HasOTELMapping bool              `json:"has_otel_mapping"`
+}
+
+// OTELMappingInfo provides OTEL semantic convention information.
+type OTELMappingInfo struct {
+	Version      string `json:"version"`
+	MappedCount  int    `json:"mapped_count"`
+	TotalMetrics int    `json:"total_metrics"`
+	Coverage     string `json:"coverage"`
+}
+
+// metricsDescriptionHandler serves metric documentation as JSON.
+func (e *Exporter) metricsDescriptionHandler(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=300")
+
+	// Get all metric mappings organized by category
+	allMappings := GetAllMetricMappings()
+
+	var categories []MetricCategoryInfo
+	totalMetrics := 0
+	mappedCount := 0
+
+	for _, cat := range allMappings {
+		var metrics []MetricInfo
+		for _, m := range cat.Metrics {
+			hasMapping := m.OTELName != ""
+			if hasMapping {
+				mappedCount++
+			}
+			totalMetrics++
+
+			// Convert label mappings to simple map
+			labels := make(map[string]string)
+			for _, lm := range m.Labels {
+				labels[lm.NodeExporterLabel] = lm.OTELAttribute
+			}
+
+			metrics = append(metrics, MetricInfo{
+				Name:           m.NodeExporterName,
+				OTELName:       m.OTELName,
+				Description:    m.Description,
+				Unit:           m.Unit,
+				Type:           m.Type,
+				Labels:         labels,
+				HasOTELMapping: hasMapping,
+			})
+		}
+
+		categories = append(categories, MetricCategoryInfo{
+			Category: cat.Name,
+			Count:    len(metrics),
+			Metrics:  metrics,
+		})
+	}
+
+	coverage := "0%"
+	if totalMetrics > 0 {
+		coverage = fmt.Sprintf("%.1f%%", float64(mappedCount)/float64(totalMetrics)*100)
+	}
+
+	response := MetricDescriptionResponse{
+		Categories: categories,
+		Total:      totalMetrics,
+		OTELInfo: OTELMappingInfo{
+			Version:      "v1.38.0",
+			MappedCount:  mappedCount,
+			TotalMetrics: totalMetrics,
+			Coverage:     coverage,
+		},
+	}
+
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(response); err != nil {
+		e.logger.Error("failed to encode metric descriptions", "error", err)
+	}
 }

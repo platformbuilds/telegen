@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/platformbuilds/telegen/internal/config"
+	"github.com/platformbuilds/telegen/internal/kubemetrics"
 	"github.com/platformbuilds/telegen/internal/nodeexporter"
 	"github.com/platformbuilds/telegen/internal/pipeline"
 	"github.com/platformbuilds/telegen/internal/selftelemetry"
@@ -74,6 +76,11 @@ func main() {
 		}()
 	}
 
+	// Start kube_metrics if enabled or auto-detected
+	// This provides kube-state-metrics + cAdvisor equivalent metrics natively
+	var kubeMetricsProvider *kubemetrics.Provider
+	kubeMetricsProvider = startKubeMetrics(ctx, cfg)
+
 	pl := pipeline.New(cfg, st)
 	if err := pl.Start(ctx); err != nil {
 		log.Fatalf("start: %v", err)
@@ -109,5 +116,117 @@ func main() {
 	if nodeExp != nil {
 		_ = nodeExp.Shutdown(context.Background())
 	}
+	if kubeMetricsProvider != nil {
+		_ = kubeMetricsProvider.Stop(context.Background())
+	}
 	_ = srv.Shutdown(context.Background())
+}
+
+// startKubeMetrics initializes and starts the kubemetrics provider if enabled or auto-detected.
+// Returns nil if kubemetrics is disabled or if running outside a Kubernetes cluster without explicit config.
+func startKubeMetrics(ctx context.Context, cfg *config.Config) *kubemetrics.Provider {
+	// Create a structured logger for kubemetrics
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})).With("component", "kubemetrics")
+
+	// Check if we should auto-enable based on Kubernetes detection
+	inCluster := kubemetrics.IsInCluster()
+
+	// Determine if we should start kubemetrics
+	shouldStart := cfg.KubeMetrics.ShouldAutoEnable(inCluster)
+	if !shouldStart {
+		if cfg.KubeMetrics.AutoDetect {
+			log.Printf("  kube_metrics: auto-detect enabled but not running in Kubernetes cluster")
+		}
+		return nil
+	}
+
+	// Build agent config from the main config
+	agentCfg := &kubemetrics.AgentConfig{
+		Enabled:           cfg.KubeMetrics.Enabled,
+		AutoDetect:        cfg.KubeMetrics.AutoDetect,
+		ListenAddress:     cfg.KubeMetrics.ListenAddress,
+		MetricsPath:       cfg.KubeMetrics.MetricsPath,
+		SeparateEndpoints: cfg.KubeMetrics.SeparateEndpoints,
+		KubeState:         cfg.KubeMetrics.KubeState,
+		Cadvisor:          cfg.KubeMetrics.Cadvisor,
+		Streaming: kubemetrics.StreamingAgentConfig{
+			Enabled:      cfg.KubeMetrics.Streaming.Enabled,
+			Interval:     cfg.KubeMetrics.Streaming.Interval,
+			BatchSize:    cfg.KubeMetrics.Streaming.BatchSize,
+			FlushTimeout: cfg.KubeMetrics.Streaming.FlushTimeout,
+			UseOTLP:      cfg.KubeMetrics.Streaming.UseOTLP,
+		},
+		LogsStreaming: kubemetrics.LogsStreamingAgentConfig{
+			Enabled:       cfg.KubeMetrics.LogsStreaming.Enabled,
+			BufferSize:    cfg.KubeMetrics.LogsStreaming.BufferSize,
+			FlushInterval: cfg.KubeMetrics.LogsStreaming.FlushInterval,
+			EventTypes:    cfg.KubeMetrics.LogsStreaming.EventTypes,
+			Namespaces:    cfg.KubeMetrics.LogsStreaming.Namespaces,
+		},
+		SignalMetadata: kubemetrics.SignalMetadataAgentConfig{
+			Enabled: cfg.KubeMetrics.SignalMetadata.Enabled,
+			Fields:  cfg.KubeMetrics.SignalMetadata.Fields,
+		},
+	}
+
+	// Create the provider
+	provider, err := kubemetrics.NewFromAgentConfig(agentCfg, logger)
+	if err != nil {
+		log.Printf("kube_metrics: failed to create provider: %v", err)
+		return nil
+	}
+	if provider == nil {
+		// Not an error, just not enabled
+		return nil
+	}
+
+	// Start the provider (HTTP server + collectors)
+	if err := provider.Start(ctx); err != nil {
+		log.Printf("kube_metrics: failed to start: %v", err)
+		return nil
+	}
+
+	log.Printf("  kube_metrics: enabled on %s%s (kubestate=%v, cadvisor=%v)",
+		cfg.KubeMetrics.ListenAddress,
+		cfg.KubeMetrics.MetricsPath,
+		cfg.KubeMetrics.KubeState.Enabled,
+		cfg.KubeMetrics.Cadvisor.Enabled,
+	)
+
+	// Configure OTLP streaming if enabled
+	if cfg.KubeMetrics.Streaming.Enabled && cfg.KubeMetrics.Streaming.UseOTLP {
+		configureKubeMetricsStreaming(ctx, provider, cfg, logger)
+	}
+
+	return provider
+}
+
+// configureKubeMetricsStreaming sets up OTLP streaming for kubemetrics
+func configureKubeMetricsStreaming(ctx context.Context, provider *kubemetrics.Provider, cfg *config.Config, logger *slog.Logger) {
+	// Use the same OTLP endpoint as eBPF metrics
+	if !cfg.EBPF.OTELMetrics.EndpointEnabled() {
+		log.Printf("  kube_metrics: OTLP streaming configured but no OTEL endpoint available")
+		return
+	}
+
+	// Create metrics exporter
+	meInstancer := &otelcfg.MetricsExporterInstancer{Cfg: &cfg.EBPF.OTELMetrics}
+	metricsExporter, err := meInstancer.Instantiate(ctx)
+	if err != nil {
+		log.Printf("kube_metrics: failed to create OTLP metrics exporter: %v", err)
+		return
+	}
+
+	// Get the Kubernetes client for logs streaming (events watching)
+	kubeClient := provider.GetKubernetesClient()
+
+	// Setup streaming - logs exporter is nil for now (can be added when OTLP logs are configured)
+	if err := provider.SetupStreaming(metricsExporter, nil, kubeClient); err != nil {
+		log.Printf("kube_metrics: failed to configure OTLP streaming: %v", err)
+		return
+	}
+
+	log.Printf("  kube_metrics: OTLP streaming enabled (interval: %s)", cfg.KubeMetrics.Streaming.Interval)
 }

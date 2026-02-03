@@ -28,4 +28,15 @@ spec:
         - sourceLabels: [__name__]
           regex: 'telegen_.*'
           action: keep
+    {{- if and (eq .Values.mode "agent") .Values.kubeMetrics.enabled }}
+    - port: kube-metrics
+      path: /metrics
+      interval: {{ .Values.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout }}
+      honorLabels: true
+      metricRelabelings:
+        - sourceLabels: [__name__]
+          regex: 'kube_.*|container_.*'
+          action: keep
+    {{- end }}
 {{- end }}

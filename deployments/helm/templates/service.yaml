@@ -32,6 +32,12 @@ spec:
       port: {{ .Values.service.healthPort }}
       targetPort: health
       protocol: TCP
+    {{- if and (eq .Values.mode "agent") .Values.kubeMetrics.enabled }}
+    - name: kube-metrics
+      port: 9443
+      targetPort: kube-metrics
+      protocol: TCP
+    {{- end }}
     {{- if and (eq .Values.mode "collector") .Values.collector.snmp.traps.enabled }}
     - name: snmp-traps
       port: 162
