@@ -104,10 +104,10 @@ func (k *KubeState) buildServiceCollector(ctx context.Context) error {
 	}
 
 	informer := cache.NewSharedInformer(lw, &corev1.Service{}, k.config.GetResyncPeriod())
-	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { store.Add(obj) },
-		UpdateFunc: func(_, obj interface{}) { store.Update(obj) },
-		DeleteFunc: func(obj interface{}) { store.Delete(obj) },
+	_, _ = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { _ = store.Add(obj) },
+		UpdateFunc: func(_, obj interface{}) { _ = store.Update(obj) },
+		DeleteFunc: func(obj interface{}) { _ = store.Delete(obj) },
 	})
 
 	k.informers = append(k.informers, informer)

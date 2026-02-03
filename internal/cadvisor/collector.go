@@ -259,7 +259,7 @@ func (c *Collector) WriteMetrics(w io.Writer, stats []*ContainerStats) {
 	c.writeDiskIOMetrics(buf, stats)
 	c.writeNetworkMetrics(buf, stats)
 
-	w.Write(buf.Bytes())
+	_, _ = w.Write(buf.Bytes())
 }
 
 func (c *Collector) writeCPUMetrics(buf *bytes.Buffer, stats []*ContainerStats) {

@@ -430,7 +430,7 @@ func (r *CgroupReader) readDiskIOStatsV2(cgroupPath string, stats *DiskIOStats) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to open io.stat: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -485,7 +485,7 @@ func (r *CgroupReader) readDiskIOStatsV1(cgroupPath string, stats *DiskIOStats) 
 	// Read blkio.throttle.io_service_bytes
 	bytesPath := filepath.Join(basePath, "blkio.throttle.io_service_bytes")
 	if file, err := os.Open(bytesPath); err == nil {
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
 			fields := strings.Fields(scanner.Text())
@@ -505,7 +505,7 @@ func (r *CgroupReader) readDiskIOStatsV1(cgroupPath string, stats *DiskIOStats) 
 	// Read blkio.throttle.io_serviced
 	opsPath := filepath.Join(basePath, "blkio.throttle.io_serviced")
 	if file, err := os.Open(opsPath); err == nil {
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
 			fields := strings.Fields(scanner.Text())

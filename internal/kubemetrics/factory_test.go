@@ -13,21 +13,21 @@ func TestIsInCluster(t *testing.T) {
 	origHost := os.Getenv("KUBERNETES_SERVICE_HOST")
 	origPort := os.Getenv("KUBERNETES_SERVICE_PORT")
 	defer func() {
-		os.Setenv("KUBERNETES_SERVICE_HOST", origHost)
-		os.Setenv("KUBERNETES_SERVICE_PORT", origPort)
+		_ = os.Setenv("KUBERNETES_SERVICE_HOST", origHost)
+		_ = os.Setenv("KUBERNETES_SERVICE_PORT", origPort)
 	}()
 
 	// Test 1: Not in cluster (no env vars, no service account)
-	os.Unsetenv("KUBERNETES_SERVICE_HOST")
-	os.Unsetenv("KUBERNETES_SERVICE_PORT")
+	_ = os.Unsetenv("KUBERNETES_SERVICE_HOST")
+	_ = os.Unsetenv("KUBERNETES_SERVICE_PORT")
 	if IsInCluster() {
 		// This might pass if running in actual K8s
 		t.Log("IsInCluster() returned true - either running in K8s or service account exists")
 	}
 
 	// Test 2: In cluster via env var
-	os.Setenv("KUBERNETES_SERVICE_HOST", "10.0.0.1")
-	os.Setenv("KUBERNETES_SERVICE_PORT", "443")
+	t.Setenv("KUBERNETES_SERVICE_HOST", "10.0.0.1")
+	t.Setenv("KUBERNETES_SERVICE_PORT", "443")
 	if !IsInCluster() {
 		t.Error("IsInCluster() should return true when KUBERNETES_SERVICE_HOST is set")
 	}
@@ -80,8 +80,8 @@ func TestNewFromAgentConfig_NilConfig(t *testing.T) {
 func TestNewFromAgentConfig_NotInCluster(t *testing.T) {
 	// Save original env
 	origHost := os.Getenv("KUBERNETES_SERVICE_HOST")
-	defer os.Setenv("KUBERNETES_SERVICE_HOST", origHost)
-	os.Unsetenv("KUBERNETES_SERVICE_HOST")
+	defer func() { _ = os.Setenv("KUBERNETES_SERVICE_HOST", origHost) }()
+	_ = os.Unsetenv("KUBERNETES_SERVICE_HOST")
 
 	cfg := &AgentConfig{
 		Enabled:    false,
@@ -96,6 +96,6 @@ func TestNewFromAgentConfig_NotInCluster(t *testing.T) {
 	}
 	if provider != nil {
 		t.Error("Provider should be nil when not in cluster with auto-detect")
-		provider.Stop(nil)
+		_ = provider.Stop(nil)
 	}
 }
