@@ -90,7 +90,7 @@ require (
 	github.com/golang/snappy v1.0.0
 	github.com/gosnmp/gosnmp v1.43.2
 	github.com/grafana/jfr-parser v0.12.0
-	github.com/jsimonetti/rtnetlink/v2 v2.0.1
+	github.com/jsimonetti/rtnetlink/v2 v2.1.0
 	github.com/openconfig/gnmi v0.14.1
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.40.0
 	golang.org/x/time v0.14.0
@@ -147,7 +147,6 @@ require (
 	github.com/google/go-tpm v0.9.9-0.20260124013517-8f8f42cba0de // indirect
 	github.com/grafana/regexp v0.0.0-20250905093917-f7b3be9d1853 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.7 // indirect
-	github.com/josharian/native v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.18.3 // indirect
 	github.com/knadh/koanf/maps v0.1.2 // indirect
@@ -155,8 +154,8 @@ require (
 	github.com/knadh/koanf/v2 v2.3.2 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20251013123823-9fd1530e3ec3 // indirect
-	github.com/mdlayher/netlink v1.7.2 // indirect
-	github.com/mdlayher/socket v0.4.1 // indirect
+	github.com/mdlayher/netlink v1.8.0 // indirect
+	github.com/mdlayher/socket v0.5.1 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
