@@ -130,14 +130,15 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
             docker.io/platformbuilds/telegen
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=raw,value=v${{ steps.version.outputs.VERSION }}
+            type=raw,value=${{ steps.version.outputs.VERSION }}
+            type=raw,value=latest
             type=sha,prefix=
           labels: |
             org.opencontainers.image.title=Telegen
             org.opencontainers.image.description=Zero-config universal observability agent powered by eBPF
             org.opencontainers.image.vendor=Platform Builds
+            org.opencontainers.image.version=${{ steps.version.outputs.VERSION }}
 
       - name: Build and push
         uses: docker/build-push-action@v6

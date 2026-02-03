@@ -3,8 +3,8 @@ cmd/*
 bin/*
 obj/*
 .tools/telegen
-cusdeps
-cusdeps/*
+custdeploy
+custdeploy/*
 
 # Binary output
 telegen
