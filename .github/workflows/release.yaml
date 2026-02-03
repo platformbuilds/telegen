@@ -117,34 +117,15 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Docker Hub
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+        id: dockerhub-login
+        continue-on-error: true
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract metadata (with Docker Hub)
+      - name: Extract metadata
         id: meta
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' }}
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-            docker.io/platformbuilds/telegen
-          tags: |
-            type=raw,value=v${{ steps.version.outputs.VERSION }}
-            type=raw,value=${{ steps.version.outputs.VERSION }}
-            type=raw,value=latest
-            type=sha,prefix=
-          labels: |
-            org.opencontainers.image.title=Telegen
-            org.opencontainers.image.description=Zero-config universal observability agent powered by eBPF
-            org.opencontainers.image.vendor=Platform Builds
-            org.opencontainers.image.version=${{ steps.version.outputs.VERSION }}
-
-      - name: Extract metadata (GHCR only)
-        id: meta-ghcr
-        if: ${{ secrets.DOCKERHUB_USERNAME == '' }}
         uses: docker/metadata-action@v5
         with:
           images: |
@@ -166,8 +147,8 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags || steps.meta-ghcr.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels || steps.meta-ghcr.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ steps.version.outputs.VERSION }}
             REVISION=${{ github.sha }}
@@ -184,7 +165,6 @@ jobs:
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-debug
-            docker.io/platformbuilds/telegen:${{ steps.version.outputs.VERSION }}-debug
           build-args: |
             VERSION=${{ steps.version.outputs.VERSION }}
             REVISION=${{ github.sha }}
