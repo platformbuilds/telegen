@@ -272,7 +272,7 @@ attributes:
     cloud.region: ${AWS_REGION}
     cloud.account.id: ${AWS_ACCOUNT_ID}
     telegen.mode: collector
-    telegen.version: 2.0.0
+    telegen.version: 2.1.0
     
   # ECS metadata
   metadata:

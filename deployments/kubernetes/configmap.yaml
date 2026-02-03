@@ -9,7 +9,7 @@ metadata:
   labels:
     app.kubernetes.io/name: telegen
     app.kubernetes.io/component: config
-    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/version: "2.1.0"
 data:
   config.yaml: |
     # =============================================================================

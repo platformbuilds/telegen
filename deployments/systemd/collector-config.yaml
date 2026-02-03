@@ -383,7 +383,7 @@ attributes:
     service.namespace: infrastructure
     deployment.environment: ${DEPLOYMENT_ENV:-production}
     telegen.mode: collector
-    telegen.version: 2.0.0
+    telegen.version: 2.1.0
     
   # Additional metadata
   metadata:
