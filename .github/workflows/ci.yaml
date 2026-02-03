@@ -94,7 +94,7 @@ jobs:
           make build GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: telegen-${{ matrix.goos }}-${{ matrix.goarch }}
           path: bin/telegen
