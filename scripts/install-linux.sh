@@ -1,5 +1,5 @@
 #!/bin/bash
-# Telegen v2.0 Linux Installation Script
+# Telegen v2.1 Linux Installation Script
 # Task: DEP-013
 # Usage: curl -sSL https://get.telegen.io | bash
 #   or:  ./install-linux.sh [agent|collector]
@@ -7,7 +7,7 @@
 set -e
 
 # Configuration
-TELEGEN_VERSION="${TELEGEN_VERSION:-v2.0.0}"
+TELEGEN_VERSION="${TELEGEN_VERSION:-v2.1.0}"
 TELEGEN_MODE="${1:-agent}"
 TELEGEN_ENDPOINT="${TELEGEN_ENDPOINT:-otel-collector:4317}"
 TELEGEN_INSTALL_DIR="${TELEGEN_INSTALL_DIR:-/usr/local/bin}"

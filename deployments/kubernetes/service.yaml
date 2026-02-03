@@ -8,7 +8,7 @@ metadata:
   labels:
     app.kubernetes.io/name: telegen
     app.kubernetes.io/component: agent
-    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/version: "2.1.0"
   annotations:
     prometheus.io/scrape: "true"
     prometheus.io/port: "19090"
@@ -42,7 +42,7 @@ metadata:
   labels:
     app.kubernetes.io/name: telegen
     app.kubernetes.io/component: monitoring
-    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/version: "2.1.0"
 spec:
   selector:
     matchLabels:

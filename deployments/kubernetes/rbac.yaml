@@ -18,7 +18,7 @@ metadata:
   labels:
     app.kubernetes.io/name: telegen
     app.kubernetes.io/component: rbac
-    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/version: "2.1.0"
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -27,7 +27,7 @@ metadata:
   labels:
     app.kubernetes.io/name: telegen
     app.kubernetes.io/component: rbac
-    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/version: "2.1.0"
 rules:
   # Pod and node discovery
   - apiGroups: [""]
@@ -187,7 +187,7 @@ metadata:
   labels:
     app.kubernetes.io/name: telegen
     app.kubernetes.io/component: rbac
-    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/version: "2.1.0"
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole

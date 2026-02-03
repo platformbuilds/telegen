@@ -967,7 +967,7 @@ metadata:
   labels:
     app.kubernetes.io/name: telegen
     app.kubernetes.io/component: agent
-    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/version: "2.1.0"
 spec:
   selector:
     matchLabels:
@@ -1000,7 +1000,7 @@ spec:
       
       containers:
         - name: telegen
-          image: ghcr.io/platformbuilds/telegen:v2.0.0
+          image: ghcr.io/platformbuilds/telegen:v2.1.0
           imagePullPolicy: IfNotPresent
           args:
             - "--config=/etc/telegen/config.yaml"
