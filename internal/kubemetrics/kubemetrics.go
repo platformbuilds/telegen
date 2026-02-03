@@ -296,7 +296,7 @@ func (p *Provider) metricsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Write kubestate metrics
 	if p.kubestate != nil {
-		p.kubestate.WriteMetrics(w)
+		_ = p.kubestate.WriteMetrics(w)
 	}
 
 	// Write cadvisor metrics
@@ -335,10 +335,10 @@ func (p *Provider) healthHandler(w http.ResponseWriter, r *http.Request) {
 
 	if healthy {
 		w.WriteHeader(http.StatusOK)
-		io.WriteString(w, "ok")
+		_, _ = io.WriteString(w, "ok")
 	} else {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		io.WriteString(w, "unhealthy")
+		_, _ = io.WriteString(w, "unhealthy")
 	}
 }
 
@@ -348,37 +348,37 @@ func (p *Provider) telemetryHandler(w http.ResponseWriter, r *http.Request) {
 
 	if p.kubestate != nil {
 		stats := p.kubestate.Stats()
-		fmt.Fprintf(w, "# HELP kubemetrics_kubestate_stores_total Number of metrics stores\n")
-		fmt.Fprintf(w, "# TYPE kubemetrics_kubestate_stores_total gauge\n")
-		fmt.Fprintf(w, "kubemetrics_kubestate_stores_total %v\n", stats["stores"])
-		fmt.Fprintf(w, "# HELP kubemetrics_kubestate_informers_total Number of active informers\n")
-		fmt.Fprintf(w, "# TYPE kubemetrics_kubestate_informers_total gauge\n")
-		fmt.Fprintf(w, "kubemetrics_kubestate_informers_total %v\n", stats["informers"])
+		_, _ = fmt.Fprintf(w, "# HELP kubemetrics_kubestate_stores_total Number of metrics stores\n")
+		_, _ = fmt.Fprintf(w, "# TYPE kubemetrics_kubestate_stores_total gauge\n")
+		_, _ = fmt.Fprintf(w, "kubemetrics_kubestate_stores_total %v\n", stats["stores"])
+		_, _ = fmt.Fprintf(w, "# HELP kubemetrics_kubestate_informers_total Number of active informers\n")
+		_, _ = fmt.Fprintf(w, "# TYPE kubemetrics_kubestate_informers_total gauge\n")
+		_, _ = fmt.Fprintf(w, "kubemetrics_kubestate_informers_total %v\n", stats["informers"])
 	}
 
 	if p.cadvisor != nil {
 		stats := p.cadvisor.Stats()
-		fmt.Fprintf(w, "# HELP kubemetrics_cadvisor_containers_total Number of containers being monitored\n")
-		fmt.Fprintf(w, "# TYPE kubemetrics_cadvisor_containers_total gauge\n")
-		fmt.Fprintf(w, "kubemetrics_cadvisor_containers_total %v\n", stats["containers"])
+		_, _ = fmt.Fprintf(w, "# HELP kubemetrics_cadvisor_containers_total Number of containers being monitored\n")
+		_, _ = fmt.Fprintf(w, "# TYPE kubemetrics_cadvisor_containers_total gauge\n")
+		_, _ = fmt.Fprintf(w, "kubemetrics_cadvisor_containers_total %v\n", stats["containers"])
 	}
 
 	// Streaming stats
 	if p.metricsStreaming != nil {
 		stats := p.metricsStreaming.Stats()
-		fmt.Fprintf(w, "# HELP kubemetrics_streaming_exports_total Total streaming exports\n")
-		fmt.Fprintf(w, "# TYPE kubemetrics_streaming_exports_total counter\n")
-		fmt.Fprintf(w, "kubemetrics_streaming_exports_total %v\n", stats["export_count"])
+		_, _ = fmt.Fprintf(w, "# HELP kubemetrics_streaming_exports_total Total streaming exports\n")
+		_, _ = fmt.Fprintf(w, "# TYPE kubemetrics_streaming_exports_total counter\n")
+		_, _ = fmt.Fprintf(w, "kubemetrics_streaming_exports_total %v\n", stats["export_count"])
 	}
 
 	if p.logsStreaming != nil {
 		stats := p.logsStreaming.Stats()
-		fmt.Fprintf(w, "# HELP kubemetrics_logs_events_received_total K8s events received\n")
-		fmt.Fprintf(w, "# TYPE kubemetrics_logs_events_received_total counter\n")
-		fmt.Fprintf(w, "kubemetrics_logs_events_received_total %v\n", stats["events_received"])
-		fmt.Fprintf(w, "# HELP kubemetrics_logs_events_exported_total K8s events exported\n")
-		fmt.Fprintf(w, "# TYPE kubemetrics_logs_events_exported_total counter\n")
-		fmt.Fprintf(w, "kubemetrics_logs_events_exported_total %v\n", stats["events_exported"])
+		_, _ = fmt.Fprintf(w, "# HELP kubemetrics_logs_events_received_total K8s events received\n")
+		_, _ = fmt.Fprintf(w, "# TYPE kubemetrics_logs_events_received_total counter\n")
+		_, _ = fmt.Fprintf(w, "kubemetrics_logs_events_received_total %v\n", stats["events_received"])
+		_, _ = fmt.Fprintf(w, "# HELP kubemetrics_logs_events_exported_total K8s events exported\n")
+		_, _ = fmt.Fprintf(w, "# TYPE kubemetrics_logs_events_exported_total counter\n")
+		_, _ = fmt.Fprintf(w, "kubemetrics_logs_events_exported_total %v\n", stats["events_exported"])
 	}
 }
 
