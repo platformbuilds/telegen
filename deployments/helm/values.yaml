@@ -193,10 +193,32 @@ nodeExporter:
   endpoint:
     port: 9100
     path: "/metrics"
+    # TLS configuration for secure metrics endpoint
+    tls:
+      enabled: false
+      certFile: "/etc/telegen/tls/tls.crt"
+      keyFile: "/etc/telegen/tls/tls.key"
+      # Enable mTLS by specifying client CA
+      clientCAFile: ""  # e.g., "/etc/telegen/tls/ca.crt"
   
   # Scrape settings
   scrape:
     timeout: "20s"
+    # Cardinality controls to limit metric explosion
+    cardinality:
+      enabled: false
+      # Maximum metrics per scrape (0 = unlimited)
+      maxMetrics: 0
+      # Maximum labels per metric (0 = unlimited)
+      maxLabels: 0
+      # Maximum label value length (0 = unlimited)
+      maxLabelValueLength: 0
+      # Labels to drop from all metrics
+      dropLabels: []
+      # Metric name patterns to include (regex, empty = all)
+      includeMetrics: []
+      # Metric name patterns to exclude (regex)
+      excludeMetrics: []
   
   # Streaming export configuration (push to OTLP)
   export:
@@ -386,6 +408,114 @@ discovery:
   disabledRouteHarvesters: []
   routeHarvesterAdvanced:
     javaHarvestDelay: 60s
+
+# =============================================================================
+# Kubernetes Metrics Configuration (kube-state-metrics + cAdvisor equivalent)
+# =============================================================================
+# Native kube-state-metrics and cAdvisor equivalent metrics without requiring
+# separate deployments. One Agent, Many Signals!
+kubeMetrics:
+  # Enable Kubernetes metrics collection
+  enabled: true
+  
+  # Auto-detect Kubernetes environment
+  autoDetect: true
+  
+  # Listen address for Kubernetes metrics endpoint
+  listenAddress: ":9443"
+  
+  # Metrics path
+  metricsPath: "/metrics"
+  
+  # Expose separate endpoints for kubestate and cadvisor
+  separateEndpoints: true
+
+  # kube-state-metrics equivalent configuration
+  kubeState:
+    enabled: true
+    resources:
+      - pods
+      - deployments
+      - statefulsets
+      - daemonsets
+      - replicasets
+      - nodes
+      - namespaces
+      - services
+      - endpoints
+      - jobs
+      - cronjobs
+      - persistentvolumes
+      - persistentvolumeclaims
+      - configmaps
+      - secrets
+      - horizontalpodautoscalers
+      - ingresses
+    namespaces: []
+    namespacesExclude:
+      - kube-system
+    metricAllowlist: []
+    metricDenylist: []
+    labelsAllowlist:
+      pods:
+        - app
+        - app.kubernetes.io/name
+        - app.kubernetes.io/instance
+        - app.kubernetes.io/component
+      deployments:
+        - app
+        - app.kubernetes.io/name
+      services:
+        - app
+        - app.kubernetes.io/name
+    annotationsAllowlist: {}
+    kubeconfig: ""
+    resyncPeriod: 5m
+    shard: 0
+    totalShards: 1
+
+  # cAdvisor equivalent configuration
+  cadvisor:
+    enabled: true
+    cgroupRoot: "/sys/fs/cgroup"
+    containerdSocket: "/run/containerd/containerd.sock"
+    collectInterval: 10s
+    housekeepingInterval: 1m
+    namespaces: []
+    namespacesExclude: []
+    disabledMetrics: []
+    diskIOEnabled: true
+    networkEnabled: true
+    perCPUEnabled: false
+
+  # OTLP Streaming Configuration
+  streaming:
+    enabled: true
+    interval: 15s
+    batchSize: 1000
+    flushTimeout: 5s
+    useOTLP: true
+
+  # Kubernetes Events as OTLP Logs
+  logsStreaming:
+    enabled: false
+    bufferSize: 1000
+    flushInterval: 5s
+    eventTypes:
+      - Normal
+      - Warning
+    namespaces: []
+
+  # Signal Metadata Configuration
+  signalMetadata:
+    enabled: true
+    fields:
+      enableCategory: true
+      enableSubcategory: true
+      enableSourceModule: true
+      enableCollectorType: true
+      enableBPFComponent: false
+      enableDescription: false
 
 # =============================================================================
 # Kubernetes Attributes Configuration

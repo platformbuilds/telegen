@@ -92,6 +92,9 @@ spec:
             - name: health
               containerPort: 8080
               protocol: TCP
+            - name: kube-metrics
+              containerPort: 9443
+              protocol: TCP
           
           # DEP-005: Liveness and Readiness Probes
           livenessProbe:

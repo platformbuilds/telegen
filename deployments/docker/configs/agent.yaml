@@ -47,10 +47,32 @@ node_exporter:
   endpoint:
     port: 9100
     path: "/metrics"
+    # TLS configuration for secure metrics endpoint
+    tls:
+      enabled: false
+      cert_file: "/etc/telegen/tls/tls.crt"
+      key_file: "/etc/telegen/tls/tls.key"
+      # Enable mTLS by specifying client CA
+      client_ca_file: ""  # e.g., "/etc/telegen/tls/ca.crt"
   
   # Scrape settings
   scrape:
     timeout: 20s
+    # Cardinality controls to limit metric explosion
+    cardinality:
+      enabled: false
+      # Maximum metrics per scrape (0 = unlimited)
+      max_metrics: 0
+      # Maximum labels per metric (0 = unlimited)
+      max_labels: 0
+      # Maximum label value length (0 = unlimited)
+      max_label_value_length: 0
+      # Labels to drop from all metrics
+      drop_labels: []
+      # Metric name patterns to include (regex, empty = all)
+      include_metrics: []
+      # Metric name patterns to exclude (regex)
+      exclude_metrics: []
   
   # Streaming export configuration (push to OTLP)
   export:
@@ -231,6 +253,84 @@ discovery:
   disabled_route_harvesters: []
   route_harvester_advanced:
     java_harvest_delay: 60s
+
+# -----------------------------------------------------------------------------
+# Kubernetes Metrics Configuration (kube-state-metrics + cAdvisor equivalent)
+# -----------------------------------------------------------------------------
+# Disabled for Docker Compose deployments. Enable when running telegen in
+# Kubernetes to get native kube-state-metrics and cAdvisor equivalent metrics.
+# One Agent, Many Signals!
+kube_metrics:
+  enabled: false
+  auto_detect: true
+  listen_address: ":9443"
+  metrics_path: "/metrics"
+  separate_endpoints: true
+
+  kube_state:
+    enabled: true
+    resources:
+      - pods
+      - deployments
+      - statefulsets
+      - daemonsets
+      - replicasets
+      - nodes
+      - namespaces
+      - services
+      - endpoints
+      - jobs
+      - cronjobs
+    namespaces: []
+    namespaces_exclude:
+      - kube-system
+    metric_allowlist: []
+    metric_denylist: []
+    labels_allowlist: {}
+    annotations_allowlist: {}
+    kubeconfig: ""
+    resync_period: 5m
+    shard: 0
+    total_shards: 1
+
+  cadvisor:
+    enabled: true
+    cgroup_root: "/sys/fs/cgroup"
+    containerd_socket: "/run/containerd/containerd.sock"
+    collect_interval: 10s
+    housekeeping_interval: 1m
+    namespaces: []
+    namespaces_exclude: []
+    disabled_metrics: []
+    disk_io_enabled: true
+    network_enabled: true
+    per_cpu_enabled: false
+
+  streaming:
+    enabled: false
+    interval: 15s
+    batch_size: 1000
+    flush_timeout: 5s
+    use_otlp: true
+
+  logs_streaming:
+    enabled: false
+    buffer_size: 1000
+    flush_interval: 5s
+    event_types:
+      - Normal
+      - Warning
+    namespaces: []
+
+  signal_metadata:
+    enabled: true
+    fields:
+      enable_category: true
+      enable_subcategory: true
+      enable_source_module: true
+      enable_collector_type: true
+      enable_bpf_component: false
+      enable_description: false
 
 # -----------------------------------------------------------------------------
 # Profiling Configuration

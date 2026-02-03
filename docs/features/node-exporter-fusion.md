@@ -190,6 +190,135 @@ agent:
         - "^br-.*"
 ```
 
+### TLS/mTLS Configuration
+
+Secure the metrics endpoint with TLS and optional mutual TLS (mTLS):
+
+```yaml
+agent:
+  nodeexporter:
+    enabled: true
+    listen_address: ":9100"
+    
+    # TLS configuration
+    tls:
+      enabled: true
+      
+      # Server certificate and key
+      cert_file: "/etc/telegen/certs/server.crt"
+      key_file: "/etc/telegen/certs/server.key"
+      
+      # Enable mTLS (client certificate verification)
+      client_auth: true
+      
+      # CA certificate for verifying client certs
+      client_ca_file: "/etc/telegen/certs/ca.crt"
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `tls.enabled` | Enable TLS for metrics endpoint | `false` |
+| `tls.cert_file` | Path to server certificate | - |
+| `tls.key_file` | Path to server private key | - |
+| `tls.client_auth` | Require client certificates (mTLS) | `false` |
+| `tls.client_ca_file` | CA for verifying client certificates | - |
+
+### Metric Cardinality Controls
+
+Control metric cardinality to prevent explosion from high-cardinality labels:
+
+```yaml
+agent:
+  nodeexporter:
+    enabled: true
+    
+    # Cardinality controls
+    cardinality:
+      enabled: true
+      
+      # Maximum number of metric families
+      max_metrics: 1000
+      
+      # Include only these metrics (regex patterns)
+      include_metrics:
+        - "node_cpu_.*"
+        - "node_memory_.*"
+        - "node_disk_.*"
+        - "node_filesystem_.*"
+        - "node_network_.*"
+        - "node_load.*"
+      
+      # Exclude these metrics (regex patterns)
+      exclude_metrics:
+        - "node_scrape_.*"
+        - "go_.*"
+      
+      # Drop these labels from all metrics
+      drop_labels:
+        - "id"
+        - "name"
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `cardinality.enabled` | Enable cardinality filtering | `false` |
+| `cardinality.max_metrics` | Maximum metric families (0 = unlimited) | `0` |
+| `cardinality.include_metrics` | Regex patterns to include | `[]` (all) |
+| `cardinality.exclude_metrics` | Regex patterns to exclude | `[]` |
+| `cardinality.drop_labels` | Labels to remove from all metrics | `[]` |
+
+---
+
+## API Endpoints
+
+The node exporter provides several HTTP endpoints:
+
+| Endpoint | Description |
+|----------|-------------|
+| `/metrics` | Prometheus metrics endpoint |
+| `/metrics/description` | JSON documentation of all metrics with OTEL mappings |
+| `/health` | Health check (JSON) |
+| `/ready` | Readiness probe |
+| `/live` | Liveness probe |
+
+### Metric Descriptions Endpoint
+
+The `/metrics/description` endpoint returns JSON documentation for all available metrics, including OTEL semantic convention mappings:
+
+```bash
+curl http://localhost:9100/metrics/description
+```
+
+Response:
+```json
+{
+  "categories": [
+    {
+      "category": "CPU",
+      "count": 4,
+      "metrics": [
+        {
+          "name": "node_cpu_seconds_total",
+          "otel_name": "system.cpu.time",
+          "description": "Seconds the CPUs spent in each mode",
+          "unit": "s",
+          "type": "counter",
+          "labels": {"cpu": "cpu", "mode": "cpu.mode"},
+          "has_otel_mapping": true
+        }
+      ]
+    }
+  ],
+  "total": 35,
+  "otel_info": {
+    "version": "v1.38.0",
+    "mapped_count": 35,
+    "total_metrics": 35,
+    "coverage": "100.0%"
+  }
+}
+```
+
 ---
 
 ## Prometheus Integration

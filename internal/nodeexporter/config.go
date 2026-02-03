@@ -83,6 +83,34 @@ type TLSConfig struct {
 type ScrapeConfig struct {
 	// Timeout for individual collector scrapes
 	Timeout time.Duration `yaml:"timeout"`
+
+	// Cardinality holds configuration for controlling metric cardinality
+	Cardinality CardinalityConfig `yaml:"cardinality"`
+}
+
+// CardinalityConfig holds configuration for controlling metric cardinality.
+type CardinalityConfig struct {
+	// Enabled enables cardinality controls
+	Enabled bool `yaml:"enabled"`
+
+	// MaxMetrics is the maximum number of metrics per scrape (0 = unlimited)
+	MaxMetrics int `yaml:"max_metrics"`
+
+	// MaxLabels is the maximum number of labels per metric (0 = unlimited)
+	MaxLabels int `yaml:"max_labels"`
+
+	// MaxLabelValueLength is the maximum length of label values (0 = unlimited)
+	MaxLabelValueLength int `yaml:"max_label_value_length"`
+
+	// DropLabels is a list of label names to drop from all metrics
+	DropLabels []string `yaml:"drop_labels"`
+
+	// IncludeMetrics is a list of metric name patterns to include (regex)
+	// If empty, all metrics are included
+	IncludeMetrics []string `yaml:"include_metrics"`
+
+	// ExcludeMetrics is a list of metric name patterns to exclude (regex)
+	ExcludeMetrics []string `yaml:"exclude_metrics"`
 }
 
 // ExportConfig holds configuration for streaming metrics export.

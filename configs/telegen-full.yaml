@@ -493,6 +493,201 @@ kubernetes:
     - app.kubernetes.io/version
 
 # -----------------------------------------------------------------------------
+# Kubernetes Metrics Configuration (kube-state-metrics + cAdvisor equivalent)
+# -----------------------------------------------------------------------------
+# When telegen auto-discovers it's running in a Kubernetes cluster, this section
+# is automatically enabled. Provides native kube-state-metrics and cAdvisor
+# equivalent metrics without requiring separate deployments.
+#
+# One Agent, Many Signals - this is part of telegen's unified observability.
+kube_metrics:
+  # Enable Kubernetes metrics collection
+  # Auto-enabled when kubernetes.enable is true and running in-cluster
+  enabled: true
+  
+  # Auto-detect Kubernetes environment (uses in-cluster config when available)
+  auto_detect: true
+  
+  # Listen address for Kubernetes metrics endpoint
+  # Separate from main telemetry endpoint for independent scraping
+  listen_address: ":9443"
+  
+  # Metrics path
+  metrics_path: "/metrics"
+  
+  # Expose separate endpoints for kubestate and cadvisor
+  # When true: /metrics/kubestate and /metrics/cadvisor
+  # When false: combined on /metrics
+  separate_endpoints: true
+
+  # kube-state-metrics equivalent configuration
+  kube_state:
+    enabled: true
+    
+    # Resources to collect metrics for
+    # Supported: pods, deployments, statefulsets, daemonsets, replicasets,
+    #            nodes, namespaces, services, endpoints, jobs, cronjobs,
+    #            persistentvolumes, persistentvolumeclaims, configmaps,
+    #            secrets, horizontalpodautoscalers, ingresses
+    resources:
+      - pods
+      - deployments
+      - statefulsets
+      - daemonsets
+      - replicasets
+      - nodes
+      - namespaces
+      - services
+      - endpoints
+      - jobs
+      - cronjobs
+      - persistentvolumes
+      - persistentvolumeclaims
+      - configmaps
+      - secrets
+      - horizontalpodautoscalers
+      - ingresses
+    
+    # Namespaces to include (empty = all)
+    namespaces: []
+    
+    # Namespaces to exclude
+    namespaces_exclude:
+      - kube-system
+    
+    # Metrics allowlist (empty = all, supports regex)
+    metric_allowlist: []
+    
+    # Metrics denylist (takes precedence over allowlist)
+    metric_denylist: []
+    
+    # Labels allowlist per resource
+    labels_allowlist:
+      pods:
+        - app
+        - app.kubernetes.io/name
+        - app.kubernetes.io/instance
+        - app.kubernetes.io/component
+      deployments:
+        - app
+        - app.kubernetes.io/name
+      services:
+        - app
+        - app.kubernetes.io/name
+    
+    # Annotations allowlist per resource
+    annotations_allowlist: {}
+    
+    # Kubeconfig path (empty = in-cluster config)
+    kubeconfig: ""
+    
+    # Resync period for informers
+    resync_period: 5m
+    
+    # Sharding for horizontal scaling (when running multiple telegen replicas)
+    shard: 0
+    total_shards: 1
+
+  # cAdvisor equivalent configuration
+  # Container resource utilization metrics via cgroups
+  cadvisor:
+    enabled: true
+    
+    # Cgroup filesystem root (auto-detects v1 vs v2)
+    cgroup_root: "/sys/fs/cgroup"
+    
+    # Containerd socket for container metadata
+    containerd_socket: "/run/containerd/containerd.sock"
+    
+    # Collection interval
+    collect_interval: 10s
+    
+    # Housekeeping interval (container discovery)
+    housekeeping_interval: 1m
+    
+    # Namespaces to include (empty = all)
+    namespaces: []
+    
+    # Namespaces to exclude
+    namespaces_exclude: []
+    
+    # Disabled metrics
+    disabled_metrics: []
+    
+    # Enable disk I/O metrics
+    disk_io_enabled: true
+    
+    # Enable network metrics
+    network_enabled: true
+    
+    # Enable per-CPU metrics (can be expensive)
+    per_cpu_enabled: false
+
+  # OTLP Streaming Configuration
+  # Push metrics directly to OTEL Collector (in addition to HTTP pull)
+  streaming:
+    # Enable streaming push to OTLP endpoint
+    enabled: false
+    
+    # Push interval
+    interval: 15s
+    
+    # Maximum batch size
+    batch_size: 1000
+    
+    # Flush timeout
+    flush_timeout: 5s
+    
+    # Use telegen's configured OTLP exporter
+    use_otlp: true
+
+  # Kubernetes Events as OTLP Logs
+  # Stream K8s events as structured logs to OTLP endpoint
+  logs_streaming:
+    # Enable K8s event streaming as OTLP logs
+    enabled: false
+    
+    # Event buffer size
+    buffer_size: 1000
+    
+    # Flush interval
+    flush_interval: 5s
+    
+    # Event types to include
+    event_types:
+      - Normal
+      - Warning
+    
+    # Namespaces to watch (empty = all)
+    namespaces: []
+
+  # Signal Metadata Configuration
+  # Controls telegen.* attributes appended to all Kubernetes signals
+  signal_metadata:
+    # Enable signal metadata
+    enabled: true
+    
+    # Control which metadata fields are exported
+    fields:
+      # telegen.signal.category (e.g., "Kubernetes State", "Container Metrics")
+      enable_category: true
+      
+      # telegen.signal.subcategory (e.g., "Pod Metrics", "CPU Utilization")
+      enable_subcategory: true
+      
+      # telegen.source.module (e.g., "internal/kubestate")
+      enable_source_module: true
+      
+      # telegen.collector.type (e.g., "api", "cgroups")
+      enable_collector_type: true
+      
+      # telegen.bpf.component (not applicable for kube metrics)
+      enable_bpf_component: false
+      
+      # telegen.signal.description (verbose, disabled by default)
+      enable_description: false
+
+# -----------------------------------------------------------------------------
 # Profiling Configuration
 # -----------------------------------------------------------------------------
 profiling:

@@ -74,6 +74,28 @@ type Config struct {
 
 	// NodeExporter provides Prometheus node_exporter compatible system metrics
 	NodeExporter nodeexporter.Config `yaml:"node_exporter"`
+
+	// KubeMetrics provides native kube-state-metrics + cAdvisor equivalent
+	// Auto-enabled when running in a Kubernetes cluster
+	KubeMetrics KubeMetricsConfig `yaml:"kube_metrics"`
+
+	// Kubernetes configures Kubernetes metadata decoration
+	Kubernetes KubernetesConfig `yaml:"kubernetes"`
+}
+
+// KubernetesConfig holds Kubernetes discovery/decoration settings
+type KubernetesConfig struct {
+	// Enable Kubernetes metadata decoration
+	Enable bool `yaml:"enable"`
+
+	// InformersSyncTimeout is the timeout for informers sync
+	InformersSyncTimeout string `yaml:"informers_sync_timeout"`
+
+	// InformersResyncPeriod is the resync period for informers
+	InformersResyncPeriod string `yaml:"informers_resync_period"`
+
+	// ResourceLabels are the resource labels to include
+	ResourceLabels []string `yaml:"resource_labels"`
 }
 
 // EBPFConfig holds configuration for eBPF-based auto-instrumentation (from OBI)

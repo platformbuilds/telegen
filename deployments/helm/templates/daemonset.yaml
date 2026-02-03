@@ -79,6 +79,11 @@ spec:
             - name: health
               containerPort: {{ .Values.service.healthPort }}
               protocol: TCP
+            {{- if .Values.kubeMetrics.enabled }}
+            - name: kube-metrics
+              containerPort: 9443
+              protocol: TCP
+            {{- end }}
           
           {{- if .Values.livenessProbe.enabled }}
           livenessProbe:

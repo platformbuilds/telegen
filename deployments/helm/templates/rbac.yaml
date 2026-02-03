@@ -21,7 +21,7 @@ metadata:
   labels:
     {{- include "telegen.labels" . | nindent 4 }}
 rules:
-  # Pod and node discovery
+  # Pod and node discovery (includes kube-state-metrics resources)
   - apiGroups: [""]
     resources:
       - pods
@@ -34,6 +34,11 @@ rules:
       - endpoints
       - configmaps
       - secrets
+      - persistentvolumes
+      - persistentvolumeclaims
+      - resourcequotas
+      - limitranges
+      - replicationcontrollers
     verbs:
       - get
       - list
@@ -54,6 +59,48 @@ rules:
     resources:
       - jobs
       - cronjobs
+    verbs:
+      - get
+      - list
+      - watch
+  # Autoscaling resources (for kube-state-metrics)
+  - apiGroups: ["autoscaling"]
+    resources:
+      - horizontalpodautoscalers
+    verbs:
+      - get
+      - list
+      - watch
+  # Policy resources
+  - apiGroups: ["policy"]
+    resources:
+      - poddisruptionbudgets
+    verbs:
+      - get
+      - list
+      - watch
+  # Certificates
+  - apiGroups: ["certificates.k8s.io"]
+    resources:
+      - certificatesigningrequests
+    verbs:
+      - get
+      - list
+      - watch
+  # Storage classes
+  - apiGroups: ["storage.k8s.io"]
+    resources:
+      - storageclasses
+      - volumeattachments
+    verbs:
+      - get
+      - list
+      - watch
+  # Admission controllers
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources:
+      - mutatingwebhookconfigurations
+      - validatingwebhookconfigurations
     verbs:
       - get
       - list

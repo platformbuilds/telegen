@@ -28,6 +28,10 @@ spec:
       port: 8080
       targetPort: health
       protocol: TCP
+    - name: kube-metrics
+      port: 9443
+      targetPort: kube-metrics
+      protocol: TCP
 ---
 # ServiceMonitor for Prometheus Operator
 apiVersion: monitoring.coreos.com/v1
@@ -55,4 +59,13 @@ spec:
       metricRelabelings:
         - sourceLabels: [__name__]
           regex: 'telegen_.*'
+          action: keep
+    - port: kube-metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      honorLabels: true
+      metricRelabelings:
+        - sourceLabels: [__name__]
+          regex: 'kube_.*|container_.*'
           action: keep
