@@ -53,28 +53,28 @@ Signals enabled:
   - Logs:     {{ .Values.otlp.logs.enabled }}
   - Profiles: {{ .Values.otlp.profiles.enabled }}
 
-{{- if .Values.features.profiling.enabled }}
+{{- if .Values.profiling.enabled }}
 ================================================================================
                           CONTINUOUS PROFILING
 ================================================================================
 
 Profiling is enabled with the following settings:
-  - CPU Profiling:    {{ .Values.features.profiling.cpu }}
-  - Off-CPU Profiling: {{ .Values.features.profiling.offCpu }}
-  - Memory Profiling: {{ .Values.features.profiling.memory }}
-  - Mutex Profiling:  {{ .Values.features.profiling.mutex }}
-  - Sample Rate:      {{ .Values.features.profiling.sampleRate }} Hz
+  - CPU Profiling:    {{ .Values.profiling.cpu.enabled }}
+  - Off-CPU Profiling: {{ .Values.profiling.offCpu.enabled }}
+  - Memory Profiling: {{ .Values.profiling.memory.enabled }}
+  - Mutex Profiling:  {{ .Values.profiling.mutex.enabled }}
+  - Sample Rate:      {{ .Values.profiling.cpu.sampleRate }} Hz
 {{- end }}
 
-{{- if .Values.features.security.enabled }}
+{{- if .Values.security.enabled }}
 ================================================================================
                         SECURITY OBSERVABILITY
 ================================================================================
 
 Security monitoring is enabled:
-  - Syscall Auditing:      {{ .Values.features.security.syscallAudit }}
-  - File Integrity:        {{ .Values.features.security.fileIntegrity }}
-  - Container Escape:      {{ .Values.features.security.containerEscape }}
+  - Syscall Auditing:      {{ .Values.security.syscallAudit.enabled }}
+  - File Integrity:        {{ .Values.security.fileIntegrity.enabled }}
+  - Container Escape:      {{ .Values.security.containerEscape.enabled }}
 {{- end }}
 
 {{- if .Values.serviceMonitor.enabled }}
