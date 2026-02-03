@@ -137,7 +137,7 @@ func ReadFilesystemStats(pid int, rootfs string) ([]FilesystemStats, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open mountinfo: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
