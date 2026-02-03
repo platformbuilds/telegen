@@ -64,5 +64,3 @@ func boolToString(b bool) string {
 func int32ToString(i int32) string {
 	return strconv.FormatInt(int64(i), 10)
 }
-
-
