@@ -92,9 +92,9 @@ features/index
 
 ```{toctree}
 :maxdepth: 2
-:caption: Integration
+:caption: Integrations
 
-integration/index
+integrations/index
 ```
 
 ```{toctree}
