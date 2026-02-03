@@ -113,7 +113,7 @@ func (k *KubeState) buildEndpointsCollector(ctx context.Context) error {
 
 	composedFunc := ComposeMetricGenFuncs(generators)
 	generateFunc := func(obj interface{}) []byte {
-		endpoints := obj.(*corev1.Endpoints)
+		endpoints := obj.(*corev1.Endpoints) //nolint:staticcheck // SA1019: Endpoints still supported for older K8s versions
 
 		if !k.IsMine(string(endpoints.UID)) {
 			return nil
@@ -143,6 +143,7 @@ func (k *KubeState) buildEndpointsCollector(ctx context.Context) error {
 		},
 	}
 
+	//nolint:staticcheck // SA1019: Endpoints still supported for older K8s versions
 	informer := cache.NewSharedInformer(lw, &corev1.Endpoints{}, k.config.GetResyncPeriod())
 	_, _ = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(obj interface{}) { _ = store.Add(obj) },
@@ -215,7 +216,7 @@ func (k *KubeState) buildEndpointSliceCollector(ctx context.Context) error {
 // Endpoints metric generator functions
 
 func generateEndpointInfo(obj interface{}) *Family {
-	endpoints := obj.(*corev1.Endpoints)
+	endpoints := obj.(*corev1.Endpoints) //nolint:staticcheck // SA1019: Endpoints still supported for older K8s versions
 	return &Family{
 		Metrics: []*Metric{
 			{
@@ -228,7 +229,7 @@ func generateEndpointInfo(obj interface{}) *Family {
 }
 
 func generateEndpointCreated(obj interface{}) *Family {
-	endpoints := obj.(*corev1.Endpoints)
+	endpoints := obj.(*corev1.Endpoints) //nolint:staticcheck // SA1019: Endpoints still supported for older K8s versions
 	return &Family{
 		Metrics: []*Metric{
 			{
@@ -241,7 +242,7 @@ func generateEndpointCreated(obj interface{}) *Family {
 }
 
 func generateEndpointLabels(obj interface{}) *Family {
-	endpoints := obj.(*corev1.Endpoints)
+	endpoints := obj.(*corev1.Endpoints) //nolint:staticcheck // SA1019: Endpoints still supported for older K8s versions
 	labelKeys := make([]string, 0, len(endpoints.Labels)+2)
 	labelValues := make([]string, 0, len(endpoints.Labels)+2)
 
@@ -265,7 +266,7 @@ func generateEndpointLabels(obj interface{}) *Family {
 }
 
 func generateEndpointAddressAvailable(obj interface{}) *Family {
-	endpoints := obj.(*corev1.Endpoints)
+	endpoints := obj.(*corev1.Endpoints) //nolint:staticcheck // SA1019: Endpoints still supported for older K8s versions
 	available := 0
 	for _, subset := range endpoints.Subsets {
 		available += len(subset.Addresses)
@@ -283,7 +284,7 @@ func generateEndpointAddressAvailable(obj interface{}) *Family {
 }
 
 func generateEndpointAddressNotReady(obj interface{}) *Family {
-	endpoints := obj.(*corev1.Endpoints)
+	endpoints := obj.(*corev1.Endpoints) //nolint:staticcheck // SA1019: Endpoints still supported for older K8s versions
 	notReady := 0
 	for _, subset := range endpoints.Subsets {
 		notReady += len(subset.NotReadyAddresses)
@@ -301,7 +302,7 @@ func generateEndpointAddressNotReady(obj interface{}) *Family {
 }
 
 func generateEndpointPorts(obj interface{}) *Family {
-	endpoints := obj.(*corev1.Endpoints)
+	endpoints := obj.(*corev1.Endpoints) //nolint:staticcheck // SA1019: Endpoints still supported for older K8s versions
 	metrics := make([]*Metric, 0)
 
 	for _, subset := range endpoints.Subsets {

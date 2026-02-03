@@ -458,14 +458,14 @@ func TestMetricsStore(t *testing.T) {
 			UID:       "uid1",
 		},
 	}
-	store.Add(pod1)
+	_ = store.Add(pod1)
 	if store.Size() != 1 {
 		t.Errorf("expected size 1, got %d", store.Size())
 	}
 
 	// Write metrics
 	buf := &bytes.Buffer{}
-	store.WriteAll(buf)
+	_ = store.WriteAll(buf)
 	output := buf.String()
 	if !strings.Contains(output, "test_metric{pod=\"pod1\"}") {
 		t.Errorf("expected output to contain pod1 metric, got: %s", output)
@@ -474,13 +474,13 @@ func TestMetricsStore(t *testing.T) {
 	// Update the pod
 	pod1Updated := pod1.DeepCopy()
 	pod1Updated.Labels = map[string]string{"app": "nginx"}
-	store.Update(pod1Updated)
+	_ = store.Update(pod1Updated)
 	if store.Size() != 1 {
 		t.Errorf("expected size 1 after update, got %d", store.Size())
 	}
 
 	// Delete the pod
-	store.Delete(pod1)
+	_ = store.Delete(pod1)
 	if store.Size() != 0 {
 		t.Errorf("expected size 0 after delete, got %d", store.Size())
 	}

@@ -78,8 +78,7 @@ func main() {
 
 	// Start kube_metrics if enabled or auto-detected
 	// This provides kube-state-metrics + cAdvisor equivalent metrics natively
-	var kubeMetricsProvider *kubemetrics.Provider
-	kubeMetricsProvider = startKubeMetrics(ctx, cfg)
+	kubeMetricsProvider := startKubeMetrics(ctx, cfg)
 
 	pl := pipeline.New(cfg, st)
 	if err := pl.Start(ctx); err != nil {
