@@ -24,7 +24,7 @@ func (r *CgroupReader) ReadNetworkStats(pid int) (*NetworkStats, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open %s: %w", netDevPath, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	lineNum := 0
@@ -97,7 +97,7 @@ func GetContainerPID(cgroupPath string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to open cgroup.procs: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	if scanner.Scan() {

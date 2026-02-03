@@ -4,6 +4,7 @@
 package kubemetrics
 
 import (
+	"context"
 	"os"
 	"testing"
 )
@@ -96,6 +97,6 @@ func TestNewFromAgentConfig_NotInCluster(t *testing.T) {
 	}
 	if provider != nil {
 		t.Error("Provider should be nil when not in cluster with auto-detect")
-		_ = provider.Stop(nil)
+		_ = provider.Stop(context.Background())
 	}
 }

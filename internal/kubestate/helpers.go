@@ -4,8 +4,6 @@
 package kubestate
 
 import (
-	"strconv"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -58,9 +56,4 @@ func boolToString(b bool) string {
 		return "true"
 	}
 	return "false"
-}
-
-// int32ToString converts an int32 to a string
-func int32ToString(i int32) string {
-	return strconv.FormatInt(int64(i), 10)
 }

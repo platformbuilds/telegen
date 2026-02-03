@@ -158,7 +158,7 @@ func generateNodeInfo(obj interface{}) *Family {
 					node.Status.NodeInfo.OSImage,
 					node.Status.NodeInfo.ContainerRuntimeVersion,
 					node.Status.NodeInfo.KubeletVersion,
-					node.Status.NodeInfo.KubeProxyVersion,
+					node.Status.NodeInfo.KubeProxyVersion, //nolint:staticcheck // SA1019: Still useful for older K8s versions
 					node.Spec.ProviderID,
 					node.Spec.PodCIDR,
 					node.Status.NodeInfo.SystemUUID,

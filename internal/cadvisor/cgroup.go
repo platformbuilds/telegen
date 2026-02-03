@@ -531,7 +531,7 @@ func (r *CgroupReader) readKeyValueFile(path string) (map[string]uint64, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	result := make(map[string]uint64)
 	scanner := bufio.NewScanner(file)
