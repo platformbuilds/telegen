@@ -1,6 +1,6 @@
 # Telegen Documentation
 
-```{image} _static/telegen-logo.png
+```{image} ../telegen.svg
 :alt: Telegen Logo
 :width: 200px
 :align: center
