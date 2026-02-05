@@ -347,6 +347,26 @@ profiling:
   output_format: pprof
   aggregate_stacks: true
   upload_interval: 60s
+  # eBPF Java profiling with perf-map-agent
+  java_ebpf:
+    enabled: false
+    agent_jar_path: "/opt/perf-map-agent/attach-main.jar"
+    agent_lib_path: "/opt/perf-map-agent/libperfmap.so"
+    refresh_interval: 60s
+    timeout: 30s
+    unfold_all: true
+    unfold_simple: false
+    dotted_class: true
+  # Export profiles as OTLP Logs (unified with JFR)
+  log_export:
+    enabled: false
+    endpoint: ""
+    headers: {}
+    compression: gzip
+    timeout: 30s
+    batch_size: 100
+    flush_interval: 10s
+    include_stack_trace: true
 
 # -----------------------------------------------------------------------------
 # Security Observability Configuration

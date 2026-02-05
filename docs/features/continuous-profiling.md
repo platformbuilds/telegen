@@ -321,6 +321,133 @@ If you see `[unknown]` in profiles:
 
 ---
 
+## Java Profiling
+
+Telegen supports two approaches for profiling Java applications:
+
+### Approach Comparison
+
+| Aspect | JFR (Recommended) | eBPF + perf-map-agent |
+|--------|-------------------|----------------------|
+| **JVM Flag Required** | None | `-XX:+PreserveFramePointer` |
+| **JVM Restart** | Not required | Not required |
+| **Symbol Accuracy** | Always accurate | Depends on perf-map refresh |
+| **GC Events** | ✅ Native | ❌ Not available |
+| **Lock Contention** | ✅ Native | ❌ Not available |
+| **Kernel Stacks** | ❌ JVM only | ✅ Full system view |
+| **Mixed-mode** | ❌ JVM only | ✅ Java + native |
+| **Overhead** | ~1% | ~1-2% |
+
+### JFR-Based Profiling (Recommended)
+
+Java Flight Recorder (JFR) is built into the JVM and provides the most accurate profiling:
+
+```yaml
+profiles:
+  jfr:
+    enabled: true
+    input_dirs:
+      - /var/log/jfr
+    # Export as OTLP Logs for unified pipeline
+    direct_export:
+      log_export:
+        enabled: true
+        endpoint: "http://otel-collector:4318/v1/logs"
+```
+
+JFR provides:
+- **Execution samples** - CPU profiling with accurate Java symbols
+- **Allocation samples** - Memory allocation tracking
+- **Lock contention** - Monitor enter/exit timing
+- **GC events** - Garbage collection correlation
+
+### eBPF-Based Java Profiling
+
+For scenarios requiring kernel-level visibility or mixed-mode profiling (Java + native code), use eBPF with perf-map-agent:
+
+```yaml
+profiling:
+  enabled: true
+  cpu:
+    enabled: true
+  
+  # Enable Java symbol resolution for eBPF profiles
+  java_ebpf:
+    enabled: true
+    agent_jar_path: "/opt/perf-map-agent/attach-main.jar"
+    agent_lib_path: "/opt/perf-map-agent/libperfmap.so"
+    refresh_interval: 60s
+    unfold_all: true
+    dotted_class: true
+  
+  # Export as OTLP Logs (same format as JFR)
+  log_export:
+    enabled: true
+    endpoint: "http://otel-collector:4318/v1/logs"
+```
+
+**Requirements:**
+
+1. **JVM Flag** - Java applications must be started with:
+   ```bash
+   java -XX:+PreserveFramePointer -jar myapp.jar
+   ```
+
+2. **perf-map-agent** - Install from [jvm-profiling-tools/perf-map-agent](https://github.com/jvm-profiling-tools/perf-map-agent):
+   ```bash
+   git clone https://github.com/jvm-profiling-tools/perf-map-agent
+   cd perf-map-agent
+   cmake .
+   make
+   # Copy to /opt/perf-map-agent/
+   ```
+
+**How It Works:**
+
+```{mermaid}
+sequenceDiagram
+    participant JVM as Java App
+    participant Agent as perf-map-agent
+    participant Telegen as Telegen eBPF
+    participant Map as /tmp/perf-PID.map
+    
+    Telegen->>Agent: Attach to PID
+    Agent->>JVM: JVMTI attach
+    JVM->>Agent: JIT method addresses
+    Agent->>Map: Write symbol map
+    
+    loop Profiling
+        Telegen->>JVM: eBPF CPU samples
+        Telegen->>Map: Resolve addresses
+        Telegen->>Telegen: Build profile
+    end
+```
+
+### Unified OTLP Logs Export
+
+Both JFR and eBPF profiles can export to the same OTLP Logs endpoint using identical `ProfileEvent` JSON format:
+
+```json
+{
+  "timestamp": "2024-02-05T10:30:00.123Z",
+  "eventType": "jdk.ExecutionSample",
+  "profileType": "cpu",
+  "serviceName": "my-java-app",
+  "k8s_pod_name": "my-java-app-7b5f8d4c9b-x2kpq",
+  "k8s_namespace": "production",
+  "threadName": "main",
+  "threadId": 1,
+  "topClass": "com.example.MyService",
+  "topMethod": "processRequest",
+  "stackPath": "processRequest <- handleRequest <- doFilter",
+  "stackDepth": 25,
+  "sampleWeight": 150,
+  "stackTrace": "[{\"class\":\"com.example.MyService\",\"method\":\"processRequest\",\"line\":42}]"
+}
+```
+
+---
+
 ## Performance Overhead
 
 Telegen profiling is designed for production:

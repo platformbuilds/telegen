@@ -853,6 +853,47 @@ profiling:
   
   # Upload interval for profile export
   upload_interval: 60s
+  
+  # eBPF Java profiling with perf-map-agent
+  # Enables symbol resolution for JIT-compiled Java code when using eBPF profiling
+  # Requires: -XX:+PreserveFramePointer JVM flag on the profiled Java applications
+  java_ebpf:
+    enabled: false
+    # Path to perf-map-agent attach-main.jar
+    # Get from: https://github.com/jvm-profiling-tools/perf-map-agent
+    agent_jar_path: "/opt/perf-map-agent/attach-main.jar"
+    # Path to perf-map-agent libperfmap.so
+    agent_lib_path: "/opt/perf-map-agent/libperfmap.so"
+    # Refresh interval for perf-map files (JIT recompiles methods over time)
+    # Set to 0 to disable refresh (generate only once per process)
+    refresh_interval: 60s
+    # Timeout for attaching to JVM
+    timeout: 30s
+    # Generate symbols for all JIT-compiled code (not just hot methods)
+    unfold_all: true
+    # Use simple (short) method names
+    unfold_simple: false
+    # Use dotted class names (com.example.Foo) instead of slashed (com/example/Foo)
+    dotted_class: true
+  
+  # Export profiles as OTLP Logs (same format as JFR log export)
+  # This provides a unified export path for both eBPF and JFR profiles
+  log_export:
+    enabled: false
+    # OTLP Logs endpoint
+    endpoint: "http://otel-collector:4318/v1/logs"
+    # Headers to include in requests
+    headers: {}
+    # Compression: gzip, none
+    compression: gzip
+    # Timeout for requests
+    timeout: 30s
+    # Batch size (number of events before sending)
+    batch_size: 100
+    # Flush interval (send even if batch not full)
+    flush_interval: 10s
+    # Include full stack traces in log body
+    include_stack_trace: true
 
 # -----------------------------------------------------------------------------
 # Security Observability Configuration

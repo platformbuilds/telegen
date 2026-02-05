@@ -43,6 +43,41 @@ const (
 	BlockReasonCgroupLimit BlockReason = 11
 )
 
+// String returns the string representation of ProfileType
+func (pt ProfileType) String() string {
+	return string(pt)
+}
+
+// String returns the string representation of BlockReason
+func (br BlockReason) String() string {
+	switch br {
+	case BlockReasonSleep:
+		return "sleep"
+	case BlockReasonIO:
+		return "io"
+	case BlockReasonMutex:
+		return "mutex"
+	case BlockReasonChannel:
+		return "channel"
+	case BlockReasonNetwork:
+		return "network"
+	case BlockReasonSync:
+		return "sync"
+	case BlockReasonSyscall:
+		return "syscall"
+	case BlockReasonPreempted:
+		return "preempted"
+	case BlockReasonWaiting:
+		return "waiting"
+	case BlockReasonScheduler:
+		return "scheduler"
+	case BlockReasonCgroupLimit:
+		return "cgroup_limit"
+	default:
+		return "unknown"
+	}
+}
+
 // Config holds profiler configuration
 type Config struct {
 	// Enabled profile types
