@@ -1,9 +1,23 @@
+// Package filetailer provides file-based log collection with container runtime
+// format parsing and Kubernetes metadata extraction.
+//
+// IMPORTANT: This package uses the unified OTLP exporter. The LoggerProvider
+// passed to New/NewWithOptions MUST come from the shared OTLP pipeline
+// (internal/exporters/otlp.Clients.Log). This ensures all telegen signals
+// (traces, metrics, logs, profiles) share the same OTLP connection.
+//
+// The filetailer:
+//   - Watches files matching glob patterns (e.g., /var/log/pods/*/*.log)
+//   - Parses container runtime formats (Docker JSON, CRI-O, containerd)
+//   - Extracts Kubernetes metadata from file paths
+//   - Parses application log formats (Spring Boot, Log4j, JSON)
+//   - Ships logs via the unified OTLP LoggerProvider
 package filetailer
 
 import (
 	"bufio"
 	"context"
-	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +27,7 @@ import (
 	"go.opentelemetry.io/otel/log"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 
+	"github.com/platformbuilds/telegen/internal/logs/parsers"
 	"github.com/platformbuilds/telegen/internal/sigdef"
 )
 
@@ -22,7 +37,9 @@ type Options struct {
 	Globs []string
 	// PositionFile stores file read positions for resuming after restart
 	PositionFile string
-	// LoggerProvider for emitting logs
+	// LoggerProvider is the OTEL SDK LoggerProvider from the unified OTLP pipeline.
+	// This MUST come from the shared OTLP exporter (internal/exporters/otlp.Clients.Log).
+	// Telegen follows a single-exporter design: all signals share the same OTLP connection.
 	LoggerProvider *sdklog.LoggerProvider
 	// ShipHistoricalEvents controls whether to ship log entries that existed before Telegen started.
 	// When false (default), only new log entries written after StartTime are shipped.
@@ -30,21 +47,65 @@ type Options struct {
 	ShipHistoricalEvents bool
 	// StartTime is when Telegen started. Used to filter historical entries.
 	StartTime time.Time
+	// PollInterval is how often to check for new log content (default: 500ms)
+	PollInterval time.Duration
+	// Logger for debug output
+	Logger *slog.Logger
+
+	// Parser configuration
+	ParserConfig ParserConfig
 }
 
+// ParserConfig configures log parsing behavior
+type ParserConfig struct {
+	// EnableContainerRuntime enables Docker/CRI-O/containerd format parsing
+	EnableContainerRuntime bool
+	// EnableK8sMetadata extracts K8s metadata from file paths
+	EnableK8sMetadata bool
+	// EnableApplicationParsers enables Spring Boot, Log4j, etc. parsing
+	EnableApplicationParsers bool
+	// EnableSpringBoot enables Spring Boot log parsing with trace correlation
+	EnableSpringBoot bool
+	// EnableLog4j enables Log4j format parsing
+	EnableLog4j bool
+	// EnableGenericParsing enables generic timestamp/level parsing
+	EnableGenericParsing bool
+}
+
+// DefaultParserConfig returns parser config with all features enabled
+func DefaultParserConfig() ParserConfig {
+	return ParserConfig{
+		EnableContainerRuntime:   true,
+		EnableK8sMetadata:        true,
+		EnableApplicationParsers: true,
+		EnableSpringBoot:         true,
+		EnableLog4j:              true,
+		EnableGenericParsing:     true,
+	}
+}
+
+// Tailer watches files matching glob patterns and ships log entries via OTLP.
+// It uses the unified OTLP LoggerProvider from the shared pipeline - ensuring
+// all signals (traces, metrics, logs) use the same OTLP connection.
 type Tailer struct {
 	paths                []string
 	positionFile         string
-	lp                   *sdklog.LoggerProvider
+	lp                   *sdklog.LoggerProvider // From unified OTLP pipeline (otlp.Clients.Log)
 	shipHistoricalEvents bool
 	startTime            time.Time
+	pollInterval         time.Duration
+	logger               *slog.Logger
 	// Track file positions to avoid re-reading content
 	filePositions sync.Map // map[string]int64
 	// Track if we've initialized each file (for historical event filtering)
 	initializedFiles sync.Map // map[string]bool
+	// Parser pipeline for log parsing
+	pipeline *parsers.Pipeline
 }
 
-// New creates a new Tailer (backward compatible constructor)
+// New creates a new Tailer using the unified OTLP LoggerProvider.
+// The lp parameter MUST come from the shared OTLP exporter (otlp.Clients.Log).
+// This ensures all telegen signals share the same OTLP connection.
 func New(globs []string, positionFile string, lp *sdklog.LoggerProvider) *Tailer {
 	return NewWithOptions(Options{
 		Globs:                globs,
@@ -52,20 +113,67 @@ func New(globs []string, positionFile string, lp *sdklog.LoggerProvider) *Tailer
 		LoggerProvider:       lp,
 		ShipHistoricalEvents: false,
 		StartTime:            time.Now(),
+		PollInterval:         500 * time.Millisecond,
+		ParserConfig:         DefaultParserConfig(),
 	})
 }
 
-// NewWithOptions creates a new Tailer with full configuration
+// NewWithOptions creates a new Tailer with full configuration.
+// The LoggerProvider MUST come from the unified OTLP pipeline (otlp.Clients.Log).
+// Telegen requires all signals to use the shared OTLP exporter for consistency.
 func NewWithOptions(opts Options) *Tailer {
+	if opts.LoggerProvider == nil {
+		// LoggerProvider is required - it must come from the unified OTLP pipeline
+		// The pipeline should pass otlp.Clients.Log here
+		return nil
+	}
+
 	if opts.StartTime.IsZero() {
 		opts.StartTime = time.Now()
 	}
+	if opts.PollInterval == 0 {
+		opts.PollInterval = 500 * time.Millisecond
+	}
+	if opts.Logger == nil {
+		opts.Logger = slog.Default()
+	}
+
+	// Create parser pipeline configuration
+	pipelineConfig := parsers.PipelineConfig{
+		EnableRuntimeParsing:     opts.ParserConfig.EnableContainerRuntime,
+		EnableK8sEnrichment:      opts.ParserConfig.EnableK8sMetadata,
+		EnableApplicationParsing: opts.ParserConfig.EnableApplicationParsers,
+		DefaultSeverity:          "INFO",
+	}
+
+	// Configure application parsers based on ParserConfig
+	if opts.ParserConfig.EnableApplicationParsers {
+		appParsers := []string{}
+		if opts.ParserConfig.EnableSpringBoot {
+			appParsers = append(appParsers, "spring_boot")
+		}
+		if opts.ParserConfig.EnableLog4j {
+			appParsers = append(appParsers, "log4j")
+		}
+		if opts.ParserConfig.EnableGenericParsing {
+			appParsers = append(appParsers, "json", "generic")
+		}
+		// If no specific parsers requested, enable all
+		if len(appParsers) == 0 {
+			appParsers = nil // nil means all parsers
+		}
+		pipelineConfig.ApplicationParsers = appParsers
+	}
+
 	return &Tailer{
 		paths:                opts.Globs,
 		positionFile:         opts.PositionFile,
 		lp:                   opts.LoggerProvider,
 		shipHistoricalEvents: opts.ShipHistoricalEvents,
 		startTime:            opts.StartTime,
+		pollInterval:         opts.PollInterval,
+		logger:               opts.Logger,
+		pipeline:             parsers.NewPipeline(pipelineConfig, opts.Logger),
 	}
 }
 
@@ -73,7 +181,7 @@ func (t *Tailer) Run(stop <-chan struct{}) error {
 	if t.lp == nil {
 		return nil
 	}
-	tick := time.NewTicker(10 * time.Second)
+	tick := time.NewTicker(t.pollInterval)
 	defer tick.Stop()
 	for {
 		select {
@@ -173,16 +281,24 @@ func (t *Tailer) tailOnce(path string) {
 
 	for sc.Scan() {
 		line := sc.Text()
-		var rec log.Record
-		rec.SetTimestamp(time.Now())
-		rec.SetBody(log.StringValue(line))
-		var js map[string]any
-		if json.Unmarshal([]byte(line), &js) == nil {
-			rec.AddAttributes(log.String("body.format", "json"))
-		} else {
-			rec.AddAttributes(log.String("body.format", "text"))
+
+		// Parse the log line using the pipeline
+		parsed := t.pipeline.Parse(line, path)
+		if parsed == nil {
+			// Fallback to raw line if parsing fails
+			parsed = &parsers.ParsedLog{
+				Body:               line,
+				Timestamp:          time.Now(),
+				Format:             "text",
+				FilePath:           path,
+				OriginalLine:       line,
+				ResourceAttributes: make(map[string]string),
+				Attributes:         make(map[string]string),
+			}
 		}
-		rec.AddAttributes(log.String("file.path", path))
+
+		// Convert to OTEL record
+		rec := parsed.ToOTelRecord()
 
 		// Add telegen signal metadata attributes
 		rec.AddAttributes(logMetadataAttrs...)

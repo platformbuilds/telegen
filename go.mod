@@ -41,14 +41,12 @@ require (
 	go.opentelemetry.io/collector/config/configgrpc v0.145.0
 	go.opentelemetry.io/collector/config/confighttp v0.145.0
 	go.opentelemetry.io/collector/config/configopaque v1.51.0
-	go.opentelemetry.io/collector/config/configoptional v1.51.0
+	go.opentelemetry.io/collector/config/configoptional v1.51.0 // indirect
 	go.opentelemetry.io/collector/config/configretry v1.51.0
-	go.opentelemetry.io/collector/config/configtelemetry v0.145.0
 	go.opentelemetry.io/collector/config/configtls v1.51.0
 	go.opentelemetry.io/collector/confmap v1.51.0
 	go.opentelemetry.io/collector/consumer v1.51.0
 	go.opentelemetry.io/collector/exporter v1.51.0
-	go.opentelemetry.io/collector/exporter/debugexporter v0.145.0
 	go.opentelemetry.io/collector/exporter/exporterhelper v0.145.0
 	go.opentelemetry.io/collector/exporter/otlpexporter v0.145.0
 	go.opentelemetry.io/collector/exporter/otlphttpexporter v0.145.0
