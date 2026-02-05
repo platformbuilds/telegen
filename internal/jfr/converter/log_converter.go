@@ -22,6 +22,13 @@ type LogExportConfig struct {
 	ContainerName string
 	NodeName      string
 	ClusterName   string
+
+	// Telegen metadata
+	ScopeName           string // e.g., "telegen.jfr", "telegen.profiler"
+	ScopeVersion        string // e.g., "1.0.0"
+	TelemetrySDKName    string // defaults to "telegen"
+	TelemetrySDKVersion string // agent version
+	TelemetrySDKLang    string // e.g., "java", "native", "go"
 }
 
 // LogConverter converts JFR profile events to OTLP Logs
@@ -129,8 +136,16 @@ func (c *LogConverter) ConvertToLogs(events []*ProfileEvent) plog.Logs {
 	c.setResourceAttributesWithVersion(rl.Resource(), serviceName, serviceVersion)
 
 	sl := rl.ScopeLogs().AppendEmpty()
-	sl.Scope().SetName("telegen.jfr")
-	sl.Scope().SetVersion("1.0.0")
+	scopeName := c.config.ScopeName
+	if scopeName == "" {
+		scopeName = "telegen.jfr"
+	}
+	scopeVersion := c.config.ScopeVersion
+	if scopeVersion == "" {
+		scopeVersion = "1.0.0"
+	}
+	sl.Scope().SetName(scopeName)
+	sl.Scope().SetVersion(scopeVersion)
 
 	for _, event := range events {
 		lr := sl.LogRecords().AppendEmpty()
@@ -194,9 +209,21 @@ func (c *LogConverter) setResourceAttributes(resource pcommon.Resource) {
 	}
 
 	// Set telemetry SDK attributes
-	attrs.PutStr("telemetry.sdk.name", "telegen")
-	attrs.PutStr("telemetry.sdk.language", "java")
-	attrs.PutStr("telemetry.sdk.version", "1.0.0")
+	sdkName := c.config.TelemetrySDKName
+	if sdkName == "" {
+		sdkName = "telegen"
+	}
+	sdkLang := c.config.TelemetrySDKLang
+	if sdkLang == "" {
+		sdkLang = "java"
+	}
+	sdkVersion := c.config.TelemetrySDKVersion
+	if sdkVersion == "" {
+		sdkVersion = "1.0.0"
+	}
+	attrs.PutStr("telemetry.sdk.name", sdkName)
+	attrs.PutStr("telemetry.sdk.language", sdkLang)
+	attrs.PutStr("telemetry.sdk.version", sdkVersion)
 }
 
 func (c *LogConverter) setResourceAttributesWithVersion(resource pcommon.Resource, serviceName, serviceVersion string) {
@@ -225,9 +252,21 @@ func (c *LogConverter) setResourceAttributesWithVersion(resource pcommon.Resourc
 	}
 
 	// Set telemetry SDK attributes
-	attrs.PutStr("telemetry.sdk.name", "telegen")
-	attrs.PutStr("telemetry.sdk.language", "java")
-	attrs.PutStr("telemetry.sdk.version", "1.0.0")
+	sdkName := c.config.TelemetrySDKName
+	if sdkName == "" {
+		sdkName = "telegen"
+	}
+	sdkLang := c.config.TelemetrySDKLang
+	if sdkLang == "" {
+		sdkLang = "java"
+	}
+	sdkVersion := c.config.TelemetrySDKVersion
+	if sdkVersion == "" {
+		sdkVersion = "1.0.0"
+	}
+	attrs.PutStr("telemetry.sdk.name", sdkName)
+	attrs.PutStr("telemetry.sdk.language", sdkLang)
+	attrs.PutStr("telemetry.sdk.version", sdkVersion)
 }
 
 func (c *LogConverter) profileEventToLogRecord(event *ProfileEvent, lr plog.LogRecord) {
