@@ -187,12 +187,12 @@ Examples:
 
 ## Self-Telemetry Variables
 
+The self-telemetry endpoint serves health probes (`/healthz`, `/readyz`) and Prometheus metrics (`/metrics`).
+
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TELEGEN_SELF_TELEMETRY_ENABLED` | `true` | Enable self-telemetry |
-| `TELEGEN_SELF_TELEMETRY_LISTEN` | `:19090` | Metrics listen address |
-| `TELEGEN_SELF_TELEMETRY_PATH` | `/metrics` | Metrics path |
-| `TELEGEN_SELF_TELEMETRY_PROMETHEUS_NAMESPACE` | `telegen` | Prometheus namespace |
+| `TELEGEN_SELF_TELEMETRY_LISTEN` | `:19090` | HTTP listen address for health probes and metrics |
+| `TELEGEN_SELF_TELEMETRY_PROMETHEUS_NAMESPACE` | `telegen` | Prometheus metrics namespace prefix |
 
 ---
 

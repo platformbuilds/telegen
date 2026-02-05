@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/caarlos0/env/v9"
 	"gopkg.in/yaml.v3"
 
 	"github.com/platformbuilds/telegen/internal/appolly/services"
@@ -87,6 +88,10 @@ type Config struct {
 type KubernetesConfig struct {
 	// Enable Kubernetes metadata decoration
 	Enable bool `yaml:"enable"`
+
+	// ClusterName overrides the cluster name. If empty, the module will try to retrieve
+	// it from the Cloud Provider Metadata (EC2, GCP, and Azure), and leave it empty if it fails.
+	ClusterName string `yaml:"cluster_name" env:"OTEL_EBPF_KUBE_CLUSTER_NAME"`
 
 	// InformersSyncTimeout is the timeout for informers sync
 	InformersSyncTimeout string `yaml:"informers_sync_timeout"`
@@ -379,6 +384,7 @@ type OTLP struct {
 	HTTP struct {
 		Enabled    bool              `yaml:"enabled"`
 		Endpoint   string            `yaml:"endpoint"`
+		Insecure   bool              `yaml:"insecure"`
 		TracesPath string            `yaml:"traces_path"`
 		LogsPath   string            `yaml:"logs_path"`
 		Headers    map[string]string `yaml:"headers"`
@@ -392,9 +398,16 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Expand environment variables in config (e.g., ${OTLP_ENDPOINT})
+	expanded := os.ExpandEnv(string(b))
 	var c Config
-	if err := yaml.Unmarshal(b, &c); err != nil {
+	if err := yaml.Unmarshal([]byte(expanded), &c); err != nil {
 		return nil, err
+	}
+	// Parse environment variables from struct tags (e.g., env:"OTEL_EBPF_KUBE_CLUSTER_NAME")
+	// This allows environment variables to override YAML config values
+	if err := env.Parse(&c); err != nil {
+		return nil, fmt.Errorf("parsing env vars: %w", err)
 	}
 	if c.SelfTelemetry.Listen == "" {
 		c.SelfTelemetry.Listen = ":19090"

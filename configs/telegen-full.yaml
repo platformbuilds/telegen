@@ -445,7 +445,7 @@ discovery:
   # Default services to exclude from tracing (by regex path match)
   # These are observability tools that should not be self-instrumented
   default_exclude_services:
-    - path: "(?:^|/)(beyla$|alloy$|otelcol[^/]*$)"
+    - path: "(?:^|/)(telegen$|alloy$|otelcol[^/]*$)"
     - k8s_namespace: "^kube-system$|^kube-node-lease$|^monitoring$"
   
   # Instrumentation targeting

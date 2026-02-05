@@ -4,6 +4,7 @@
 package otel
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -11,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	ebpf "github.com/platformbuilds/telegen/internal/netollyebpf"
 	"github.com/platformbuilds/telegen/pkg/export"
@@ -23,6 +26,21 @@ import (
 )
 
 var mpConfig = perapp.MetricsConfig{Features: export.FeatureNetwork | export.FeatureNetworkInterZone}
+
+// testMockExporter is a mock exporter for tests
+type testMockExporter struct{}
+
+func (m *testMockExporter) Export(ctx context.Context, rm *metricdata.ResourceMetrics) error {
+	return nil
+}
+func (m *testMockExporter) Temporality(k sdkmetric.InstrumentKind) metricdata.Temporality {
+	return metricdata.CumulativeTemporality
+}
+func (m *testMockExporter) Aggregation(k sdkmetric.InstrumentKind) sdkmetric.Aggregation {
+	return sdkmetric.DefaultAggregationSelector(k)
+}
+func (m *testMockExporter) ForceFlush(ctx context.Context) error { return nil }
+func (m *testMockExporter) Shutdown(ctx context.Context) error   { return nil }
 
 func TestMetricAttributes(t *testing.T) {
 	defer otelcfg.RestoreEnvAfterExecution()()
@@ -55,7 +73,7 @@ func TestMetricAttributes(t *testing.T) {
 	}
 	me, err := newMetricsExporter(t.Context(), &global.ContextInfo{
 		MetricAttributeGroups: attributes.GroupKubernetes,
-		OTELMetricsExporter:   &otelcfg.MetricsExporterInstancer{Cfg: mcfg},
+		OTELMetricsExporter:   &otelcfg.MetricsExporterInstancer{Cfg: mcfg, SharedExporter: &testMockExporter{}},
 	}, &NetMetricsConfig{
 		SelectorCfg: &attributes.SelectorConfig{
 			SelectionCfg: map[attributes.Section]attributes.InclusionLists{
@@ -117,7 +135,7 @@ func TestMetricAttributes_Filter(t *testing.T) {
 	}
 	me, err := newMetricsExporter(t.Context(), &global.ContextInfo{
 		MetricAttributeGroups: attributes.GroupKubernetes,
-		OTELMetricsExporter:   &otelcfg.MetricsExporterInstancer{Cfg: mcfg},
+		OTELMetricsExporter:   &otelcfg.MetricsExporterInstancer{Cfg: mcfg, SharedExporter: &testMockExporter{}},
 	},
 		&NetMetricsConfig{
 			SelectorCfg: &attributes.SelectorConfig{

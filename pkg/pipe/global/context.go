@@ -4,11 +4,12 @@
 package global // import "github.com/platformbuilds/telegen/pkg/pipe/global"
 
 import (
+	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/platformbuilds/telegen/internal/appolly/app/request"
 	"github.com/platformbuilds/telegen/internal/kube"
-	"github.com/platformbuilds/telegen/internal/netollyebpf"
+	ebpf "github.com/platformbuilds/telegen/internal/netollyebpf"
 	"github.com/platformbuilds/telegen/pkg/export/attributes"
 	"github.com/platformbuilds/telegen/pkg/export/connector"
 	"github.com/platformbuilds/telegen/pkg/export/imetrics"
@@ -53,6 +54,11 @@ type ContextInfo struct {
 
 	// OTELMetricsExporter allows sharing the same OTEL exporter through diverse metrics export nodes (Application, Network...)
 	OTELMetricsExporter *otelcfg.MetricsExporterInstancer
+
+	// OTELTracesExporter is the shared Collector-compatible traces exporter from the unified OTLP pipeline.
+	// This follows the OpenTelemetry Collector standard (exporter.Traces interface) and enables
+	// the telegen design principle of "one agent, one exporter connection".
+	OTELTracesExporter exporter.Traces
 }
 
 // AppO11y stores context information that is only required for application observability.

@@ -14,7 +14,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 
 	"github.com/platformbuilds/telegen/internal/sigdef"
 )
@@ -112,35 +112,30 @@ func NewStreamingExporter(
 	}, nil
 }
 
-// buildKubeResource creates an OTEL resource with Kubernetes metadata
+// buildKubeResource creates an OTEL resource with Kubernetes metadata.
+// Uses NewSchemaless to avoid schema URL conflicts with SDK internal detectors.
+// The shared OTLP exporter already has the proper resource with schema URL.
 func buildKubeResource() (*resource.Resource, error) {
-	attrs := []resource.Option{
-		resource.WithSchemaURL(semconv.SchemaURL),
-		resource.WithOS(),
-		resource.WithHost(),
+	attrs := []attribute.KeyValue{
+		semconv.ServiceName("telegen-kubemetrics"),
+		semconv.ServiceVersion("1.0.0"),
 	}
 
 	// Add Kubernetes attributes from environment
 	if nodeName := getEnvOrDefault("KUBERNETES_NODE_NAME", ""); nodeName != "" {
-		attrs = append(attrs, resource.WithAttributes(semconv.K8SNodeName(nodeName)))
+		attrs = append(attrs, semconv.K8SNodeName(nodeName))
 	}
 	if namespace := getEnvOrDefault("KUBERNETES_NAMESPACE", ""); namespace != "" {
-		attrs = append(attrs, resource.WithAttributes(semconv.K8SNamespaceName(namespace)))
+		attrs = append(attrs, semconv.K8SNamespaceName(namespace))
 	}
 	if podName := getEnvOrDefault("KUBERNETES_POD_NAME", ""); podName != "" {
-		attrs = append(attrs, resource.WithAttributes(semconv.K8SPodName(podName)))
+		attrs = append(attrs, semconv.K8SPodName(podName))
 	}
 	if clusterName := getEnvOrDefault("KUBERNETES_CLUSTER_NAME", ""); clusterName != "" {
-		attrs = append(attrs, resource.WithAttributes(semconv.K8SClusterName(clusterName)))
+		attrs = append(attrs, semconv.K8SClusterName(clusterName))
 	}
 
-	// Add telegen service identification
-	attrs = append(attrs, resource.WithAttributes(
-		semconv.ServiceName("telegen-kubemetrics"),
-		semconv.ServiceVersion("1.0.0"),
-	))
-
-	return resource.New(context.Background(), attrs...)
+	return resource.NewSchemaless(attrs...), nil
 }
 
 // Start begins the streaming export loop

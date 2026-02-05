@@ -85,8 +85,15 @@ func TestMissingSchemeInMetricsEndpoint(t *testing.T) {
 
 func TestGRPCMetricsEndpointOptions(t *testing.T) {
 	defer RestoreEnvAfterExecution()()
-	t.Run("do not accept URLs without a scheme", func(t *testing.T) {
-		_, err := grpcMetricEndpointOptions(&MetricsConfig{CommonEndpoint: "foo:3939"})
+	// gRPC endpoints should accept host:port format without a URL scheme
+	t.Run("accept host:port format without scheme", func(t *testing.T) {
+		opts, err := grpcMetricEndpointOptions(&MetricsConfig{CommonEndpoint: "foo:3939"})
+		require.NoError(t, err)
+		assert.Equal(t, "foo:3939", opts.Endpoint)
+		assert.False(t, opts.Insecure) // Default to secure for plain host:port
+	})
+	t.Run("reject host without port", func(t *testing.T) {
+		_, err := grpcMetricEndpointOptions(&MetricsConfig{CommonEndpoint: "foo"})
 		require.Error(t, err)
 	})
 

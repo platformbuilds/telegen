@@ -5,7 +5,6 @@ package goexec // import "github.com/platformbuilds/telegen/internal/goexec"
 
 import (
 	"debug/elf"
-	"fmt"
 	"strings"
 )
 
@@ -33,10 +32,19 @@ func iTabType(sym string) string {
 
 func findInterfaceImpls(ef *elf.File) (map[string]uint64, error) {
 	implementations := map[string]uint64{}
+
+	// Try regular symbols first, then fall back to dynamic symbols
+	// Stripped binaries may not have regular symbols but might have dynamic symbols
 	symbols, err := ef.Symbols()
 	if err != nil {
-		return nil, fmt.Errorf("accessing symbols table: %w", err)
+		// Try dynamic symbols as fallback for stripped or dynamically linked binaries
+		symbols, err = ef.DynamicSymbols()
+		if err != nil {
+			// No symbols available - return empty map, manual spans won't work but auto-instrumentation will
+			return implementations, nil
+		}
 	}
+
 	for _, s := range symbols {
 		// Name is in format: go:itab.*net/http.response,net/http.ResponseWriter or go.itab.*net/http.response,net/http.ResponseWriter on old versions
 		if !isITabEntry(s.Name) {

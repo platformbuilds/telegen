@@ -38,6 +38,9 @@ type MetricsConfig struct {
 	Protocol        Protocol `yaml:"protocol" env:"OTEL_EXPORTER_OTLP_PROTOCOL"`
 	MetricsProtocol Protocol `yaml:"-" env:"OTEL_EXPORTER_OTLP_METRICS_PROTOCOL"`
 
+	// Insecure disables TLS for gRPC/HTTP connections (plain text)
+	Insecure bool `yaml:"insecure" env:"OTEL_EXPORTER_OTLP_INSECURE"`
+
 	// InsecureSkipVerify is not standard, so we don't follow the same naming convention
 	InsecureSkipVerify bool `yaml:"insecure_skip_verify" env:"OTEL_EBPF_INSECURE_SKIP_VERIFY"`
 
@@ -107,13 +110,13 @@ func (m *MetricsConfig) GetInterval() time.Duration {
 }
 
 func (m *MetricsConfig) GuessProtocol() Protocol {
-	// If no explicit protocol is set, we guess it from the metrics endpoint port
+	// If no explicit protocol is set, we guess it from the endpoint port
 	// (assuming it uses a standard port or a development-like form like 14317, 24317, 14318...)
-	ep, _, err := parseMetricsEndpoint(m)
-	if err == nil {
-		if strings.HasSuffix(ep.Port(), UsualPortGRPC) {
+	port := extractPortFromEndpoint(m.MetricsEndpoint, m.CommonEndpoint)
+	if port != "" {
+		if strings.HasSuffix(port, UsualPortGRPC) {
 			return ProtocolGRPC
-		} else if strings.HasSuffix(ep.Port(), UsualPortHTTP) {
+		} else if strings.HasSuffix(port, UsualPortHTTP) {
 			return ProtocolHTTPProtobuf
 		}
 	}
@@ -154,8 +157,9 @@ func httpMetricEndpointOptions(cfg *MetricsConfig) (OTLPOptions, error) {
 
 	setMetricsProtocol(cfg)
 	opts.Endpoint = murl.Host
-	if murl.Scheme == "http" || murl.Scheme == "unix" {
-		log.Debug("Specifying insecure connection", "scheme", murl.Scheme)
+	// Insecure can be set via config field or inferred from URL scheme (http://)
+	if cfg.Insecure || murl.Scheme == "http" || murl.Scheme == "unix" {
+		log.Debug("Specifying insecure connection", "fromConfig", cfg.Insecure, "scheme", murl.Scheme)
 		opts.Insecure = true
 	}
 	// If the value is set from the OTEL_EXPORTER_OTLP_ENDPOINT common property, we need to add /v1/metrics to the path
@@ -187,17 +191,20 @@ func httpMetricEndpointOptions(cfg *MetricsConfig) (OTLPOptions, error) {
 func grpcMetricEndpointOptions(cfg *MetricsConfig) (OTLPOptions, error) {
 	opts := OTLPOptions{Headers: map[string]string{}}
 	log := mlog().With("transport", "grpc")
-	murl, _, err := parseMetricsEndpoint(cfg)
+
+	// Use gRPC-specific parser that accepts host:port format
+	endpoint, insecureFromScheme, _, err := parseGRPCMetricsEndpoint(cfg)
 	if err != nil {
 		return opts, err
 	}
 	log.Debug("Configuring exporter",
-		"protocol", cfg.Protocol, "metricsProtocol", cfg.MetricsProtocol, "endpoint", murl.Host)
+		"protocol", cfg.Protocol, "metricsProtocol", cfg.MetricsProtocol, "endpoint", endpoint)
 
 	setMetricsProtocol(cfg)
-	opts.Endpoint = murl.Host
-	if murl.Scheme == "http" || murl.Scheme == "unix" {
-		log.Debug("Specifying insecure connection", "scheme", murl.Scheme)
+	opts.Endpoint = endpoint
+	// Insecure can be set via config field or inferred from URL scheme (http://)
+	if cfg.Insecure || insecureFromScheme {
+		log.Debug("Specifying insecure connection", "fromConfig", cfg.Insecure, "fromScheme", insecureFromScheme)
 		opts.Insecure = true
 	}
 	if cfg.InsecureSkipVerify {
@@ -214,10 +221,12 @@ func grpcMetricEndpointOptions(cfg *MetricsConfig) (OTLPOptions, error) {
 	return opts, nil
 }
 
-// the HTTP path will be defined from one of the following sources, from highest to lowest priority
+// parseMetricsEndpoint parses an HTTP metrics endpoint.
+// The HTTP path will be defined from one of the following sources, from highest to lowest priority
 // - the result from any overridden OTLP Provider function
 // - OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, if defined
 // - OTEL_EXPORTER_OTLP_ENDPOINT, if defined
+// NOTE: This function is for HTTP endpoints which require a scheme (http:// or https://).
 func parseMetricsEndpoint(cfg *MetricsConfig) (*url.URL, bool, error) {
 	endpoint, isCommon := cfg.OTLPMetricsEndpoint()
 
@@ -226,9 +235,36 @@ func parseMetricsEndpoint(cfg *MetricsConfig) (*url.URL, bool, error) {
 		return nil, isCommon, fmt.Errorf("parsing endpoint URL %s: %w", endpoint, err)
 	}
 	if murl.Scheme == "" || murl.Host == "" {
-		return nil, isCommon, fmt.Errorf("URL %q must have a scheme and a host", endpoint)
+		return nil, isCommon, fmt.Errorf("HTTP URL %q must have a scheme and a host", endpoint)
 	}
 	return murl, isCommon, nil
+}
+
+// parseGRPCMetricsEndpoint parses a gRPC endpoint which can be in either:
+// - host:port format (e.g., "otel-collector.svc:4317") - used by gRPC SDK
+// - URL format with scheme (e.g., "http://otel-collector.svc:4317") - scheme used for insecure detection
+// gRPC endpoints do NOT require a URL scheme - the gRPC SDK expects just host:port.
+func parseGRPCMetricsEndpoint(cfg *MetricsConfig) (endpoint string, insecure bool, isCommon bool, err error) {
+	ep, isCommon := cfg.OTLPMetricsEndpoint()
+	if ep == "" {
+		return "", false, isCommon, fmt.Errorf("no metrics endpoint configured")
+	}
+
+	// Try parsing as URL first
+	murl, parseErr := url.Parse(ep)
+	if parseErr == nil && murl.Scheme != "" && murl.Host != "" {
+		// Valid URL with scheme - extract host:port and check if insecure
+		return murl.Host, murl.Scheme == "http" || murl.Scheme == "unix", isCommon, nil
+	}
+
+	// Not a URL with scheme - treat as host:port (standard gRPC format)
+	// Validate it looks like host:port
+	if !strings.Contains(ep, ":") {
+		return "", false, isCommon, fmt.Errorf("gRPC endpoint %q must be in host:port format", ep)
+	}
+
+	// For plain host:port, default to secure (TLS) unless insecure_skip_verify is set
+	return ep, false, isCommon, nil
 }
 
 // HACK: at the time of writing this, the otelpmetrichttp API does not support explicitly

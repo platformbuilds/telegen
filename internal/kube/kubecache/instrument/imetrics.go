@@ -49,7 +49,7 @@ type promInternalMetrics struct {
 	informerEvents   *prometheus.CounterVec
 	connectedClients prometheus.Gauge
 	clientMessages   *prometheus.CounterVec
-	beylaCacheInfo   prometheus.Gauge
+	telegenCacheInfo prometheus.Gauge
 	informerLag      prometheus.Histogram
 }
 
@@ -65,17 +65,17 @@ func prometheusInternalMetrics(
 		}, []string{"type"}),
 		connectedClients: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: attr.VendorPrefix + "_kube_cache_connected_clients",
-			Help: "How many concurrent Beyla instances are connected to this cache service",
+			Help: "How many concurrent telegen instances are connected to this cache service",
 		}),
 		clientMessages: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: attr.VendorPrefix + "_kube_cache_client_messages_total",
 			Help: "How many notifications have been started to be submitted to" +
 				" the subscriber client",
 		}, []string{"status"}),
-		beylaCacheInfo: prometheus.NewGauge(prometheus.GaugeOpts{
+		telegenCacheInfo: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: attr.VendorPrefix + "_kube_cache_internal_build_info",
 			Help: "A metric with a constant '1' value labeled by version, revision, branch, " +
-				"goversion from which Beyla was built, the goos and goarch for the build.",
+				"goversion from which telegen was built, the goos and goarch for the build.",
 			ConstLabels: map[string]string{
 				"goarch":    runtime.GOARCH,
 				"goos":      runtime.GOOS,
@@ -94,12 +94,12 @@ func prometheusInternalMetrics(
 			NativeHistogramMinResetDuration: 10 * time.Minute,
 		}),
 	}
-	pr.beylaCacheInfo.Set(1)
+	pr.telegenCacheInfo.Set(1)
 	manager.Register(cfg.Port, cfg.Path,
 		pr.informerEvents,
 		pr.connectedClients,
 		pr.clientMessages,
-		pr.beylaCacheInfo,
+		pr.telegenCacheInfo,
 		pr.informerLag)
 
 	return pr

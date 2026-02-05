@@ -33,6 +33,62 @@ telegen:
 
 ---
 
+## Common Exporter Pipeline
+
+Telegen uses a **Common Exporter Pipeline** architecture where all signals share
+a unified OTLP export configuration.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              TELEGEN AGENT                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────┐  ┌─────┐  │
+│   │kube_metrics │  │node_exporter│  │    ebpf     │  │   jfr   │  │logs │  │
+│   │ (kubestate  │  │   (host     │  │  (traces +  │  │(to JSON │  │     │  │
+│   │ + cadvisor) │  │   metrics)  │  │   metrics)  │  │  logs)  │  │     │  │
+│   └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └────┬────┘  └──┬──┘  │
+│          │                │                │              │          │     │
+│          └────────────────┴────────────────┴──────────────┴──────────┘     │
+│                                    │                                        │
+│                       ┌────────────▼────────────┐                          │
+│                       │  COMMON OTLP EXPORTER   │                          │
+│                       │    (exports.otlp)       │                          │
+│                       │                         │                          │
+│                       │  grpc: :4317            │                          │
+│                       │  http: :4318            │                          │
+│                       └────────────┬────────────┘                          │
+│                                    │                                        │
+└────────────────────────────────────┼────────────────────────────────────────┘
+                                     │
+                                     ▼
+                    ┌────────────────────────────────┐
+                    │        OTEL COLLECTOR          │
+                    └────────────────────────────────┘
+```
+
+### Benefits
+
+- **Connection pooling** - Single gRPC/HTTP connection to collector
+- **Consistent configuration** - TLS, compression, timeouts configured once
+- **Simplified management** - Change endpoint once, affects all signals
+- **Reduced resource usage** - No per-signal connection overhead
+
+### Signal-to-Exporter Mapping
+
+| Signal | Configuration | Export Path |
+|--------|--------------|-------------|
+| kube_metrics | `kube_metrics.streaming.use_otlp: true` | `exports.otlp.grpc` |
+| node_exporter | `node_exporter.export.use_otlp: true` | `exports.otlp.grpc` |
+| ebpf traces | `ebpf.otel_traces_export.protocol: grpc` | `exports.otlp.grpc` |
+| ebpf metrics | `ebpf.otel_metrics_export.protocol: grpc` | `exports.otlp.grpc` |
+| jfr logs | `pipelines.jfr.direct_export.log_export.otlp_enabled: true` | `exports.otlp.http` |
+| app logs | `pipelines.logs.enabled: true` | `exports.otlp.http` |
+
+---
+
 ## OTLP Export Configuration
 
 ```yaml
@@ -395,15 +451,25 @@ backoff:
 
 ## Self-Telemetry
 
+The `selfTelemetry` section configures the agent's health endpoints and internal metrics.
+
 ```yaml
-self_telemetry:
-  enabled: true
+selfTelemetry:
+  # HTTP endpoint for health probes and Prometheus metrics
+  # Serves: /healthz, /readyz, /metrics
   listen: ":19090"
-  path: "/metrics"
   
-  # Prometheus namespace for metrics
+  # Prometheus metrics namespace prefix
   prometheus_namespace: "telegen"
 ```
+
+### Endpoints
+
+| Path | Description |
+|------|-------------|
+| `/healthz` | Liveness probe - returns 200 if agent is alive |
+| `/readyz` | Readiness probe - returns 200 when pipeline is ready |
+| `/metrics` | Prometheus metrics for agent internals |
 
 ---
 

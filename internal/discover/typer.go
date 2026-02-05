@@ -128,8 +128,12 @@ func (t *typer) makeServiceAttrs(processMatch *ProcessMatch) svc.Attrs {
 
 	routesCfg := t.cfg.Routes
 	wildcard := byte('*')
-	if routesCfg.WildcardChar != "" {
-		wildcard = routesCfg.WildcardChar[0]
+	maxPathSegmentCardinality := 10 // default value
+	if routesCfg != nil {
+		if routesCfg.WildcardChar != "" {
+			wildcard = routesCfg.WildcardChar[0]
+		}
+		maxPathSegmentCardinality = routesCfg.MaxPathSegmentCardinality
 	}
 
 	s := svc.Attrs{
@@ -140,7 +144,7 @@ func (t *typer) makeServiceAttrs(processMatch *ProcessMatch) svc.Attrs {
 		ProcPID:            processMatch.Process.Pid,
 		ExportModes:        exportModes,
 		Sampler:            samplerFromConfig(samplerConfig),
-		PathTrie:           clusterurl.NewPathTrie(routesCfg.MaxPathSegmentCardinality, wildcard),
+		PathTrie:           clusterurl.NewPathTrie(maxPathSegmentCardinality, wildcard),
 		Features:           svcFeatures,
 		LogEnricherEnabled: processMatch.LogEnricherEnabled(),
 	}

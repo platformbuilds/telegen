@@ -130,8 +130,15 @@ func TestHTTPTracesEndpointHeaders(t *testing.T) {
 
 func TestGRPCTracesEndpointOptions(t *testing.T) {
 	defer RestoreEnvAfterExecution()()
-	t.Run("do not accept URLs without a scheme", func(t *testing.T) {
-		_, err := GRPCTracesEndpointOptions(&TracesConfig{CommonEndpoint: "foo:3939", Instrumentations: []instrumentations.Instrumentation{instrumentations.InstrumentationALL}})
+	// gRPC endpoints should accept host:port format without a URL scheme
+	t.Run("accept host:port format without scheme", func(t *testing.T) {
+		opts, err := GRPCTracesEndpointOptions(&TracesConfig{CommonEndpoint: "foo:3939", Instrumentations: []instrumentations.Instrumentation{instrumentations.InstrumentationALL}})
+		require.NoError(t, err)
+		assert.Equal(t, "foo:3939", opts.Endpoint)
+		assert.False(t, opts.Insecure) // Default to secure for plain host:port
+	})
+	t.Run("reject host without port", func(t *testing.T) {
+		_, err := GRPCTracesEndpointOptions(&TracesConfig{CommonEndpoint: "foo", Instrumentations: []instrumentations.Instrumentation{instrumentations.InstrumentationALL}})
 		require.Error(t, err)
 	})
 	tcfg := TracesConfig{

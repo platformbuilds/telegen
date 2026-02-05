@@ -220,6 +220,10 @@ func (wk *watcherKubeEnricher) onNewPod(pod *informer.ObjectMeta) []Event[Proces
 	wk.mt.RLock()
 	defer wk.mt.RUnlock()
 	var events []Event[ProcessAttrs]
+	// Pod field may be nil if the Kube object is not a Pod
+	if pod.Pod == nil {
+		return events
+	}
 	for _, cnt := range pod.Pod.Containers {
 		wk.log.Debug("looking up running process for pod container", "container", cnt.Id)
 		if procInfos, ok := wk.processByContainer[cnt.Id]; ok {
@@ -238,6 +242,10 @@ func (wk *watcherKubeEnricher) onNewPod(pod *informer.ObjectMeta) []Event[Proces
 func (wk *watcherKubeEnricher) onDeletedPod(pod *informer.ObjectMeta) {
 	wk.mt.Lock()
 	defer wk.mt.Unlock()
+	// Pod field may be nil if the Kube object is not a Pod
+	if pod.Pod == nil {
+		return
+	}
 	for _, cnt := range pod.Pod.Containers {
 		if pbcs, ok := wk.processByContainer[cnt.Id]; ok {
 			for _, pbc := range pbcs {
@@ -277,16 +285,18 @@ func withMetadata(pp ProcessAttrs, info *informer.ObjectMeta, containerID string
 	ret.podAnnotations = info.Annotations
 
 	// add any other owner name (they might be several, e.g. replicaset and deployment)
-	for _, owner := range info.Pod.Owners {
-		ret.metadata[transform.OwnerLabelName(owner.Kind).Prom()] = owner.Name
-	}
-	if containerID == "" {
-		return ret
-	}
-	for _, podContainer := range info.Pod.Containers {
-		if podContainer.Id == containerID {
-			ret.metadata[services.AttrContainerName] = podContainer.Name
-			break
+	// Pod field may be nil if the Kube object is not a Pod
+	if info.Pod != nil {
+		for _, owner := range info.Pod.Owners {
+			ret.metadata[transform.OwnerLabelName(owner.Kind).Prom()] = owner.Name
+		}
+		if containerID != "" {
+			for _, podContainer := range info.Pod.Containers {
+				if podContainer.Id == containerID {
+					ret.metadata[services.AttrContainerName] = podContainer.Name
+					break
+				}
+			}
 		}
 	}
 	return ret

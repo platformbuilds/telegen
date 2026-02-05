@@ -12,6 +12,18 @@ otlp:
   endpoint: "otel-collector:4317"
 ```
 
+## Common Exporter Pipeline
+
+Telegen uses a unified **Common Exporter Pipeline** architecture. All signals
+(kube_metrics, node_exporter, ebpf, jfr, logs) flow through a shared OTLP
+exporter configured in `exports.otlp`. This provides:
+
+- **Single connection** - Connection pooling for all signals
+- **Consistent config** - TLS, compression, timeouts configured once
+- **Simplified ops** - Change endpoint once, affects all signals
+
+See {doc}`full-reference` for the complete architecture diagram.
+
 ## Configuration Methods
 
 | Method | Priority | Use Case |

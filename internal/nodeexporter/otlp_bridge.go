@@ -17,7 +17,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 
 	"github.com/platformbuilds/telegen/internal/sigdef"
 )
@@ -58,37 +58,33 @@ func NewOTLPBridge(
 }
 
 // buildResource creates an OTEL resource from the detected environment.
+// Uses NewSchemaless to avoid schema URL conflicts with SDK internal detectors.
+// The shared OTLP exporter already has the proper resource with schema URL.
 func buildResource(env *DetectedEnvironment) (*resource.Resource, error) {
-	attrs := []resource.Option{
-		resource.WithSchemaURL(semconv.SchemaURL),
-		resource.WithOS(),
-		resource.WithHost(),
+	attrs := []attribute.KeyValue{
+		semconv.ServiceName("telegen-nodeexporter"),
+		semconv.ServiceVersion("1.0.0"),
 	}
 
 	// Add environment-specific attributes
 	if env != nil {
 		if env.Kubernetes != nil && env.Kubernetes.Detected {
-			attrs = append(attrs, resource.WithAttributes(
+			attrs = append(attrs,
 				semconv.K8SNodeName(env.Kubernetes.NodeName),
 				semconv.K8SNamespaceName(env.Kubernetes.Namespace),
 				semconv.K8SPodName(env.Kubernetes.PodName),
-			))
+			)
 			if env.Kubernetes.ClusterName != "" {
-				attrs = append(attrs, resource.WithAttributes(
-					semconv.K8SClusterName(env.Kubernetes.ClusterName),
-				))
+				attrs = append(attrs, semconv.K8SClusterName(env.Kubernetes.ClusterName))
 			}
 		}
 		// Add cloud/VM attributes if available
-		for k, v := range env.Labels {
-			attrs = append(attrs, resource.WithAttributes(
-				semconv.CloudProviderKey.String(k),
-			))
-			_ = v // label values are included via environment labels on metrics
+		for k := range env.Labels {
+			attrs = append(attrs, attribute.String("cloud.label."+k, env.Labels[k]))
 		}
 	}
 
-	return resource.New(context.Background(), attrs...)
+	return resource.NewSchemaless(attrs...), nil
 }
 
 // ReceiveMetrics implements MetricsReceiver and converts/sends metrics via OTLP.

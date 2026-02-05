@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -18,8 +18,19 @@ import (
 	"github.com/platformbuilds/telegen/internal/pipeline"
 	"github.com/platformbuilds/telegen/internal/selftelemetry"
 	"github.com/platformbuilds/telegen/internal/version"
-	"github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 )
+
+// Global JSON logger - all telegen logs are structured JSON
+var logger *slog.Logger
+
+func init() {
+	// Initialize JSON logger as the default for all telegen output
+	logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+}
 
 func main() {
 	cfgPath := flag.String("config", "/etc/telegen/config.yaml", "path to config yaml")
@@ -27,38 +38,60 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		log.Printf("telegen %s (%s/%s)", version.Version(), runtime.GOOS, runtime.GOARCH)
+		fmt.Printf(`{"level":"INFO","msg":"version","version":"%s","os":"%s","arch":"%s"}`+"\n",
+			version.Version(), runtime.GOOS, runtime.GOARCH)
 		os.Exit(0)
 	}
 
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
-		log.Fatalf("config: %v", err)
+		logger.Error("failed to load config", "error", err)
+		os.Exit(1)
 	}
 
 	// Log startup info
-	log.Printf("telegen %s starting (one agent, many signals)", version.Version())
-	if cfg.EBPF.Enabled {
-		log.Printf("  eBPF instrumentation: enabled (context propagation, auto-instrumentation)")
-	}
-	if cfg.Pipelines.JFR.Enabled {
-		log.Printf("  JFR profiling: enabled")
-	}
-	if cfg.Pipelines.Logs.Enabled {
-		log.Printf("  Log collection: enabled")
-	}
+	logger.Info("telegen starting",
+		"version", version.Version(),
+		"mode", "one agent, many signals",
+		"ebpf_enabled", cfg.EBPF.Enabled,
+		"jfr_enabled", cfg.Pipelines.JFR.Enabled,
+		"logs_enabled", cfg.Pipelines.Logs.Enabled,
+	)
 
 	mux := http.NewServeMux()
 	st := selftelemetry.InstallHandlers(mux, cfg.SelfTelemetry.Listen)
 	srv := &http.Server{Addr: cfg.SelfTelemetry.Listen, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
-		log.Printf("HTTP server listening on %s", cfg.SelfTelemetry.Listen)
+		logger.Info("HTTP server started", "address", cfg.SelfTelemetry.Listen)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("http: %v", err)
+			logger.Error("HTTP server failed", "error", err)
+			os.Exit(1)
 		}
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
+
+	// Track which signals are successfully started for graceful degradation
+	var signalsStarted int
+
+	// Start the pipeline FIRST to get the shared OTLP exporters
+	// The pipeline creates OTLP trace, log, and metrics exporters from exports.otlp config
+	pl := pipeline.New(cfg, st)
+	if err := pl.Start(ctx); err != nil {
+		logger.Warn("pipeline failed to start, continuing with other signals",
+			"error", err,
+			"status", "degraded")
+	} else {
+		signalsStarted++
+	}
+
+	// Get the shared metrics exporter from the pipeline for kube_metrics and node_exporter
+	var sharedMetricsExporter sdkmetric.Exporter
+	if exp := pl.GetMetricsExporter(); exp != nil {
+		if mexp, ok := exp.(sdkmetric.Exporter); ok {
+			sharedMetricsExporter = mexp
+		}
+	}
 
 	// Start node_exporter if enabled
 	var nodeExp *nodeexporter.Exporter
@@ -66,50 +99,57 @@ func main() {
 		var err error
 		nodeExp, err = nodeexporter.New(cfg.NodeExporter)
 		if err != nil {
-			log.Fatalf("node_exporter: %v", err)
+			logger.Warn("node_exporter failed to initialize, continuing without node metrics",
+				"error", err,
+				"status", "degraded")
+			nodeExp = nil // Ensure it's nil so we don't try to use it later
+		} else {
+			signalsStarted++
+			go func() {
+				logger.Info("node_exporter started",
+					"port", cfg.NodeExporter.Endpoint.Port,
+					"path", cfg.NodeExporter.Endpoint.Path)
+				if err := nodeExp.Run(ctx); err != nil && err != http.ErrServerClosed {
+					logger.Error("node_exporter runtime error",
+						"error", err,
+						"status", "degraded")
+				}
+			}()
 		}
-		go func() {
-			log.Printf("  node_exporter: enabled on :%d%s", cfg.NodeExporter.Endpoint.Port, cfg.NodeExporter.Endpoint.Path)
-			if err := nodeExp.Run(ctx); err != nil && err != http.ErrServerClosed {
-				log.Printf("node_exporter: %v", err)
-			}
-		}()
 	}
 
 	// Start kube_metrics if enabled or auto-detected
 	// This provides kube-state-metrics + cAdvisor equivalent metrics natively
-	kubeMetricsProvider := startKubeMetrics(ctx, cfg)
-
-	pl := pipeline.New(cfg, st)
-	if err := pl.Start(ctx); err != nil {
-		log.Fatalf("start: %v", err)
+	kubeMetricsProvider := startKubeMetrics(ctx, cfg, sharedMetricsExporter)
+	if kubeMetricsProvider != nil {
+		signalsStarted++
 	}
+
+	// Check if we have at least one working signal
+	if signalsStarted == 0 {
+		logger.Error("no signals could be started, cannot operate without at least one data source")
+		os.Exit(1)
+	}
+	logger.Info("telegen ready", "signals_started", signalsStarted)
 
 	// Wire up node_exporter OTLP streaming if enabled
 	if nodeExp != nil && cfg.NodeExporter.Export.Enabled && cfg.NodeExporter.Export.UseOTLP {
-		// Create a MetricsExporterInstancer for node exporter metrics
-		// Uses the EBPF OTELMetrics config if available, or can be extended for standalone config
-		if cfg.EBPF.OTELMetrics.EndpointEnabled() {
-			meInstancer := &otelcfg.MetricsExporterInstancer{Cfg: &cfg.EBPF.OTELMetrics}
-			exporter, err := meInstancer.Instantiate(ctx)
-			if err != nil {
-				log.Printf("node_exporter: failed to create OTLP exporter: %v", err)
+		if sharedMetricsExporter != nil {
+			if err := nodeExp.ConfigureOTLPStreaming(ctx, sharedMetricsExporter); err != nil {
+				logger.Warn("node_exporter failed to configure OTLP streaming", "error", err)
 			} else {
-				if err := nodeExp.ConfigureOTLPStreaming(ctx, exporter); err != nil {
-					log.Printf("node_exporter: failed to configure OTLP streaming: %v", err)
-				} else {
-					log.Printf("  node_exporter: OTLP streaming enabled (interval: %s)", cfg.NodeExporter.Export.Interval)
-				}
+				logger.Info("node_exporter OTLP streaming enabled",
+					"interval", cfg.NodeExporter.Export.Interval)
 			}
 		} else {
-			log.Printf("  node_exporter: OTLP streaming configured but no OTEL endpoint available")
+			logger.Warn("node_exporter OTLP streaming configured but no OTLP metrics exporter available")
 		}
 	}
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
 	<-sig
-	log.Println("telegen: shutting down…")
+	logger.Info("telegen shutting down")
 	cancel()
 	pl.Close()
 	if nodeExp != nil {
@@ -119,15 +159,14 @@ func main() {
 		_ = kubeMetricsProvider.Stop(context.Background())
 	}
 	_ = srv.Shutdown(context.Background())
+	logger.Info("telegen shutdown complete")
 }
 
 // startKubeMetrics initializes and starts the kubemetrics provider if enabled or auto-detected.
 // Returns nil if kubemetrics is disabled or if running outside a Kubernetes cluster without explicit config.
-func startKubeMetrics(ctx context.Context, cfg *config.Config) *kubemetrics.Provider {
-	// Create a structured logger for kubemetrics
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})).With("component", "kubemetrics")
+func startKubeMetrics(ctx context.Context, cfg *config.Config, metricsExporter sdkmetric.Exporter) *kubemetrics.Provider {
+	// Create a structured logger for kubemetrics (uses global logger with component tag)
+	kubeLogger := logger.With("component", "kubemetrics")
 
 	// Check if we should auto-enable based on Kubernetes detection
 	inCluster := kubemetrics.IsInCluster()
@@ -136,7 +175,7 @@ func startKubeMetrics(ctx context.Context, cfg *config.Config) *kubemetrics.Prov
 	shouldStart := cfg.KubeMetrics.ShouldAutoEnable(inCluster)
 	if !shouldStart {
 		if cfg.KubeMetrics.AutoDetect {
-			log.Printf("  kube_metrics: auto-detect enabled but not running in Kubernetes cluster")
+			logger.Info("kube_metrics auto-detect enabled but not in Kubernetes cluster")
 		}
 		return nil
 	}
@@ -171,9 +210,9 @@ func startKubeMetrics(ctx context.Context, cfg *config.Config) *kubemetrics.Prov
 	}
 
 	// Create the provider
-	provider, err := kubemetrics.NewFromAgentConfig(agentCfg, logger)
+	provider, err := kubemetrics.NewFromAgentConfig(agentCfg, kubeLogger)
 	if err != nil {
-		log.Printf("kube_metrics: failed to create provider: %v", err)
+		logger.Warn("kube_metrics failed to create provider", "error", err)
 		return nil
 	}
 	if provider == nil {
@@ -183,38 +222,30 @@ func startKubeMetrics(ctx context.Context, cfg *config.Config) *kubemetrics.Prov
 
 	// Start the provider (HTTP server + collectors)
 	if err := provider.Start(ctx); err != nil {
-		log.Printf("kube_metrics: failed to start: %v", err)
+		logger.Warn("kube_metrics failed to start", "error", err)
 		return nil
 	}
 
-	log.Printf("  kube_metrics: enabled on %s%s (kubestate=%v, cadvisor=%v)",
-		cfg.KubeMetrics.ListenAddress,
-		cfg.KubeMetrics.MetricsPath,
-		cfg.KubeMetrics.KubeState.Enabled,
-		cfg.KubeMetrics.Cadvisor.Enabled,
+	logger.Info("kube_metrics enabled",
+		"listen_address", cfg.KubeMetrics.ListenAddress,
+		"metrics_path", cfg.KubeMetrics.MetricsPath,
+		"kubestate_enabled", cfg.KubeMetrics.KubeState.Enabled,
+		"cadvisor_enabled", cfg.KubeMetrics.Cadvisor.Enabled,
 	)
 
 	// Configure OTLP streaming if enabled
 	if cfg.KubeMetrics.Streaming.Enabled && cfg.KubeMetrics.Streaming.UseOTLP {
-		configureKubeMetricsStreaming(ctx, provider, cfg, logger)
+		configureKubeMetricsStreaming(ctx, provider, cfg, metricsExporter)
 	}
 
 	return provider
 }
 
 // configureKubeMetricsStreaming sets up OTLP streaming for kubemetrics
-func configureKubeMetricsStreaming(ctx context.Context, provider *kubemetrics.Provider, cfg *config.Config, logger *slog.Logger) {
-	// Use the same OTLP endpoint as eBPF metrics
-	if !cfg.EBPF.OTELMetrics.EndpointEnabled() {
-		log.Printf("  kube_metrics: OTLP streaming configured but no OTEL endpoint available")
-		return
-	}
-
-	// Create metrics exporter
-	meInstancer := &otelcfg.MetricsExporterInstancer{Cfg: &cfg.EBPF.OTELMetrics}
-	metricsExporter, err := meInstancer.Instantiate(ctx)
-	if err != nil {
-		log.Printf("kube_metrics: failed to create OTLP metrics exporter: %v", err)
+func configureKubeMetricsStreaming(ctx context.Context, provider *kubemetrics.Provider, cfg *config.Config, metricsExporter sdkmetric.Exporter) {
+	// Use the shared OTLP metrics exporter from the pipeline
+	if metricsExporter == nil {
+		logger.Warn("kube_metrics OTLP streaming configured but no OTLP metrics exporter available")
 		return
 	}
 
@@ -223,9 +254,9 @@ func configureKubeMetricsStreaming(ctx context.Context, provider *kubemetrics.Pr
 
 	// Setup streaming - logs exporter is nil for now (can be added when OTLP logs are configured)
 	if err := provider.SetupStreaming(metricsExporter, nil, kubeClient); err != nil {
-		log.Printf("kube_metrics: failed to configure OTLP streaming: %v", err)
+		logger.Error("kube_metrics failed to configure OTLP streaming", "error", err)
 		return
 	}
 
-	log.Printf("  kube_metrics: OTLP streaming enabled (interval: %s)", cfg.KubeMetrics.Streaming.Interval)
+	logger.Info("kube_metrics OTLP streaming enabled", "interval", cfg.KubeMetrics.Streaming.Interval)
 }

@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path"
 	"reflect"
@@ -28,7 +29,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 
 	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/internal/obiconfig"
+	config "github.com/platformbuilds/telegen/internal/obiconfig"
 	"github.com/platformbuilds/telegen/pkg/buildinfo"
 	"github.com/platformbuilds/telegen/pkg/export/attributes"
 	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
@@ -62,6 +63,35 @@ const (
 	UsualPortGRPC = "4317"
 	UsualPortHTTP = "4318"
 )
+
+// extractPortFromEndpoint extracts the port from an endpoint string.
+// Supports both URL format (http://host:port) and gRPC format (host:port).
+// Returns the first found port from specificEndpoint or commonEndpoint.
+func extractPortFromEndpoint(specificEndpoint, commonEndpoint string) string {
+	for _, ep := range []string{specificEndpoint, commonEndpoint} {
+		if ep == "" {
+			continue
+		}
+		// Try parsing as URL first
+		if u, err := url.Parse(ep); err == nil && u.Host != "" {
+			if port := u.Port(); port != "" {
+				return port
+			}
+		}
+		// Try extracting port from host:port format
+		// Handle IPv6 addresses like [::1]:4317
+		if strings.HasPrefix(ep, "[") {
+			// IPv6 address
+			if idx := strings.LastIndex(ep, "]:"); idx != -1 {
+				return ep[idx+2:]
+			}
+		} else if idx := strings.LastIndex(ep, ":"); idx != -1 {
+			// IPv4 or hostname
+			return ep[idx+1:]
+		}
+	}
+	return ""
+}
 
 func omitFieldsForYAML(input any, omitFields map[string]struct{}) map[string]any {
 	result := make(map[string]any)

@@ -16,6 +16,9 @@ type Collector struct {
 	interval      time.Duration
 	cb            func(*prompb.WriteRequest)
 	extra         []labels.Label
+	// cachedTimestamp is updated once per collection cycle to avoid
+	// repeated time.Now() syscalls when appending many metrics
+	cachedTimestamp int64
 }
 
 func New(job, instance string, interval time.Duration, enqueue func(*prompb.WriteRequest)) *Collector {
@@ -28,6 +31,8 @@ func (c *Collector) Run(stop <-chan struct{}) {
 	for {
 		select {
 		case <-t.C:
+			// Cache timestamp once per collection cycle to avoid repeated syscalls
+			c.cachedTimestamp = time.Now().UnixMilli()
 			wr := &prompb.WriteRequest{}
 			c.appendCPU(wr)
 			c.appendMem(wr)
@@ -56,7 +61,7 @@ func (c *Collector) SetExtraLabels(kv map[string]string) {
 		c.extra = append(c.extra, labels.Label{Name: k, Value: v})
 	}
 }
-func appendPoint(wr *prompb.WriteRequest, metric string, lbls []labels.Label, val float64) {
+func (c *Collector) appendPoint(wr *prompb.WriteRequest, metric string, lbls []labels.Label, val float64) {
 	var labs []prompb.Label
 	for _, l := range lbls {
 		if l.Name == "__name__" {
@@ -65,7 +70,8 @@ func appendPoint(wr *prompb.WriteRequest, metric string, lbls []labels.Label, va
 			labs = append(labs, prompb.Label{Name: l.Name, Value: l.Value})
 		}
 	}
-	wr.Timeseries = append(wr.Timeseries, prompb.TimeSeries{Labels: labs, Samples: []prompb.Sample{{Timestamp: time.Now().UnixMilli(), Value: val}}})
+	// Use cached timestamp to avoid repeated time.Now() syscalls
+	wr.Timeseries = append(wr.Timeseries, prompb.TimeSeries{Labels: labs, Samples: []prompb.Sample{{Timestamp: c.cachedTimestamp, Value: val}}})
 }
 func (c *Collector) appendCPU(wr *prompb.WriteRequest) {
 	f, err := os.Open("/proc/stat")
@@ -94,7 +100,7 @@ func (c *Collector) appendCPU(wr *prompb.WriteRequest) {
 		if total > 0 {
 			util = (user + system) / total
 		}
-		appendPoint(wr, "system_cpu_utilization", c.baseLabels(labels.Label{Name: "cpu", Value: name}), util)
+		c.appendPoint(wr, "system_cpu_utilization", c.baseLabels(labels.Label{Name: "cpu", Value: name}), util)
 	}
 }
 func (c *Collector) appendMem(wr *prompb.WriteRequest) {
@@ -116,8 +122,8 @@ func (c *Collector) appendMem(wr *prompb.WriteRequest) {
 	}
 	if memTotal > 0 {
 		used := (memTotal - memAvail) * 1024.0
-		appendPoint(wr, "system_memory_used_bytes", c.baseLabels(), used)
-		appendPoint(wr, "system_memory_total_bytes", c.baseLabels(), memTotal*1024.0)
+		c.appendPoint(wr, "system_memory_used_bytes", c.baseLabels(), used)
+		c.appendPoint(wr, "system_memory_total_bytes", c.baseLabels(), memTotal*1024.0)
 	}
 }
 func (c *Collector) appendNet(wr *prompb.WriteRequest) {
@@ -141,8 +147,8 @@ func (c *Collector) appendNet(wr *prompb.WriteRequest) {
 		}
 		rx := atof(fs[0])
 		tx := atof(fs[8])
-		appendPoint(wr, "system_network_receive_bytes_total", c.baseLabels(labels.Label{Name: "device", Value: strings.TrimSpace(iface)}), rx)
-		appendPoint(wr, "system_network_transmit_bytes_total", c.baseLabels(labels.Label{Name: "device", Value: strings.TrimSpace(iface)}), tx)
+		c.appendPoint(wr, "system_network_receive_bytes_total", c.baseLabels(labels.Label{Name: "device", Value: strings.TrimSpace(iface)}), rx)
+		c.appendPoint(wr, "system_network_transmit_bytes_total", c.baseLabels(labels.Label{Name: "device", Value: strings.TrimSpace(iface)}), tx)
 	}
 }
 func atof(s string) float64 { var v float64; _, _ = fmt.Sscanf(s, "%f", &v); return v }

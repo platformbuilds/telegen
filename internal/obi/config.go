@@ -24,7 +24,7 @@ import (
 	"github.com/platformbuilds/telegen/internal/ebpf/tcmanager"
 	"github.com/platformbuilds/telegen/internal/kube"
 	"github.com/platformbuilds/telegen/internal/kube/kubeflags"
-	"github.com/platformbuilds/telegen/internal/obiconfig"
+	config "github.com/platformbuilds/telegen/internal/obiconfig"
 	"github.com/platformbuilds/telegen/internal/transform"
 	"github.com/platformbuilds/telegen/pkg/export"
 	"github.com/platformbuilds/telegen/pkg/export/attributes"
@@ -219,7 +219,7 @@ var DefaultConfig = Config{
 		ExcludeOTelInstrumentedServices: true,
 		DefaultExcludeServices: services.RegexDefinitionCriteria{
 			services.RegexSelector{
-				Path: services.NewRegexp("(?:^|/)(beyla$|alloy$|otelcol[^/]*$)"),
+				Path: services.NewRegexp("(?:^|/)(telegen$|alloy$|otelcol[^/]*$)"),
 			},
 			services.RegexSelector{
 				Metadata: map[string]*services.RegexpAttr{"k8s_namespace": &k8sDefaultNamespacesRegex},
@@ -227,7 +227,7 @@ var DefaultConfig = Config{
 		},
 		DefaultExcludeInstrument: services.GlobDefinitionCriteria{
 			services.GlobAttributes{
-				Path: services.NewGlob("{*beyla,*alloy,*ebpf-instrument,*otelcol,*otelcol-contrib,*otelcol-contrib[!/]*}"),
+				Path: services.NewGlob("{*telegen,*alloy,*ebpf-instrument,*otelcol,*otelcol-contrib,*otelcol-contrib[!/]*}"),
 			},
 			services.GlobAttributes{
 				Metadata: map[string]*services.GlobAttr{"k8s_namespace": &k8sDefaultNamespacesGlob},
@@ -581,7 +581,7 @@ func (c *Config) Validate() error {
 			" application_span or application_span_otel")
 	}
 
-	if len(c.Routes.WildcardChar) > 1 {
+	if c.Routes != nil && len(c.Routes.WildcardChar) > 1 {
 		return ConfigError("wildcard_char can only be a single character, multiple characters are not allowed")
 	}
 

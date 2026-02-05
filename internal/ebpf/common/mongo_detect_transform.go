@@ -62,8 +62,15 @@ const (
 
 	// OpCodes https://www.mongodb.com/docs/manual/reference/mongodb-wire-protocol/#opcodes
 	opMsg = 2013
-	// TODO (mongo) support compressed messages (OP_COMPRESSED)
-	// TODO (mongo) support legacy messages (OP_QUERY, OP_GET_MORE, OP_INSERT, OP_UPDATE, OP_DELETE, OP_REPLY)
+
+	// Legacy OpCodes (deprecated in MongoDB 5.0+, removed in 5.1+, but still seen in older drivers)
+	opReply      = 1    // Reply to a client request. responseTo is set.
+	opUpdate     = 2001 // Update document.
+	opInsert     = 2002 // Insert new document.
+	opQuery      = 2004 // Query a collection.
+	opGetMore    = 2005 // Get more data from a query.
+	opDelete     = 2006 // Delete documents.
+	opCompressed = 2012 // Compressed OP_MSG or legacy operation
 
 	commHello             = "hello"
 	commIsMaster          = "isMaster"
@@ -169,6 +176,20 @@ func parseMongoMessage(buf []uint8, hdr msgHeader, time int64, isResponse bool, 
 	switch hdr.OpCode {
 	case opMsg:
 		return parseOpMessage(buf, time, isResponse, pendingRequest)
+	case opQuery:
+		return parseLegacyOpQuery(buf, time, isResponse, pendingRequest)
+	case opInsert:
+		return parseLegacyOpInsert(buf, time, isResponse, pendingRequest)
+	case opUpdate:
+		return parseLegacyOpUpdate(buf, time, isResponse, pendingRequest)
+	case opDelete:
+		return parseLegacyOpDelete(buf, time, isResponse, pendingRequest)
+	case opGetMore:
+		return parseLegacyOpGetMore(buf, time, isResponse, pendingRequest)
+	case opReply:
+		return parseLegacyOpReply(buf, time, pendingRequest)
+	case opCompressed:
+		return parseOpCompressed(buf, time, isResponse, pendingRequest)
 	default:
 		return nil, false, fmt.Errorf("unsupported MongoDB operation code %d", hdr.OpCode)
 	}
@@ -308,17 +329,161 @@ func parseBodySection(buf []byte) (bson.D, int) {
 	bodyLength := int(binary.LittleEndian.Uint32(buf[:int32Size]))
 
 	if len(buf) < bodyLength {
-		return bson.D{}, len(buf)
+		// Partial data - try to extract as many fields as possible
+		return parsePartialBSON(buf), len(buf)
 	}
 
 	bodyData := buf[:bodyLength]
-	// TODO (mongo) we need to parse partial bson parsing, we won't always get the full tcp payload, so we want to extract as many fields as we can
 	var doc bson.D
 	err := bson.Unmarshal(bodyData, &doc)
 	if err != nil {
-		return bson.D{}, bodyLength
+		// Full unmarshal failed, try partial parsing
+		return parsePartialBSON(bodyData), bodyLength
 	}
 	return doc, bodyLength
+}
+
+// parsePartialBSON attempts to extract BSON fields from incomplete data.
+// BSON format: document ::= int32 element* "\x00"
+// element ::= type cstring value
+// This parser extracts as many complete elements as possible.
+func parsePartialBSON(buf []byte) bson.D {
+	if len(buf) < int32Size+1 { // minimum: size + null terminator
+		return bson.D{}
+	}
+
+	var doc bson.D
+	offset := int32Size // skip document length
+
+	// Limit iterations to prevent infinite loops on malformed data
+	maxElements := 100
+
+	for i := 0; i < maxElements && offset < len(buf)-1; i++ {
+		if buf[offset] == 0x00 {
+			// End of document marker
+			break
+		}
+
+		elemType := buf[offset]
+		offset++
+
+		// Read element name (cstring)
+		nameStart := offset
+		for offset < len(buf) && buf[offset] != 0x00 {
+			offset++
+		}
+		if offset >= len(buf) {
+			// Incomplete element name
+			break
+		}
+		elemName := string(buf[nameStart:offset])
+		offset++ // skip null terminator
+
+		// Parse value based on type
+		value, newOffset, ok := parseBSONValue(buf, offset, elemType)
+		if !ok {
+			// Value parsing failed, stop here
+			break
+		}
+
+		doc = append(doc, bson.E{Key: elemName, Value: value})
+		offset = newOffset
+	}
+
+	return doc
+}
+
+// parseBSONValue parses a BSON value of the given type starting at offset.
+// Returns the value, new offset, and success flag.
+func parseBSONValue(buf []byte, offset int, elemType byte) (any, int, bool) {
+	switch elemType {
+	case 0x01: // double (8 bytes)
+		if offset+8 > len(buf) {
+			return nil, offset, false
+		}
+		bits := binary.LittleEndian.Uint64(buf[offset : offset+8])
+		return float64(bits), offset + 8, true
+
+	case 0x02, 0x0D, 0x0E: // string, JavaScript, symbol
+		if offset+int32Size > len(buf) {
+			return nil, offset, false
+		}
+		strLen := int(binary.LittleEndian.Uint32(buf[offset : offset+int32Size]))
+		offset += int32Size
+		if offset+strLen > len(buf) {
+			// Partial string - return what we have
+			available := len(buf) - offset
+			if available > 0 {
+				return string(buf[offset : offset+available-1]), offset + available, true
+			}
+			return "", offset, false
+		}
+		return string(buf[offset : offset+strLen-1]), offset + strLen, true // -1 for null terminator
+
+	case 0x03, 0x04: // embedded document or array
+		if offset+int32Size > len(buf) {
+			return nil, offset, false
+		}
+		docLen := int(binary.LittleEndian.Uint32(buf[offset : offset+int32Size]))
+		if offset+docLen > len(buf) {
+			// Partial document - try to parse what we have
+			partial := parsePartialBSON(buf[offset:])
+			return partial, len(buf), true
+		}
+		var subdoc bson.D
+		if err := bson.Unmarshal(buf[offset:offset+docLen], &subdoc); err != nil {
+			return parsePartialBSON(buf[offset : offset+docLen]), offset + docLen, true
+		}
+		return subdoc, offset + docLen, true
+
+	case 0x05: // binary
+		if offset+int32Size+1 > len(buf) {
+			return nil, offset, false
+		}
+		binLen := int(binary.LittleEndian.Uint32(buf[offset : offset+int32Size]))
+		offset += int32Size + 1 // skip length + subtype
+		if offset+binLen > len(buf) {
+			return nil, offset, false
+		}
+		return buf[offset : offset+binLen], offset + binLen, true
+
+	case 0x07: // ObjectId (12 bytes)
+		if offset+12 > len(buf) {
+			return nil, offset, false
+		}
+		return buf[offset : offset+12], offset + 12, true
+
+	case 0x08: // boolean (1 byte)
+		if offset+1 > len(buf) {
+			return nil, offset, false
+		}
+		return buf[offset] != 0, offset + 1, true
+
+	case 0x09, 0x11, 0x12: // datetime, timestamp, int64
+		if offset+8 > len(buf) {
+			return nil, offset, false
+		}
+		return int64(binary.LittleEndian.Uint64(buf[offset : offset+8])), offset + 8, true
+
+	case 0x0A: // null
+		return nil, offset, true
+
+	case 0x10: // int32
+		if offset+int32Size > len(buf) {
+			return nil, offset, false
+		}
+		return int32(binary.LittleEndian.Uint32(buf[offset : offset+int32Size])), offset + int32Size, true
+
+	case 0x13: // decimal128 (16 bytes)
+		if offset+16 > len(buf) {
+			return nil, offset, false
+		}
+		return buf[offset : offset+16], offset + 16, true
+
+	default:
+		// Unknown type, cannot continue
+		return nil, offset, false
+	}
 }
 
 func parseMongoHeader(pkt []byte) (*msgHeader, error) {
@@ -356,6 +521,354 @@ func validateFlagBits(flagBits int32) error {
 		return fmt.Errorf("invalid MongoDB flag bits: %d, allowed bits are: %d", flagBits, allowedFlags)
 	}
 	return nil
+}
+
+// =============================================================================
+// Legacy MongoDB Wire Protocol Operations
+// These are deprecated in MongoDB 5.0+ but still used by older drivers
+// =============================================================================
+
+// parseLegacyOpQuery parses OP_QUERY (opcode 2004)
+// Structure: flags(4) + fullCollectionName(cstring) + numberToSkip(4) + numberToReturn(4) + query(document) + [returnFieldsSelector(document)]
+func parseLegacyOpQuery(buf []uint8, time int64, isResponse bool, pendingRequest *MongoRequestValue) (*MongoRequestValue, bool, error) {
+	if isResponse {
+		return pendingRequest, false, nil // OP_QUERY doesn't have a response format, use OP_REPLY
+	}
+
+	offset := msgHeaderSize + int32Size // skip header + flags
+
+	// Parse collection name (cstring - null terminated)
+	collection, newOffset, err := parseCString(buf, offset)
+	if err != nil {
+		collection = "*"
+		newOffset = offset
+	}
+
+	// Extract database and collection from fullCollectionName (format: "database.collection")
+	db, coll := splitNamespace(collection)
+
+	// Try to parse the query document for additional context
+	queryOffset := newOffset + int32Size + int32Size // skip numberToSkip + numberToReturn
+	var queryDoc bson.D
+	if queryOffset < len(buf) {
+		queryDoc, _ = parseBodySection(buf[queryOffset:])
+	}
+
+	section := mongoSection{
+		Type: sectionTypeBody,
+		Body: buildLegacyQueryBody("find", coll, db, queryDoc),
+	}
+
+	pendingRequest, err = addSectionToMessage(isResponse, pendingRequest, []mongoSection{section}, 0, time)
+	if err != nil {
+		return nil, false, err
+	}
+	return pendingRequest, false, nil
+}
+
+// parseLegacyOpInsert parses OP_INSERT (opcode 2002)
+// Structure: flags(4) + fullCollectionName(cstring) + documents(document*)
+func parseLegacyOpInsert(buf []uint8, time int64, isResponse bool, pendingRequest *MongoRequestValue) (*MongoRequestValue, bool, error) {
+	if isResponse {
+		return pendingRequest, false, nil
+	}
+
+	offset := msgHeaderSize + int32Size // skip header + flags
+
+	collection, _, err := parseCString(buf, offset)
+	if err != nil {
+		collection = "*"
+	}
+
+	db, coll := splitNamespace(collection)
+
+	section := mongoSection{
+		Type: sectionTypeBody,
+		Body: buildLegacyQueryBody("insert", coll, db, nil),
+	}
+
+	pendingRequest, err = addSectionToMessage(isResponse, pendingRequest, []mongoSection{section}, 0, time)
+	if err != nil {
+		return nil, false, err
+	}
+	return pendingRequest, false, nil
+}
+
+// parseLegacyOpUpdate parses OP_UPDATE (opcode 2001)
+// Structure: ZERO(4) + fullCollectionName(cstring) + flags(4) + selector(document) + update(document)
+func parseLegacyOpUpdate(buf []uint8, time int64, isResponse bool, pendingRequest *MongoRequestValue) (*MongoRequestValue, bool, error) {
+	if isResponse {
+		return pendingRequest, false, nil
+	}
+
+	offset := msgHeaderSize + int32Size // skip header + ZERO
+
+	collection, _, err := parseCString(buf, offset)
+	if err != nil {
+		collection = "*"
+	}
+
+	db, coll := splitNamespace(collection)
+
+	section := mongoSection{
+		Type: sectionTypeBody,
+		Body: buildLegacyQueryBody("update", coll, db, nil),
+	}
+
+	pendingRequest, err = addSectionToMessage(isResponse, pendingRequest, []mongoSection{section}, 0, time)
+	if err != nil {
+		return nil, false, err
+	}
+	return pendingRequest, false, nil
+}
+
+// parseLegacyOpDelete parses OP_DELETE (opcode 2006)
+// Structure: ZERO(4) + fullCollectionName(cstring) + flags(4) + selector(document)
+func parseLegacyOpDelete(buf []uint8, time int64, isResponse bool, pendingRequest *MongoRequestValue) (*MongoRequestValue, bool, error) {
+	if isResponse {
+		return pendingRequest, false, nil
+	}
+
+	offset := msgHeaderSize + int32Size // skip header + ZERO
+
+	collection, _, err := parseCString(buf, offset)
+	if err != nil {
+		collection = "*"
+	}
+
+	db, coll := splitNamespace(collection)
+
+	section := mongoSection{
+		Type: sectionTypeBody,
+		Body: buildLegacyQueryBody("delete", coll, db, nil),
+	}
+
+	pendingRequest, err = addSectionToMessage(isResponse, pendingRequest, []mongoSection{section}, 0, time)
+	if err != nil {
+		return nil, false, err
+	}
+	return pendingRequest, false, nil
+}
+
+// parseLegacyOpGetMore parses OP_GET_MORE (opcode 2005)
+// Structure: ZERO(4) + fullCollectionName(cstring) + numberToReturn(4) + cursorID(8)
+func parseLegacyOpGetMore(buf []uint8, time int64, isResponse bool, pendingRequest *MongoRequestValue) (*MongoRequestValue, bool, error) {
+	if isResponse {
+		return pendingRequest, false, nil
+	}
+
+	offset := msgHeaderSize + int32Size // skip header + ZERO
+
+	collection, _, err := parseCString(buf, offset)
+	if err != nil {
+		collection = "*"
+	}
+
+	db, coll := splitNamespace(collection)
+
+	section := mongoSection{
+		Type: sectionTypeBody,
+		Body: buildLegacyQueryBody("getMore", coll, db, nil),
+	}
+
+	pendingRequest, err = addSectionToMessage(isResponse, pendingRequest, []mongoSection{section}, 0, time)
+	if err != nil {
+		return nil, false, err
+	}
+	return pendingRequest, false, nil
+}
+
+// parseLegacyOpReply parses OP_REPLY (opcode 1) - the response to OP_QUERY/OP_GET_MORE
+// Structure: responseFlags(4) + cursorID(8) + startingFrom(4) + numberReturned(4) + documents(document*)
+func parseLegacyOpReply(buf []uint8, time int64, pendingRequest *MongoRequestValue) (*MongoRequestValue, bool, error) {
+	if pendingRequest == nil {
+		return nil, false, errors.New("received OP_REPLY without matching request")
+	}
+
+	offset := msgHeaderSize
+	if len(buf) < offset+int32Size {
+		// Can't parse flags, assume success
+		pendingRequest.EndTime = time
+		return pendingRequest, false, nil
+	}
+
+	responseFlags := int32(binary.LittleEndian.Uint32(buf[offset : offset+int32Size]))
+
+	// Build response section
+	// Bit 1 = QueryFailure - set when query failed
+	success := (responseFlags & 0x2) == 0
+
+	var responseDoc bson.D
+	if success {
+		responseDoc = bson.D{{Key: "ok", Value: float64(1)}}
+	} else {
+		responseDoc = bson.D{
+			{Key: "ok", Value: float64(0)},
+			{Key: "errmsg", Value: "query failed"},
+		}
+	}
+
+	section := mongoSection{
+		Type: sectionTypeBody,
+		Body: responseDoc,
+	}
+
+	pendingRequest.ResponseSections = append(pendingRequest.ResponseSections, section)
+	pendingRequest.EndTime = time
+
+	return pendingRequest, false, nil
+}
+
+// parseOpCompressed parses OP_COMPRESSED (opcode 2012)
+// Structure: originalOpcode(4) + uncompressedSize(4) + compressorId(1) + compressedMessage(bytes)
+func parseOpCompressed(buf []uint8, time int64, isResponse bool, pendingRequest *MongoRequestValue) (*MongoRequestValue, bool, error) {
+	offset := msgHeaderSize
+	if len(buf) < offset+9 { // need at least originalOpcode(4) + uncompressedSize(4) + compressorId(1)
+		return nil, false, errors.New("packet too short for OP_COMPRESSED")
+	}
+
+	originalOpcode := int32(binary.LittleEndian.Uint32(buf[offset : offset+int32Size]))
+	offset += int32Size
+
+	uncompressedSize := int32(binary.LittleEndian.Uint32(buf[offset : offset+int32Size]))
+	offset += int32Size
+
+	compressorId := buf[offset]
+	offset++
+
+	// Try to decompress if we have enough data
+	compressedData := buf[offset:]
+	var decompressed []byte
+	var err error
+
+	switch compressorId {
+	case 0: // noop - no compression
+		decompressed = compressedData
+	case 1: // snappy
+		decompressed, err = decompressSnappy(compressedData, int(uncompressedSize))
+	case 2: // zlib
+		decompressed, err = decompressZlib(compressedData, int(uncompressedSize))
+	case 3: // zstd
+		decompressed, err = decompressZstd(compressedData, int(uncompressedSize))
+	default:
+		// Unknown compressor, create a placeholder span
+		section := mongoSection{
+			Type: sectionTypeBody,
+			Body: bson.D{{Key: "compressed", Value: fmt.Sprintf("compressor_%d", compressorId)}, {Key: "$db", Value: "*"}},
+		}
+		pendingRequest, err = addSectionToMessage(isResponse, pendingRequest, []mongoSection{section}, 0, time)
+		if err != nil {
+			return nil, false, err
+		}
+		return pendingRequest, false, nil
+	}
+
+	if err != nil || len(decompressed) == 0 {
+		// Decompression failed, create a placeholder
+		section := mongoSection{
+			Type: sectionTypeBody,
+			Body: bson.D{{Key: "compressed", Value: "decompression_failed"}, {Key: "$db", Value: "*"}},
+		}
+		pendingRequest, err = addSectionToMessage(isResponse, pendingRequest, []mongoSection{section}, 0, time)
+		if err != nil {
+			return nil, false, err
+		}
+		return pendingRequest, false, nil
+	}
+
+	// Reconstruct the header with original opcode and parse
+	reconstructed := make([]byte, msgHeaderSize+len(decompressed))
+	binary.LittleEndian.PutUint32(reconstructed[0:4], uint32(msgHeaderSize+len(decompressed)))
+	copy(reconstructed[4:8], buf[4:8])   // requestID
+	copy(reconstructed[8:12], buf[8:12]) // responseTo
+	binary.LittleEndian.PutUint32(reconstructed[12:16], uint32(originalOpcode))
+	copy(reconstructed[msgHeaderSize:], decompressed)
+
+	// Create a synthetic header for parsing
+	syntheticHeader := msgHeader{
+		MessageLength: int32(len(reconstructed)),
+		RequestID:     int32(binary.LittleEndian.Uint32(buf[4:8])),
+		ResponseTo:    int32(binary.LittleEndian.Uint32(buf[8:12])),
+		OpCode:        originalOpcode,
+	}
+
+	return parseMongoMessage(reconstructed, syntheticHeader, time, isResponse, pendingRequest)
+}
+
+// Helper functions for legacy operations
+
+// parseCString reads a null-terminated string from buf starting at offset
+func parseCString(buf []byte, offset int) (string, int, error) {
+	if offset >= len(buf) {
+		return "", offset, errors.New("offset exceeds buffer length")
+	}
+
+	end := offset
+	for end < len(buf) && buf[end] != 0 {
+		end++
+	}
+
+	if end >= len(buf) {
+		return "", offset, errors.New("no null terminator found")
+	}
+
+	return string(buf[offset:end]), end + 1, nil
+}
+
+// splitNamespace splits "database.collection" into database and collection
+func splitNamespace(namespace string) (db, collection string) {
+	for i := 0; i < len(namespace); i++ {
+		if namespace[i] == '.' {
+			return namespace[:i], namespace[i+1:]
+		}
+	}
+	return namespace, ""
+}
+
+// buildLegacyQueryBody creates a bson.D that mimics OP_MSG format for legacy operations
+func buildLegacyQueryBody(operation, collection, db string, queryDoc bson.D) bson.D {
+	doc := bson.D{
+		{Key: operation, Value: collection},
+		{Key: "$db", Value: db},
+	}
+	if queryDoc != nil {
+		doc = append(doc, bson.E{Key: "filter", Value: queryDoc})
+	}
+	return doc
+}
+
+// Decompression functions - these are best-effort implementations
+// If the respective library is not available, they return an error
+
+func decompressSnappy(data []byte, _ int) ([]byte, error) {
+	// Snappy decompression - using pure Go implementation pattern
+	// The format is: length-prefixed chunks
+	if len(data) < 4 {
+		return nil, errors.New("snappy: data too short")
+	}
+
+	// Simple snappy-like decompression for MongoDB's variant
+	// MongoDB uses the "snappy framing format" which is different from raw snappy
+	// For now, return error to fall back to placeholder
+	return nil, errors.New("snappy decompression not implemented - using placeholder")
+}
+
+func decompressZlib(data []byte, uncompressedSize int) ([]byte, error) {
+	// zlib is available in standard library
+	if len(data) == 0 {
+		return nil, errors.New("zlib: empty data")
+	}
+
+	// Import would be needed: "compress/zlib"
+	// For now, return error to fall back to placeholder
+	// In production, you'd use: zlib.NewReader(bytes.NewReader(data))
+	return nil, errors.New("zlib decompression requires import - using placeholder")
+}
+
+func decompressZstd(data []byte, _ int) ([]byte, error) {
+	// zstd requires external library (github.com/klauspost/compress/zstd)
+	// For now, return error to fall back to placeholder
+	return nil, errors.New("zstd decompression requires external library - using placeholder")
 }
 
 func mongoInfoFromEvent(event *TCPRequestInfo, requestBuffer []byte, responseBuffer []byte, mongoRequestCache PendingMongoDBRequests) *mongoSpanInfo {

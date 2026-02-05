@@ -7,13 +7,16 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
+	"golang.org/x/sync/singleflight"
 
-	"github.com/platformbuilds/telegen/internal/netollyebpf"
+	ebpf "github.com/platformbuilds/telegen/internal/netollyebpf"
 	"github.com/platformbuilds/telegen/internal/rdns/ebpf/xdp"
 	"github.com/platformbuilds/telegen/internal/rdns/store"
 	"github.com/platformbuilds/telegen/pkg/pipe/msg"
@@ -64,8 +67,15 @@ func ReverseDNSProvider(cfg *ReverseDNS, input, output *msg.Queue[[]*ebpf.Record
 		if err := checkEBPFReverseDNS(ctx, cfg); err != nil {
 			return nil, err
 		}
-		// TODO: replace by a cache with fuzzy expiration time to avoid cache stampede
-		cache := expirable.NewLRU[ebpf.IPAddr, string](cfg.CacheLen, nil, cfg.CacheTTL)
+		// Use jittered cache with singleflight to prevent cache stampedes
+		// Jitter is 20% of TTL to spread out expirations
+		jitterRange := cfg.CacheTTL / 5
+		resolver := &dnsResolver{
+			cache:       expirable.NewLRU[ebpf.IPAddr, cachedEntry](cfg.CacheLen, nil, cfg.CacheTTL+jitterRange),
+			baseTTL:     cfg.CacheTTL,
+			jitterRange: jitterRange,
+			log:         rdlog(),
+		}
 
 		log := rdlog()
 		in := input.Subscribe(msg.SubscriberName("flow.ReverseDNS"))
@@ -75,10 +85,10 @@ func ReverseDNSProvider(cfg *ReverseDNS, input, output *msg.Queue[[]*ebpf.Record
 			for flows := range in {
 				for _, flow := range flows {
 					if flow.Attrs.SrcName == "" {
-						flow.Attrs.SrcName = optGetName(log, cache, flow.Id.SrcIp.In6U.U6Addr8)
+						flow.Attrs.SrcName = resolver.getName(flow.Id.SrcIp.In6U.U6Addr8)
 					}
 					if flow.Attrs.DstName == "" {
-						flow.Attrs.DstName = optGetName(log, cache, flow.Id.DstIp.In6U.U6Addr8)
+						flow.Attrs.DstName = resolver.getName(flow.Id.DstIp.In6U.U6Addr8)
 					}
 				}
 				output.Send(flows)
@@ -103,18 +113,76 @@ func checkEBPFReverseDNS(ctx context.Context, cfg *ReverseDNS) error {
 	return nil
 }
 
-func optGetName(log *slog.Logger, cache *expirable.LRU[ebpf.IPAddr, string], ip ebpf.IPAddr) string {
-	if host, ok := cache.Get(ip); ok {
-		return host
+// cachedEntry holds a hostname with its jittered expiration time
+type cachedEntry struct {
+	hostname  string
+	expiresAt time.Time
+}
+
+// dnsResolver provides cache stampede protection using singleflight
+// and jittered expiration times to spread cache invalidations
+type dnsResolver struct {
+	cache       *expirable.LRU[ebpf.IPAddr, cachedEntry]
+	sf          singleflight.Group
+	baseTTL     time.Duration
+	jitterRange time.Duration
+	log         *slog.Logger
+	mu          sync.Mutex
+	rng         *rand.Rand
+}
+
+func (r *dnsResolver) getName(ip ebpf.IPAddr) string {
+	// Check cache first
+	if entry, ok := r.cache.Get(ip); ok {
+		// Check if entry is still valid (jittered expiration)
+		if time.Now().Before(entry.expiresAt) {
+			return entry.hostname
+		}
+		// Entry expired - remove it so singleflight can refresh
+		r.cache.Remove(ip)
 	}
+
 	ipStr := ip.IP().String()
-	if names, err := netLookupAddr(ipStr); err == nil && len(names) > 0 {
-		cache.Add(ip, names[0])
-		return names[0]
-	} else if err != nil {
-		log.Debug("error trying to lookup by IP address", "ip", ipStr, "error", err)
+
+	// Use singleflight to deduplicate concurrent lookups for the same IP
+	result, _, _ := r.sf.Do(ipStr, func() (interface{}, error) {
+		// Double-check cache in case another goroutine just populated it
+		if entry, ok := r.cache.Get(ip); ok && time.Now().Before(entry.expiresAt) {
+			return entry.hostname, nil
+		}
+
+		names, err := netLookupAddr(ipStr)
+		if err != nil {
+			r.log.Debug("error trying to lookup by IP address", "ip", ipStr, "error", err)
+			return "", err
+		}
+		if len(names) == 0 {
+			return "", nil
+		}
+
+		hostname := names[0]
+		// Add jitter to TTL to prevent synchronized expirations
+		jitter := r.randomJitter()
+		entry := cachedEntry{
+			hostname:  hostname,
+			expiresAt: time.Now().Add(r.baseTTL + jitter),
+		}
+		r.cache.Add(ip, entry)
+		return hostname, nil
+	})
+
+	if result == nil {
+		return ""
 	}
-	// return empty string. In a later pipeline stage it will be decorated with
-	// the actual IP
-	return ""
+	return result.(string)
+}
+
+// randomJitter returns a random duration between 0 and jitterRange
+func (r *dnsResolver) randomJitter() time.Duration {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.rng == nil {
+		r.rng = rand.New(rand.NewSource(time.Now().UnixNano()))
+	}
+	return time.Duration(r.rng.Int63n(int64(r.jitterRange)))
 }

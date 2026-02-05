@@ -51,6 +51,8 @@ func InspectOffsets(execElf *exec.FileInfo, funcs []string) (*Offsets, error) {
 	itypes, err := findInterfaceImpls(execElf.ELF)
 	if err != nil {
 		slog.Warn("error reading itab section in Go program, manual spans will not work", "error", err)
+	} else if len(itypes) == 0 {
+		slog.Debug("no itab entries found in Go program (binary may be stripped), manual spans will not work", "path", execElf.CmdExePath)
 	}
 
 	return &Offsets{

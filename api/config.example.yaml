@@ -103,6 +103,7 @@ exports:
     http:
       enabled: false
       endpoint: "otel-collector:4318"
+      insecure: true
       traces_path: "/v1/traces"
       logs_path: "/v1/logs"
       metrics_path: "/v1/metrics"
