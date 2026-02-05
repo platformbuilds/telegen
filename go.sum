@@ -315,8 +315,6 @@ go.opentelemetry.io/collector/config/configoptional v1.51.0 h1:kVD8B3JF0Hd5LrRhH
 go.opentelemetry.io/collector/config/configoptional v1.51.0/go.mod h1:nBG71pzrklmiPIp1XPQiO3RzlbLIolUlFrW30q1UXzM=
 go.opentelemetry.io/collector/config/configretry v1.51.0 h1:HUeaYeFPKEFHxlfj+EubxOa1HdfowlmkylTlvCkPvBU=
 go.opentelemetry.io/collector/config/configretry v1.51.0/go.mod h1:ZSTYqAJCq4qf+/4DGoIxCElDIl5yHt8XxEbcnpWBbMM=
-go.opentelemetry.io/collector/config/configtelemetry v0.145.0 h1:Bdp9mDmSorPq+p/MteURpy9gkvxXj9dFV0gxxgbQgcI=
-go.opentelemetry.io/collector/config/configtelemetry v0.145.0/go.mod h1:Xjw2+DpNLjYtx596EHSWBy0dNQRiJ2H+BlWU907lO40=
 go.opentelemetry.io/collector/config/configtls v1.51.0 h1:fkZ3o3i6A7MCQBYCid2ZBYgaE3bYWpr3EognX09C1Tc=
 go.opentelemetry.io/collector/config/configtls v1.51.0/go.mod h1:d2yeGb0Bt0WA9cL9SpC1nfhu5Qfiz+PhtQoecs+Kong=
 go.opentelemetry.io/collector/confmap v1.51.0 h1:C9YlMNkIgzuauLpUz2F7DLlWwqAmkQKNcKj1XATVWuE=
@@ -335,8 +333,6 @@ go.opentelemetry.io/collector/consumer/xconsumer v0.145.0 h1:9w7KKv9lVJoHvMLC6SU
 go.opentelemetry.io/collector/consumer/xconsumer v0.145.0/go.mod h1:SryDCLP2ZaFeZJtA2CSksJ0XvjH8k3LmlfXvy/kC7Wc=
 go.opentelemetry.io/collector/exporter v1.51.0 h1:oHthB4EgSxPJtEC5hqBavZNSz2emBErDkDwfTN1aZVI=
 go.opentelemetry.io/collector/exporter v1.51.0/go.mod h1:iJKSvK856xicuLbGuX1ni/TNSt2YZTQDZ4J6sYHY6cI=
-go.opentelemetry.io/collector/exporter/debugexporter v0.145.0 h1:PaxiD1T+I+rXWKvQ9Ex38YuOk+i2blqWTAWgECdZjIA=
-go.opentelemetry.io/collector/exporter/debugexporter v0.145.0/go.mod h1:78gJcIR8GxAq3+UBKqhGAuP8j2BxvcIjHLSo2gwtQOc=
 go.opentelemetry.io/collector/exporter/exporterhelper v0.145.0 h1:uybv+igeM67/BqFHLCtzhlcDWuu06i4QlU6+Ew5vExo=
 go.opentelemetry.io/collector/exporter/exporterhelper v0.145.0/go.mod h1:QOOagk5cG0SOmqTDQcxWE44Lk6JC/B9uCT1JsPDy3Rk=
 go.opentelemetry.io/collector/exporter/exporterhelper/xexporterhelper v0.145.0 h1:u/+DHCL96KUIMg97Rd1nePZckh2VqiuLPnmCUb3sdhE=

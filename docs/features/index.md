@@ -19,6 +19,7 @@ Telegen provides comprehensive observability through:
 
 auto-discovery
 distributed-tracing
+log-collection
 continuous-profiling
 ```
 
@@ -56,6 +57,8 @@ node-exporter-fusion
 |---------|------------|----------------|----------|
 | **Auto-Discovery** | ✅ | ❌ | eBPF |
 | **Distributed Tracing** | ✅ | ❌ | eBPF |
+| **Log Collection** | ✅ | ✅ | Filesystem |
+| **Log Trace Enrichment** | ✅ | ❌ | eBPF |
 | **Continuous Profiling** | ✅ | ❌ | eBPF |
 | **Security Monitoring** | ✅ | ❌ | eBPF |
 | **Network Observability** | ✅ | ❌ | eBPF |

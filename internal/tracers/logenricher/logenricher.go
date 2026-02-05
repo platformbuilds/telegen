@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/cilium/ebpf"
@@ -26,9 +27,11 @@ import (
 
 	"github.com/platformbuilds/telegen/internal/appolly/app/request"
 	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
+	"github.com/platformbuilds/telegen/internal/correlation"
 	"github.com/platformbuilds/telegen/internal/discover/exec"
 	ebpfcommon "github.com/platformbuilds/telegen/internal/ebpf/common"
 	"github.com/platformbuilds/telegen/internal/goexec"
+	"github.com/platformbuilds/telegen/internal/kube"
 	"github.com/platformbuilds/telegen/internal/obi"
 	config "github.com/platformbuilds/telegen/internal/obiconfig"
 	"github.com/platformbuilds/telegen/internal/procs"
@@ -54,6 +57,11 @@ type Tracer struct {
 	asyncWriter *shardedqueue.ShardedQueue[LogEvent]
 	pids        map[uint32][]uint32 // ns:[]pid
 	pidsMU      sync.Mutex
+
+	// correlator records trace context for filelog pipeline correlation.
+	// This enables trace correlation for plain-text logs that can't be
+	// enriched inline (JSON injection only works for JSON logs).
+	correlator *correlation.LogTraceCorrelator
 }
 
 func New(cfg *obi.Config) *Tracer {
@@ -65,8 +73,9 @@ func New(cfg *obi.Config) *Tracer {
 	}
 
 	tr := &Tracer{
-		log: logger,
-		cfg: cfg,
+		log:        logger,
+		cfg:        cfg,
+		correlator: correlation.GetGlobalLogTraceCorrelator(),
 		fdCache: expirable.NewLRU[string, *os.File](cfg.EBPF.LogEnricher.CacheSize, func(_ string, f *os.File) {
 			_ = f.Close()
 		}, cfg.EBPF.LogEnricher.CacheTTL),
@@ -336,7 +345,17 @@ func (p *Tracer) handle(e LogEvent) {
 		zeroTraceID [16]uint8
 		zeroSpanID  [8]uint8
 	)
-	if e.orig.PidTp.Tp.TraceId == zeroTraceID || e.orig.PidTp.Tp.SpanId == zeroSpanID {
+
+	hasTraceContext := e.orig.PidTp.Tp.TraceId != zeroTraceID && e.orig.PidTp.Tp.SpanId != zeroSpanID
+
+	// Record trace context to correlator for filelog pipeline correlation.
+	// This enables trace correlation for ALL logs, not just JSON.
+	// The filelog pipeline can later lookup trace context by container ID + timestamp.
+	if hasTraceContext && p.correlator != nil {
+		p.recordTraceContextForFilelog(e)
+	}
+
+	if !hasTraceContext {
 		// No trace context to inject, write original log line
 		_, err := f.Write([]byte(e.logLine))
 		if err != nil {
@@ -368,6 +387,7 @@ func (p *Tracer) handle(e LogEvent) {
 		b.WriteByte('\n')
 	} else {
 		// Not JSON -> preserve the original logline
+		// Trace context is still recorded to correlator above, so filelog can correlate later
 		b.Write([]byte(e.logLine[:e.orig.Len]))
 	}
 
@@ -375,4 +395,50 @@ func (p *Tracer) handle(e LogEvent) {
 	if err != nil {
 		p.log.Error("failed to write enriched log line", "error", err)
 	}
+}
+
+// recordTraceContextForFilelog records trace context to the correlator.
+// This allows the filelog pipeline to correlate plain-text logs with traces
+// by looking up a correlation key + timestamp.
+//
+// Correlation key selection:
+//   - Kubernetes: ContainerID (preferred, most reliable)
+//   - Non-Kubernetes: Resolved file path (fallback)
+//
+// This enables trace correlation in both K8s and bare-metal environments.
+func (p *Tracer) recordTraceContextForFilelog(e LogEvent) {
+	var correlationKey string
+
+	// Try Kubernetes container ID first (most reliable in K8s)
+	pid := e.orig.Tgid
+	containerInfo, err := kube.InfoForPID(pid)
+	if err == nil && containerInfo.ContainerID != "" {
+		// Kubernetes environment: use container ID
+		correlationKey = "cid:" + containerInfo.ContainerID
+	} else {
+		// Non-Kubernetes environment: use resolved file path
+		// This works for bare-metal, Docker standalone, or any other environment
+		fp := e.filePath()
+		if fp == "" {
+			// Can't correlate without a key
+			return
+		}
+
+		// Resolve symlinks to get canonical path for consistent matching
+		resolved, err := filepath.EvalSymlinks(fp)
+		if err != nil {
+			// Use original path if symlink resolution fails
+			resolved = fp
+		}
+		correlationKey = "path:" + resolved
+	}
+
+	// Convert trace IDs
+	traceID := correlation.TraceID(e.orig.PidTp.Tp.TraceId)
+	spanID := correlation.SpanID(e.orig.PidTp.Tp.SpanId)
+	traceFlags := correlation.TraceFlags(e.orig.PidTp.Tp.Flags)
+
+	// Record to correlator with current timestamp
+	// The filelog pipeline will later lookup using log timestamp (with tolerance)
+	p.correlator.RecordTraceContext(correlationKey, time.Now(), traceID, spanID, traceFlags)
 }

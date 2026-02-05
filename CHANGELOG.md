@@ -5,6 +5,35 @@ All notable changes to Telegen will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.1] - 2026-02-05
+
+### Added
+
+#### Native Log Collection Pipeline
+- Native container runtime parsers: Docker JSON, containerd, CRI-O
+- Automatic Kubernetes metadata extraction from log file paths
+- Application-aware parsing: Spring Boot, Log4j, Logback, Python logging
+- 100% OTLP-compliant log records with full semantic convention support
+
+#### Log Trace Enrichment (eBPF)
+- `log_enricher`: eBPF-based trace context capture at write syscall
+- `LogTraceCorrelator`: Time-windowed correlation cache (100ms buckets, 30s TTL)
+- JSON log injection: Direct trace_id/span_id injection into structured logs
+- Plain-text log correlation: Links any log format to distributed traces
+
+#### Non-Kubernetes Environment Support
+- File path-based correlation for VMs and bare-metal deployments
+- Dual correlation key support: `cid:<container_id>` (K8s) and `path:<file_path>` (non-K8s)
+- Works with application logs in `/var/log/myapp/` or custom paths
+
+### Documentation
+
+- Added comprehensive Log Collection & Trace Enrichment guide
+- Updated features index with log collection capabilities
+- Added troubleshooting and performance tuning sections
+
+---
+
 ## [1.1.0] - 2026-01-30
 
 ### Security
