@@ -397,12 +397,61 @@ network:
 # =============================================================================
 # Discovery Configuration
 # =============================================================================
+# Telegen uses port-based and path-based discovery to find services to instrument.
+# Port-based discovery is often more reliable in containerized environments.
+#
+# Each entry in instrument/excludeInstrument can specify:
+#   - openPorts: Port numbers or ranges (e.g., "8080", "8000-8999", "80,443")
+#   - exePath: Glob pattern for executable path (e.g., "*java*")
+#   - k8sNamespace: Kubernetes namespace (glob pattern)
+#   - k8sPodName: Pod name (glob pattern)
+#   - k8sDeploymentName: Deployment name (glob pattern)
+#   - k8sPodLabels: Map of label key to glob pattern
+#   - k8sPodAnnotations: Map of annotation key to glob pattern
+#   - containersOnly: Only match processes inside containers
+#   - exports: What to export (traces, metrics)
+#   - sampler: Sampling configuration
 discovery:
   excludeOtelInstrumentedServices: true
   excludeOtelInstrumentedServicesSpanMetrics: false
+  skipGoSpecificTracers: false
+  bpfPidFilterOff: false
+  
+  # Instrument by port (recommended for containerized workloads)
+  # Examples:
+  #   - openPorts: "8080-8089"          # Range of ports
+  #   - openPorts: "80,443,3000"        # Multiple specific ports
+  #   - openPorts: "8080"               # Single port
+  #     exePath: "*myapp*"              # Combined with path (AND logic)
+  #   - k8sNamespace: "production"      # Kubernetes-aware
+  #     openPorts: "8080"
+  #   - k8sPodLabels:                   # Match by labels
+  #       app: "frontend*"
+  #   - containersOnly: true            # Only containerized processes
+  #     openPorts: "8080"
   instrument:
-    - path: "*"
+    # Default: instrument all processes (use excludeInstrument for filtering)
+    - exePath: "*"
+    # Uncomment to use port-based discovery:
+    # - openPorts: "8080-8089"
+    # - openPorts: "3000,5000,8000-8999"
+  
+  # Exclude specific services from instrumentation
+  excludeInstrument: []
+    # - k8sNamespace: "kube-system"
+    # - exePath: "*health*"
+    # - openPorts: "9090"  # Prometheus metrics port
+  
+  # Default exclusions (telegen and common observability tools)
+  defaultExcludeInstrument:
+    - exePath: "*telegen*"
+    - exePath: "*alloy*"
+    - exePath: "*otelcol*"
+    - k8sNamespace: "kube-system"
+    - k8sNamespace: "monitoring"
+  
   minProcessAge: 5s
+  pollInterval: 5s
   defaultOtlpGrpcPort: 4317
   routeHarvesterTimeout: 10s
   disabledRouteHarvesters: []

@@ -235,11 +235,107 @@ network:
 discovery:
   exclude_otel_instrumented_services: {{ .Values.discovery.excludeOtelInstrumentedServices | default true }}
   exclude_otel_instrumented_services_span_metrics: {{ .Values.discovery.excludeOtelInstrumentedServicesSpanMetrics | default false }}
+  skip_go_specific_tracers: {{ .Values.discovery.skipGoSpecificTracers | default false }}
+  bpf_pid_filter_off: {{ .Values.discovery.bpfPidFilterOff | default false }}
+  {{- if .Values.discovery.instrument }}
   instrument:
-    {{- range .Values.discovery.instrument | default (list (dict "path" "*")) }}
-    - path: {{ .path | quote }}
+    {{- range .Values.discovery.instrument }}
+    - {{- if .openPorts }}
+      open_ports: {{ .openPorts | quote }}
+      {{- end }}
+      {{- if .exePath }}
+      exe_path: {{ .exePath | quote }}
+      {{- end }}
+      {{- if .path }}
+      exe_path: {{ .path | quote }}
+      {{- end }}
+      {{- if .k8sNamespace }}
+      k8s_namespace: {{ .k8sNamespace | quote }}
+      {{- end }}
+      {{- if .k8sPodName }}
+      k8s_pod_name: {{ .k8sPodName | quote }}
+      {{- end }}
+      {{- if .k8sDeploymentName }}
+      k8s_deployment_name: {{ .k8sDeploymentName | quote }}
+      {{- end }}
+      {{- if .k8sPodLabels }}
+      k8s_pod_labels:
+        {{- range $key, $value := .k8sPodLabels }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+      {{- end }}
+      {{- if .k8sPodAnnotations }}
+      k8s_pod_annotations:
+        {{- range $key, $value := .k8sPodAnnotations }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+      {{- end }}
+      {{- if .containersOnly }}
+      containers_only: {{ .containersOnly }}
+      {{- end }}
+      {{- if .name }}
+      name: {{ .name | quote }}
+      {{- end }}
+      {{- if .namespace }}
+      namespace: {{ .namespace | quote }}
+      {{- end }}
+      {{- if .exports }}
+      exports:
+        {{- range .exports }}
+        - {{ . }}
+        {{- end }}
+      {{- end }}
+      {{- if .sampler }}
+      sampler:
+        name: {{ .sampler.name | quote }}
+        {{- if .sampler.arg }}
+        arg: {{ .sampler.arg }}
+        {{- end }}
+      {{- end }}
     {{- end }}
+  {{- else }}
+  instrument:
+    - exe_path: "*"
+  {{- end }}
+  {{- if .Values.discovery.excludeInstrument }}
+  exclude_instrument:
+    {{- range .Values.discovery.excludeInstrument }}
+    - {{- if .openPorts }}
+      open_ports: {{ .openPorts | quote }}
+      {{- end }}
+      {{- if .exePath }}
+      exe_path: {{ .exePath | quote }}
+      {{- end }}
+      {{- if .k8sNamespace }}
+      k8s_namespace: {{ .k8sNamespace | quote }}
+      {{- end }}
+      {{- if .k8sPodLabels }}
+      k8s_pod_labels:
+        {{- range $key, $value := .k8sPodLabels }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+      {{- end }}
+      {{- if .containersOnly }}
+      containers_only: {{ .containersOnly }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.discovery.defaultExcludeInstrument }}
+  default_exclude_instrument:
+    {{- range .Values.discovery.defaultExcludeInstrument }}
+    - {{- if .openPorts }}
+      open_ports: {{ .openPorts | quote }}
+      {{- end }}
+      {{- if .exePath }}
+      exe_path: {{ .exePath | quote }}
+      {{- end }}
+      {{- if .k8sNamespace }}
+      k8s_namespace: {{ .k8sNamespace | quote }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
   min_process_age: {{ .Values.discovery.minProcessAge | default "5s" }}
+  poll_interval: {{ .Values.discovery.pollInterval | default "5s" }}
   default_otlp_grpc_port: {{ .Values.discovery.defaultOtlpGrpcPort | default 4317 }}
   route_harvester_timeout: {{ .Values.discovery.routeHarvesterTimeout | default "10s" }}
   disabled_route_harvesters: {{ .Values.discovery.disabledRouteHarvesters | default list | toJson }}

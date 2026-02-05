@@ -86,12 +86,7 @@ func main() {
 	}
 
 	// Get the shared metrics exporter from the pipeline for kube_metrics and node_exporter
-	var sharedMetricsExporter sdkmetric.Exporter
-	if exp := pl.GetMetricsExporter(); exp != nil {
-		if mexp, ok := exp.(sdkmetric.Exporter); ok {
-			sharedMetricsExporter = mexp
-		}
-	}
+	sharedMetricsExporter := pl.GetMetricsExporter()
 
 	// Start node_exporter if enabled
 	var nodeExp *nodeexporter.Exporter

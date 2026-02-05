@@ -435,6 +435,17 @@ network:
 # -----------------------------------------------------------------------------
 # Discovery Configuration
 # -----------------------------------------------------------------------------
+# Telegen uses port-based and path-based discovery to find services to instrument.
+# This leverages the embedded OBI (OpenTelemetry eBPF Instrumentation) engine.
+#
+# Discovery Priority:
+#   1. instrument (explicit includes)
+#   2. exclude_instrument (explicit excludes)
+#   3. default_exclude_instrument (system defaults)
+#
+# Port-based discovery is often more reliable than path-based, especially in
+# containerized environments where executable paths may vary.
+# -----------------------------------------------------------------------------
 discovery:
   # Exclude services that are already instrumented with OpenTelemetry
   exclude_otel_instrumented_services: true
@@ -442,29 +453,121 @@ discovery:
   # Exclude span metrics generation for OTel-instrumented services
   exclude_otel_instrumented_services_span_metrics: false
   
+  # Skip Go-specific tracers and use generic HTTP tracers only
+  skip_go_specific_tracers: false
+  
+  # Disable BPF-level PID filtering (force userspace filtering - debug only)
+  bpf_pid_filter_off: false
+  
   # Default services to exclude from tracing (by regex path match)
   # These are observability tools that should not be self-instrumented
+  # Deprecated: Use default_exclude_instrument instead
   default_exclude_services:
     - path: "(?:^|/)(telegen$|alloy$|otelcol[^/]*$)"
     - k8s_namespace: "^kube-system$|^kube-node-lease$|^monitoring$"
   
-  # Instrumentation targeting
+  # Default exclusions using glob patterns (preferred over default_exclude_services)
+  default_exclude_instrument:
+    - exe_path: "*telegen*"
+    - exe_path: "*alloy*"
+    - exe_path: "*otelcol*"
+    - k8s_namespace: "kube-system"
+    - k8s_namespace: "kube-node-lease"
+    - k8s_namespace: "monitoring"
+  
+  # ============================================================================
+  # Instrumentation Targeting (Primary Discovery Configuration)
+  # ============================================================================
+  # Each entry can specify one or more of:
+  #   - open_ports: Port numbers or ranges (e.g., "8080", "8000-8999", "80,443,8080-8089")
+  #   - exe_path: Glob pattern for executable path (e.g., "*java*", "/usr/bin/python*")
+  #   - k8s_namespace: Kubernetes namespace (glob pattern)
+  #   - k8s_pod_name: Pod name (glob pattern)
+  #   - k8s_deployment_name: Deployment name (glob pattern)
+  #   - k8s_pod_labels: Map of label key to glob pattern
+  #   - k8s_pod_annotations: Map of annotation key to glob pattern
+  #   - containers_only: Only match processes inside containers
+  #
+  # If multiple criteria are specified in one entry, ALL must match (AND logic).
+  # Multiple entries use OR logic - if any entry matches, the process is instrumented.
+  # ============================================================================
   instrument:
-    # Glob patterns for executables to instrument
-    - path: "*"
-      # Can specify metadata conditions
-      # k8s_namespace: "production"
+    # Example 1: Instrument by port number (most common and reliable)
+    # This will trace any service listening on ports 8080-8089
+    # - open_ports: "8080-8089"
+    
+    # Example 2: Instrument specific application ports
+    # - open_ports: "80,443,3000,8000-8999"
+    
+    # Example 3: Instrument by executable path using glob patterns
+    # - exe_path: "*java*"
+    # - exe_path: "/usr/bin/python*"
+    # - exe_path: "*node*"
+    
+    # Example 4: Combine port and path requirements (both must match)
+    # - open_ports: "8080"
+    #   exe_path: "*myapp*"
+    
+    # Example 5: Kubernetes-aware discovery (trace only production namespace)
+    # - k8s_namespace: "production"
+    #   open_ports: "8080-8089"
+    
+    # Example 6: Match by pod labels
+    # - k8s_pod_labels:
+    #     app: "frontend*"
+    #     version: "v2*"
+    
+    # Example 7: Match by pod annotations
+    # - k8s_pod_annotations:
+    #     telegen.io/instrument: "true"
+    
+    # Example 8: Containers only (useful in mixed environments)
+    # - containers_only: true
+    #   open_ports: "8080"
+    
+    # Example 9: Named service with custom exports
+    # - name: "payment-service"
+    #   open_ports: "8080"
+    #   exports:
+    #     - traces
+    #     - metrics
+    
+    # Example 10: Service with custom sampling
+    # - open_ports: "8080"
+    #   sampler:
+    #     name: parent_based_traceidratio
+    #     arg: 0.1  # 10% sampling
+    
+    # Default: instrument everything (use exclude_instrument for filtering)
+    - exe_path: "*"
+  
+  # ============================================================================
+  # Exclusion Rules
+  # ============================================================================
+  # Same syntax as instrument, but matched processes will NOT be traced
+  # even if they match an instrument rule. Exclusions take precedence.
+  exclude_instrument:
+    # Exclude health check endpoints
+    # - open_ports: "9090"
+    #   exe_path: "*health*"
+    
+    # Exclude test namespaces
+    # - k8s_namespace: "test*"
+    # - k8s_namespace: "*-test"
   
   # Minimum process age before discovery (avoid ephemeral processes)
   min_process_age: 5s
   
-  # Default OTLP gRPC port for applications
+  # Poll interval for process discovery (how often to scan for new processes)
+  poll_interval: 5s
+  
+  # Default OTLP gRPC port for applications (used to detect OTEL-instrumented apps)
   default_otlp_grpc_port: 4317
   
   # Route harvesting timeout
   route_harvester_timeout: 10s
   
-  # Disabled route harvesters
+  # Disabled route harvesters (e.g., ["java", "dotnet"])
   disabled_route_harvesters: []
   
   # Route harvester advanced configuration

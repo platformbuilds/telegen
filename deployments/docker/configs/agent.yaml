@@ -242,12 +242,48 @@ network:
 # -----------------------------------------------------------------------------
 # Discovery Configuration
 # -----------------------------------------------------------------------------
+# Telegen uses port-based and path-based discovery to find services to instrument.
+# In Docker environments, port-based discovery is particularly useful since
+# container executables may have unpredictable paths.
+#
+# Each entry in instrument can specify:
+#   - open_ports: Port numbers or ranges (e.g., "8080", "8000-8999", "80,443")
+#   - exe_path: Glob pattern for executable path
+#   - containers_only: Only match processes inside containers
 discovery:
   exclude_otel_instrumented_services: true
   exclude_otel_instrumented_services_span_metrics: false
+  skip_go_specific_tracers: false
+  bpf_pid_filter_off: false
+  
+  # Instrument by port (recommended for Docker) or path
+  # Examples:
+  #   - open_ports: "8080-8089"          # Range of ports
+  #   - open_ports: "80,443,3000"        # Multiple ports
+  #   - containers_only: true            # Only containers
+  #     open_ports: "8080"
   instrument:
-    - path: "*"
+    # Default: instrument all processes
+    - exe_path: "*"
+    # Uncomment for port-based discovery (recommended for Docker):
+    # - open_ports: "8080-8089"
+    # - open_ports: "3000,5000,8000-8999"
+    # - containers_only: true
+    #   open_ports: "8080"
+  
+  # Exclude specific services
+  exclude_instrument: []
+    # - exe_path: "*health*"
+    # - open_ports: "9090"
+  
+  # Default exclusions (telegen and observability tools)
+  default_exclude_instrument:
+    - exe_path: "*telegen*"
+    - exe_path: "*alloy*"
+    - exe_path: "*otelcol*"
+  
   min_process_age: 5s
+  poll_interval: 5s
   default_otlp_grpc_port: 4317
   route_harvester_timeout: 10s
   disabled_route_harvesters: []

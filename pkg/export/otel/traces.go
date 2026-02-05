@@ -14,9 +14,6 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/config/configopaque"
-	"go.opentelemetry.io/collector/config/configoptional"
-	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
@@ -228,34 +225,6 @@ func getTracesExporter(ctx context.Context, cfg otelcfg.TracesConfig, im imetric
 		"Ensure the unified OTLP pipeline is initialized before starting eBPF instrumentation")
 }
 
-func getQueueConfig(cfg otelcfg.TracesConfig) configoptional.Optional[exporterhelper.QueueBatchConfig] {
-	// enable batching only if the queue config is enabled
-	if cfg.MaxQueueSize <= 0 && cfg.BatchTimeout <= 0 {
-		return configoptional.None[exporterhelper.QueueBatchConfig]()
-	}
-	queueConfig := exporterhelper.NewDefaultQueueConfig()
-	queueConfig.Sizer = exporterhelper.RequestSizerTypeItems
-	// Avoid continuously seeing "sending queue is full" errors in the standard output
-	queueConfig.BlockOnOverflow = true
-	batchCfg := exporterhelper.BatchConfig{
-		Sizer: queueConfig.Sizer,
-	}
-	batchSet := false
-	if cfg.MaxQueueSize > 0 {
-		batchSet = true
-		batchCfg.MaxSize = int64(cfg.MaxQueueSize)
-	}
-	if cfg.BatchTimeout > 0 {
-		batchSet = true
-		batchCfg.FlushTimeout = cfg.BatchTimeout
-		batchCfg.MinSize = int64(cfg.MaxQueueSize)
-	}
-	if batchSet {
-		queueConfig.Batch = configoptional.Some(batchCfg)
-	}
-	return configoptional.Some(queueConfig)
-}
-
 func createZapLoggerDev(sdkLogLevel string) *zap.Logger {
 	if sdkLogLevel == "" {
 		return zap.NewNop()
@@ -294,26 +263,4 @@ func getTraceSettings(dataType component.Type, sdkLogLevel string) exporter.Sett
 		ID:                component.NewIDWithName(dataType, "obi"),
 		TelemetrySettings: telemetrySettings,
 	}
-}
-
-func getRetrySettings(cfg otelcfg.TracesConfig) configretry.BackOffConfig {
-	backOffCfg := configretry.NewDefaultBackOffConfig()
-	if cfg.BackOffInitialInterval > 0 {
-		backOffCfg.InitialInterval = cfg.BackOffInitialInterval
-	}
-	if cfg.BackOffMaxInterval > 0 {
-		backOffCfg.MaxInterval = cfg.BackOffMaxInterval
-	}
-	if cfg.BackOffMaxElapsedTime > 0 {
-		backOffCfg.MaxElapsedTime = cfg.BackOffMaxElapsedTime
-	}
-	return backOffCfg
-}
-
-func convertHeaders(headers map[string]string) configopaque.MapList {
-	opaqueHeaders := make(configopaque.MapList, 0, len(headers))
-	for key, value := range headers {
-		opaqueHeaders = append(opaqueHeaders, configopaque.Pair{Name: key, Value: configopaque.String(value)})
-	}
-	return opaqueHeaders
 }

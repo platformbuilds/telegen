@@ -131,13 +131,143 @@ agent:
 
 ## Process Discovery
 
+Telegen discovers which processes to instrument using **port-based** and/or **path-based** selection.
+
+### Basic Discovery
+
 ```yaml
 agent:
   discovery:
+    # Skip services already instrumented with OTel SDKs
+    exclude_otel_instrumented_services: true
+    
+    # Process discovery timing
+    min_process_age: 5s
+    poll_interval: 5s
+```
+
+### Port-Based Discovery (Recommended)
+
+Port-based discovery is more reliable in containerized environments:
+
+```yaml
+agent:
+  discovery:
+    instrument:
+      # Single port
+      - open_ports: "8080"
+      
+      # Port range
+      - open_ports: "8000-8999"
+      
+      # Multiple ports and ranges
+      - open_ports: "80,443,3000,8080-8089"
+```
+
+### Path-Based Discovery
+
+Discover by executable path pattern (glob syntax):
+
+```yaml
+agent:
+  discovery:
+    instrument:
+      # All Java processes
+      - exe_path: "*java*"
+      
+      # Specific application
+      - exe_path: "/usr/bin/myapp"
+      
+      # Node.js
+      - exe_path: "*node*"
+```
+
+### Kubernetes-Aware Discovery
+
+```yaml
+agent:
+  discovery:
+    instrument:
+      # By namespace
+      - k8s_namespace: "production"
+      
+      # By namespace + port
+      - k8s_namespace: "production"
+        open_ports: "8080"
+      
+      # By pod labels
+      - k8s_pod_labels:
+          app: "frontend*"
+          version: "v2*"
+      
+      # By annotations
+      - k8s_pod_annotations:
+          telegen.io/instrument: "true"
+```
+
+### Excluding Services
+
+```yaml
+agent:
+  discovery:
+    instrument:
+      - open_ports: "8080-8089"
+    
+    exclude_instrument:
+      # Test namespaces
+      - k8s_namespace: "*-test"
+      
+      # Prometheus metrics port
+      - open_ports: "9090"
+      
+      # Health check services
+      - exe_path: "*health*"
+    
+    # Default exclusions (observability tools)
+    default_exclude_instrument:
+      - exe_path: "*telegen*"
+      - exe_path: "*otelcol*"
+      - k8s_namespace: "kube-system"
+```
+
+### Full Discovery Example
+
+```yaml
+agent:
+  discovery:
+    exclude_otel_instrumented_services: true
+    skip_go_specific_tracers: false
+    
+    instrument:
+      # Common app ports
+      - open_ports: "8080-8089"
+      - open_ports: "3000,5000"
+      
+      # Java in production
+      - exe_path: "*java*"
+        k8s_namespace: "production"
+      
+      # Opt-in via annotation
+      - k8s_pod_annotations:
+          telegen.io/instrument: "true"
+    
+    exclude_instrument:
+      - k8s_namespace: "kube-system"
+      - open_ports: "9090"
+    
+    min_process_age: 5s
+    poll_interval: 5s
+```
+
+### Metadata Discovery
+
+Automatic detection of cloud and runtime environments:
+
+```yaml
+agent:
+  metadata_discovery:
     enabled: true
     interval: 30s
-    
-    # Detection settings
     detect_cloud: true        # AWS, GCP, Azure
     detect_kubernetes: true   # K8s metadata
     detect_runtimes: true     # Go, Java, Python, Node.js
