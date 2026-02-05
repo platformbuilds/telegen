@@ -94,7 +94,7 @@ const (
 	defaultHistogramMinResetDuration = 1 * time.Hour
 )
 
-// metrics for Beyla statistics
+// metrics for telegen statistics
 const (
 	buildInfoSuffix = "_build_info"
 
@@ -103,8 +103,8 @@ const (
 
 // not adding version, as it is a fixed value
 var (
-	beylaInfoLabelNames = []string{LanguageLabel}
-	hostInfoLabelNames  = []string{grafanaHostIDKey}
+	telegenInfoLabelNames = []string{LanguageLabel}
+	hostInfoLabelNames    = []string{grafanaHostIDKey}
 )
 
 // TODO: TLS
@@ -162,7 +162,7 @@ type metricsReporter struct {
 	input         <-chan []request.Span
 	processEvents <-chan exec.ProcessEvent
 
-	beylaInfo              *Expirer[prometheus.Gauge]
+	telegenInfo            *Expirer[prometheus.Gauge]
 	httpDuration           *Expirer[prometheus.Histogram]
 	httpClientDuration     *Expirer[prometheus.Histogram]
 	grpcDuration           *Expirer[prometheus.Histogram]
@@ -413,10 +413,10 @@ func newReporter(
 		attrGPUMemoryCopies:        attrGPUMemoryCopies,
 		attrDNSLookupDuration:      attrDNSLookupDuration,
 		attrSvcGraph:               attrSvcGraph,
-		beylaInfo: NewExpirer[prometheus.Gauge](prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		telegenInfo: NewExpirer[prometheus.Gauge](prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: attr.VendorPrefix + buildInfoSuffix,
 			Help: "A metric with a constant '1' value labeled by version, revision, branch, " +
-				"goversion from which Beyla was built, the goos and goarch for the build, and the" +
+				"goversion from which telegen was built, the goos and goarch for the build, and the" +
 				"language of the reported services",
 			ConstLabels: map[string]string{
 				"goarch":    runtime.GOARCH,
@@ -425,7 +425,7 @@ func newReporter(
 				"version":   buildinfo.Version,
 				"revision":  buildinfo.Revision,
 			},
-		}, beylaInfoLabelNames).MetricVec, clock.Time, cfg.TTL),
+		}, telegenInfoLabelNames).MetricVec, clock.Time, cfg.TTL),
 		httpDuration: optionalHistogramProvider(is.HTTPEnabled(), func() *Expirer[prometheus.Histogram] {
 			return NewExpirer[prometheus.Histogram](prometheus.NewHistogramVec(prometheus.HistogramOpts{
 				Name:                            attributes.HTTPServerDuration.Prom,
@@ -673,7 +673,7 @@ func newReporter(
 	registeredMetrics := []prometheus.Collector{mr.targetInfo}
 
 	if !mr.cfg.DisableBuildInfo {
-		registeredMetrics = append(registeredMetrics, mr.beylaInfo)
+		registeredMetrics = append(registeredMetrics, mr.telegenInfo)
 	}
 
 	if jointMetricsConfig.Features.AppRED() {
@@ -843,7 +843,7 @@ func (r *metricsReporter) observe(span *request.Span) {
 		return
 	}
 	t := span.Timings()
-	r.beylaInfo.WithLabelValues(span.Service.SDKLanguage.String()).Metric.Set(1.0)
+	r.telegenInfo.WithLabelValues(span.Service.SDKLanguage.String()).Metric.Set(1.0)
 	if span.Service.Features.AppHost() {
 		r.tracesHostInfo.WithLabelValues(r.hostID).Metric.Set(1.0)
 	}

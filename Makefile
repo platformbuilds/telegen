@@ -110,6 +110,9 @@ lint:
 
 ### Docker Targets ##########################################################
 
+# Docker buildx platforms
+PLATFORMS ?= linux/amd64,linux/arm64
+
 .PHONY: docker
 docker:
 	$(OCI_BIN) build -t $(IMG) .
@@ -117,6 +120,69 @@ docker:
 .PHONY: docker-push
 docker-push: docker
 	$(OCI_BIN) push $(IMG)
+
+# Build for specific platform (useful for M1 Mac building for amd64 servers)
+.PHONY: docker-amd64
+docker-amd64:
+	$(OCI_BIN) build --platform linux/amd64 -t $(IMG)-amd64 .
+
+.PHONY: docker-arm64
+docker-arm64:
+	$(OCI_BIN) build --platform linux/arm64 -t $(IMG)-arm64 .
+
+# Multi-platform build (requires buildx)
+.PHONY: docker-buildx-setup
+docker-buildx-setup:
+	@if ! $(OCI_BIN) buildx inspect telegen-builder >/dev/null 2>&1; then \
+		echo "### Creating buildx builder..."; \
+		$(OCI_BIN) buildx create --name telegen-builder --use --bootstrap; \
+	else \
+		echo "### Using existing buildx builder"; \
+		$(OCI_BIN) buildx use telegen-builder; \
+	fi
+
+# Build multi-platform image and load to local docker (only current platform)
+.PHONY: docker-buildx
+docker-buildx: docker-buildx-setup
+	$(OCI_BIN) buildx build \
+		--platform $(PLATFORMS) \
+		--build-arg VERSION=$(RELEASE_VERSION) \
+		--build-arg REVISION=$(RELEASE_REVISION) \
+		-t $(IMG) \
+		.
+
+# Build multi-platform and push to registry
+.PHONY: docker-buildx-push
+docker-buildx-push: docker-buildx-setup
+	$(OCI_BIN) buildx build \
+		--platform $(PLATFORMS) \
+		--build-arg VERSION=$(RELEASE_VERSION) \
+		--build-arg REVISION=$(RELEASE_REVISION) \
+		-t $(IMG) \
+		--push \
+		.
+
+# Build for amd64 and load locally (for M1 Mac users deploying to x86 servers)
+.PHONY: docker-for-server
+docker-for-server: docker-buildx-setup
+	$(OCI_BIN) buildx build \
+		--platform linux/amd64 \
+		--build-arg VERSION=$(RELEASE_VERSION) \
+		--build-arg REVISION=$(RELEASE_REVISION) \
+		-t $(IMG) \
+		--load \
+		.
+
+# Build for current platform and load locally
+.PHONY: docker-local
+docker-local: docker-buildx-setup
+	$(OCI_BIN) buildx build \
+		--platform linux/$(GOARCH) \
+		--build-arg VERSION=$(RELEASE_VERSION) \
+		--build-arg REVISION=$(RELEASE_REVISION) \
+		-t $(IMG) \
+		--load \
+		.
 
 ### Cleanup #################################################################
 
@@ -145,16 +211,33 @@ help:
 	@echo "Telegen - One Agent Many Signals"
 	@echo ""
 	@echo "Targets:"
-	@echo "  build          Build the telegen binary"
-	@echo "  build-all      Generate eBPF code (docker) and build"
-	@echo "  generate       Generate eBPF code locally (requires clang)"
-	@echo "  docker-generate Generate eBPF code via docker"
-	@echo "  run            Run telegen with example config"
-	@echo "  test           Run tests"
-	@echo "  lint           Run linter"
-	@echo "  docker         Build docker image"
-	@echo "  docker-push    Push docker image"
-	@echo "  clean          Remove build artifacts"
-	@echo "  dev            Development build (generate + build)"
-	@echo "  tools          Install development tools"
-	@echo "  help           Show this help"
+	@echo "  build              Build the telegen binary"
+	@echo "  build-all          Generate eBPF code (docker) and build"
+	@echo "  generate           Generate eBPF code locally (requires clang)"
+	@echo "  docker-generate    Generate eBPF code via docker"
+	@echo "  run                Run telegen with example config"
+	@echo "  test               Run tests"
+	@echo "  lint               Run linter"
+	@echo "  clean              Remove build artifacts"
+	@echo "  dev                Development build (generate + build)"
+	@echo "  tools              Install development tools"
+	@echo ""
+	@echo "Docker Targets:"
+	@echo "  docker             Build docker image (current platform)"
+	@echo "  docker-push        Build and push docker image"
+	@echo "  docker-amd64       Build for linux/amd64 only"
+	@echo "  docker-arm64       Build for linux/arm64 only"
+	@echo "  docker-buildx      Build multi-platform image (amd64+arm64)"
+	@echo "  docker-buildx-push Build multi-platform and push to registry"
+	@echo "  docker-for-server  Build amd64 image on M1 Mac for x86 servers"
+	@echo "  docker-local       Build for current platform with buildx"
+	@echo ""
+	@echo "Variables:"
+	@echo "  IMG                Container image name (default: $(IMG))"
+	@echo "  PLATFORMS          Build platforms (default: $(PLATFORMS))"
+	@echo "  VERSION            Image version tag (default: $(VERSION))"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make docker-for-server VERSION=v2.1.0  # Build amd64 on M1 Mac"
+	@echo "  make docker-buildx-push VERSION=v2.1.0 # Multi-arch push"
+	@echo "  make docker IMG=myregistry/telegen:dev # Custom image name"

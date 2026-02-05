@@ -14,19 +14,12 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/config/configgrpc"
-	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/config/configopaque"
 	"go.opentelemetry.io/collector/config/configoptional"
 	"go.opentelemetry.io/collector/config/configretry"
-	"go.opentelemetry.io/collector/config/configtelemetry"
-	"go.opentelemetry.io/collector/config/configtls"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/exporter"
-	"go.opentelemetry.io/collector/exporter/debugexporter"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
-	"go.opentelemetry.io/collector/exporter/otlpexporter"
-	"go.opentelemetry.io/collector/exporter/otlphttpexporter"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/metric"
@@ -60,6 +53,11 @@ func makeTracesReceiver(
 	selectorCfg *attributes.SelectorConfig,
 	input *msg.Queue[[]request.Span],
 ) *tracesOTELReceiver {
+	// Use the shared traces exporter from the unified OTLP pipeline if available
+	if ctxInfo.OTELTracesExporter != nil && cfg.SharedTracesExporter == nil {
+		cfg.SharedTracesExporter = ctxInfo.OTELTracesExporter
+	}
+
 	return &tracesOTELReceiver{
 		cfg:                cfg,
 		ctxInfo:            ctxInfo,
@@ -154,16 +152,22 @@ func (tr *tracesOTELReceiver) provideLoop(ctx context.Context) {
 		slog.Error("error creating traces exporter", "error", err)
 		return
 	}
-	defer func() {
-		err := exp.Shutdown(ctx)
+
+	// Only manage lifecycle if NOT using the shared exporter
+	// The shared exporter's lifecycle is managed by the unified OTLP pipeline
+	usingSharedExporter := tr.cfg.SharedTracesExporter != nil
+	if !usingSharedExporter {
+		defer func() {
+			err := exp.Shutdown(ctx)
+			if err != nil {
+				slog.Error("error shutting down traces exporter", "error", err)
+			}
+		}()
+		err = exp.Start(ctx, emptyHost{})
 		if err != nil {
-			slog.Error("error shutting down traces exporter", "error", err)
+			slog.Error("error starting traces exporter", "error", err)
+			return
 		}
-	}()
-	err = exp.Start(ctx, emptyHost{})
-	if err != nil {
-		slog.Error("error starting traces exporter", "error", err)
-		return
 	}
 
 	traceAttrs, err := tr.getConstantAttributes()
@@ -194,114 +198,34 @@ func instrumentTracesExporter(internalMetrics imetrics.Reporter, in exporter.Tra
 
 //nolint:cyclop
 func getTracesExporter(ctx context.Context, cfg otelcfg.TracesConfig, im imetrics.Reporter) (exporter.Traces, error) {
+	// SharedTracesExporter from the unified OTLP pipeline is required
+	// This follows the OpenTelemetry Collector standard
+	if cfg.SharedTracesExporter != nil {
+		slog.Info("using shared collector traces exporter from unified OTLP pipeline")
+		return instrumentTracesExporter(im, cfg.SharedTracesExporter), nil
+	}
+
+	// TracesConsumer is allowed for testing/vendored mode
 	if cfg.TracesConsumer != nil {
+		slog.Debug("instantiating Consumer TracesReporter (testing/vendored mode)")
 		newType, err := component.NewType("traces")
 		if err != nil {
 			return nil, err
 		}
 		set := getTraceSettings(newType, cfg.SDKLogLevel)
-		// TODO nimrod: do we need this?
 		exp, err := exporterhelper.NewTraces(ctx, set, cfg,
 			cfg.TracesConsumer.ConsumeTraces,
-			// exporterhelper.WithStart(exp.Start),
-			// exporterhelper.WithShutdown(exp.Shutdown),
 			exporterhelper.WithCapabilities(consumer.Capabilities{MutatesData: false}),
-			// exporterhelper.WithQueue(config.QueueConfig),
-			// exporterhelper.WithRetry(config.RetryConfig))
 		)
 		if err != nil {
 			return nil, err
 		}
-		exp = instrumentTracesExporter(im, exp)
-		return exp, nil
+		return instrumentTracesExporter(im, exp), nil
 	}
-	switch proto := cfg.GetProtocol(); proto {
-	case otelcfg.ProtocolHTTPJSON, otelcfg.ProtocolHTTPProtobuf, "": // zero value defaults to HTTP for backwards-compatibility
-		slog.Debug("instantiating HTTP TracesReporter", "protocol", proto)
-		var err error
 
-		opts, err := otelcfg.HTTPTracesEndpointOptions(&cfg)
-		if err != nil {
-			slog.Error("can't get HTTP traces endpoint options", "error", err)
-			return nil, err
-		}
-		factory := otlphttpexporter.NewFactory()
-		config := factory.CreateDefaultConfig().(*otlphttpexporter.Config)
-		config.QueueConfig = getQueueConfig(cfg)
-		config.RetryConfig = getRetrySettings(cfg)
-		config.ClientConfig = confighttp.ClientConfig{
-			Endpoint: opts.Scheme + "://" + opts.Endpoint + opts.BaseURLPath,
-			TLS: configtls.ClientConfig{
-				Insecure:           opts.Insecure,
-				InsecureSkipVerify: cfg.InsecureSkipVerify,
-			},
-			Headers: convertHeaders(opts.Headers),
-		}
-		slog.Debug("getTracesExporter: confighttp.ClientConfig created", "endpoint", config.ClientConfig.Endpoint)
-		set := getTraceSettings(factory.Type(), cfg.SDKLogLevel)
-		exp, err := factory.CreateTraces(ctx, set, config)
-		if err != nil {
-			slog.Error("can't create OTLP HTTP traces exporter", "error", err)
-			return nil, err
-		}
-		exp = instrumentTracesExporter(im, exp)
-		// TODO: remove this once the batcher helper is added to otlphttpexporter
-		return exporterhelper.NewTraces(ctx, set, cfg,
-			exp.ConsumeTraces,
-			exporterhelper.WithStart(exp.Start),
-			exporterhelper.WithShutdown(exp.Shutdown),
-			exporterhelper.WithCapabilities(consumer.Capabilities{MutatesData: false}),
-			exporterhelper.WithQueue(config.QueueConfig),
-			exporterhelper.WithRetry(config.RetryConfig))
-	case otelcfg.ProtocolGRPC:
-		slog.Debug("instantiating GRPC TracesReporter", "protocol", proto)
-		var err error
-		opts, err := otelcfg.GRPCTracesEndpointOptions(&cfg)
-		if err != nil {
-			slog.Error("can't get GRPC traces endpoint options", "error", err)
-			return nil, err
-		}
-		endpoint, _, err := otelcfg.ParseTracesEndpoint(&cfg)
-		if err != nil {
-			slog.Error("can't parse GRPC traces endpoint", "error", err)
-			return nil, err
-		}
-		factory := otlpexporter.NewFactory()
-		config := factory.CreateDefaultConfig().(*otlpexporter.Config)
-		config.QueueConfig = getQueueConfig(cfg)
-		config.RetryConfig = getRetrySettings(cfg)
-		config.ClientConfig = configgrpc.ClientConfig{
-			Endpoint: endpoint.String(),
-			TLS: configtls.ClientConfig{
-				Insecure:           opts.Insecure,
-				InsecureSkipVerify: cfg.InsecureSkipVerify,
-			},
-			Headers: convertHeaders(opts.Headers),
-		}
-		set := getTraceSettings(factory.Type(), cfg.SDKLogLevel)
-		exp, err := factory.CreateTraces(ctx, set, config)
-		if err != nil {
-			return nil, err
-		}
-		exp = instrumentTracesExporter(im, exp)
-		return exp, nil
-	case otelcfg.ProtocolDebug:
-		slog.Debug("instantiating Debug TracesReporter", "protocol", proto)
-		factory := debugexporter.NewFactory()
-		config := factory.CreateDefaultConfig().(*debugexporter.Config)
-		config.UseInternalLogger = false
-		config.Verbosity = configtelemetry.LevelDetailed
-		set := getTraceSettings(factory.Type(), cfg.SDKLogLevel)
-		exp, err := factory.CreateTraces(ctx, set, config)
-		if err != nil {
-			return nil, err
-		}
-		return exp, nil
-	default:
-		slog.Error(fmt.Sprintf("invalid protocol value: %q. Accepted values are: %s, %s, %s",
-			proto, otelcfg.ProtocolGRPC, otelcfg.ProtocolHTTPJSON, otelcfg.ProtocolHTTPProtobuf))
-		return nil, fmt.Errorf("invalid protocol value: %q", proto)
-	}
+	// No fallback - shared exporter is required
+	return nil, fmt.Errorf("SharedTracesExporter is required: telegen requires all signals to use the unified OTLP exporter. " +
+		"Ensure the unified OTLP pipeline is initialized before starting eBPF instrumentation")
 }
 
 func getQueueConfig(cfg otelcfg.TracesConfig) configoptional.Optional[exporterhelper.QueueBatchConfig] {

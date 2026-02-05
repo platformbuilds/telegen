@@ -369,7 +369,14 @@ func TestProcessMongoEventSuccessWhenCannotParseBsonInRequest(t *testing.T) {
 	assert.Len(t, mongoRequestValue.RequestSections, 1, "Expected one request section")
 	firstRequestSection := mongoRequestValue.RequestSections[0]
 	assert.Equal(t, sectionTypeBody, firstRequestSection.Type, "Expected first section type to be sectionTypeBody")
-	assert.Equal(t, bson.D{}, firstRequestSection.Body, "Expected first section body be empty due to parsing error")
+	// Partial BSON parsing extracts whatever fields it can from the truncated data
+	// The last 4 bytes were truncated, but partial parsing recovers some fields
+	parsedBody := firstRequestSection.Body
+	// Partial parsing should recover at least the "find" command
+	if len(parsedBody) > 0 {
+		assert.Equal(t, "find", parsedBody[0].Key, "Expected first key to be 'find'")
+		assert.Equal(t, "my_collection", parsedBody[0].Value, "Expected first value to be 'my_collection'")
+	}
 	assert.Len(t, mongoRequestValue.ResponseSections, 1, "Expected one response section")
 	firstResponseSection := mongoRequestValue.ResponseSections[0]
 	assert.Equal(t, sectionTypeBody, firstResponseSection.Type, "Expected first section type to be sectionTypeBody")

@@ -21,7 +21,7 @@ import (
 	"github.com/platformbuilds/telegen/internal/kube"
 	"github.com/platformbuilds/telegen/internal/kube/kubeflags"
 	"github.com/platformbuilds/telegen/internal/netolly/cidr"
-	"github.com/platformbuilds/telegen/internal/obiconfig"
+	config "github.com/platformbuilds/telegen/internal/obiconfig"
 	"github.com/platformbuilds/telegen/internal/transform"
 	"github.com/platformbuilds/telegen/pkg/export"
 	"github.com/platformbuilds/telegen/pkg/export/attributes"
@@ -260,7 +260,7 @@ discovery:
 			MinProcessAge:                   5 * time.Second,
 			DefaultExcludeServices: services.RegexDefinitionCriteria{
 				services.RegexSelector{
-					Path: services.NewRegexp("(?:^|/)(beyla$|alloy$|otelcol[^/]*$)"),
+					Path: services.NewRegexp("(?:^|/)(telegen$|alloy$|otelcol[^/]*$)"),
 				},
 				services.RegexSelector{
 					Metadata: map[string]*services.RegexpAttr{"k8s_namespace": &k8sDefaultNamespacesRegex},
@@ -268,7 +268,7 @@ discovery:
 			},
 			DefaultExcludeInstrument: services.GlobDefinitionCriteria{
 				services.GlobAttributes{
-					Path: services.NewGlob("{*beyla,*alloy,*ebpf-instrument,*otelcol,*otelcol-contrib,*otelcol-contrib[!/]*}"),
+					Path: services.NewGlob("{*telegen,*alloy,*ebpf-instrument,*otelcol,*otelcol-contrib,*otelcol-contrib[!/]*}"),
 				},
 				services.GlobAttributes{
 					Metadata: map[string]*services.GlobAttr{"k8s_namespace": &k8sDefaultNamespacesGlob},
@@ -554,19 +554,19 @@ time=\S+ level=DEBUG msg=debug arg=debug$`),
 func TestDefaultExclusionFilter(t *testing.T) {
 	c := DefaultConfig.Discovery.DefaultExcludeInstrument
 
-	assert.True(t, c[0].Path.MatchString("beyla"))
+	assert.True(t, c[0].Path.MatchString("telegen"))
 	assert.True(t, c[0].Path.MatchString("alloy"))
 	assert.True(t, c[0].Path.MatchString("otelcol-contrib"))
 
-	assert.False(t, c[0].Path.MatchString("/usr/bin/beyla/test"))
+	assert.False(t, c[0].Path.MatchString("/usr/bin/telegen/test"))
 	assert.False(t, c[0].Path.MatchString("/usr/bin/alloy/test"))
 	assert.False(t, c[0].Path.MatchString("/usr/bin/otelcol-contrib/test"))
 
-	assert.True(t, c[0].Path.MatchString("/beyla"))
+	assert.True(t, c[0].Path.MatchString("/telegen"))
 	assert.True(t, c[0].Path.MatchString("/alloy"))
 	assert.True(t, c[0].Path.MatchString("/otelcol-contrib"))
 
-	assert.True(t, c[0].Path.MatchString("/usr/bin/beyla"))
+	assert.True(t, c[0].Path.MatchString("/usr/bin/telegen"))
 	assert.True(t, c[0].Path.MatchString("/usr/bin/alloy"))
 	assert.True(t, c[0].Path.MatchString("/usr/bin/otelcol-contrib"))
 	assert.True(t, c[0].Path.MatchString("/usr/bin/otelcol-contrib123"))
@@ -575,19 +575,19 @@ func TestDefaultExclusionFilter(t *testing.T) {
 func TestDefaultLegacyExclusionFilter(t *testing.T) {
 	c := DefaultConfig.Discovery.DefaultExcludeServices
 
-	assert.True(t, c[0].Path.MatchString("beyla"))
+	assert.True(t, c[0].Path.MatchString("telegen"))
 	assert.True(t, c[0].Path.MatchString("alloy"))
 	assert.True(t, c[0].Path.MatchString("otelcol-contrib"))
 
-	assert.False(t, c[0].Path.MatchString("/usr/bin/beyla/test"))
+	assert.False(t, c[0].Path.MatchString("/usr/bin/telegen/test"))
 	assert.False(t, c[0].Path.MatchString("/usr/bin/alloy/test"))
 	assert.False(t, c[0].Path.MatchString("/usr/bin/otelcol-contrib/test"))
 
-	assert.True(t, c[0].Path.MatchString("/beyla"))
+	assert.True(t, c[0].Path.MatchString("/telegen"))
 	assert.True(t, c[0].Path.MatchString("/alloy"))
 	assert.True(t, c[0].Path.MatchString("/otelcol-contrib"))
 
-	assert.True(t, c[0].Path.MatchString("/usr/bin/beyla"))
+	assert.True(t, c[0].Path.MatchString("/usr/bin/telegen"))
 	assert.True(t, c[0].Path.MatchString("/usr/bin/alloy"))
 	assert.True(t, c[0].Path.MatchString("/usr/bin/otelcol-contrib"))
 	assert.True(t, c[0].Path.MatchString("/usr/bin/otelcol-contrib123"))

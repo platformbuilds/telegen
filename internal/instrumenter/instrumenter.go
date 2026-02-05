@@ -10,9 +10,11 @@ import (
 	"sync"
 	"text/template"
 
+	"go.opentelemetry.io/collector/exporter"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/platformbuilds/telegen/internal/appolly/core"
+	appolly "github.com/platformbuilds/telegen/internal/appolly/core"
 	"github.com/platformbuilds/telegen/internal/kube"
 	"github.com/platformbuilds/telegen/internal/netolly/agent"
 	"github.com/platformbuilds/telegen/internal/netolly/flowdef"
@@ -31,6 +33,9 @@ func Run(
 	ctx context.Context, cfg *obi.Config,
 	opts ...Option,
 ) error {
+	if cfg == nil {
+		return fmt.Errorf("config cannot be nil")
+	}
 	ctxInfo, err := BuildCommonContextInfo(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("can't build common context info: %w", err)
@@ -42,6 +47,12 @@ func RunWithContextInfo(
 	ctx context.Context, cfg *obi.Config, ctxInfo *global.ContextInfo,
 	opts ...Option,
 ) error {
+	if cfg == nil {
+		return fmt.Errorf("config cannot be nil")
+	}
+	if ctxInfo == nil {
+		return fmt.Errorf("context info cannot be nil")
+	}
 	for _, opt := range opts {
 		opt(ctxInfo)
 	}
@@ -106,7 +117,7 @@ func setupAppO11y(ctx context.Context, ctxInfo *global.ContextInfo, config *obi.
 }
 
 func setupNetO11y(ctx context.Context, ctxInfo *global.ContextInfo, cfg *obi.Config) error {
-	slog.Info("starting Beyla in Network metrics mode")
+	slog.Info("starting telegen in Network metrics mode")
 	flowsAgent, err := agent.FlowsAgent(ctxInfo, cfg)
 	if err != nil {
 		slog.Debug("can't start network metrics capture", "error", err)
@@ -142,6 +153,25 @@ func buildServiceNameTemplate(config *obi.Config) (*template.Template, error) {
 func BuildCommonContextInfo(
 	ctx context.Context, config *obi.Config,
 ) (*global.ContextInfo, error) {
+	return BuildCommonContextInfoWithExporter(ctx, config, nil, nil)
+}
+
+// BuildCommonContextInfoWithExporter is like BuildCommonContextInfo but accepts shared
+// exporters from the unified OTLP pipeline. When the shared exporters are non-nil,
+// all eBPF metrics/traces will be exported through these shared exporters instead of creating new ones.
+// This enables the telegen design principle of "one agent, one exporter connection".
+//
+// Parameters:
+//   - sharedMetricsExporter: SDK-compatible metrics exporter (sdkmetric.Exporter)
+//   - sharedTracesExporter: Collector-compatible traces exporter (exporter.Traces)
+func BuildCommonContextInfoWithExporter(
+	ctx context.Context, config *obi.Config,
+	sharedMetricsExporter sdkmetric.Exporter,
+	sharedTracesExporter exporter.Traces,
+) (*global.ContextInfo, error) {
+	if config == nil {
+		return nil, fmt.Errorf("config cannot be nil")
+	}
 	// merging deprecated resource labels definition for backwards compatibility
 	resourceLabels := config.Attributes.Kubernetes.ResourceLabels
 	if resourceLabels == nil {
@@ -168,8 +198,12 @@ func BuildCommonContextInfo(
 
 	promMgr := &connector.PrometheusManager{}
 	ctxInfo := &global.ContextInfo{
-		Prometheus:          promMgr,
-		OTELMetricsExporter: &otelcfg.MetricsExporterInstancer{Cfg: &config.OTELMetrics},
+		Prometheus: promMgr,
+		OTELMetricsExporter: &otelcfg.MetricsExporterInstancer{
+			Cfg:            &config.OTELMetrics,
+			SharedExporter: sharedMetricsExporter,
+		},
+		OTELTracesExporter: sharedTracesExporter,
 	}
 	if config.Attributes.HostID.Override == "" {
 		ctxInfo.FetchHostID(ctx, config.Attributes.HostID.FetchTimeout)
@@ -227,7 +261,7 @@ func internalMetrics(
 // attributeGroups specifies, based in the provided configuration, which groups of attributes
 // need to be enabled by default for the diverse metrics
 func attributeGroups(config *obi.Config, ctxInfo *global.ContextInfo) {
-	if ctxInfo.K8sInformer.IsKubeEnabled() {
+	if ctxInfo.K8sInformer != nil && ctxInfo.K8sInformer.IsKubeEnabled() {
 		ctxInfo.MetricAttributeGroups.Add(attributes.GroupKubernetes)
 	}
 	if config.Routes != nil {

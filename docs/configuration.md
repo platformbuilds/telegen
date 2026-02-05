@@ -446,6 +446,63 @@ logs:
 
 ## Export Configuration
 
+Telegen uses a **Common Exporter Pipeline** architecture where all signals share
+a unified OTLP export configuration.
+
+### Common Exporter Pipeline Architecture
+
+All telegen signals (kube_metrics, node_exporter, ebpf, jfr, logs) flow through
+a shared OTLP exporter, ensuring consistent behavior and simplified management:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              TELEGEN AGENT                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────┐  ┌─────┐  │
+│   │kube_metrics │  │node_exporter│  │    ebpf     │  │   jfr   │  │logs │  │
+│   │ (kubestate  │  │   (host     │  │  (traces +  │  │(to JSON │  │     │  │
+│   │ + cadvisor) │  │   metrics)  │  │   metrics)  │  │  logs)  │  │     │  │
+│   └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └────┬────┘  └──┬──┘  │
+│          │                │                │              │          │     │
+│          └────────────────┴────────────────┴──────────────┴──────────┘     │
+│                                    │                                        │
+│                       ┌────────────▼────────────┐                          │
+│                       │  COMMON OTLP EXPORTER   │                          │
+│                       │    (exports.otlp)       │                          │
+│                       │                         │                          │
+│                       │  grpc: :4317            │                          │
+│                       │  http: :4318            │                          │
+│                       └────────────┬────────────┘                          │
+│                                    │                                        │
+└────────────────────────────────────┼────────────────────────────────────────┘
+                                     │
+                                     ▼
+                    ┌────────────────────────────────┐
+                    │        OTEL COLLECTOR          │
+                    └────────────────────────────────┘
+```
+
+### Benefits
+
+- **Connection pooling** - Single gRPC/HTTP connection to collector
+- **Consistent configuration** - TLS, compression, timeouts configured once
+- **Simplified management** - Change endpoint once, affects all signals
+- **Reduced resource usage** - No per-signal connection overhead
+
+### Signal-to-Exporter Mapping
+
+| Signal | Configuration | Export Path |
+|--------|--------------|-------------|
+| kube_metrics | `kube_metrics.streaming.use_otlp: true` | `exports.otlp.grpc` |
+| node_exporter | `node_exporter.export.use_otlp: true` | `exports.otlp.grpc` |
+| ebpf traces | `ebpf.otel_traces_export.protocol: grpc` | `exports.otlp.grpc` |
+| ebpf metrics | `ebpf.otel_metrics_export.protocol: grpc` | `exports.otlp.grpc` |
+| jfr logs | `pipelines.jfr.direct_export.log_export.otlp_enabled: true` | `exports.otlp.http` |
+| app logs | `pipelines.logs.enabled: true` | `exports.otlp.http` |
+
+### OTLP Configuration
+
 ```yaml
 exports:
   # OTLP export
@@ -526,29 +583,47 @@ exports:
 
 ## Self-Telemetry Configuration
 
+The `selfTelemetry` section configures the agent's health endpoints and internal metrics.
+
 ```yaml
 selfTelemetry:
-  # Metrics endpoint
-  listen: ":19090"
+  # HTTP endpoint for health probes and Prometheus metrics
+  # Serves: /healthz, /readyz, /metrics
+  listen: ":8080"
   
-  # Health check endpoint
-  health_listen: ":8080"
-  
-  # Enable pprof endpoints
-  pprof: false
-  
-  # Metrics prefix
-  metrics_prefix: "telegen_"
-  
-  # Internal metrics
-  internal_metrics:
-    enabled: true
-    # eBPF program metrics
-    ebpf: true
-    # Memory usage metrics
-    memory: true
-    # Queue metrics
-    queues: true
+  # Prometheus metrics namespace prefix
+  prometheus_namespace: "telegen"
+```
+
+### Endpoints
+
+| Path | Description |
+|------|-------------|
+| `/healthz` | Liveness probe - returns 200 if agent is alive |
+| `/readyz` | Readiness probe - returns 200 when pipeline is ready |
+| `/metrics` | Prometheus metrics for agent internals |
+
+### Health Probes for Kubernetes
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  periodSeconds: 20
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 8080
+  periodSeconds: 10
+
+startupProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  failureThreshold: 30
+  periodSeconds: 10
 ```
 
 ## Environment Variables

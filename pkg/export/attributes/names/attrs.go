@@ -94,7 +94,7 @@ const (
 // This value can be overridden when OBI is vendored as a library (e.g. from the OTEL collector)
 var (
 	VendorPrefix  = "obi"
-	VendorSDKName = "opentelemetry-ebpf-instrumentation"
+	VendorSDKName = "telegen"
 )
 
 var OBIIP = Name("obi.ip")

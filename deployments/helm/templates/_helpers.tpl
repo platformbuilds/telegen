@@ -706,6 +706,7 @@ exports:
     http:
       enabled: {{ eq (.Values.otlp.protocol | default "grpc") "http" }}
       endpoint: {{ include "telegen.otlpEndpoint" . | quote }}
+      insecure: {{ .Values.otlp.insecure | default true }}
       traces_path: "/v1/traces"
       logs_path: "/v1/logs"
       metrics_path: "/v1/metrics"
@@ -986,6 +987,7 @@ exports:
     http:
       enabled: {{ eq (.Values.otlp.protocol | default "grpc") "http" }}
       endpoint: {{ include "telegen.otlpEndpoint" . | quote }}
+      insecure: {{ .Values.otlp.insecure | default true }}
       traces_path: "/v1/traces"
       logs_path: "/v1/logs"
       metrics_path: "/v1/metrics"

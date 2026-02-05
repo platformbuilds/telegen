@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/collector/consumer"
+	"go.opentelemetry.io/collector/exporter"
 
 	"github.com/platformbuilds/telegen/internal/appolly/services"
 	"github.com/platformbuilds/telegen/pkg/export/instrumentations"
@@ -32,6 +33,9 @@ type TracesConfig struct {
 
 	// Allows configuration of which instrumentations should be enabled, e.g. http, grpc, sql...
 	Instrumentations []instrumentations.Instrumentation `yaml:"instrumentations" env:"OTEL_EBPF_TRACES_INSTRUMENTATIONS" envSeparator:","`
+
+	// Insecure disables TLS for gRPC/HTTP connections (plain text)
+	Insecure bool `yaml:"insecure" env:"OTEL_EXPORTER_OTLP_INSECURE"`
 
 	// InsecureSkipVerify is not standard, so we don't follow the same naming convention
 	InsecureSkipVerify bool `yaml:"insecure_skip_verify" env:"OTEL_EBPF_INSECURE_SKIP_VERIFY"`
@@ -63,6 +67,11 @@ type TracesConfig struct {
 
 	// InjectHeaders allows injecting custom headers to the HTTP OTLP exporter
 	InjectHeaders func(dst map[string]string) `yaml:"-" env:"-"`
+
+	// SharedTracesExporter is the shared Collector-compatible traces exporter from the unified OTLP pipeline.
+	// When set, this exporter will be used instead of creating a new one.
+	// This follows the OpenTelemetry Collector standard (exporter.Traces interface).
+	SharedTracesExporter exporter.Traces `yaml:"-" env:"-"`
 }
 
 func (m TracesConfig) MarshalYAML() (any, error) {
@@ -100,13 +109,13 @@ func (m *TracesConfig) OTLPTracesEndpoint() (string, bool) {
 }
 
 func (m *TracesConfig) guessProtocol() Protocol {
-	// If no explicit protocol is set, we guess it it from the metrics enpdoint port
+	// If no explicit protocol is set, we guess it from the endpoint port
 	// (assuming it uses a standard port or a development-like form like 14317, 24317, 14318...)
-	ep, _, err := ParseTracesEndpoint(m)
-	if err == nil {
-		if strings.HasSuffix(ep.Port(), UsualPortGRPC) {
+	port := extractPortFromEndpoint(m.TracesEndpoint, m.CommonEndpoint)
+	if port != "" {
+		if strings.HasSuffix(port, UsualPortGRPC) {
 			return ProtocolGRPC
-		} else if strings.HasSuffix(ep.Port(), UsualPortHTTP) {
+		} else if strings.HasSuffix(port, UsualPortHTTP) {
 			return ProtocolHTTPProtobuf
 		}
 	}
@@ -122,6 +131,7 @@ func (m *TracesConfig) guessProtocol() Protocol {
 // - https://otlp-gateway-${GRAFANA_CLOUD_ZONE}.grafana.net/otlp, if GRAFANA_CLOUD_ZONE is defined
 // If, by some reason, Grafana changes its OTLP Gateway URL in a distant future, you can still point to the
 // correct URL with the OTLP_EXPORTER_... variables.
+// NOTE: This function is for HTTP endpoints which require a scheme (http:// or https://).
 func ParseTracesEndpoint(cfg *TracesConfig) (*url.URL, bool, error) {
 	endpoint, isCommon := cfg.OTLPTracesEndpoint()
 
@@ -130,9 +140,36 @@ func ParseTracesEndpoint(cfg *TracesConfig) (*url.URL, bool, error) {
 		return nil, isCommon, fmt.Errorf("parsing endpoint URL %s: %w", endpoint, err)
 	}
 	if murl.Scheme == "" || murl.Host == "" {
-		return nil, isCommon, fmt.Errorf("URL %q must have a scheme and a host", endpoint)
+		return nil, isCommon, fmt.Errorf("HTTP URL %q must have a scheme and a host", endpoint)
 	}
 	return murl, isCommon, nil
+}
+
+// parseGRPCTracesEndpoint parses a gRPC endpoint which can be in either:
+// - host:port format (e.g., "otel-collector.svc:4317") - used by gRPC SDK
+// - URL format with scheme (e.g., "http://otel-collector.svc:4317") - scheme used for insecure detection
+// gRPC endpoints do NOT require a URL scheme - the gRPC SDK expects just host:port.
+func parseGRPCTracesEndpoint(cfg *TracesConfig) (endpoint string, insecure bool, isCommon bool, err error) {
+	ep, isCommon := cfg.OTLPTracesEndpoint()
+	if ep == "" {
+		return "", false, isCommon, fmt.Errorf("no traces endpoint configured")
+	}
+
+	// Try parsing as URL first
+	murl, parseErr := url.Parse(ep)
+	if parseErr == nil && murl.Scheme != "" && murl.Host != "" {
+		// Valid URL with scheme - extract host:port and check if insecure
+		return murl.Host, murl.Scheme == "http" || murl.Scheme == "unix", isCommon, nil
+	}
+
+	// Not a URL with scheme - treat as host:port (standard gRPC format)
+	// Validate it looks like host:port
+	if !strings.Contains(ep, ":") {
+		return "", false, isCommon, fmt.Errorf("gRPC endpoint %q must be in host:port format", ep)
+	}
+
+	// For plain host:port, default to secure (TLS) unless insecure_skip_verify is set
+	return ep, false, isCommon, nil
 }
 
 func HTTPTracesEndpointOptions(cfg *TracesConfig) (OTLPOptions, error) {
@@ -149,8 +186,9 @@ func HTTPTracesEndpointOptions(cfg *TracesConfig) (OTLPOptions, error) {
 	setTracesProtocol(cfg)
 	opts.Scheme = murl.Scheme
 	opts.Endpoint = murl.Host
-	if murl.Scheme == "http" || murl.Scheme == "unix" {
-		log.Debug("Specifying insecure connection", "scheme", murl.Scheme)
+	// Insecure can be set via config field or inferred from URL scheme (http://)
+	if cfg.Insecure || murl.Scheme == "http" || murl.Scheme == "unix" {
+		log.Debug("Specifying insecure connection", "fromConfig", cfg.Insecure, "scheme", murl.Scheme)
 		opts.Insecure = true
 	}
 	// If the value is set from the OTEL_EXPORTER_OTLP_ENDPOINT common property, we need to add /v1/traces to the path
@@ -179,16 +217,19 @@ func HTTPTracesEndpointOptions(cfg *TracesConfig) (OTLPOptions, error) {
 func GRPCTracesEndpointOptions(cfg *TracesConfig) (OTLPOptions, error) {
 	opts := OTLPOptions{Headers: map[string]string{}}
 	log := tlog().With("transport", "grpc")
-	murl, _, err := ParseTracesEndpoint(cfg)
+
+	// Use gRPC-specific parser that accepts host:port format
+	endpoint, insecureFromScheme, _, err := parseGRPCTracesEndpoint(cfg)
 	if err != nil {
 		return opts, err
 	}
 
 	log.Debug("Configuring exporter", "protocol",
-		cfg.Protocol, "tracesProtocol", cfg.TracesProtocol, "endpoint", murl.Host)
-	opts.Endpoint = murl.Host
-	if murl.Scheme == "http" || murl.Scheme == "unix" {
-		log.Debug("Specifying insecure connection", "scheme", murl.Scheme)
+		cfg.Protocol, "tracesProtocol", cfg.TracesProtocol, "endpoint", endpoint)
+	opts.Endpoint = endpoint
+	// Insecure can be set via config field or inferred from URL scheme (http://)
+	if cfg.Insecure || insecureFromScheme {
+		log.Debug("Specifying insecure connection", "fromConfig", cfg.Insecure, "fromScheme", insecureFromScheme)
 		opts.Insecure = true
 	}
 

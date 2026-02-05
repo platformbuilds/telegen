@@ -80,6 +80,21 @@ func NewRouteHarvester(cfg *services.RouteHarvestingConfig, disabled []string, t
 }
 
 func (h *RouteHarvester) HarvestRoutes(fileInfo *exec.FileInfo) (*RouteHarvesterResult, error) {
+	// Early return for unsupported languages - no need to acquire lock or set up context
+	switch fileInfo.Service.SDKLanguage {
+	case svc.InstrumentableJava:
+		if _, ok := h.disabled[svc.InstrumentableJava]; ok {
+			return nil, nil
+		}
+	case svc.InstrumentableNodejs:
+		if _, ok := h.disabled[svc.InstrumentableNodejs]; ok {
+			return nil, nil
+		}
+	default:
+		// Route harvesting is only supported for Java and Node.js
+		return nil, nil
+	}
+
 	// Ensure we harvest one by one
 	h.mux.Lock()
 	defer h.mux.Unlock()
@@ -115,31 +130,20 @@ func (h *RouteHarvester) HarvestRoutes(fileInfo *exec.FileInfo) (*RouteHarvester
 
 		switch fileInfo.Service.SDKLanguage {
 		case svc.InstrumentableJava:
-			if _, ok := h.disabled[svc.InstrumentableJava]; !ok {
-				r, err := h.javaExtractRoutes(fileInfo.Pid)
-				if err != nil {
-					resultChan <- result{err: err}
-					return
-				}
-				resultChan <- result{r: r}
-			} else {
-				resultChan <- result{r: nil}
+			r, err := h.javaExtractRoutes(fileInfo.Pid)
+			if err != nil {
+				resultChan <- result{err: err}
+				return
 			}
+			resultChan <- result{r: r}
 		case svc.InstrumentableNodejs:
-			if _, ok := h.disabled[svc.InstrumentableNodejs]; !ok {
-				r, err := h.nodeExtractRoutes(fileInfo.Pid)
-				if err != nil {
-					resultChan <- result{err: err}
-					return
-				}
-				h.log.Debug("found node js application routes", "routes", r.Routes)
-
-				resultChan <- result{r: r}
-			} else {
-				resultChan <- result{r: nil}
+			r, err := h.nodeExtractRoutes(fileInfo.Pid)
+			if err != nil {
+				resultChan <- result{err: err}
+				return
 			}
-		default:
-			resultChan <- result{r: nil}
+			h.log.Debug("found node js application routes", "routes", r.Routes)
+			resultChan <- result{r: r}
 		}
 	}()
 

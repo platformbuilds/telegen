@@ -89,6 +89,10 @@ func (ta *traceAttacher) attacherLoop(_ context.Context) (swarm.RunFunc, error) 
 		ta.javaInjector = javaInjector
 	}
 	ta.processInstances = maps.MultiCounter[uint64]{}
+	// EbpfEventContext must be set before reaching this point
+	if ta.EbpfEventContext == nil {
+		return nil, fmt.Errorf("EbpfEventContext is nil - must be set before starting attacher")
+	}
 	ta.EbpfEventContext.CommonPIDsFilter = ebpfcommon.NewPIDsFilter(&ta.Cfg.Discovery, slog.With("component", "ebpfCommon.CommonPIDsFilter"), ta.Metrics)
 	ta.routeHarvester = harvest.NewRouteHarvester(&ta.Cfg.Discovery.RouteHarvestConfig, ta.Cfg.Discovery.DisabledRouteHarvesters, ta.Cfg.Discovery.RouteHarvesterTimeout)
 	ta.processAgeFunc = ProcessAgeFunc()

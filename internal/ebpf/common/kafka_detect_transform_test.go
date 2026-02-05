@@ -32,6 +32,9 @@ func TestProcessKafkaRequest(t *testing.T) {
 				ClientID:  "sarama",
 				Operation: Fetch,
 				Topic:     "important",
+				Topics: []TopicInfo{
+					{Name: "important", PartitionInfo: &PartitionInfo{Partition: 0, Offset: 19}},
+				},
 				PartitionInfo: &PartitionInfo{
 					Partition: 0,
 					Offset:    19,
@@ -74,6 +77,9 @@ func TestProcessKafkaRequest(t *testing.T) {
 				ClientID:  "consumer-fraud-detection-1",
 				Operation: Fetch,
 				Topic:     "*",
+				Topics: []TopicInfo{
+					{Name: "*", PartitionInfo: nil},
+				},
 			},
 		},
 		{
@@ -119,6 +125,9 @@ func TestProcessKafkaRequest(t *testing.T) {
 				ClientID:  "consumer-fraud-detection-1",
 				Operation: Fetch,
 				Topic:     "topic1",
+				Topics: []TopicInfo{
+					{Name: "topic1", PartitionInfo: nil},
+				},
 			},
 		},
 		{
@@ -128,6 +137,9 @@ func TestProcessKafkaRequest(t *testing.T) {
 				ClientID:  "sarama",
 				Operation: Produce,
 				Topic:     "important",
+				Topics: []TopicInfo{
+					{Name: "important", PartitionInfo: &PartitionInfo{Partition: 0, Offset: 0}},
+				},
 				PartitionInfo: &PartitionInfo{
 					Partition: 0,
 				},
@@ -140,6 +152,9 @@ func TestProcessKafkaRequest(t *testing.T) {
 				ClientID:  "producer-1",
 				Operation: Produce,
 				Topic:     "my-topic",
+				Topics: []TopicInfo{
+					{Name: "my-topic", PartitionInfo: &PartitionInfo{Partition: 0, Offset: 0}},
+				},
 				PartitionInfo: &PartitionInfo{
 					Partition: 0,
 				},

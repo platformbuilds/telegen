@@ -32,11 +32,17 @@ const (
 // Some cloud providers store the cluster name as a Node label.
 // This greatly facilitates the retrieval of the cluster name, as we
 // don't need to rely on provider-specific APIs.
-// TODO: update with labels from other providers, or newer labels as long as specs are updated
+// Labels are ordered by preference: stable labels first, then provider-specific,
+// then deprecated/alpha labels as fallback for older clusters.
 var clusterNameNodeLabels = []string{
-	"alpha.eksctl.io/cluster-name",
+	// Cluster API stable label (preferred)
 	"cluster.x-k8s.io/cluster-name",
-	"kubernetes.azure.com/cluster",
+	// Cloud provider specific labels
+	"kubernetes.azure.com/cluster",   // AKS
+	"eks.amazonaws.com/cluster-name", // EKS (if available)
+	"cloud.google.com/gke-nodepool",  // GKE (indicates cluster context)
+	// Alpha/deprecated labels (fallback for older clusters)
+	"alpha.eksctl.io/cluster-name", // eksctl alpha label
 }
 
 func klog() *slog.Logger {

@@ -14,7 +14,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
@@ -41,13 +41,11 @@ func NewOTLPBridge(
 	enableMeta bool,
 ) *OTLPBridge {
 	if res == nil {
-		res, _ = resource.New(context.Background(),
-			resource.WithSchemaURL(semconv.SchemaURL),
-			resource.WithOS(),
-			resource.WithHost(),
-			resource.WithAttributes(
-				semconv.ServiceName("telegen-kubemetrics"),
-			),
+		// Use NewSchemaless to avoid schema URL conflicts with SDK internal detectors.
+		// The shared OTLP exporter already has the proper resource with schema URL.
+		res = resource.NewSchemaless(
+			semconv.ServiceName("telegen-kubemetrics"),
+			semconv.ServiceVersion("1.0.0"),
 		)
 	}
 

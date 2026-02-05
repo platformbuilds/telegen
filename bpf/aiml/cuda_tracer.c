@@ -83,6 +83,28 @@ struct {
     __type(value, u8[CUDA_MAX_KERNEL_NAME]);
 } cuda_kernel_names SEC(".maps");
 
+// Per-CPU scratch space to avoid stack overflow (BPF stack limit is 512 bytes)
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, u32);
+    __type(value, struct cuda_kernel_info);
+} cuda_kernel_info_scratch SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, u32);
+    __type(value, cuda_event_t);
+} cuda_event_scratch SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, u32);
+    __type(value, struct cuda_memop_info);
+} cuda_memop_scratch SEC(".maps");
+
 // Submit a CUDA event to the ring buffer
 static __always_inline int submit_cuda_event(cuda_event_t *event) {
     cuda_event_t *e = bpf_ringbuf_reserve(&cuda_events, sizeof(*event), 0);
@@ -96,156 +118,206 @@ static __always_inline int submit_cuda_event(cuda_event_t *event) {
 }
 
 // Track cudaLaunchKernel calls
+// Note: cudaLaunchKernel has 10 parameters which exceeds BPF_UPROBE limit of 9.
+// We use BPF_KPROBE pattern to manually read arguments from pt_regs.
+// Large structs are stored in per-CPU maps to avoid stack overflow.
 SEC("uprobe/cudaLaunchKernel")
-int BPF_UPROBE(cudaLaunchKernel, 
-               void *func,        // Kernel function pointer
-               u32 grid_x, u32 grid_y, u32 grid_z,
-               u32 block_x, u32 block_y, u32 block_z,
-               void **args,
-               u64 shared_mem,
-               void *stream) {
-    
+int BPF_KPROBE(cudaLaunchKernel) {
+    u32 zero = 0;
+
+    // Get scratch space from per-CPU maps (avoids 512-byte stack limit)
+    struct cuda_kernel_info *info = bpf_map_lookup_elem(&cuda_kernel_info_scratch, &zero);
+    cuda_event_t *event = bpf_map_lookup_elem(&cuda_event_scratch, &zero);
+    if (!info || !event) {
+        return 0;
+    }
+
+    // Zero out the scratch space
+    __builtin_memset(info, 0, sizeof(*info));
+    __builtin_memset(event, 0, sizeof(*event));
+
+    // Manually read arguments since we have more than 9 parameters
+    // cudaLaunchKernel(func, grid_x, grid_y, grid_z, block_x, block_y, block_z, args, shared_mem, stream)
+    void *func = (void *)PT_REGS_PARM1(ctx);
+    u32 grid_x = (u32)PT_REGS_PARM2(ctx);
+    u32 grid_y = (u32)PT_REGS_PARM3(ctx);
+    u32 grid_z = (u32)PT_REGS_PARM4(ctx);
+    u32 block_x = (u32)PT_REGS_PARM5(ctx);
+    u32 block_y = (u32)PT_REGS_PARM6(ctx);
+    // Args 7+ are on the stack for x86_64 calling convention
+    u32 block_z = 0;
+    u64 shared_mem = 0;
+    void *stream = NULL;
+    bpf_probe_read_user(&block_z, sizeof(block_z), (void *)(PT_REGS_SP(ctx) + 8));
+    bpf_probe_read_user(&shared_mem, sizeof(shared_mem), (void *)(PT_REGS_SP(ctx) + 24));
+    bpf_probe_read_user(&stream, sizeof(stream), (void *)(PT_REGS_SP(ctx) + 32));
+
     u64 pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = pid_tgid >> 32;
     u32 tid = pid_tgid;
     u64 now = bpf_ktime_get_ns();
-    
-    // Create kernel tracking entry
-    struct cuda_kernel_info info = {};
-    info.start_time = now;
-    info.pid = pid;
-    info.tid = tid;
-    info.stream_id = (u64)stream;
-    info.grid_dim_x = grid_x;
-    info.grid_dim_y = grid_y;
-    info.grid_dim_z = grid_z;
-    info.block_dim_x = block_x;
-    info.block_dim_y = block_y;
-    info.block_dim_z = block_z;
-    info.shared_mem_bytes = (u32)shared_mem;
-    
+
+    // Populate kernel tracking entry
+    info->start_time = now;
+    info->pid = pid;
+    info->tid = tid;
+    info->stream_id = (u64)stream;
+    info->grid_dim_x = grid_x;
+    info->grid_dim_y = grid_y;
+    info->grid_dim_z = grid_z;
+    info->block_dim_x = block_x;
+    info->block_dim_y = block_y;
+    info->block_dim_z = block_z;
+    info->shared_mem_bytes = (u32)shared_mem;
+
     // Look up kernel name from cache
     u64 func_ptr = (u64)func;
     u8 *name = bpf_map_lookup_elem(&cuda_kernel_names, &func_ptr);
     if (name) {
-        __builtin_memcpy(info.kernel_name, name, CUDA_MAX_KERNEL_NAME);
+        __builtin_memcpy(info->kernel_name, name, CUDA_MAX_KERNEL_NAME);
     }
-    
+
     // Store in active kernels map
     u64 kernel_id = (pid_tgid << 16) | (now & 0xFFFF);
-    bpf_map_update_elem(&cuda_active_kernels, &kernel_id, &info, BPF_ANY);
-    
-    // Submit launch event
-    cuda_event_t event = {};
-    event.timestamp_ns = now;
-    event.pid = pid;
-    event.tid = tid;
-    event.event_type = CUDA_EVENT_KERNEL_LAUNCH;
-    event.stream_id = (u64)stream;
-    event.grid_dim_x = grid_x;
-    event.grid_dim_y = grid_y;
-    event.grid_dim_z = grid_z;
-    event.block_dim_x = block_x;
-    event.block_dim_y = block_y;
-    event.block_dim_z = block_z;
-    event.shared_mem_bytes = (u32)shared_mem;
-    __builtin_memcpy(event.kernel_name, info.kernel_name, CUDA_MAX_KERNEL_NAME);
-    
-    submit_cuda_event(&event);
-    
+    bpf_map_update_elem(&cuda_active_kernels, &kernel_id, info, BPF_ANY);
+
+    // Populate launch event
+    event->timestamp_ns = now;
+    event->pid = pid;
+    event->tid = tid;
+    event->event_type = CUDA_EVENT_KERNEL_LAUNCH;
+    event->stream_id = (u64)stream;
+    event->grid_dim_x = grid_x;
+    event->grid_dim_y = grid_y;
+    event->grid_dim_z = grid_z;
+    event->block_dim_x = block_x;
+    event->block_dim_y = block_y;
+    event->block_dim_z = block_z;
+    event->shared_mem_bytes = (u32)shared_mem;
+    __builtin_memcpy(event->kernel_name, info->kernel_name, CUDA_MAX_KERNEL_NAME);
+
+    submit_cuda_event(event);
+
     return 0;
 }
 
 // Track cudaMemcpy calls
 SEC("uprobe/cudaMemcpy")
 int BPF_UPROBE(cudaMemcpy, void *dst, void *src, u64 count, u32 kind) {
+    u32 zero = 0;
+
+    // Get scratch space from per-CPU maps
+    struct cuda_memop_info *info = bpf_map_lookup_elem(&cuda_memop_scratch, &zero);
+    cuda_event_t *event = bpf_map_lookup_elem(&cuda_event_scratch, &zero);
+    if (!info || !event) {
+        return 0;
+    }
+
+    __builtin_memset(info, 0, sizeof(*info));
+    __builtin_memset(event, 0, sizeof(*event));
+
     u64 pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = pid_tgid >> 32;
     u32 tid = pid_tgid;
     u64 now = bpf_ktime_get_ns();
-    
-    // Create memop tracking entry
-    struct cuda_memop_info info = {};
-    info.start_time = now;
-    info.pid = pid;
-    info.tid = tid;
-    info.src_ptr = (u64)src;
-    info.dst_ptr = (u64)dst;
-    info.bytes = count;
-    info.memcpy_kind = kind;
-    
+
+    // Populate memop tracking entry
+    info->start_time = now;
+    info->pid = pid;
+    info->tid = tid;
+    info->src_ptr = (u64)src;
+    info->dst_ptr = (u64)dst;
+    info->bytes = count;
+    info->memcpy_kind = kind;
+
     u64 memop_id = (pid_tgid << 16) | (now & 0xFFFF);
-    bpf_map_update_elem(&cuda_active_memops, &memop_id, &info, BPF_ANY);
-    
+    bpf_map_update_elem(&cuda_active_memops, &memop_id, info, BPF_ANY);
+
     // Submit start event
-    cuda_event_t event = {};
-    event.timestamp_ns = now;
-    event.pid = pid;
-    event.tid = tid;
-    event.event_type = CUDA_EVENT_MEMCPY_START;
-    event.src_ptr = (u64)src;
-    event.dst_ptr = (u64)dst;
-    event.bytes = count;
-    event.memcpy_kind = kind;
-    
-    submit_cuda_event(&event);
-    
+    event->timestamp_ns = now;
+    event->pid = pid;
+    event->tid = tid;
+    event->event_type = CUDA_EVENT_MEMCPY_START;
+    event->src_ptr = (u64)src;
+    event->dst_ptr = (u64)dst;
+    event->bytes = count;
+    event->memcpy_kind = kind;
+
+    submit_cuda_event(event);
+
     return 0;
 }
 
 // Track cudaMemcpyAsync calls
 SEC("uprobe/cudaMemcpyAsync")
 int BPF_UPROBE(cudaMemcpyAsync, void *dst, void *src, u64 count, u32 kind, void *stream) {
+    u32 zero = 0;
+
+    struct cuda_memop_info *info = bpf_map_lookup_elem(&cuda_memop_scratch, &zero);
+    cuda_event_t *event = bpf_map_lookup_elem(&cuda_event_scratch, &zero);
+    if (!info || !event) {
+        return 0;
+    }
+
+    __builtin_memset(info, 0, sizeof(*info));
+    __builtin_memset(event, 0, sizeof(*event));
+
     u64 pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = pid_tgid >> 32;
     u32 tid = pid_tgid;
     u64 now = bpf_ktime_get_ns();
-    
-    struct cuda_memop_info info = {};
-    info.start_time = now;
-    info.pid = pid;
-    info.tid = tid;
-    info.src_ptr = (u64)src;
-    info.dst_ptr = (u64)dst;
-    info.bytes = count;
-    info.memcpy_kind = kind;
-    info.stream_id = (u64)stream;
-    
+
+    info->start_time = now;
+    info->pid = pid;
+    info->tid = tid;
+    info->src_ptr = (u64)src;
+    info->dst_ptr = (u64)dst;
+    info->bytes = count;
+    info->memcpy_kind = kind;
+    info->stream_id = (u64)stream;
+
     u64 memop_id = (pid_tgid << 16) | (now & 0xFFFF);
-    bpf_map_update_elem(&cuda_active_memops, &memop_id, &info, BPF_ANY);
-    
-    cuda_event_t event = {};
-    event.timestamp_ns = now;
-    event.pid = pid;
-    event.tid = tid;
-    event.event_type = CUDA_EVENT_MEMCPY_START;
-    event.stream_id = (u64)stream;
-    event.src_ptr = (u64)src;
-    event.dst_ptr = (u64)dst;
-    event.bytes = count;
-    event.memcpy_kind = kind;
-    
-    submit_cuda_event(&event);
-    
+    bpf_map_update_elem(&cuda_active_memops, &memop_id, info, BPF_ANY);
+
+    event->timestamp_ns = now;
+    event->pid = pid;
+    event->tid = tid;
+    event->event_type = CUDA_EVENT_MEMCPY_START;
+    event->stream_id = (u64)stream;
+    event->src_ptr = (u64)src;
+    event->dst_ptr = (u64)dst;
+    event->bytes = count;
+    event->memcpy_kind = kind;
+
+    submit_cuda_event(event);
+
     return 0;
 }
 
 // Track cudaMalloc calls
 SEC("uprobe/cudaMalloc")
 int BPF_UPROBE(cudaMalloc, void **devPtr, u64 size) {
+    u32 zero = 0;
+
+    cuda_event_t *event = bpf_map_lookup_elem(&cuda_event_scratch, &zero);
+    if (!event) {
+        return 0;
+    }
+
+    __builtin_memset(event, 0, sizeof(*event));
+
     u64 pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = pid_tgid >> 32;
     u32 tid = pid_tgid;
     u64 now = bpf_ktime_get_ns();
-    
-    cuda_event_t event = {};
-    event.timestamp_ns = now;
-    event.pid = pid;
-    event.tid = tid;
-    event.event_type = CUDA_EVENT_MALLOC;
-    event.alloc_size = size;
-    
-    submit_cuda_event(&event);
+
+    event->timestamp_ns = now;
+    event->pid = pid;
+    event->tid = tid;
+    event->event_type = CUDA_EVENT_MALLOC;
+    event->alloc_size = size;
+
+    submit_cuda_event(event);
     
     // Update memory statistics
     cuda_mem_stats_t *stats = bpf_map_lookup_elem(&cuda_mem_per_process, &pid);
@@ -273,19 +345,27 @@ int BPF_UPROBE(cudaMalloc, void **devPtr, u64 size) {
 // Track cudaFree calls
 SEC("uprobe/cudaFree")
 int BPF_UPROBE(cudaFree, void *devPtr) {
+    u32 zero = 0;
+
+    cuda_event_t *event = bpf_map_lookup_elem(&cuda_event_scratch, &zero);
+    if (!event) {
+        return 0;
+    }
+
+    __builtin_memset(event, 0, sizeof(*event));
+
     u64 pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = pid_tgid >> 32;
     u32 tid = pid_tgid;
     u64 now = bpf_ktime_get_ns();
-    
-    cuda_event_t event = {};
-    event.timestamp_ns = now;
-    event.pid = pid;
-    event.tid = tid;
-    event.event_type = CUDA_EVENT_FREE;
-    event.alloc_ptr = (u64)devPtr;
-    
-    submit_cuda_event(&event);
+
+    event->timestamp_ns = now;
+    event->pid = pid;
+    event->tid = tid;
+    event->event_type = CUDA_EVENT_FREE;
+    event->alloc_ptr = (u64)devPtr;
+
+    submit_cuda_event(event);
     
     // Update memory statistics
     cuda_mem_stats_t *stats = bpf_map_lookup_elem(&cuda_mem_per_process, &pid);
@@ -300,103 +380,143 @@ int BPF_UPROBE(cudaFree, void *devPtr) {
 // Track cudaDeviceSynchronize calls
 SEC("uprobe/cudaDeviceSynchronize")
 int BPF_UPROBE(cudaDeviceSynchronize) {
+    u32 zero = 0;
+
+    cuda_event_t *event = bpf_map_lookup_elem(&cuda_event_scratch, &zero);
+    if (!event) {
+        return 0;
+    }
+
+    __builtin_memset(event, 0, sizeof(*event));
+
     u64 pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = pid_tgid >> 32;
     u32 tid = pid_tgid;
     u64 now = bpf_ktime_get_ns();
-    
-    cuda_event_t event = {};
-    event.timestamp_ns = now;
-    event.pid = pid;
-    event.tid = tid;
-    event.event_type = CUDA_EVENT_SYNC;
-    
-    submit_cuda_event(&event);
-    
+
+    event->timestamp_ns = now;
+    event->pid = pid;
+    event->tid = tid;
+    event->event_type = CUDA_EVENT_SYNC;
+
+    submit_cuda_event(event);
+
     return 0;
 }
 
 // Track cudaStreamCreate calls
 SEC("uprobe/cudaStreamCreate")
 int BPF_UPROBE(cudaStreamCreate, void **pStream) {
+    u32 zero = 0;
+
+    cuda_event_t *event = bpf_map_lookup_elem(&cuda_event_scratch, &zero);
+    if (!event) {
+        return 0;
+    }
+
+    __builtin_memset(event, 0, sizeof(*event));
+
     u64 pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = pid_tgid >> 32;
     u32 tid = pid_tgid;
     u64 now = bpf_ktime_get_ns();
-    
-    cuda_event_t event = {};
-    event.timestamp_ns = now;
-    event.pid = pid;
-    event.tid = tid;
-    event.event_type = CUDA_EVENT_STREAM_CREATE;
-    
-    submit_cuda_event(&event);
-    
+
+    event->timestamp_ns = now;
+    event->pid = pid;
+    event->tid = tid;
+    event->event_type = CUDA_EVENT_STREAM_CREATE;
+
+    submit_cuda_event(event);
+
     return 0;
 }
 
 // Track cudaStreamDestroy calls
 SEC("uprobe/cudaStreamDestroy")
 int BPF_UPROBE(cudaStreamDestroy, void *stream) {
+    u32 zero = 0;
+
+    cuda_event_t *event = bpf_map_lookup_elem(&cuda_event_scratch, &zero);
+    if (!event) {
+        return 0;
+    }
+
+    __builtin_memset(event, 0, sizeof(*event));
+
     u64 pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = pid_tgid >> 32;
     u32 tid = pid_tgid;
     u64 now = bpf_ktime_get_ns();
-    
-    cuda_event_t event = {};
-    event.timestamp_ns = now;
-    event.pid = pid;
-    event.tid = tid;
-    event.event_type = CUDA_EVENT_STREAM_DESTROY;
-    event.stream_id = (u64)stream;
-    
-    submit_cuda_event(&event);
-    
+
+    event->timestamp_ns = now;
+    event->pid = pid;
+    event->tid = tid;
+    event->event_type = CUDA_EVENT_STREAM_DESTROY;
+    event->stream_id = (u64)stream;
+
+    submit_cuda_event(event);
+
     return 0;
 }
 
 // Return probe for cudaLaunchKernel to capture completion
 SEC("uretprobe/cudaLaunchKernel")
 int BPF_URETPROBE(cudaLaunchKernel_ret, int ret) {
-    u64 pid_tgid = bpf_get_current_pid_tgid();
-    u32 pid = pid_tgid >> 32;
-    u32 tid = pid_tgid;
-    u64 now = bpf_ktime_get_ns();
-    
     // Note: This captures the return from the launch, not the actual kernel completion
     // True kernel completion tracking requires CUPTI or synchronization tracking
-    
+
     if (ret != 0) {
-        cuda_event_t event = {};
-        event.timestamp_ns = now;
-        event.pid = pid;
-        event.tid = tid;
-        event.event_type = CUDA_EVENT_KERNEL_COMPLETE;
-        event.cuda_error = ret;
-        
-        submit_cuda_event(&event);
+        u32 zero = 0;
+
+        cuda_event_t *event = bpf_map_lookup_elem(&cuda_event_scratch, &zero);
+        if (!event) {
+            return 0;
+        }
+
+        __builtin_memset(event, 0, sizeof(*event));
+
+        u64 pid_tgid = bpf_get_current_pid_tgid();
+        u32 pid = pid_tgid >> 32;
+        u32 tid = pid_tgid;
+        u64 now = bpf_ktime_get_ns();
+
+        event->timestamp_ns = now;
+        event->pid = pid;
+        event->tid = tid;
+        event->event_type = CUDA_EVENT_KERNEL_COMPLETE;
+        event->cuda_error = ret;
+
+        submit_cuda_event(event);
     }
-    
+
     return 0;
 }
 
 // Return probe for cudaMemcpy to capture completion
 SEC("uretprobe/cudaMemcpy")
 int BPF_URETPROBE(cudaMemcpy_ret, int ret) {
+    u32 zero = 0;
+
+    cuda_event_t *event = bpf_map_lookup_elem(&cuda_event_scratch, &zero);
+    if (!event) {
+        return 0;
+    }
+
+    __builtin_memset(event, 0, sizeof(*event));
+
     u64 pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = pid_tgid >> 32;
     u32 tid = pid_tgid;
     u64 now = bpf_ktime_get_ns();
-    
-    cuda_event_t event = {};
-    event.timestamp_ns = now;
-    event.pid = pid;
-    event.tid = tid;
-    event.event_type = CUDA_EVENT_MEMCPY_COMPLETE;
-    event.cuda_error = ret;
-    
-    submit_cuda_event(&event);
-    
+
+    event->timestamp_ns = now;
+    event->pid = pid;
+    event->tid = tid;
+    event->event_type = CUDA_EVENT_MEMCPY_COMPLETE;
+    event->cuda_error = ret;
+
+    submit_cuda_event(event);
+
     return 0;
 }
 

@@ -5,6 +5,7 @@ package ebpfcommon // import "github.com/platformbuilds/telegen/internal/ebpf/co
 
 import (
 	"errors"
+	"strings"
 	"unsafe"
 
 	"github.com/hashicorp/golang-lru/v2/simplelru"
@@ -25,11 +26,18 @@ type PartitionInfo struct {
 	Offset    int64
 }
 
+// TopicInfo holds information about a single Kafka topic in a request
+type TopicInfo struct {
+	Name          string
+	PartitionInfo *PartitionInfo
+}
+
 type KafkaInfo struct {
 	Operation     Operation
-	Topic         string
+	Topic         string      // Primary topic (first topic, for backwards compatibility)
+	Topics        []TopicInfo // All topics in the request
 	ClientID      string
-	PartitionInfo *PartitionInfo
+	PartitionInfo *PartitionInfo // Partition info for primary topic
 }
 
 func (k Operation) String() string {
@@ -80,17 +88,30 @@ func processProduceRequest(pkt []byte, hdr *kafkaparser.KafkaRequestHeader, offs
 	if err != nil {
 		return nil, true, err
 	}
-	var partitionInfo *PartitionInfo
-	if produceReq.Topics[0].Partition != nil {
-		partitionInfo = &PartitionInfo{
-			Partition: *produceReq.Topics[0].Partition,
+
+	// Build topic info for all topics
+	topics := make([]TopicInfo, 0, len(produceReq.Topics))
+	for _, t := range produceReq.Topics {
+		ti := TopicInfo{Name: t.Name}
+		if t.Partition != nil {
+			ti.PartitionInfo = &PartitionInfo{Partition: *t.Partition}
 		}
+		topics = append(topics, ti)
 	}
+
+	// Primary topic info (first topic for backwards compatibility)
+	var partitionInfo *PartitionInfo
+	primaryTopic := ""
+	if len(topics) > 0 {
+		primaryTopic = topics[0].Name
+		partitionInfo = topics[0].PartitionInfo
+	}
+
 	return &KafkaInfo{
-		ClientID:  hdr.ClientID,
-		Operation: Produce,
-		// TODO: handle multiple topics
-		Topic:         produceReq.Topics[0].Name,
+		ClientID:      hdr.ClientID,
+		Operation:     Produce,
+		Topic:         primaryTopic,
+		Topics:        topics,
 		PartitionInfo: partitionInfo,
 	}, false, nil
 }
@@ -100,28 +121,43 @@ func processFetchRequest(pkt []byte, hdr *kafkaparser.KafkaRequestHeader, offset
 	if err != nil {
 		return nil, true, err
 	}
-	firstTopic := fetchReq.Topics[0]
-	topicName := firstTopic.Name
-	// get topic name from UUID if available
-	if firstTopic.UUID != nil {
-		var found bool
-		topicName, found = kafkaTopicUUIDToName.Get(*firstTopic.UUID)
-		if !found {
-			topicName = "*"
+
+	// Build topic info for all topics
+	topics := make([]TopicInfo, 0, len(fetchReq.Topics))
+	for _, t := range fetchReq.Topics {
+		topicName := t.Name
+		// get topic name from UUID if available
+		if t.UUID != nil {
+			if name, found := kafkaTopicUUIDToName.Get(*t.UUID); found {
+				topicName = name
+			} else {
+				topicName = "*"
+			}
 		}
+
+		ti := TopicInfo{Name: topicName}
+		if t.Partition != nil {
+			ti.PartitionInfo = &PartitionInfo{
+				Partition: t.Partition.Partition,
+				Offset:    t.Partition.FetchOffset,
+			}
+		}
+		topics = append(topics, ti)
 	}
+
+	// Primary topic info (first topic for backwards compatibility)
 	var partitionInfo *PartitionInfo
-	if firstTopic.Partition != nil {
-		partitionInfo = &PartitionInfo{
-			Partition: firstTopic.Partition.Partition,
-			Offset:    firstTopic.Partition.FetchOffset,
-		}
+	primaryTopic := ""
+	if len(topics) > 0 {
+		primaryTopic = topics[0].Name
+		partitionInfo = topics[0].PartitionInfo
 	}
+
 	return &KafkaInfo{
-		ClientID:  hdr.ClientID,
-		Operation: Fetch,
-		// TODO: handle multiple topics
-		Topic:         topicName,
+		ClientID:      hdr.ClientID,
+		Operation:     Fetch,
+		Topic:         primaryTopic,
+		Topics:        topics,
 		PartitionInfo: partitionInfo,
 	}, false, nil
 }
@@ -181,11 +217,21 @@ func TCPToKafkaToSpan(trace *TCPRequestInfo, data *KafkaInfo) request.Span {
 		}
 	}
 
+	// Build topic path - join multiple topics with comma if present
+	topicPath := data.Topic
+	if len(data.Topics) > 1 {
+		topicNames := make([]string, 0, len(data.Topics))
+		for _, t := range data.Topics {
+			topicNames = append(topicNames, t.Name)
+		}
+		topicPath = strings.Join(topicNames, ",")
+	}
+
 	return request.Span{
 		Type:          reqType,
 		Method:        data.Operation.String(),
 		Statement:     data.ClientID,
-		Path:          data.Topic,
+		Path:          topicPath,
 		Peer:          peer,
 		PeerPort:      int(trace.ConnInfo.S_port),
 		Host:          hostname,
