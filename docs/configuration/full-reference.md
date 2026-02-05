@@ -182,12 +182,93 @@ agent:
       lifecycle: true
       file_ops: true
   
-  # Auto-discovery
+  # Auto-discovery (process selection)
   discovery:
+    # Skip services already instrumented with OpenTelemetry SDKs
+    exclude_otel_instrumented_services: true
+    exclude_otel_instrumented_services_span_metrics: false
+    
+    # Use generic HTTP tracers only (no Go-specific uprobes)
+    skip_go_specific_tracers: false
+    
+    # Disable BPF-level PID filtering (debug only)
+    bpf_pid_filter_off: false
+    
+    # =========================================================================
+    # Process Instrumentation Targeting
+    # =========================================================================
+    # Each entry can specify one or more criteria (AND logic):
+    #   - open_ports: Port numbers/ranges ("8080", "8000-8999", "80,443")
+    #   - exe_path: Glob pattern for executable path
+    #   - k8s_namespace: Kubernetes namespace (glob)
+    #   - k8s_pod_name: Pod name (glob)
+    #   - k8s_deployment_name: Deployment name (glob)
+    #   - k8s_pod_labels: Map of label to glob pattern
+    #   - k8s_pod_annotations: Map of annotation to glob pattern
+    #   - containers_only: Only match containerized processes
+    #   - name: Service name override
+    #   - exports: What to export (traces, metrics)
+    #   - sampler: Sampling configuration
+    # =========================================================================
+    instrument:
+      # Port-based (recommended for containers)
+      - open_ports: "8080-8089"
+      
+      # Path-based
+      # - exe_path: "*java*"
+      
+      # Combined (AND logic)
+      # - open_ports: "8080"
+      #   exe_path: "*myapp*"
+      
+      # Kubernetes-aware
+      # - k8s_namespace: "production"
+      #   open_ports: "8080"
+      
+      # By pod labels
+      # - k8s_pod_labels:
+      #     app: "frontend*"
+      
+      # Containers only
+      # - containers_only: true
+      #   open_ports: "3000"
+      
+      # With custom sampling
+      # - open_ports: "8080"
+      #   sampler:
+      #     name: parent_based_traceidratio
+      #     arg: 0.1  # 10% sampling
+    
+    # Exclusions (takes precedence over instrument)
+    exclude_instrument:
+      # - k8s_namespace: "*-test"
+      # - open_ports: "9090"
+    
+    # Default exclusions (telegen and observability tools)
+    default_exclude_instrument:
+      - exe_path: "*telegen*"
+      - exe_path: "*alloy*"
+      - exe_path: "*otelcol*"
+      - k8s_namespace: "kube-system"
+      - k8s_namespace: "monitoring"
+    
+    # Process discovery timing
+    min_process_age: 5s
+    poll_interval: 5s
+    
+    # Default OTLP port for detecting OTel-instrumented apps
+    default_otlp_grpc_port: 4317
+    
+    # Route harvesting
+    route_harvester_timeout: 10s
+    disabled_route_harvesters: []
+    route_harvester_advanced:
+      java_harvest_delay: 60s
+  
+  # Cloud/K8s metadata discovery (automatic)
+  metadata_discovery:
     enabled: true
     interval: 30s
-    
-    # What to discover
     detect_cloud: true
     detect_kubernetes: true
     detect_runtimes: true

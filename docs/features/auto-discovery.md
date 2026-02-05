@@ -159,6 +159,180 @@ dependencies:
 
 ---
 
+## Process Discovery (Port-Based & Path-Based)
+
+Telegen discovers processes to instrument using **port-based** and/or **path-based** selection.
+Port-based discovery is often more reliable in containerized environments where executable paths vary.
+
+### Discovery Methods
+
+| Method | Use Case | Reliability in Containers |
+|--------|----------|---------------------------|
+| **Port-based** | Known service ports (8080, 3000, etc.) | ✅ High |
+| **Path-based** | Known executable patterns | ⚠️ Medium (paths vary) |
+| **Kubernetes metadata** | Label/namespace selectors | ✅ High |
+| **Combined** | Port + path + K8s metadata | ✅ Highest precision |
+
+### Port-Based Discovery
+
+Discover services by the ports they listen on:
+
+```yaml
+discovery:
+  instrument:
+    # Single port
+    - open_ports: "8080"
+    
+    # Port range
+    - open_ports: "8000-8999"
+    
+    # Multiple ports and ranges
+    - open_ports: "80,443,3000,8080-8089"
+```
+
+### Path-Based Discovery
+
+Discover services by executable path patterns (glob syntax):
+
+```yaml
+discovery:
+  instrument:
+    # Match any Java process
+    - exe_path: "*java*"
+    
+    # Match specific application
+    - exe_path: "/usr/bin/myapp"
+    
+    # Match Node.js processes
+    - exe_path: "*node*"
+```
+
+### Combined Discovery (AND Logic)
+
+When multiple criteria are in one entry, ALL must match:
+
+```yaml
+discovery:
+  instrument:
+    # Must be: Java process AND listening on port 8080
+    - open_ports: "8080"
+      exe_path: "*java*"
+    
+    # Must be: in production namespace AND on port 3000
+    - k8s_namespace: "production"
+      open_ports: "3000"
+```
+
+### Kubernetes-Aware Discovery
+
+Use Kubernetes metadata for precise targeting:
+
+```yaml
+discovery:
+  instrument:
+    # By namespace
+    - k8s_namespace: "production"
+    
+    # By deployment name
+    - k8s_deployment_name: "api-gateway"
+    
+    # By pod labels
+    - k8s_pod_labels:
+        app: "frontend*"
+        version: "v2*"
+    
+    # By pod annotations
+    - k8s_pod_annotations:
+        telegen.io/instrument: "true"
+    
+    # Combined: namespace + port
+    - k8s_namespace: "production"
+      open_ports: "8080-8089"
+```
+
+### Container-Only Discovery
+
+Limit discovery to containerized processes:
+
+```yaml
+discovery:
+  instrument:
+    - containers_only: true
+      open_ports: "8080"
+```
+
+### Excluding Services
+
+Exclude specific services from instrumentation (takes precedence over `instrument`):
+
+```yaml
+discovery:
+  instrument:
+    - open_ports: "8080-8089"
+  
+  exclude_instrument:
+    # Exclude health check services
+    - open_ports: "9090"
+    
+    # Exclude test namespaces
+    - k8s_namespace: "*-test"
+    
+    # Exclude by path
+    - exe_path: "*health*"
+```
+
+### Default Exclusions
+
+Telegen excludes itself and common observability tools by default:
+
+```yaml
+discovery:
+  default_exclude_instrument:
+    - exe_path: "*telegen*"
+    - exe_path: "*alloy*"
+    - exe_path: "*otelcol*"
+    - k8s_namespace: "kube-system"
+    - k8s_namespace: "monitoring"
+```
+
+### Full Discovery Example
+
+```yaml
+discovery:
+  # Skip already-instrumented services
+  exclude_otel_instrumented_services: true
+  exclude_otel_instrumented_services_span_metrics: false
+  
+  # Use generic tracers for all languages
+  skip_go_specific_tracers: false
+  
+  # What to instrument
+  instrument:
+    # Instrument common application ports
+    - open_ports: "8080-8089"
+    - open_ports: "3000,5000"
+    
+    # Instrument all Java apps in production
+    - exe_path: "*java*"
+      k8s_namespace: "production"
+    
+    # Instrument anything with our annotation
+    - k8s_pod_annotations:
+        telegen.io/instrument: "true"
+  
+  # What to exclude
+  exclude_instrument:
+    - k8s_namespace: "kube-system"
+    - k8s_namespace: "monitoring"
+    - open_ports: "9090"  # Prometheus
+  
+  # Timing
+  min_process_age: 5s
+  poll_interval: 5s
+```
+
+---
+
 ## Configuration
 
 ### Enabling/Disabling Discovery

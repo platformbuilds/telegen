@@ -109,6 +109,36 @@ collector:
 
 ---
 
+## Targeted Instrumentation
+
+By default, Telegen instruments all processes. To target specific services, use port-based discovery:
+
+### Instrument Specific Ports
+
+```yaml
+otlp:
+  endpoint: "otel-collector:4317"
+
+discovery:
+  instrument:
+    - open_ports: "8080-8089"
+    - open_ports: "3000,5000"
+```
+
+### Kubernetes-Aware Targeting
+
+```yaml
+otlp:
+  endpoint: "otel-collector:4317"
+
+discovery:
+  instrument:
+    - k8s_namespace: "production"
+      open_ports: "8080"
+```
+
+---
+
 ## Enabling Additional Features
 
 ### Enable Profiling

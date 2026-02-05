@@ -99,7 +99,39 @@ Examples:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TELEGEN_AGENT_DISCOVERY_ENABLED` | `true` | Enable auto-discovery |
+| `OTEL_EBPF_DISCOVERY_POLL_INTERVAL` | `5s` | Process discovery poll interval |
+| `OTEL_EBPF_EXCLUDE_OTEL_INSTRUMENTED_SERVICES` | `true` | Skip OTel-instrumented services |
+| `OTEL_EBPF_MIN_PROCESS_AGE` | `5s` | Min process age before discovery |
+| `OTEL_EBPF_SKIP_GO_SPECIFIC_TRACERS` | `false` | Use generic tracers only |
+| `OTEL_EBPF_BPF_PID_FILTER_OFF` | `false` | Disable BPF PID filtering (debug) |
+| `OTEL_EBPF_DEFAULT_OTLP_GRPC_PORT` | `4317` | Port for OTel-instrumented detection |
+
+#### Port-Based Discovery Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OTEL_EBPF_INSTRUMENT_PORTS` | - | Ports to instrument (e.g., `8080,8000-8999`) |
+| `OTEL_EBPF_INSTRUMENT_COMMAND` | - | Glob pattern for executable path |
+
+**Examples:**
+
+```bash
+# Instrument only ports 8080-8089
+export OTEL_EBPF_INSTRUMENT_PORTS="8080-8089"
+
+# Instrument Java processes on port 8080
+export OTEL_EBPF_INSTRUMENT_PORTS="8080"
+export OTEL_EBPF_INSTRUMENT_COMMAND="*java*"
+
+# Instrument common web ports
+export OTEL_EBPF_INSTRUMENT_PORTS="80,443,3000,5000,8080-8089"
+```
+
+#### Metadata Discovery Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TELEGEN_AGENT_DISCOVERY_ENABLED` | `true` | Enable metadata discovery |
 | `TELEGEN_AGENT_DISCOVERY_INTERVAL` | `30s` | Discovery interval |
 | `TELEGEN_AGENT_DISCOVERY_DETECT_CLOUD` | `true` | Detect cloud provider |
 | `TELEGEN_AGENT_DISCOVERY_DETECT_KUBERNETES` | `true` | Detect Kubernetes |

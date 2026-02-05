@@ -14,6 +14,17 @@ Telegen automatically traces:
 
 No code changes or SDK integration required.
 
+:::{tip}
+For targeted tracing, use **port-based discovery** to instrument only specific services.
+See {doc}`auto-discovery` for details.
+
+```yaml
+discovery:
+  instrument:
+    - open_ports: "8080-8089"  # Only trace these ports
+```
+:::
+
 ---
 
 ## How It Works

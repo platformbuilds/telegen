@@ -146,6 +146,25 @@ curl http://localhost:19090/metrics | head -20
 
 ---
 
+## Targeted Instrumentation (Optional)
+
+By default, Telegen instruments all processes. For targeted instrumentation, use port-based discovery:
+
+```yaml
+otlp:
+  endpoint: "otel-collector:4317"
+
+discovery:
+  instrument:
+    # Only instrument services on these ports
+    - open_ports: "8080-8089"
+    - open_ports: "3000,5000"
+```
+
+See {doc}`../features/auto-discovery` for more options including Kubernetes-aware targeting.
+
+---
+
 ## What Gets Collected
 
 Once running, Telegen automatically collects:
