@@ -10,24 +10,21 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/jfr/converter"
+	"github.com/platformbuilds/telegen/internal/exporters/otlp/logs"
 	"github.com/platformbuilds/telegen/internal/profiler/perfmap"
+	"github.com/platformbuilds/telegen/internal/version"
 )
 
 // LogExporter converts eBPF profile data to ProfileEvent format and exports as OTLP logs.
-// This provides a unified export path for both JFR-based (Java) and eBPF-based (native/Java) profiling.
+// This uses the shared OTLP logs exporter for consistent telegen metadata.
 type LogExporter struct {
 	config         LogExporterConfig
 	log            *slog.Logger
-	logExporter    *converter.OTLPLogExporter
+	logExporter    *logs.Exporter
 	perfMapReader  *perfmap.PerfMapReader
 	symbolResolver *SymbolResolver
-
-	mu      sync.Mutex
-	pending []*converter.ProfileEvent
 }
 
 // LogExporterConfig holds configuration for the profile log exporter
@@ -57,6 +54,11 @@ type LogExporterConfig struct {
 
 	// ProfileSource identifies the source (ebpf, jfr)
 	ProfileSource string
+
+	// Telegen metadata (optional, defaults provided)
+	ScopeName        string // defaults to "telegen.profiler"
+	ScopeVersion     string // defaults to agent version
+	TelemetrySDKLang string // defaults to "native", can be "java" for Java profiles
 }
 
 // DefaultLogExporterConfig returns default configuration
@@ -76,23 +78,41 @@ func NewLogExporter(cfg LogExporterConfig, log *slog.Logger) (*LogExporter, erro
 		log = slog.Default()
 	}
 
-	// Create the underlying OTLP log exporter
-	otlpCfg := converter.OTLPLogExporterConfig{
-		Endpoint:          cfg.Endpoint,
-		Headers:           cfg.Headers,
-		BatchSize:         cfg.BatchSize,
-		FlushInterval:     cfg.FlushInterval,
-		IncludeStackTrace: cfg.IncludeStackTrace,
-		IncludeRawJSON:    true,
-		ServiceName:       cfg.ServiceName,
-		Namespace:         cfg.Namespace,
-		PodName:           cfg.PodName,
-		ContainerName:     cfg.ContainerName,
-		NodeName:          cfg.NodeName,
-		ClusterName:       cfg.ClusterName,
+	// Create the underlying OTLP log exporter with telegen metadata
+	scopeName := cfg.ScopeName
+	if scopeName == "" {
+		scopeName = "telegen.profiler"
+	}
+	scopeVersion := cfg.ScopeVersion
+	if scopeVersion == "" {
+		scopeVersion = version.Version()
+	}
+	sdkLang := cfg.TelemetrySDKLang
+	if sdkLang == "" {
+		sdkLang = "native" // eBPF profiles are language-agnostic
 	}
 
-	otlpExporter, err := converter.NewOTLPLogExporter(otlpCfg, log)
+	otlpCfg := logs.ExporterConfig{
+		Endpoint:            cfg.Endpoint,
+		Headers:             cfg.Headers,
+		BatchSize:           cfg.BatchSize,
+		FlushInterval:       cfg.FlushInterval,
+		IncludeStackTrace:   cfg.IncludeStackTrace,
+		IncludeRawJSON:      true,
+		ServiceName:         cfg.ServiceName,
+		Namespace:           cfg.Namespace,
+		PodName:             cfg.PodName,
+		ContainerName:       cfg.ContainerName,
+		NodeName:            cfg.NodeName,
+		ClusterName:         cfg.ClusterName,
+		ScopeName:           scopeName,
+		ScopeVersion:        scopeVersion,
+		TelemetrySDKName:    "telegen",
+		TelemetrySDKVersion: version.Version(),
+		TelemetrySDKLang:    sdkLang,
+	}
+
+	otlpExporter, err := logs.NewExporter(otlpCfg, log)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OTLP log exporter: %w", err)
 	}
@@ -109,7 +129,6 @@ func NewLogExporter(cfg LogExporterConfig, log *slog.Logger) (*LogExporter, erro
 		logExporter:    otlpExporter,
 		perfMapReader:  perfmap.NewPerfMapReader(),
 		symbolResolver: symbolResolver,
-		pending:        make([]*converter.ProfileEvent, 0, cfg.BatchSize),
 	}, nil
 }
 
@@ -143,8 +162,8 @@ func (e *LogExporter) Close() error {
 }
 
 // convertToEvents converts an eBPF profile to ProfileEvent slice
-func (e *LogExporter) convertToEvents(profile *Profile) []*converter.ProfileEvent {
-	events := make([]*converter.ProfileEvent, 0, len(profile.Samples))
+func (e *LogExporter) convertToEvents(profile *Profile) []*logs.ProfileEvent {
+	events := make([]*logs.ProfileEvent, 0, len(profile.Samples))
 	timestamp := profile.Timestamp
 
 	for _, sample := range profile.Samples {
@@ -156,18 +175,22 @@ func (e *LogExporter) convertToEvents(profile *Profile) []*converter.ProfileEven
 }
 
 // sampleToEvent converts a single eBPF stack sample to a ProfileEvent
-func (e *LogExporter) sampleToEvent(sample StackSample, profileType ProfileType, timestamp time.Time) *converter.ProfileEvent {
-	event := &converter.ProfileEvent{
+func (e *LogExporter) sampleToEvent(sample StackSample, profileType ProfileType, timestamp time.Time) *logs.ProfileEvent {
+	event := &logs.ProfileEvent{
 		Timestamp:        timestamp.Format(time.RFC3339Nano),
 		EventType:        e.profileTypeToEventType(profileType),
 		ServiceName:      e.config.ServiceName,
 		ProfileType:      profileType.String(),
+		ProfileSource:    "ebpf",
 		K8sPodName:       e.config.PodName,
 		K8sNamespace:     e.config.Namespace,
 		K8sContainerName: e.config.ContainerName,
 		K8sNodeName:      e.config.NodeName,
 		SampleWeight:     sample.Value,
 		TotalSamples:     sample.Count,
+		PID:              sample.PID,
+		TID:              sample.TGID, // Use TGID as TID
+		Comm:             sample.Comm,
 	}
 
 	// Set thread info from comm
@@ -203,7 +226,7 @@ func (e *LogExporter) sampleToEvent(sample StackSample, profileType ProfileType,
 	switch profileType {
 	case ProfileTypeOffCPU:
 		event.DurationNs = sample.Value // Off-CPU value is block time in ns
-		event.State = sample.BlockReason.String()
+		event.BlockReason = sample.BlockReason.String()
 	case ProfileTypeMemory:
 		event.AllocationSize = sample.Value
 	}
@@ -211,20 +234,24 @@ func (e *LogExporter) sampleToEvent(sample StackSample, profileType ProfileType,
 	return event
 }
 
-// convertFrames converts ResolvedFrame slice to converter.StackFrame slice
-func (e *LogExporter) convertFrames(frames []ResolvedFrame) []converter.StackFrame {
-	result := make([]converter.StackFrame, len(frames))
+// convertFrames converts ResolvedFrame slice to logs.StackFrame slice
+func (e *LogExporter) convertFrames(frames []ResolvedFrame) []logs.StackFrame {
+	result := make([]logs.StackFrame, len(frames))
 
 	for i, f := range frames {
-		result[i] = converter.StackFrame{
-			Class:  f.Class,
-			Method: f.ShortName,
-			Line:   f.Line,
-			File:   f.File,
-			Depth:  i,
+		result[i] = logs.StackFrame{
+			Function: f.Function,
+			Class:    f.Class,
+			Method:   f.ShortName,
+			Line:     f.Line,
+			File:     f.File,
+			Depth:    i,
+			Module:   f.Module,
+			Address:  f.Address,
+			IsInline: f.Inlined,
 		}
 
-		// Use Function as fallback
+		// Use Function as fallback for Method
 		if result[i].Method == "" {
 			result[i].Method = f.Function
 		}
@@ -263,19 +290,19 @@ func (e *LogExporter) buildStackPath(frames []ResolvedFrame) string {
 	return strings.Join(parts, " <- ")
 }
 
-// profileTypeToEventType maps ProfileType to JFR-style event type names
+// profileTypeToEventType maps ProfileType to eBPF-style event type names
 func (e *LogExporter) profileTypeToEventType(pt ProfileType) string {
 	switch pt {
 	case ProfileTypeCPU:
-		return "jdk.ExecutionSample" // Compatible with JFR event names
+		return "ebpf.CPUSample"
 	case ProfileTypeOffCPU:
-		return "jdk.ThreadPark"
+		return "ebpf.OffCPUSample"
 	case ProfileTypeMemory:
-		return "jdk.ObjectAllocationSample"
+		return "ebpf.AllocationSample"
 	case ProfileTypeMutex:
-		return "jdk.JavaMonitorEnter"
+		return "ebpf.MutexSample"
 	case ProfileTypeBlock:
-		return "jdk.ThreadSleep"
+		return "ebpf.BlockSample"
 	default:
 		return "ebpf.Sample"
 	}

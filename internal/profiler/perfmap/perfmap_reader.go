@@ -129,7 +129,7 @@ func parsePerfMap(pid uint32, path string) (*PerfMap, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	pm := &PerfMap{
 		PID:     pid,
@@ -226,7 +226,6 @@ func parseJavaSymbolName(sym *PerfMapSymbol) {
 		if lastDot > 0 {
 			// Check if there's a space (class name follows method)
 			if spaceIdx := strings.Index(name, " "); spaceIdx > 0 {
-				separator = " "
 				// Format: method class
 				sym.Method = name[:spaceIdx]
 				sym.Class = name[spaceIdx+1:]

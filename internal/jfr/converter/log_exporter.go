@@ -63,6 +63,13 @@ type OTLPLogExporterConfig struct {
 	ContainerName string
 	NodeName      string
 	ClusterName   string
+
+	// Telegen metadata (instrumentation scope and SDK attributes)
+	ScopeName           string // e.g., "telegen.jfr", "telegen.profiler"
+	ScopeVersion        string // e.g., "1.0.0"
+	TelemetrySDKName    string // defaults to "telegen"
+	TelemetrySDKVersion string // agent version
+	TelemetrySDKLang    string // e.g., "java", "native", "go"
 }
 
 // DefaultOTLPLogExporterConfig returns default configuration
@@ -85,12 +92,17 @@ func NewOTLPLogExporter(cfg OTLPLogExporterConfig, log *slog.Logger) (*OTLPLogEx
 	}
 
 	logConverter := NewLogConverter(LogExportConfig{
-		ServiceName:   cfg.ServiceName,
-		Namespace:     cfg.Namespace,
-		PodName:       cfg.PodName,
-		ContainerName: cfg.ContainerName,
-		NodeName:      cfg.NodeName,
-		ClusterName:   cfg.ClusterName,
+		ServiceName:         cfg.ServiceName,
+		Namespace:           cfg.Namespace,
+		PodName:             cfg.PodName,
+		ContainerName:       cfg.ContainerName,
+		NodeName:            cfg.NodeName,
+		ClusterName:         cfg.ClusterName,
+		ScopeName:           cfg.ScopeName,
+		ScopeVersion:        cfg.ScopeVersion,
+		TelemetrySDKName:    cfg.TelemetrySDKName,
+		TelemetrySDKVersion: cfg.TelemetrySDKVersion,
+		TelemetrySDKLang:    cfg.TelemetrySDKLang,
 	})
 
 	return &OTLPLogExporter{
