@@ -4,6 +4,7 @@
 package correlation
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -96,6 +97,10 @@ type LogTraceCorrelator struct {
 	ttl        time.Duration // How long to keep entries (default: 30s)
 	maxEntries int           // Maximum entries to prevent memory issues
 
+	// Shutdown
+	ctx    context.Context
+	cancel context.CancelFunc
+
 	// Metrics
 	hits       int64
 	misses     int64
@@ -141,11 +146,14 @@ func NewLogTraceCorrelator(cfg LogTraceCorrelatorConfig) *LogTraceCorrelator {
 		cfg.MaxEntries = 100000
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	c := &LogTraceCorrelator{
 		entries:    make(map[string]*LogTraceEntry),
 		bucketSize: cfg.BucketSize,
 		ttl:        cfg.TTL,
 		maxEntries: cfg.MaxEntries,
+		ctx:        ctx,
+		cancel:     cancel,
 	}
 
 	// Start background eviction
@@ -240,8 +248,13 @@ func (c *LogTraceCorrelator) evictionLoop() {
 	ticker := time.NewTicker(c.ttl / 2)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		c.evictExpired()
+	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		case <-ticker.C:
+			c.evictExpired()
+		}
 	}
 }
 
@@ -283,6 +296,11 @@ func (c *LogTraceCorrelator) Stats() (entries, hits, misses, evictions, recordin
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return int64(len(c.entries)), c.hits, c.misses, c.evictions, c.recordings
+}
+
+// Stop stops the background eviction loop and cleans up resources.
+func (c *LogTraceCorrelator) Stop() {
+	c.cancel()
 }
 
 // Global correlator instance for use across packages

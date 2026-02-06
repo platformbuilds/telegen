@@ -30,15 +30,15 @@ const (
 type MutexProfilerEvent struct {
 	Type        uint8
 	EventType   uint8
-	_pad        [2]byte
+	_pad        [2]byte //nolint:unused
 	Pid         uint32
 	Tid         uint32
-	_pad2       [4]byte // alignment for lock_addr
+	_pad2       [4]byte //nolint:unused // alignment for lock_addr
 	LockAddr    uint64
 	WaitTimeNs  uint64
 	HoldTimeNs  uint64
 	StackId     int32
-	_pad3       int32
+	_pad3       int32 //nolint:unused
 	TimestampNs uint64
 	Comm        [16]int8
 }

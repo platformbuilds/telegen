@@ -72,11 +72,11 @@ type OffcpuProfilerStart struct {
 // OffcpuProfilerConfig matches struct offcpu_config in offcpu_profiler.c
 type OffcpuProfilerConfig struct {
 	TargetPid     uint32
-	_pad1         [4]byte // alignment
+	_pad1         [4]byte //nolint:unused // alignment
 	MinBlockNs    uint64
 	CaptureKernel uint8
 	CaptureUser   uint8
-	_pad2         [6]byte
+	_pad2         [6]byte //nolint:unused
 }
 
 // OffcpuProfilerOffcpuConfig is an alias for bpf2go generated name

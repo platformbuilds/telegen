@@ -158,9 +158,16 @@ func (p *CPUProfiler) Collect(ctx context.Context) (*Profile, error) {
 	var key CpuProfilerStackKey
 	var value CpuProfilerStackCount
 	var sampleCount int
+	const maxSamples = 10000 // Limit samples to prevent memory exhaustion
+	keysToDelete := make([]CpuProfilerStackKey, 0, maxSamples)
 
 	iter := p.objs.CpuStackCounts.Iterate()
 	for iter.Next(&key, &value) {
+		if sampleCount >= maxSamples {
+			p.log.Warn("CPU profiler hit max sample limit, stopping collection", "max", maxSamples)
+			break
+		}
+
 		sample := StackSample{
 			PID:       key.Pid,
 			TGID:      key.Tgid,
@@ -186,14 +193,30 @@ func (p *CPUProfiler) Collect(ctx context.Context) (*Profile, error) {
 		}
 
 		profile.AddSample(sample)
+		keysToDelete = append(keysToDelete, key)
 		sampleCount++
 	}
 
 	if err := iter.Err(); err != nil {
 		p.log.Warn("error iterating CPU stack counts", "error", err)
+		// Don't delete keys if iteration failed
+		return profile, nil
 	}
 
-	p.log.Debug("collected CPU profile samples", "count", sampleCount)
+	// Clear collected samples from BPF map to prevent unbounded growth
+	deleted := 0
+	for _, k := range keysToDelete {
+		if err := p.objs.CpuStackCounts.Delete(&k); err != nil {
+			// Log but continue - don't fail entire collection
+			if deleted == 0 {
+				p.log.Debug("error deleting CPU stack count", "error", err)
+			}
+		} else {
+			deleted++
+		}
+	}
+
+	p.log.Debug("collected CPU profile samples", "count", sampleCount, "deleted", deleted)
 	return profile, nil
 }
 
@@ -340,11 +363,11 @@ func (p *CPUProfiler) processRingBuffer(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			p.log.Info("ring buffer processor stopped (context cancelled)", 
+			p.log.Info("ring buffer processor stopped (context cancelled)",
 				"samples_processed", sampleCount, "empty_reads", emptyReads)
 			return
 		case <-p.stopCh:
-			p.log.Info("ring buffer processor stopped", 
+			p.log.Info("ring buffer processor stopped",
 				"samples_processed", sampleCount, "empty_reads", emptyReads)
 			return
 		default:
@@ -383,19 +406,19 @@ func (p *CPUProfiler) processRingBuffer(ctx context.Context) {
 				backoff = 100
 			}
 			sleepTime := time.Duration(backoff) * time.Millisecond
-			
+
 			// Log if we're experiencing sustained empty reads (potential CPU spin)
 			if emptyReads == 10 || emptyReads == 100 || emptyReads%1000 == 0 {
 				p.log.Warn("ring buffer experiencing sustained empty reads - possible CPU spin",
 					"consecutive_empty_reads", emptyReads, "backoff_ms", sleepTime.Milliseconds())
 			}
-			
+
 			time.Sleep(sleepTime)
 		}
-		
+
 		// Periodic stats logging
 		if time.Since(lastStatsLog) > 60*time.Second {
-			p.log.Info("ring buffer processor stats", 
+			p.log.Info("ring buffer processor stats",
 				"samples", sampleCount, "empty_reads", emptyReads)
 			lastStatsLog = time.Now()
 		}
@@ -545,9 +568,16 @@ func (p *OffCPUProfiler) Collect(ctx context.Context) (*Profile, error) {
 	var key OffcpuProfilerOffcpuKey
 	var value OffcpuProfilerOffcpuValue
 	var sampleCount int
+	const maxSamples = 10000
+	keysToDelete := make([]OffcpuProfilerOffcpuKey, 0, maxSamples)
 
 	iter := p.objs.OffcpuCounts.Iterate()
 	for iter.Next(&key, &value) {
+		if sampleCount >= maxSamples {
+			p.log.Warn("off-CPU profiler hit max sample limit", "max", maxSamples)
+			break
+		}
+
 		sample := StackSample{
 			PID:         key.Pid,
 			TGID:        key.Tgid,
@@ -572,14 +602,28 @@ func (p *OffCPUProfiler) Collect(ctx context.Context) (*Profile, error) {
 		}
 
 		profile.AddSample(sample)
+		keysToDelete = append(keysToDelete, key)
 		sampleCount++
 	}
 
 	if err := iter.Err(); err != nil {
 		p.log.Warn("error iterating off-CPU counts", "error", err)
+		return profile, nil
 	}
 
-	p.log.Debug("collected off-CPU profile samples", "count", sampleCount)
+	// Clear collected samples from BPF map
+	deleted := 0
+	for _, k := range keysToDelete {
+		if err := p.objs.OffcpuCounts.Delete(&k); err != nil {
+			if deleted == 0 {
+				p.log.Debug("error deleting off-CPU count", "error", err)
+			}
+		} else {
+			deleted++
+		}
+	}
+
+	p.log.Debug("collected off-CPU profile samples", "count", sampleCount, "deleted", deleted)
 	return profile, nil
 }
 
@@ -679,11 +723,11 @@ func (p *OffCPUProfiler) processRingBuffer(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			p.log.Info("off-CPU ring buffer processor stopped (context)", 
+			p.log.Info("off-CPU ring buffer processor stopped (context)",
 				"samples", sampleCount, "empty_reads", emptyReads)
 			return
 		case <-p.stopCh:
-			p.log.Info("off-CPU ring buffer processor stopped", 
+			p.log.Info("off-CPU ring buffer processor stopped",
 				"samples", sampleCount, "empty_reads", emptyReads)
 			return
 		default:
@@ -714,17 +758,17 @@ func (p *OffCPUProfiler) processRingBuffer(ctx context.Context) {
 				backoff = 100
 			}
 			sleepTime := time.Duration(backoff) * time.Millisecond
-			
+
 			if emptyReads == 10 || emptyReads == 100 || emptyReads%1000 == 0 {
 				p.log.Warn("off-CPU ring buffer sustained empty reads",
 					"consecutive_empty_reads", emptyReads, "backoff_ms", sleepTime.Milliseconds())
 			}
-			
+
 			time.Sleep(sleepTime)
 		}
-		
+
 		if time.Since(lastStatsLog) > 60*time.Second {
-			p.log.Info("off-CPU ring buffer stats", 
+			p.log.Info("off-CPU ring buffer stats",
 				"samples", sampleCount, "empty_reads", emptyReads)
 			lastStatsLog = time.Now()
 		}
@@ -1045,9 +1089,16 @@ func (p *MemoryProfiler) CollectHeap(ctx context.Context) (*Profile, error) {
 	var info AllocProfilerAllocInfo
 	var totalBytes uint64
 	var allocCount int
+	const maxAllocs = 10000
+	addrsToDelete := make([]uint64, 0, maxAllocs)
 
 	iter := p.objs.LiveAllocs.Iterate()
 	for iter.Next(&addr, &info) {
+		if allocCount >= maxAllocs {
+			p.log.Warn("heap profiler hit max alloc limit", "max", maxAllocs)
+			break
+		}
+
 		sample := StackSample{
 			PID:   info.Pid,
 			Value: int64(info.Size),
@@ -1060,14 +1111,34 @@ func (p *MemoryProfiler) CollectHeap(ctx context.Context) (*Profile, error) {
 
 		profile.AddSample(sample)
 		totalBytes += info.Size
+		addrsToDelete = append(addrsToDelete, addr)
 		allocCount++
+	}
+
+	if err := iter.Err(); err != nil {
+		p.log.Warn("error iterating live allocs", "error", err)
+		profile.Metadata["total_bytes"] = fmt.Sprintf("%d", totalBytes)
+		profile.Metadata["alloc_count"] = fmt.Sprintf("%d", allocCount)
+		return profile, iter.Err()
+	}
+
+	// Clear collected allocations from BPF map
+	deleted := 0
+	for _, a := range addrsToDelete {
+		if err := p.objs.LiveAllocs.Delete(&a); err != nil {
+			if deleted == 0 {
+				p.log.Debug("error deleting live alloc", "error", err)
+			}
+		} else {
+			deleted++
+		}
 	}
 
 	profile.Metadata["total_bytes"] = fmt.Sprintf("%d", totalBytes)
 	profile.Metadata["alloc_count"] = fmt.Sprintf("%d", allocCount)
 
-	p.log.Debug("collected heap profile", "allocs", allocCount, "bytes", totalBytes)
-	return profile, iter.Err()
+	p.log.Debug("collected heap profile", "allocs", allocCount, "bytes", totalBytes, "deleted", deleted)
+	return profile, nil
 }
 
 // CollectAllocs gathers allocation statistics (aggregated by stack)
@@ -1088,9 +1159,16 @@ func (p *MemoryProfiler) CollectAllocs(ctx context.Context) (*Profile, error) {
 	var key AllocProfilerAllocKey
 	var stats AllocProfilerAllocStats
 	var sampleCount int
+	const maxSamples = 10000
+	keysToDelete := make([]AllocProfilerAllocKey, 0, maxSamples)
 
 	iter := p.objs.AllocStatsMap.Iterate()
 	for iter.Next(&key, &stats) {
+		if sampleCount >= maxSamples {
+			p.log.Warn("alloc stats hit max sample limit", "max", maxSamples)
+			break
+		}
+
 		sample := StackSample{
 			Value: int64(stats.TotalBytes),
 			Count: int64(stats.AllocCount),
@@ -1101,11 +1179,30 @@ func (p *MemoryProfiler) CollectAllocs(ctx context.Context) (*Profile, error) {
 		}
 
 		profile.AddSample(sample)
+		keysToDelete = append(keysToDelete, key)
 		sampleCount++
 	}
 
-	p.log.Debug("collected alloc stats", "samples", sampleCount)
-	return profile, iter.Err()
+	if err := iter.Err(); err != nil {
+		p.log.Warn("error iterating alloc stats", "error", err)
+		p.log.Debug("collected alloc stats", "samples", sampleCount)
+		return profile, iter.Err()
+	}
+
+	// Clear collected stats from BPF map
+	deleted := 0
+	for _, k := range keysToDelete {
+		if err := p.objs.AllocStatsMap.Delete(&k); err != nil {
+			if deleted == 0 {
+				p.log.Debug("error deleting alloc stat", "error", err)
+			}
+		} else {
+			deleted++
+		}
+	}
+
+	p.log.Debug("collected alloc stats", "samples", sampleCount, "deleted", deleted)
+	return profile, nil
 }
 
 // Collect implements the Profiler interface - collects heap profile
@@ -1149,11 +1246,11 @@ func (p *MemoryProfiler) processRingBuffer(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			p.log.Info("memory ring buffer processor stopped (context)", 
+			p.log.Info("memory ring buffer processor stopped (context)",
 				"allocs", allocCount, "frees", freeCount, "empty_reads", emptyReads)
 			return
 		case <-p.stopCh:
-			p.log.Info("memory ring buffer processor stopped", 
+			p.log.Info("memory ring buffer processor stopped",
 				"allocs", allocCount, "frees", freeCount, "empty_reads", emptyReads)
 			return
 		default:
@@ -1189,17 +1286,17 @@ func (p *MemoryProfiler) processRingBuffer(ctx context.Context) {
 				backoff = 100
 			}
 			sleepTime := time.Duration(backoff) * time.Millisecond
-			
+
 			if emptyReads == 10 || emptyReads == 100 || emptyReads%1000 == 0 {
 				p.log.Warn("memory ring buffer sustained empty reads",
 					"consecutive_empty_reads", emptyReads, "backoff_ms", sleepTime.Milliseconds())
 			}
-			
+
 			time.Sleep(sleepTime)
 		}
-		
+
 		if time.Since(lastStatsLog) > 60*time.Second {
-			p.log.Info("memory ring buffer stats", 
+			p.log.Info("memory ring buffer stats",
 				"allocs", allocCount, "frees", freeCount, "empty_reads", emptyReads)
 			lastStatsLog = time.Now()
 		}
@@ -1461,9 +1558,16 @@ func (p *MutexProfiler) Collect(ctx context.Context) (*Profile, error) {
 	var key MutexProfilerMutexKey
 	var stats MutexProfilerMutexStats
 	var sampleCount int
+	const maxSamples = 10000
+	keysToDelete := make([]MutexProfilerMutexKey, 0, maxSamples)
 
 	iter := p.objs.MutexStatsMap.Iterate()
 	for iter.Next(&key, &stats) {
+		if sampleCount >= maxSamples {
+			p.log.Warn("mutex profiler hit max sample limit", "max", maxSamples)
+			break
+		}
+
 		sample := StackSample{
 			Value: int64(stats.TotalWaitNs),
 			Count: int64(stats.ContentionCount),
@@ -1474,14 +1578,29 @@ func (p *MutexProfiler) Collect(ctx context.Context) (*Profile, error) {
 		}
 
 		profile.AddSample(sample)
+		keysToDelete = append(keysToDelete, key)
 		sampleCount++
 	}
 
 	if err := iter.Err(); err != nil {
 		p.log.Warn("error iterating mutex stats", "error", err)
+		p.log.Debug("collected mutex contention samples", "count", sampleCount)
+		return profile, nil
 	}
 
-	p.log.Debug("collected mutex contention samples", "count", sampleCount)
+	// Clear collected stats from BPF map
+	deleted := 0
+	for _, k := range keysToDelete {
+		if err := p.objs.MutexStatsMap.Delete(&k); err != nil {
+			if deleted == 0 {
+				p.log.Debug("error deleting mutex stat", "error", err)
+			}
+		} else {
+			deleted++
+		}
+	}
+
+	p.log.Debug("collected mutex contention samples", "count", sampleCount, "deleted", deleted)
 	return profile, nil
 }
 
@@ -1520,11 +1639,11 @@ func (p *MutexProfiler) processRingBuffer(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			p.log.Info("mutex ring buffer processor stopped (context)", 
+			p.log.Info("mutex ring buffer processor stopped (context)",
 				"events", eventCount, "empty_reads", emptyReads)
 			return
 		case <-p.stopCh:
-			p.log.Info("mutex ring buffer processor stopped", 
+			p.log.Info("mutex ring buffer processor stopped",
 				"events", eventCount, "empty_reads", emptyReads)
 			return
 		default:
@@ -1555,17 +1674,17 @@ func (p *MutexProfiler) processRingBuffer(ctx context.Context) {
 				backoff = 100
 			}
 			sleepTime := time.Duration(backoff) * time.Millisecond
-			
+
 			if emptyReads == 10 || emptyReads == 100 || emptyReads%1000 == 0 {
 				p.log.Warn("mutex ring buffer sustained empty reads",
 					"consecutive_empty_reads", emptyReads, "backoff_ms", sleepTime.Milliseconds())
 			}
-			
+
 			time.Sleep(sleepTime)
 		}
-		
+
 		if time.Since(lastStatsLog) > 60*time.Second {
-			p.log.Info("mutex ring buffer stats", 
+			p.log.Info("mutex ring buffer stats",
 				"events", eventCount, "empty_reads", emptyReads)
 			lastStatsLog = time.Now()
 		}

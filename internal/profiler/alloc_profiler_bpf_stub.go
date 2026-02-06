@@ -44,7 +44,7 @@ type AllocProfilerInfo struct {
 	Pid         uint32
 	Tid         uint32
 	AllocType   uint8
-	_pad        [3]byte
+	_pad        [3]byte //nolint:unused
 }
 
 // AllocProfilerAllocInfo is an alias for bpf2go generated name
@@ -55,15 +55,15 @@ type AllocProfilerEvent struct {
 	Type        uint8
 	AllocType   uint8
 	IsFree      uint8
-	_pad        uint8
+	_pad        uint8 //nolint:unused
 	Pid         uint32
 	Tid         uint32
-	_pad2       [4]byte // alignment
+	_pad2       [4]byte //nolint:unused // alignment
 	Addr        uint64
 	Size        uint64
 	TimestampNs uint64
 	StackId     int32
-	_pad3       int32
+	_pad3       int32 //nolint:unused
 	Comm        [16]int8
 }
 
@@ -71,7 +71,7 @@ type AllocProfilerEvent struct {
 type AllocProfilerKey struct {
 	StackId   int32
 	AllocType uint8
-	_pad      [3]byte
+	_pad      [3]byte //nolint:unused
 }
 
 // AllocProfilerAllocKey is an alias for bpf2go generated name
@@ -97,7 +97,7 @@ type AllocProfilerPending struct {
 	StartNs   uint64
 	StackId   int32
 	AllocType uint8
-	_pad      [3]byte
+	_pad      [3]byte //nolint:unused
 }
 
 // AllocProfilerPendingRealloc matches struct pending_realloc in alloc_profiler.c
@@ -106,20 +106,20 @@ type AllocProfilerPendingRealloc struct {
 	NewSize uint64
 	StartNs uint64
 	StackId int32
-	_pad    int32
+	_pad    int32 //nolint:unused
 }
 
 // AllocProfilerConfig matches struct alloc_config in alloc_profiler.c
 type AllocProfilerConfig struct {
 	TargetPid    uint32
-	_pad         [4]byte
+	_pad         [4]byte //nolint:unused
 	MinSize      uint64
 	SampleRate   uint64
 	TrackFree    uint8
 	TrackCalloc  uint8
 	TrackRealloc uint8
 	TrackMmap    uint8
-	_pad2        [4]byte
+	_pad2        [4]byte //nolint:unused
 }
 
 // AllocProfilerAllocConfig is an alias for bpf2go generated name
