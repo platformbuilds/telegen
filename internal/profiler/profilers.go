@@ -420,11 +420,14 @@ func (p *CPUProfiler) resolveStackWithPID(stackID int32, pid uint32) []ResolvedF
 
 	// If no resolver available, return unresolved frames
 	if p.resolver == nil {
+		p.log.Warn("symbol resolver not available for CPU profiler",
+			"pid", pid, "stack_id", stackID, "frame_count", len(validAddrs))
 		frames := make([]ResolvedFrame, len(validAddrs))
 		for i, addr := range validAddrs {
 			frames[i] = ResolvedFrame{
 				Address:  addr,
 				Function: fmt.Sprintf("0x%x", addr),
+				Resolved: false,
 			}
 		}
 		return frames
@@ -432,6 +435,7 @@ func (p *CPUProfiler) resolveStackWithPID(stackID int32, pid uint32) []ResolvedF
 
 	// Resolve addresses to symbols with PID context
 	frames := make([]ResolvedFrame, 0, len(validAddrs))
+	resolvedCount := 0
 	for _, addr := range validAddrs {
 		frame, err := p.resolver.Resolve(pid, addr)
 		if err != nil || frame == nil {
@@ -439,10 +443,20 @@ func (p *CPUProfiler) resolveStackWithPID(stackID int32, pid uint32) []ResolvedF
 			frames = append(frames, ResolvedFrame{
 				Address:  addr,
 				Function: fmt.Sprintf("[unknown] 0x%x", addr),
+				Resolved: false,
 			})
 		} else {
 			frames = append(frames, *frame)
+			if frame.Resolved {
+				resolvedCount++
+			}
 		}
+	}
+
+	// Log warning if no symbols were resolved
+	if len(frames) > 0 && resolvedCount == 0 {
+		p.log.Debug("no symbols resolved in CPU stack",
+			"pid", pid, "frame_count", len(frames))
 	}
 
 	return frames
@@ -830,6 +844,7 @@ func (p *OffCPUProfiler) resolveStackWithPID(stackID int32, pid uint32) []Resolv
 			frames[i] = ResolvedFrame{
 				Address:  addr,
 				Function: fmt.Sprintf("0x%x", addr),
+				Resolved: false,
 			}
 		}
 		return frames
@@ -837,6 +852,7 @@ func (p *OffCPUProfiler) resolveStackWithPID(stackID int32, pid uint32) []Resolv
 
 	// Resolve addresses to symbols with PID context
 	frames := make([]ResolvedFrame, 0, len(validAddrs))
+	resolvedCount := 0
 	for _, addr := range validAddrs {
 		frame, err := p.resolver.Resolve(pid, addr)
 		if err != nil || frame == nil {
@@ -844,10 +860,20 @@ func (p *OffCPUProfiler) resolveStackWithPID(stackID int32, pid uint32) []Resolv
 			frames = append(frames, ResolvedFrame{
 				Address:  addr,
 				Function: fmt.Sprintf("[unknown] 0x%x", addr),
+				Resolved: false,
 			})
 		} else {
 			frames = append(frames, *frame)
+			if frame.Resolved {
+				resolvedCount++
+			}
 		}
+	}
+
+	// Log warning if no symbols were resolved
+	if len(frames) > 0 && resolvedCount == 0 {
+		p.log.Debug("no symbols resolved in OffCPU stack",
+			"pid", pid, "frame_count", len(frames))
 	}
 
 	return frames
@@ -1397,6 +1423,7 @@ func (p *MemoryProfiler) resolveStackWithPID(stackID int32, pid uint32) []Resolv
 			frames[i] = ResolvedFrame{
 				Address:  addr,
 				Function: fmt.Sprintf("0x%x", addr),
+				Resolved: false,
 			}
 		}
 		return frames
@@ -1404,6 +1431,7 @@ func (p *MemoryProfiler) resolveStackWithPID(stackID int32, pid uint32) []Resolv
 
 	// Resolve addresses to symbols with PID context
 	frames := make([]ResolvedFrame, 0, len(validAddrs))
+	resolvedCount := 0
 	for _, addr := range validAddrs {
 		frame, err := p.resolver.Resolve(pid, addr)
 		if err != nil || frame == nil {
@@ -1411,10 +1439,20 @@ func (p *MemoryProfiler) resolveStackWithPID(stackID int32, pid uint32) []Resolv
 			frames = append(frames, ResolvedFrame{
 				Address:  addr,
 				Function: fmt.Sprintf("[unknown] 0x%x", addr),
+				Resolved: false,
 			})
 		} else {
 			frames = append(frames, *frame)
+			if frame.Resolved {
+				resolvedCount++
+			}
 		}
+	}
+
+	// Log warning if no symbols were resolved
+	if len(frames) > 0 && resolvedCount == 0 {
+		p.log.Debug("no symbols resolved in memory stack",
+			"pid", pid, "frame_count", len(frames))
 	}
 
 	return frames
@@ -1836,6 +1874,7 @@ func (p *MutexProfiler) resolveStackWithPID(stackID int32, pid uint32) []Resolve
 			frames[i] = ResolvedFrame{
 				Address:  addr,
 				Function: fmt.Sprintf("0x%x", addr),
+				Resolved: false,
 			}
 		}
 		return frames
@@ -1843,6 +1882,7 @@ func (p *MutexProfiler) resolveStackWithPID(stackID int32, pid uint32) []Resolve
 
 	// Resolve addresses to symbols with PID context
 	frames := make([]ResolvedFrame, 0, len(validAddrs))
+	resolvedCount := 0
 	for _, addr := range validAddrs {
 		frame, err := p.resolver.Resolve(pid, addr)
 		if err != nil || frame == nil {
@@ -1850,10 +1890,20 @@ func (p *MutexProfiler) resolveStackWithPID(stackID int32, pid uint32) []Resolve
 			frames = append(frames, ResolvedFrame{
 				Address:  addr,
 				Function: fmt.Sprintf("[unknown] 0x%x", addr),
+				Resolved: false,
 			})
 		} else {
 			frames = append(frames, *frame)
+			if frame.Resolved {
+				resolvedCount++
+			}
 		}
+	}
+
+	// Log warning if no symbols were resolved
+	if len(frames) > 0 && resolvedCount == 0 {
+		p.log.Debug("no symbols resolved in mutex stack",
+			"pid", pid, "frame_count", len(frames))
 	}
 
 	return frames

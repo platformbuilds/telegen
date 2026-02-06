@@ -163,11 +163,12 @@ func (r *SymbolResolver) Resolve(pid uint32, address uint64) (*ResolvedFrame, er
 		}
 	}
 
-	// Return partially resolved frame with module info
+	// Return unresolved frame with module info
 	return &ResolvedFrame{
 		Address:  address,
-		Function: fmt.Sprintf("0x%x", address),
+		Function: fmt.Sprintf("[unresolved] 0x%x", address),
 		Module:   filepath.Base(mapping.Path),
+		Resolved: false,
 	}, nil
 }
 
@@ -435,6 +436,8 @@ func (r *SymbolResolver) resolveGoSymbol(symtab *GoSymbolTable, offset uint64, p
 				Function:  fn.Name,
 				ShortName: shortGoName(fn.Name),
 				Module:    filepath.Base(path),
+				Address:   offset,
+				Resolved:  true,
 			}
 
 			// Look up line info
@@ -470,6 +473,7 @@ func (r *SymbolResolver) resolveV8Symbol(v8Map *V8PerfMap, addr uint64) *Resolve
 				Module:    "[v8]",
 				File:      entry.ScriptName,
 				Line:      entry.LineNumber,
+				Resolved:  true,
 			}
 		}
 	}
@@ -493,6 +497,7 @@ func (r *SymbolResolver) resolveELFSymbol(info *ELFSymbolInfo, offset, addr uint
 				Function:  sym.Name,
 				ShortName: sym.Name,
 				Module:    filepath.Base(info.Path),
+				Resolved:  true,
 			}
 
 			// Try DWARF for line info
@@ -551,6 +556,7 @@ func (r *SymbolResolver) unresolvedFrame(addr uint64) *ResolvedFrame {
 	return &ResolvedFrame{
 		Address:  addr,
 		Function: fmt.Sprintf("[unknown] 0x%x", addr),
+		Resolved: false,
 	}
 }
 
