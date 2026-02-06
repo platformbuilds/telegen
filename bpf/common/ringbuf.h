@@ -37,7 +37,7 @@
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
     __uint(max_entries, 1 << 16);
-    __uint(pinning, OBI_PIN_INTERNAL);
+    __uint(pinning, LIBBPF_PIN_NONE);
 } events SEC(".maps");
 
 // To be Injected from the user space during the eBPF program load & initialization

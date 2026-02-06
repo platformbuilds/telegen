@@ -19,7 +19,7 @@ struct {
     __type(key, u32);
     __type(value, unsigned char[k_msg_buffer_size_max]);
     __uint(max_entries, 1);
-    __uint(pinning, OBI_PIN_INTERNAL);
+    __uint(pinning, LIBBPF_PIN_NONE);
 } msg_buffer_mem SEC(".maps");
 
 // When sock_msg is installed it disables the kprobes attached to tcp_sendmsg.

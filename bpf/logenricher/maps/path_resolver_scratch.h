@@ -18,5 +18,5 @@ struct {
     __type(key, u32);
     __type(value, struct dentry *[k_path_resolver_max_components]);
     __uint(max_entries, 1);
-    __uint(pinning, OBI_PIN_INTERNAL);
+    __uint(pinning, LIBBPF_PIN_NONE);
 } path_resolver_scratch SEC(".maps");

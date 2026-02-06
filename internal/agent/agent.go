@@ -19,6 +19,7 @@ import (
 	"github.com/platformbuilds/telegen/internal/agent/memory"
 	"github.com/platformbuilds/telegen/internal/exporters"
 	"github.com/platformbuilds/telegen/internal/pipeline"
+	"github.com/platformbuilds/telegen/internal/profiler"
 	"github.com/platformbuilds/telegen/internal/selftelemetry"
 )
 
@@ -85,6 +86,9 @@ type Config struct {
 	// Exporter configuration
 	Exporters exporters.Config `mapstructure:"exporters"`
 
+	// Profiling configuration
+	Profiling profiler.RunnerConfig `mapstructure:"profiling"`
+
 	// Memory budget configuration
 	Memory memory.Config `mapstructure:"memory"`
 
@@ -103,6 +107,7 @@ func DefaultConfig() Config {
 		ShutdownTimeout: 30 * time.Second,
 		Pipeline:        pipeline.DefaultConfig(),
 		Exporters:       exporters.DefaultConfig(),
+		Profiling:       profiler.DefaultRunnerConfig(),
 		Memory:          memory.DefaultConfig(),
 		DebugEnabled:    false,
 	}
@@ -120,6 +125,7 @@ type Agent struct {
 	exporterReg     *exporters.Registry
 	memoryBudget    *memory.Budget
 	selfTelemetry   *selftelemetry.Metrics
+	profilerRunner  *profiler.Runner
 
 	// HTTP server for health/debug
 	httpServer *http.Server
@@ -228,6 +234,22 @@ func (a *Agent) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start pipeline manager: %w", err)
 	}
 
+	// Initialize and start eBPF profiler if enabled
+	if a.cfg.Profiling.Enabled {
+		// Inject service metadata into profiling config
+		profCfg := a.cfg.Profiling
+		profCfg.ServiceName = a.cfg.ServiceName
+
+		a.profilerRunner, err = profiler.NewRunner(profCfg, a.log)
+		if err != nil {
+			return fmt.Errorf("failed to create profiler runner: %w", err)
+		}
+		if err := a.profilerRunner.Start(ctx); err != nil {
+			a.log.Warn("failed to start profiler runner", "error", err)
+			// Non-fatal: continue without profiling
+		}
+	}
+
 	a.state.Store(int32(StateRunning))
 	a.selfTelemetry.SetReady(true)
 	a.log.Info("agent started successfully")
@@ -258,6 +280,13 @@ func (a *Agent) Stop(ctx context.Context) error {
 		if a.httpServer != nil {
 			if err := a.httpServer.Shutdown(ctx); err != nil {
 				a.log.Warn("HTTP server shutdown error", "error", err)
+			}
+		}
+
+		// Stop profiler runner
+		if a.profilerRunner != nil {
+			if err := a.profilerRunner.Stop(ctx); err != nil {
+				a.log.Warn("profiler runner shutdown error", "error", err)
 			}
 		}
 

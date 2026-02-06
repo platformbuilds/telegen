@@ -8,6 +8,7 @@ GOARCH ?= $(shell go env GOARCH || echo amd64)
 # Build info
 RELEASE_VERSION := $(shell git describe --all 2>/dev/null | cut -d/ -f2 || echo "dev")
 RELEASE_REVISION := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 BUILDINFO_PKG ?= github.com/platformbuilds/telegen/pkg/buildinfo
 
 # Container image
@@ -61,6 +62,7 @@ generate: $(BPF2GO)
 	go generate ./internal/ebpflogger/...
 	go generate ./internal/ebpfwatcher/...
 	go generate ./internal/rdns/...
+	go generate ./internal/profiler/...
 
 .PHONY: docker-generate
 docker-generate:
@@ -79,7 +81,8 @@ docker-generate:
 		    go generate ./internal/netollyebpf/... && \
 		    go generate ./internal/ebpflogger/... && \
 		    go generate ./internal/ebpfwatcher/... && \
-		    go generate ./internal/rdns/..."
+		    go generate ./internal/rdns/... && \
+		    go generate ./internal/profiler/..."
 
 ### Build Targets ###########################################################
 
@@ -148,6 +151,7 @@ docker-buildx: docker-buildx-setup
 		--platform $(PLATFORMS) \
 		--build-arg VERSION=$(RELEASE_VERSION) \
 		--build-arg REVISION=$(RELEASE_REVISION) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
 		-t $(IMG) \
 		.
 
@@ -158,6 +162,7 @@ docker-buildx-push: docker-buildx-setup
 		--platform $(PLATFORMS) \
 		--build-arg VERSION=$(RELEASE_VERSION) \
 		--build-arg REVISION=$(RELEASE_REVISION) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
 		-t $(IMG) \
 		--push \
 		.
@@ -169,6 +174,7 @@ docker-for-server: docker-buildx-setup
 		--platform linux/amd64 \
 		--build-arg VERSION=$(RELEASE_VERSION) \
 		--build-arg REVISION=$(RELEASE_REVISION) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
 		-t $(IMG) \
 		--load \
 		.
@@ -180,6 +186,7 @@ docker-local: docker-buildx-setup
 		--platform linux/$(GOARCH) \
 		--build-arg VERSION=$(RELEASE_VERSION) \
 		--build-arg REVISION=$(RELEASE_REVISION) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
 		-t $(IMG) \
 		--load \
 		.

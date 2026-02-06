@@ -32,7 +32,8 @@ RUN go generate ./internal/ebpf/common/... && \
     go generate ./internal/netollyebpf/... && \
     go generate ./internal/ebpflogger/... && \
     go generate ./internal/ebpfwatcher/... && \
-    go generate ./internal/rdns/...
+    go generate ./internal/rdns/... && \
+    go generate ./internal/profiler/...
 
 # =============================================================================
 # Stage 2: Build Java Agent
@@ -49,6 +50,24 @@ COPY internal/java/ ./
 
 # Build the Java agent using Gradle wrapper
 RUN chmod +x gradlew && ./gradlew clean shadowJar copyLoaderJar --no-daemon
+
+# =============================================================================
+# Stage 2b: Build perf-map-agent for Java symbol resolution
+# =============================================================================
+ARG BUILDPLATFORM
+FROM --platform=$BUILDPLATFORM eclipse-temurin:17-jdk AS perfmap-build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    cmake \
+    git \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+RUN git clone --depth 1 https://github.com/jvm-profiling-tools/perf-map-agent.git && \
+    cd perf-map-agent && \
+    cmake . && \
+    make
 
 # =============================================================================
 # Stage 3: Build Go binary
@@ -158,6 +177,38 @@ COPY --from=java-build /src/internal/java/build/obi-java-agent.jar /obi-java-age
 COPY api/config.example.yaml /etc/telegen/config.yaml
 
 EXPOSE 19090
+
+ENTRYPOINT ["/telegen"]
+CMD ["--config", "/etc/telegen/config.yaml"]
+
+# =============================================================================
+# Stage 5: Java Profiling image (includes JRE + perf-map-agent for Java symbols)
+# Use this when profiling Java applications with eBPF
+# Build with: docker build --target java-profiling -t telegen:java-profiling .
+# =============================================================================
+FROM eclipse-temurin:21-jre-alpine AS java-profiling
+
+RUN apk add --no-cache \
+    ca-certificates \
+    curl \
+    jq
+
+WORKDIR /
+
+COPY --from=build /out/telegen /telegen
+COPY --from=java-build /src/internal/java/build/obi-java-agent.jar /obi-java-agent.jar
+COPY --from=perfmap-build /src/perf-map-agent/out/attach-main.jar /opt/perf-map-agent/attach-main.jar
+COPY --from=perfmap-build /src/perf-map-agent/out/libperfmap.so /opt/perf-map-agent/libperfmap.so
+COPY api/config.example.yaml /etc/telegen/config.yaml
+
+# Set environment for perf-map-agent
+ENV PERF_MAP_AGENT_JAR=/opt/perf-map-agent/attach-main.jar
+ENV PERF_MAP_AGENT_LIB=/opt/perf-map-agent/libperfmap.so
+
+EXPOSE 19090
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD ["/telegen", "--health-check"]
 
 ENTRYPOINT ["/telegen"]
 CMD ["--config", "/etc/telegen/config.yaml"]

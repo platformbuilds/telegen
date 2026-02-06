@@ -13,5 +13,5 @@ struct {
     __type(key, u64);
     __type(value, s32);
     __uint(max_entries, 1000);
-    __uint(pinning, OBI_PIN_INTERNAL);
+    __uint(pinning, LIBBPF_PIN_NONE);
 } node_fds SEC(".maps");

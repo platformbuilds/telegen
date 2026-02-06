@@ -15,8 +15,6 @@
 #include <common/map_sizing.h>
 #include <pid/pid.h>
 
-#include <logger/bpf_dbg.h>
-
 // Configuration
 #define MAX_STACK_DEPTH 127
 #define MAX_ENTRIES 65536
@@ -198,7 +196,6 @@ int BPF_PROG(offcpu_sched_switch, bool preempt, struct task_struct *prev, struct
     __u64 now = bpf_ktime_get_ns();
     __u32 prev_pid = BPF_CORE_READ(prev, pid);
     __u32 next_pid = BPF_CORE_READ(next, pid);
-    __u32 prev_tgid = BPF_CORE_READ(prev, tgid);
 
     struct offcpu_config *cfg = get_config();
     __u64 min_block = cfg ? cfg->min_block_ns : MIN_BLOCK_NS;

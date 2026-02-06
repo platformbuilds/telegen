@@ -93,6 +93,9 @@ type ResolvedFrame struct {
 	// Inlined indicates if this frame was inlined
 	Inlined bool
 
+	// IsKernel indicates if this frame is from kernel space
+	IsKernel bool
+
 	// Language-specific fields
 	Package  string // Go package
 	Receiver string // Go method receiver

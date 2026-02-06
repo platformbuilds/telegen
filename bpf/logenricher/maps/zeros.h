@@ -15,5 +15,5 @@ struct {
     __type(key, u32);
     __type(value, char[k_log_event_max_size]);
     __uint(max_entries, 1);
-    __uint(pinning, OBI_PIN_INTERNAL);
+    __uint(pinning, LIBBPF_PIN_NONE);
 } zeros SEC(".maps");

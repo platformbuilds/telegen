@@ -129,11 +129,13 @@ func (m *Manager) collectProfiles(ptype ProfileType, profiler Profiler) {
 		case <-m.ctx.Done():
 			return
 		case <-ticker.C:
-			profiles := profiler.Collect()
-			for _, p := range profiles {
-				if m.collector != nil {
-					m.collector.Collect(p)
-				}
+			profile, err := profiler.Collect(m.ctx)
+			if err != nil {
+				m.log.Debug("failed to collect profile", "type", ptype, "error", err)
+				continue
+			}
+			if profile != nil && m.collector != nil {
+				m.collector.Collect(profile)
 			}
 		}
 	}

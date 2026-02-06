@@ -13,5 +13,5 @@ struct {
     __type(key, u64); // nsid:tgid
     __type(value, u8);
     __uint(max_entries, 1 << 12);
-    __uint(pinning, OBI_PIN_INTERNAL);
+    __uint(pinning, LIBBPF_PIN_NONE);
 } log_enricher_pids SEC(".maps");
