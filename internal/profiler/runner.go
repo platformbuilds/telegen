@@ -9,6 +9,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -118,6 +120,20 @@ func (r *Runner) Start(ctx context.Context) error {
 
 	// Create OTLP log exporter if enabled
 	if r.config.LogExport.Enabled {
+		// Extract deployment name from pod name if in k8s
+		deploymentName := r.config.Deployment
+		if deploymentName == "" && r.config.PodName != "" {
+			deploymentName = extractDeploymentFromPodName(r.config.PodName)
+		}
+
+		// Get hostname if not in k8s
+		hostname := r.config.HostName
+		if hostname == "" && r.config.NodeName == "" {
+			if h, err := os.Hostname(); err == nil {
+				hostname = h
+			}
+		}
+
 		exporterCfg := LogExporterConfig{
 			Endpoint:          r.config.LogExport.Endpoint,
 			Headers:           r.config.LogExport.Headers,
@@ -131,6 +147,9 @@ func (r *Runner) Start(ctx context.Context) error {
 			ContainerName:     r.config.ContainerName,
 			NodeName:          r.config.NodeName,
 			ClusterName:       r.config.ClusterName,
+			Deployment:        deploymentName,
+			HostName:          hostname,
+			CPUSampleRate:     r.config.CPU.SampleRate,
 		}
 		r.logExporter, err = NewLogExporter(exporterCfg, r.log)
 		if err != nil {
@@ -352,4 +371,44 @@ func GetLogExporterConfig(cfg RunnerConfig) logs.ExporterConfig {
 		TelemetrySDKVersion: version.Version(),
 		TelemetrySDKLang:    "native",
 	}
+}
+
+// extractDeploymentFromPodName extracts the deployment name from a Kubernetes pod name.
+// Pod names typically follow the pattern: <deployment>-<replicaset>-<random> or <statefulset>-<ordinal>
+func extractDeploymentFromPodName(podName string) string {
+	if podName == "" {
+		return ""
+	}
+
+	// Remove trailing random suffix (5 chars) and replicaset hash (10 chars)
+	// Examples:
+	//   telegen-deployment-7d9c8f5b4d-xk9jm -> telegen-deployment
+	//   nginx-statefulset-0 -> nginx-statefulset
+	parts := strings.Split(podName, "-")
+	if len(parts) < 2 {
+		return podName // Single part, just return as-is
+	}
+
+	// Check if last part is a StatefulSet ordinal (just digits)
+	lastPart := parts[len(parts)-1]
+	isOrdinal := true
+	for _, r := range lastPart {
+		if r < '0' || r > '9' {
+			isOrdinal = false
+			break
+		}
+	}
+
+	if isOrdinal {
+		// StatefulSet: remove ordinal
+		return strings.Join(parts[:len(parts)-1], "-")
+	}
+
+	// Deployment: remove random suffix and replicaset hash
+	if len(parts) >= 3 {
+		return strings.Join(parts[:len(parts)-2], "-")
+	}
+
+	// Fallback: remove last part
+	return strings.Join(parts[:len(parts)-1], "-")
 }

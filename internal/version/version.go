@@ -1,9 +1,9 @@
 package version
 
 var (
-	version   = "v2.9.0"
-	commit    = "dev"
-	buildDate = "unknown"
+	version   = "v2.12.14"
+	commit    = "release"
+	buildDate = "2026-02-06"
 )
 
 func Version() string   { return version }

@@ -21,26 +21,38 @@ type ProfileEvent struct {
 	K8sNamespace     string `json:"k8s_namespace,omitempty"`
 	K8sContainerName string `json:"k8s_container_name,omitempty"`
 	K8sNodeName      string `json:"k8s_node_name,omitempty"`
+	K8sDeployment    string `json:"k8s_deployment,omitempty"`
+	HostName         string `json:"hostname,omitempty"` // For non-k8s environments
+	AppName          string `json:"appName,omitempty"`  // Application name (serviceName or comm)
 
 	// Thread info
 	ThreadName string `json:"threadName,omitempty"`
 	ThreadID   int64  `json:"threadId,omitempty"`
 
 	// Stack trace info
-	TopFunction string       `json:"topFunction,omitempty"`
-	TopClass    string       `json:"topClass,omitempty"`
-	TopMethod   string       `json:"topMethod,omitempty"`
-	StackPath   string       `json:"stackPath,omitempty"`
-	StackDepth  int          `json:"stackDepth,omitempty"`
-	StackTrace  string       `json:"stackTrace,omitempty"`  // JSON-encoded stack frames (deprecated, for JFR backward compat)
-	StackFrames []StackFrame `json:"stackFrames,omitempty"` // Proper JSON array (preferred for eBPF)
+	TopFunction      string       `json:"topFunction,omitempty"`
+	TopClass         string       `json:"topClass,omitempty"`
+	TopMethod        string       `json:"topMethod,omitempty"`
+	StackPath        string       `json:"stackPath,omitempty"`
+	StackDepth       int          `json:"stackDepth,omitempty"`
+	StackTrace       string       `json:"stackTrace,omitempty"`       // JSON-encoded stack frames (deprecated, for JFR backward compat)
+	StackFrames      []StackFrame `json:"stackFrames,omitempty"`      // Proper JSON array (preferred for eBPF)
+	ResolutionStatus string       `json:"resolutionStatus,omitempty"` // "resolved" or "unresolved"
 
 	// Timing/weight
 	SampleWeight    int64   `json:"sampleWeight"`
-	DurationNs      int64   `json:"durationNs,omitempty"`
+	DurationNs      int64   `json:"durationNs,omitempty"` // Meaning varies by profile type (see below)
 	SelfTimeMs      int64   `json:"selfTimeMs,omitempty"`
 	SelfTimePercent float64 `json:"selfTimePercent,omitempty"`
 	TotalSamples    int64   `json:"totalSamples,omitempty"`
+
+	// Duration semantics by profile type:
+	// - cpu: Estimated on-CPU time (sample_count × sample_period)
+	// - offcpu: Actual blocked time in nanoseconds
+	// - mutex: Lock wait time in nanoseconds
+	// - block: Go blocking time in nanoseconds
+	// - wall: Total wall-clock time (on-CPU + off-CPU)
+	// - memory/heap/alloc_*: Not applicable (use AllocationSize)
 
 	// JFR-specific fields (empty for eBPF)
 	State          string `json:"state,omitempty"`

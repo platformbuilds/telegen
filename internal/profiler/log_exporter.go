@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/platformbuilds/telegen/internal/exporters/otlp/logs"
@@ -24,6 +25,9 @@ type LogExporter struct {
 	logExporter    *logs.Exporter
 	perfMapReader  *perfmap.PerfMapReader
 	symbolResolver *SymbolResolver
+
+	// Track unresolved PIDs to avoid log spam
+	unresolvedPIDsLogged sync.Map // pid -> bool
 }
 
 // LogExporterConfig holds configuration for the profile log exporter
@@ -47,6 +51,8 @@ type LogExporterConfig struct {
 	ContainerName string
 	NodeName      string
 	ClusterName   string
+	Deployment    string // K8s deployment name
+	HostName      string // Hostname for non-k8s environments
 
 	// Headers for OTLP requests
 	Headers map[string]string
@@ -58,6 +64,9 @@ type LogExporterConfig struct {
 	ScopeName        string // defaults to "telegen.profiler"
 	ScopeVersion     string // defaults to agent version
 	TelemetrySDKLang string // defaults to "native", can be "java" for Java profiles
+
+	// Profiler settings for duration calculation
+	CPUSampleRate int // CPU sampling rate in Hz (for duration estimation)
 }
 
 // DefaultLogExporterConfig returns default configuration
@@ -175,6 +184,12 @@ func (e *LogExporter) convertToEvents(profile *Profile) []*logs.ProfileEvent {
 
 // sampleToEvent converts a single eBPF stack sample to a ProfileEvent
 func (e *LogExporter) sampleToEvent(sample StackSample, profileType ProfileType, timestamp time.Time) *logs.ProfileEvent {
+	// Determine app name: use service name if available, otherwise use process comm
+	appName := e.config.ServiceName
+	if appName == "" {
+		appName = sample.Comm
+	}
+
 	event := &logs.ProfileEvent{
 		Timestamp:        timestamp.Format(time.RFC3339Nano),
 		EventType:        e.profileTypeToEventType(profileType),
@@ -185,6 +200,9 @@ func (e *LogExporter) sampleToEvent(sample StackSample, profileType ProfileType,
 		K8sNamespace:     e.config.Namespace,
 		K8sContainerName: e.config.ContainerName,
 		K8sNodeName:      e.config.NodeName,
+		K8sDeployment:    e.config.Deployment,
+		HostName:         e.config.HostName,
+		AppName:          appName,
 		SampleWeight:     sample.Value,
 		TotalSamples:     sample.Count,
 		PID:              sample.PID,
@@ -209,6 +227,13 @@ func (e *LogExporter) sampleToEvent(sample StackSample, profileType ProfileType,
 			event.TopMethod = topFrame.Function
 		}
 
+		// Set resolution status based on top frame
+		if topFrame.Resolved {
+			event.ResolutionStatus = "resolved"
+		} else {
+			event.ResolutionStatus = "unresolved"
+		}
+
 		// Build stack path (simplified call path)
 		event.StackPath = e.buildStackPath(sample.Frames)
 
@@ -216,15 +241,56 @@ func (e *LogExporter) sampleToEvent(sample StackSample, profileType ProfileType,
 		if e.config.IncludeStackTrace {
 			event.StackFrames = e.convertFrames(sample.Frames)
 		}
+	} else {
+		// No frames means unresolved
+		event.ResolutionStatus = "unresolved"
 	}
 
-	// Set profile-type specific fields
+	// Set profile-type specific fields and calculate duration
 	switch profileType {
+	case ProfileTypeCPU:
+		// CPU profiling: calculate estimated on-CPU time from sample count
+		// Duration = sample_count * (1/sample_rate) in nanoseconds
+		if e.config.CPUSampleRate > 0 {
+			// Each sample represents ~(1/sample_rate) seconds
+			samplePeriodNs := int64(1000000000 / e.config.CPUSampleRate)
+			event.DurationNs = sample.Value * samplePeriodNs
+		} else {
+			// Default to 99 Hz if not configured
+			event.DurationNs = sample.Value * 10101010 // ~10.1ms per sample at 99Hz
+		}
 	case ProfileTypeOffCPU:
 		event.DurationNs = sample.Value // Off-CPU value is block time in ns
 		event.BlockReason = sample.BlockReason.String()
-	case ProfileTypeMemory:
+	case ProfileTypeMemory, ProfileTypeHeap, ProfileTypeAllocCount, ProfileTypeAllocBytes, ProfileTypeAllocs:
+		// Memory profiling: Value is bytes allocated, not time
 		event.AllocationSize = sample.Value
+		// No duration for memory allocations
+	case ProfileTypeMutex:
+		// Mutex contention: Value is wait time in ns
+		event.DurationNs = sample.Value
+	case ProfileTypeBlock:
+		// Block profiling: Similar to off-CPU, value is blocked time in ns
+		event.DurationNs = sample.Value
+		event.BlockReason = "block"
+	case ProfileTypeWall:
+		// Wall clock profiling: Value would be wall time in ns
+		event.DurationNs = sample.Value
+	default:
+		// Unknown profile type: set value as duration conservatively
+		e.log.Debug("unknown profile type, treating value as duration",
+			"profile_type", profileType, "value", sample.Value)
+		event.DurationNs = sample.Value
+	}
+
+	// Log warning if symbols are unresolved (stripped binaries) - once per PID
+	if event.ResolutionStatus == "unresolved" && len(sample.Frames) > 0 {
+		pidKey := sample.PID
+		if _, alreadyLogged := e.unresolvedPIDsLogged.LoadOrStore(pidKey, true); !alreadyLogged {
+			e.log.Warn("profiling stripped binary without debug symbols",
+				"pid", sample.PID, "comm", sample.Comm,
+				"hint", "rebuild with debug symbols or see docs/profiling-stripped-binaries.md")
+		}
 	}
 
 	return event
@@ -295,10 +361,22 @@ func (e *LogExporter) profileTypeToEventType(pt ProfileType) string {
 		return "ebpf.OffCPUSample"
 	case ProfileTypeMemory:
 		return "ebpf.AllocationSample"
+	case ProfileTypeHeap:
+		return "ebpf.HeapSample"
+	case ProfileTypeAllocCount:
+		return "ebpf.AllocCountSample"
+	case ProfileTypeAllocBytes:
+		return "ebpf.AllocBytesSample"
+	case ProfileTypeAllocs:
+		return "ebpf.AllocsSample"
 	case ProfileTypeMutex:
 		return "ebpf.MutexSample"
 	case ProfileTypeBlock:
 		return "ebpf.BlockSample"
+	case ProfileTypeWall:
+		return "ebpf.WallSample"
+	case ProfileTypeGorout:
+		return "ebpf.GoroutineSample"
 	default:
 		return "ebpf.Sample"
 	}

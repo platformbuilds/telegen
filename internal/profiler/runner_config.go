@@ -56,6 +56,8 @@ type RunnerConfig struct {
 	ContainerName string
 	NodeName      string
 	ClusterName   string
+	Deployment    string // K8s deployment name
+	HostName      string // Hostname for non-k8s environments
 }
 
 // CPUConfig holds CPU profiling configuration

@@ -130,6 +130,31 @@ func (c *Converter) profileEventToLogRecord(event *ProfileEvent, lr plog.LogReco
 		attrs.PutStr("profile.source", event.ProfileSource)
 	}
 
+	// Resolution status
+	if event.ResolutionStatus != "" {
+		attrs.PutStr("profile.resolution_status", event.ResolutionStatus)
+	}
+
+	// Service and environment metadata
+	if event.AppName != "" {
+		attrs.PutStr("app.name", event.AppName)
+	}
+	if event.HostName != "" {
+		attrs.PutStr("host.name", event.HostName)
+	}
+	if event.K8sDeployment != "" {
+		attrs.PutStr("k8s.deployment.name", event.K8sDeployment)
+	}
+	if event.K8sPodName != "" {
+		attrs.PutStr("k8s.pod.name", event.K8sPodName)
+	}
+	if event.K8sNodeName != "" {
+		attrs.PutStr("k8s.node.name", event.K8sNodeName)
+	}
+	if event.K8sNamespace != "" {
+		attrs.PutStr("k8s.namespace.name", event.K8sNamespace)
+	}
+
 	if event.ThreadName != "" {
 		attrs.PutStr("thread.name", event.ThreadName)
 	}
