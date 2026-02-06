@@ -16,6 +16,7 @@ import (
 	"github.com/platformbuilds/telegen/internal/kubemetrics"
 	"github.com/platformbuilds/telegen/internal/nodeexporter"
 	"github.com/platformbuilds/telegen/internal/pipeline"
+	"github.com/platformbuilds/telegen/internal/profiler"
 	"github.com/platformbuilds/telegen/internal/selftelemetry"
 	"github.com/platformbuilds/telegen/internal/version"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -54,6 +55,7 @@ func main() {
 		"version", version.Version(),
 		"mode", "one agent, many signals",
 		"ebpf_enabled", cfg.EBPF.Enabled,
+		"profiling_enabled", cfg.Profiling.Enabled,
 		"jfr_enabled", cfg.Pipelines.JFR.Enabled,
 		"logs_enabled", cfg.Pipelines.Logs.Enabled,
 	)
@@ -120,6 +122,37 @@ func main() {
 		signalsStarted++
 	}
 
+	// Start eBPF profiler if enabled
+	var profilerRunner *profiler.Runner
+	if cfg.Profiling.Enabled {
+		var err error
+		// Inject service name from agent config
+		profCfg := cfg.Profiling
+		profCfg.ServiceName = cfg.Agent.ServiceName
+
+		profilerRunner, err = profiler.NewRunner(profCfg, logger)
+		if err != nil {
+			logger.Warn("profiler failed to initialize, continuing without profiling",
+				"error", err,
+				"status", "degraded")
+		} else {
+			if err := profilerRunner.Start(ctx); err != nil {
+				logger.Warn("profiler failed to start, continuing without profiling",
+					"error", err,
+					"status", "degraded")
+				profilerRunner = nil
+			} else {
+				signalsStarted++
+				logger.Info("eBPF profiling started",
+					"cpu_enabled", cfg.Profiling.CPU.Enabled,
+					"offcpu_enabled", cfg.Profiling.OffCPU.Enabled,
+					"memory_enabled", cfg.Profiling.Memory.Enabled,
+					"log_export_enabled", cfg.Profiling.LogExport.Enabled,
+				)
+			}
+		}
+	}
+
 	// Check if we have at least one working signal
 	if signalsStarted == 0 {
 		logger.Error("no signals could be started, cannot operate without at least one data source")
@@ -147,6 +180,9 @@ func main() {
 	logger.Info("telegen shutting down")
 	cancel()
 	pl.Close()
+	if profilerRunner != nil {
+		_ = profilerRunner.Stop(context.Background())
+	}
 	if nodeExp != nil {
 		_ = nodeExp.Shutdown(context.Background())
 	}

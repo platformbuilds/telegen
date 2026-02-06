@@ -13,5 +13,5 @@ struct {
     __type(key, u64); // pid_tgid
     __type(value, int);
     __uint(max_entries, 1 << 14);
-    __uint(pinning, OBI_PIN_INTERNAL);
+    __uint(pinning, LIBBPF_PIN_NONE);
 } pid_fd SEC(".maps");

@@ -15,8 +15,6 @@
 #include <common/map_sizing.h>
 #include <pid/pid.h>
 
-#include <logger/bpf_dbg.h>
-
 // Configuration
 #define MAX_STACK_DEPTH 127
 #define MAX_ENTRIES 65536

@@ -26,5 +26,5 @@ struct {
     __uint(max_entries, MAX_CONCURRENT_REQUESTS);
     __uint(key_size, sizeof(connection_info_t));
     __uint(value_size, sizeof(conn_pid_t));
-    __uint(pinning, OBI_PIN_INTERNAL);
+    __uint(pinning, LIBBPF_PIN_NONE);
 } sock_pids SEC(".maps");

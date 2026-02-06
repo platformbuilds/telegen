@@ -16,5 +16,5 @@ struct {
     __type(key, go_addr_key_t); // goroutine key
     __type(value, char[SQL_HOSTNAME_MAX_LEN]);
     __uint(max_entries, MAX_CONCURRENT_REQUESTS);
-    __uint(pinning, OBI_PIN_INTERNAL);
+    __uint(pinning, LIBBPF_PIN_NONE);
 } pq_hostnames SEC(".maps");

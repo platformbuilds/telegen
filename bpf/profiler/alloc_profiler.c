@@ -15,8 +15,6 @@
 #include <common/map_sizing.h>
 #include <pid/pid.h>
 
-#include <logger/bpf_dbg.h>
-
 // Configuration
 #define MAX_STACK_DEPTH 127
 #define MAX_ENTRIES 65536
@@ -219,45 +217,15 @@ static __always_inline bool should_sample(void) {
         return true;
     }
     
-    __u64 count = __sync_fetch_and_add(counter, 1);
+    // Read current value first, then increment
+    // BPF doesn't allow using XADD return value
+    __u64 count = *counter;
+    __sync_fetch_and_add(counter, 1);
     return (count % cfg->sample_rate) == 0;
 }
 
-// malloc entry
-SEC("uprobe/malloc")
-int trace_malloc_enter(struct pt_regs *ctx) {
-    __u64 size = PT_REGS_PARM1(ctx);
-    __u64 now = bpf_ktime_get_ns();
-    __u64 pid_tgid = bpf_get_current_pid_tgid();
-    __u32 pid = pid_tgid >> 32;
-    
-    if (!should_profile_pid(pid)) {
-        return 0;
-    }
-    
-    struct alloc_config *cfg = get_config();
-    if (cfg && size < cfg->min_size) {
-        return 0;
-    }
-    
-    if (!should_sample()) {
-        return 0;
-    }
-    
-    struct pending_alloc pending = {
-        .size = size,
-        .start_ns = now,
-        .stack_id = bpf_get_stackid(ctx, &alloc_stacks, BPF_F_USER_STACK),
-        .alloc_type = ALLOC_MALLOC,
-    };
-    
-    bpf_map_update_elem(&pending_allocs, &pid_tgid, &pending, BPF_ANY);
-    return 0;
-}
-
-// malloc exit
-SEC("uretprobe/malloc")
-int trace_malloc_exit(struct pt_regs *ctx) {
+// Shared helper for malloc/calloc exit handling
+static __always_inline int handle_alloc_exit(struct pt_regs *ctx) {
     void *addr = (void *)PT_REGS_RC(ctx);
     __u64 now = bpf_ktime_get_ns();
     __u64 pid_tgid = bpf_get_current_pid_tgid();
@@ -266,7 +234,7 @@ int trace_malloc_exit(struct pt_regs *ctx) {
     
     if (!addr) {
         bpf_map_delete_elem(&pending_allocs, &pid_tgid);
-        return 0;  // malloc failed
+        return 0;  // malloc/calloc failed
     }
     
     struct pending_alloc *pending = bpf_map_lookup_elem(&pending_allocs, &pid_tgid);
@@ -336,6 +304,44 @@ int trace_malloc_exit(struct pt_regs *ctx) {
     
     bpf_map_delete_elem(&pending_allocs, &pid_tgid);
     return 0;
+}
+
+// malloc entry
+SEC("uprobe/malloc")
+int trace_malloc_enter(struct pt_regs *ctx) {
+    __u64 size = PT_REGS_PARM1(ctx);
+    __u64 now = bpf_ktime_get_ns();
+    __u64 pid_tgid = bpf_get_current_pid_tgid();
+    __u32 pid = pid_tgid >> 32;
+    
+    if (!should_profile_pid(pid)) {
+        return 0;
+    }
+    
+    struct alloc_config *cfg = get_config();
+    if (cfg && size < cfg->min_size) {
+        return 0;
+    }
+    
+    if (!should_sample()) {
+        return 0;
+    }
+    
+    struct pending_alloc pending = {
+        .size = size,
+        .start_ns = now,
+        .stack_id = bpf_get_stackid(ctx, &alloc_stacks, BPF_F_USER_STACK),
+        .alloc_type = ALLOC_MALLOC,
+    };
+    
+    bpf_map_update_elem(&pending_allocs, &pid_tgid, &pending, BPF_ANY);
+    return 0;
+}
+
+// malloc exit
+SEC("uretprobe/malloc")
+int trace_malloc_exit(struct pt_regs *ctx) {
+    return handle_alloc_exit(ctx);
 }
 
 // free
@@ -446,8 +452,8 @@ int trace_calloc_enter(struct pt_regs *ctx) {
 // calloc exit - reuse malloc exit logic
 SEC("uretprobe/calloc")
 int trace_calloc_exit(struct pt_regs *ctx) {
-    // Same logic as malloc exit
-    return trace_malloc_exit(ctx);
+    // Same logic as malloc exit - use shared inline helper
+    return handle_alloc_exit(ctx);
 }
 
 // realloc entry (CP-013)
@@ -589,7 +595,6 @@ int BPF_KPROBE(trace_mmap_enter, unsigned long addr, unsigned long len) {
 // munmap (CP-013)
 SEC("kprobe/do_munmap")
 int BPF_KPROBE(trace_munmap, void *addr, unsigned long len) {
-    __u64 now = bpf_ktime_get_ns();
     __u64 pid_tgid = bpf_get_current_pid_tgid();
     __u32 pid = pid_tgid >> 32;
     

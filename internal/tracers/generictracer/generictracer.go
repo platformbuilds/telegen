@@ -105,17 +105,52 @@ func (p *Tracer) buildPidFilter() []uint64 {
 }
 
 func (p *Tracer) rebuildValidPids() {
-	if p.bpfObjects.ValidPids != nil {
-		v := p.buildPidFilter()
+	if p.bpfObjects.ValidPids == nil {
+		p.log.Warn("ValidPids map is nil, skipping PID filter rebuild")
+		return
+	}
 
-		p.log.Debug("number of segments in pid filter cache", "len", len(v))
+	v := p.buildPidFilter()
+	p.log.Debug("number of segments in pid filter cache", "len", len(v))
 
-		for i, segment := range v {
-			err := p.bpfObjects.ValidPids.Put(uint32(i), segment)
-			if err != nil {
-				p.log.Error("Error setting up pid in BPF space, sizes of Go and BPF maps don't match", "error", err, "i", i)
+	// Get map info to verify it's properly initialized
+	info, err := p.bpfObjects.ValidPids.Info()
+	if err != nil {
+		p.log.Error("Failed to get ValidPids map info", "error", err)
+		return
+	}
+
+	mapID, ok := info.ID()
+	if !ok {
+		p.log.Warn("ValidPids map has no ID, might not be fully loaded")
+	} else {
+		p.log.Debug("ValidPids map info", "id", mapID, "name", info.Name)
+	}
+
+	// Update map entries
+	var errorCount int
+	for i, segment := range v {
+		if err := p.bpfObjects.ValidPids.Put(uint32(i), segment); err != nil {
+			errorCount++
+			if errorCount <= 3 {
+				// Only log first few errors to avoid log spam
+				p.log.Error("Error updating pid filter in BPF map",
+					"error", err,
+					"index", i,
+					"segment", segment,
+					"mapID", mapID,
+				)
 			}
 		}
+	}
+
+	if errorCount > 0 {
+		p.log.Error("Failed to update some pid filter entries",
+			"totalErrors", errorCount,
+			"totalEntries", len(v),
+		)
+	} else {
+		p.log.Debug("Successfully updated all pid filter entries", "count", len(v))
 	}
 }
 
@@ -485,7 +520,15 @@ func (p *Tracer) Run(ctx context.Context, ebpfEventContext *ebpfcommon.EBPFEvent
 	// At this point we now have loaded the bpf objects, which means we should insert any
 	// pids that are allowed into the bpf map
 	if p.bpfObjects.ValidPids != nil {
-		p.rebuildValidPids()
+		// Verify map is accessible before attempting to populate
+		if _, err := p.bpfObjects.ValidPids.Info(); err != nil {
+			p.log.Error("ValidPids map exists but is not accessible",
+				"error", err,
+				"hint", "Check if BPF map was properly shared via PinInternal",
+			)
+		} else {
+			p.rebuildValidPids()
+		}
 	} else {
 		p.log.Error("BPF Pids map is not created yet, this is a bug.")
 	}

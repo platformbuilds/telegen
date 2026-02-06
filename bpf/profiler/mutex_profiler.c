@@ -15,8 +15,6 @@
 #include <common/map_sizing.h>
 #include <pid/pid.h>
 
-#include <logger/bpf_dbg.h>
-
 // Configuration
 #define MAX_STACK_DEPTH 127
 #define MAX_ENTRIES 65536
@@ -169,7 +167,7 @@ static __always_inline bool should_profile_pid(__u32 pid) {
 }
 
 // pthread_mutex_lock entry - record when lock acquisition starts
-SEC("uprobe/pthread_mutex_lock")
+SEC("uprobe")
 int trace_mutex_lock_enter(struct pt_regs *ctx) {
     void *mutex = (void *)PT_REGS_PARM1(ctx);
     __u64 lock_addr = (__u64)mutex;
@@ -209,7 +207,7 @@ int trace_mutex_lock_enter(struct pt_regs *ctx) {
 }
 
 // pthread_mutex_lock exit - lock was acquired
-SEC("uretprobe/pthread_mutex_lock")
+SEC("uretprobe")
 int trace_mutex_lock_exit(struct pt_regs *ctx) {
     __u64 now = bpf_ktime_get_ns();
     __u64 pid_tgid = bpf_get_current_pid_tgid();
@@ -303,7 +301,7 @@ int trace_mutex_lock_exit(struct pt_regs *ctx) {
 }
 
 // pthread_mutex_unlock - lock is being released
-SEC("uprobe/pthread_mutex_unlock")
+SEC("uprobe")
 int trace_mutex_unlock(struct pt_regs *ctx) {
     void *mutex = (void *)PT_REGS_PARM1(ctx);
     __u64 lock_addr = (__u64)mutex;

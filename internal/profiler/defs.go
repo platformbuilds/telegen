@@ -209,8 +209,8 @@ type Profiler interface {
 	// Stop stops profiling
 	Stop() error
 
-	// Collect returns collected profiles since last call
-	Collect() []*Profile
+	// Collect returns collected profile since last call
+	Collect(ctx context.Context) (*Profile, error)
 }
 
 // TimeRange represents a time range for profile queries

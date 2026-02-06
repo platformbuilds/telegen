@@ -32,7 +32,7 @@ typedef struct log_info {
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
     __uint(max_entries, 1 << 15);
-    __uint(pinning, OBI_PIN_INTERNAL);
+    __uint(pinning, LIBBPF_PIN_NONE);
 } debug_events SEC(".maps");
 
 enum bpf_func_id___x {
