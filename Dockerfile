@@ -112,9 +112,15 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -o /out/telegen ./cmd/telegen
 
 # =============================================================================
-# Stage 3: Final runtime image (Distroless)
+# Stage 3: Final runtime image (Alpine-based for Java profiling support)
+# Includes perf-map-agent for Java symbol resolution
 # =============================================================================
-FROM gcr.io/distroless/static-debian12:nonroot AS runtime
+FROM alpine:3.23 AS runtime
+
+# Install minimal runtime dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    openjdk17-jre-headless
 
 # Labels
 LABEL org.opencontainers.image.title="Telegen"
@@ -132,8 +138,16 @@ COPY --from=build /out/telegen /telegen
 # Copy Java agent jar (must be in same directory as telegen executable)
 COPY --from=java-build /src/internal/java/build/obi-java-agent.jar /obi-java-agent.jar
 
+# Copy perf-map-agent for Java symbol resolution (eBPF profiling)
+COPY --from=perfmap-build /src/perf-map-agent/out/attach-main.jar /opt/perf-map-agent/attach-main.jar
+COPY --from=perfmap-build /src/perf-map-agent/out/libperfmap.so /opt/perf-map-agent/libperfmap.so
+
 # Copy default configuration
 COPY api/config.example.yaml /etc/telegen/config.yaml
+
+# Set environment for perf-map-agent (used by profiling subsystem)
+ENV PERF_MAP_AGENT_JAR=/opt/perf-map-agent/attach-main.jar
+ENV PERF_MAP_AGENT_LIB=/opt/perf-map-agent/libperfmap.so
 
 # eBPF requires specific capabilities at runtime:
 # - CAP_SYS_ADMIN: BPF operations

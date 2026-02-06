@@ -40,6 +40,9 @@ type CPUProfiler struct {
 	// Ring buffer reader for streaming samples
 	ringReader *ringbuf.Reader
 
+	// Symbol resolver for address symbolization
+	resolver *SymbolResolver
+
 	// State
 	mu      sync.RWMutex
 	running bool
@@ -48,10 +51,18 @@ type CPUProfiler struct {
 
 // NewCPUProfiler creates a new CPU profiler
 func NewCPUProfiler(cfg Config, log *slog.Logger) (*CPUProfiler, error) {
+	// Create symbol resolver
+	resolver, err := NewSymbolResolver(log)
+	if err != nil {
+		log.Warn("failed to create symbol resolver for CPU profiler", "error", err)
+		resolver = nil // Continue without symbol resolution
+	}
+
 	return &CPUProfiler{
-		config: cfg,
-		log:    log.With("profiler", "cpu"),
-		stopCh: make(chan struct{}),
+		config:   cfg,
+		log:      log.With("profiler", "cpu"),
+		stopCh:   make(chan struct{}),
+		resolver: resolver,
 	}, nil
 }
 
@@ -178,14 +189,14 @@ func (p *CPUProfiler) Collect(ctx context.Context) (*Profile, error) {
 			LastSeen:  time.Unix(0, int64(value.LastSeenNs)),
 		}
 
-		// Resolve user stack trace
+		// Resolve user stack trace with symbols
 		if key.UserStackId >= 0 {
-			sample.Frames = p.resolveStack(key.UserStackId)
+			sample.Frames = p.resolveStackWithPID(key.UserStackId, key.Pid)
 		}
 
 		// Resolve kernel stack trace if present
 		if key.KernelStackId >= 0 {
-			kernelFrames := p.resolveStack(key.KernelStackId)
+			kernelFrames := p.resolveStackWithPID(key.KernelStackId, 0) // kernel PID = 0
 			for i := range kernelFrames {
 				kernelFrames[i].IsKernel = true
 			}
@@ -339,15 +350,99 @@ func (p *CPUProfiler) resolveStack(stackID int32) []ResolvedFrame {
 		return nil
 	}
 
-	frames := make([]ResolvedFrame, 0)
+	// Extract non-zero addresses
+	validAddrs := make([]uint64, 0, len(addrs))
 	for _, addr := range addrs {
 		if addr == 0 {
 			break
 		}
-		frames = append(frames, ResolvedFrame{
-			Address:  addr,
-			Function: fmt.Sprintf("0x%x", addr), // Placeholder - real resolution in SymbolResolver
-		})
+		validAddrs = append(validAddrs, addr)
+	}
+
+	if len(validAddrs) == 0 {
+		return nil
+	}
+
+	// If no resolver available, return unresolved frames
+	if p.resolver == nil {
+		frames := make([]ResolvedFrame, len(validAddrs))
+		for i, addr := range validAddrs {
+			frames[i] = ResolvedFrame{
+				Address:  addr,
+				Function: fmt.Sprintf("0x%x", addr),
+			}
+		}
+		return frames
+	}
+
+	// Resolve addresses to symbols
+	frames := make([]ResolvedFrame, 0, len(validAddrs))
+	for _, addr := range validAddrs {
+		frame, err := p.resolver.Resolve(0, addr) // PID should come from stack key
+		if err != nil || frame == nil {
+			// Fallback to unresolved
+			frames = append(frames, ResolvedFrame{
+				Address:  addr,
+				Function: fmt.Sprintf("0x%x", addr),
+			})
+		} else {
+			frames = append(frames, *frame)
+		}
+	}
+
+	return frames
+}
+
+// resolveStackWithPID resolves a stack trace with PID context for proper symbol resolution
+func (p *CPUProfiler) resolveStackWithPID(stackID int32, pid uint32) []ResolvedFrame {
+	if p.objs == nil || p.objs.CpuStacks == nil || stackID < 0 {
+		return nil
+	}
+
+	// Read stack trace from map
+	var addrs [127]uint64
+	if err := p.objs.CpuStacks.Lookup(uint32(stackID), &addrs); err != nil {
+		return nil
+	}
+
+	// Extract non-zero addresses
+	validAddrs := make([]uint64, 0, len(addrs))
+	for _, addr := range addrs {
+		if addr == 0 {
+			break
+		}
+		validAddrs = append(validAddrs, addr)
+	}
+
+	if len(validAddrs) == 0 {
+		return nil
+	}
+
+	// If no resolver available, return unresolved frames
+	if p.resolver == nil {
+		frames := make([]ResolvedFrame, len(validAddrs))
+		for i, addr := range validAddrs {
+			frames[i] = ResolvedFrame{
+				Address:  addr,
+				Function: fmt.Sprintf("0x%x", addr),
+			}
+		}
+		return frames
+	}
+
+	// Resolve addresses to symbols with PID context
+	frames := make([]ResolvedFrame, 0, len(validAddrs))
+	for _, addr := range validAddrs {
+		frame, err := p.resolver.Resolve(pid, addr)
+		if err != nil || frame == nil {
+			// Fallback to unresolved
+			frames = append(frames, ResolvedFrame{
+				Address:  addr,
+				Function: fmt.Sprintf("[unknown] 0x%x", addr),
+			})
+		} else {
+			frames = append(frames, *frame)
+		}
 	}
 
 	return frames
@@ -458,6 +553,9 @@ type OffCPUProfiler struct {
 	// Ring buffer reader for streaming samples
 	ringReader *ringbuf.Reader
 
+	// Symbol resolver for address symbolization
+	resolver *SymbolResolver
+
 	// State
 	mu      sync.RWMutex
 	running bool
@@ -466,10 +564,18 @@ type OffCPUProfiler struct {
 
 // NewOffCPUProfiler creates a new off-CPU profiler
 func NewOffCPUProfiler(cfg Config, log *slog.Logger) (*OffCPUProfiler, error) {
+	// Create symbol resolver
+	resolver, err := NewSymbolResolver(log)
+	if err != nil {
+		log.Warn("failed to create symbol resolver for off-CPU profiler", "error", err)
+		resolver = nil // Continue without symbol resolution
+	}
+
 	return &OffCPUProfiler{
-		config: cfg,
-		log:    log.With("profiler", "offcpu"),
-		stopCh: make(chan struct{}),
+		config:   cfg,
+		log:      log.With("profiler", "offcpu"),
+		stopCh:   make(chan struct{}),
+		resolver: resolver,
 	}, nil
 }
 
@@ -587,14 +693,14 @@ func (p *OffCPUProfiler) Collect(ctx context.Context) (*Profile, error) {
 			BlockReason: BlockReason(key.BlockReason),
 		}
 
-		// Resolve user stack
+		// Resolve user stack with PID context
 		if key.UserStackId >= 0 {
-			sample.Frames = p.resolveStack(key.UserStackId)
+			sample.Frames = p.resolveStackWithPID(key.UserStackId, key.Pid)
 		}
 
 		// Resolve kernel stack
 		if key.KernelStackId >= 0 {
-			kernelFrames := p.resolveStack(key.KernelStackId)
+			kernelFrames := p.resolveStackWithPID(key.KernelStackId, 0) // kernel PID = 0
 			for i := range kernelFrames {
 				kernelFrames[i].IsKernel = true
 			}
@@ -688,8 +794,13 @@ func (p *OffCPUProfiler) attachTracepoints() error {
 	return nil
 }
 
-// resolveStack resolves a stack trace from its ID
+// resolveStack resolves a stack trace from its ID (legacy - use resolveStackWithPID)
 func (p *OffCPUProfiler) resolveStack(stackID int32) []ResolvedFrame {
+	return p.resolveStackWithPID(stackID, 0)
+}
+
+// resolveStackWithPID resolves a stack trace with PID context for proper symbol resolution
+func (p *OffCPUProfiler) resolveStackWithPID(stackID int32, pid uint32) []ResolvedFrame {
 	if p.objs == nil || p.objs.OffcpuStacks == nil || stackID < 0 {
 		return nil
 	}
@@ -699,15 +810,44 @@ func (p *OffCPUProfiler) resolveStack(stackID int32) []ResolvedFrame {
 		return nil
 	}
 
-	frames := make([]ResolvedFrame, 0)
+	// Extract non-zero addresses
+	validAddrs := make([]uint64, 0, len(addrs))
 	for _, addr := range addrs {
 		if addr == 0 {
 			break
 		}
-		frames = append(frames, ResolvedFrame{
-			Address:  addr,
-			Function: fmt.Sprintf("0x%x", addr),
-		})
+		validAddrs = append(validAddrs, addr)
+	}
+
+	if len(validAddrs) == 0 {
+		return nil
+	}
+
+	// If no resolver available, return unresolved frames
+	if p.resolver == nil {
+		frames := make([]ResolvedFrame, len(validAddrs))
+		for i, addr := range validAddrs {
+			frames[i] = ResolvedFrame{
+				Address:  addr,
+				Function: fmt.Sprintf("0x%x", addr),
+			}
+		}
+		return frames
+	}
+
+	// Resolve addresses to symbols with PID context
+	frames := make([]ResolvedFrame, 0, len(validAddrs))
+	for _, addr := range validAddrs {
+		frame, err := p.resolver.Resolve(pid, addr)
+		if err != nil || frame == nil {
+			// Fallback to unresolved
+			frames = append(frames, ResolvedFrame{
+				Address:  addr,
+				Function: fmt.Sprintf("[unknown] 0x%x", addr),
+			})
+		} else {
+			frames = append(frames, *frame)
+		}
 	}
 
 	return frames
@@ -843,6 +983,9 @@ type MemoryProfiler struct {
 	// Ring buffer reader
 	ringReader *ringbuf.Reader
 
+	// Symbol resolver for address symbolization
+	resolver *SymbolResolver
+
 	// State
 	mu      sync.RWMutex
 	running bool
@@ -851,10 +994,18 @@ type MemoryProfiler struct {
 
 // NewMemoryProfiler creates a new memory profiler
 func NewMemoryProfiler(cfg Config, log *slog.Logger) (*MemoryProfiler, error) {
+	// Create symbol resolver
+	resolver, err := NewSymbolResolver(log)
+	if err != nil {
+		log.Warn("failed to create symbol resolver for memory profiler", "error", err)
+		resolver = nil // Continue without symbol resolution
+	}
+
 	return &MemoryProfiler{
-		config: cfg,
-		log:    log.With("profiler", "memory"),
-		stopCh: make(chan struct{}),
+		config:   cfg,
+		log:      log.With("profiler", "memory"),
+		stopCh:   make(chan struct{}),
+		resolver: resolver,
 	}, nil
 }
 
@@ -1212,6 +1363,11 @@ func (p *MemoryProfiler) Collect(ctx context.Context) (*Profile, error) {
 
 // resolveStack resolves a stack trace from its ID
 func (p *MemoryProfiler) resolveStack(stackID int32) []ResolvedFrame {
+	return p.resolveStackWithPID(stackID, 0)
+}
+
+// resolveStackWithPID resolves a stack trace with PID context for proper symbol resolution
+func (p *MemoryProfiler) resolveStackWithPID(stackID int32, pid uint32) []ResolvedFrame {
 	if p.objs == nil || p.objs.AllocStacks == nil || stackID < 0 {
 		return nil
 	}
@@ -1221,15 +1377,44 @@ func (p *MemoryProfiler) resolveStack(stackID int32) []ResolvedFrame {
 		return nil
 	}
 
-	frames := make([]ResolvedFrame, 0)
+	// Extract non-zero addresses
+	validAddrs := make([]uint64, 0, len(addrs))
 	for _, addr := range addrs {
 		if addr == 0 {
 			break
 		}
-		frames = append(frames, ResolvedFrame{
-			Address:  addr,
-			Function: fmt.Sprintf("0x%x", addr),
-		})
+		validAddrs = append(validAddrs, addr)
+	}
+
+	if len(validAddrs) == 0 {
+		return nil
+	}
+
+	// If no resolver available, return unresolved frames
+	if p.resolver == nil {
+		frames := make([]ResolvedFrame, len(validAddrs))
+		for i, addr := range validAddrs {
+			frames[i] = ResolvedFrame{
+				Address:  addr,
+				Function: fmt.Sprintf("0x%x", addr),
+			}
+		}
+		return frames
+	}
+
+	// Resolve addresses to symbols with PID context
+	frames := make([]ResolvedFrame, 0, len(validAddrs))
+	for _, addr := range validAddrs {
+		frame, err := p.resolver.Resolve(pid, addr)
+		if err != nil || frame == nil {
+			// Fallback to unresolved
+			frames = append(frames, ResolvedFrame{
+				Address:  addr,
+				Function: fmt.Sprintf("[unknown] 0x%x", addr),
+			})
+		} else {
+			frames = append(frames, *frame)
+		}
 	}
 
 	return frames
@@ -1322,6 +1507,9 @@ type MutexProfiler struct {
 	// Ring buffer reader
 	ringReader *ringbuf.Reader
 
+	// Symbol resolver for address symbolization
+	resolver *SymbolResolver
+
 	// State
 	mu      sync.RWMutex
 	running bool
@@ -1330,10 +1518,18 @@ type MutexProfiler struct {
 
 // NewMutexProfiler creates a new mutex profiler
 func NewMutexProfiler(cfg Config, log *slog.Logger) (*MutexProfiler, error) {
+	// Create symbol resolver
+	resolver, err := NewSymbolResolver(log)
+	if err != nil {
+		log.Warn("failed to create symbol resolver for mutex profiler", "error", err)
+		resolver = nil // Continue without symbol resolution
+	}
+
 	return &MutexProfiler{
-		config: cfg,
-		log:    log.With("profiler", "mutex"),
-		stopCh: make(chan struct{}),
+		config:   cfg,
+		log:      log.With("profiler", "mutex"),
+		stopCh:   make(chan struct{}),
+		resolver: resolver,
 	}, nil
 }
 
@@ -1606,6 +1802,11 @@ func (p *MutexProfiler) Collect(ctx context.Context) (*Profile, error) {
 
 // resolveStack resolves a stack trace from its ID
 func (p *MutexProfiler) resolveStack(stackID int32) []ResolvedFrame {
+	return p.resolveStackWithPID(stackID, 0)
+}
+
+// resolveStackWithPID resolves a stack trace with PID context for proper symbol resolution
+func (p *MutexProfiler) resolveStackWithPID(stackID int32, pid uint32) []ResolvedFrame {
 	if p.objs == nil || p.objs.MutexStacks == nil || stackID < 0 {
 		return nil
 	}
@@ -1615,15 +1816,44 @@ func (p *MutexProfiler) resolveStack(stackID int32) []ResolvedFrame {
 		return nil
 	}
 
-	frames := make([]ResolvedFrame, 0)
+	// Extract non-zero addresses
+	validAddrs := make([]uint64, 0, len(addrs))
 	for _, addr := range addrs {
 		if addr == 0 {
 			break
 		}
-		frames = append(frames, ResolvedFrame{
-			Address:  addr,
-			Function: fmt.Sprintf("0x%x", addr),
-		})
+		validAddrs = append(validAddrs, addr)
+	}
+
+	if len(validAddrs) == 0 {
+		return nil
+	}
+
+	// If no resolver available, return unresolved frames
+	if p.resolver == nil {
+		frames := make([]ResolvedFrame, len(validAddrs))
+		for i, addr := range validAddrs {
+			frames[i] = ResolvedFrame{
+				Address:  addr,
+				Function: fmt.Sprintf("0x%x", addr),
+			}
+		}
+		return frames
+	}
+
+	// Resolve addresses to symbols with PID context
+	frames := make([]ResolvedFrame, 0, len(validAddrs))
+	for _, addr := range validAddrs {
+		frame, err := p.resolver.Resolve(pid, addr)
+		if err != nil || frame == nil {
+			// Fallback to unresolved
+			frames = append(frames, ResolvedFrame{
+				Address:  addr,
+				Function: fmt.Sprintf("[unknown] 0x%x", addr),
+			})
+		} else {
+			frames = append(frames, *frame)
+		}
 	}
 
 	return frames
