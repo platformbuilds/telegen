@@ -27,12 +27,13 @@ type ProfileEvent struct {
 	ThreadID   int64  `json:"threadId,omitempty"`
 
 	// Stack trace info
-	TopFunction string `json:"topFunction,omitempty"`
-	TopClass    string `json:"topClass,omitempty"`
-	TopMethod   string `json:"topMethod,omitempty"`
-	StackPath   string `json:"stackPath,omitempty"`
-	StackDepth  int    `json:"stackDepth,omitempty"`
-	StackTrace  string `json:"stackTrace,omitempty"` // JSON-encoded stack frames
+	TopFunction string       `json:"topFunction,omitempty"`
+	TopClass    string       `json:"topClass,omitempty"`
+	TopMethod   string       `json:"topMethod,omitempty"`
+	StackPath   string       `json:"stackPath,omitempty"`
+	StackDepth  int          `json:"stackDepth,omitempty"`
+	StackTrace  string       `json:"stackTrace,omitempty"`  // JSON-encoded stack frames (deprecated, for JFR backward compat)
+	StackFrames []StackFrame `json:"stackFrames,omitempty"` // Proper JSON array (preferred for eBPF)
 
 	// Timing/weight
 	SampleWeight    int64   `json:"sampleWeight"`

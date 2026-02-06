@@ -96,6 +96,9 @@ type ResolvedFrame struct {
 	// IsKernel indicates if this frame is from kernel space
 	IsKernel bool
 
+	// Resolved indicates if the address was successfully resolved to a symbol
+	Resolved bool
+
 	// Language-specific fields
 	Package  string // Go package
 	Receiver string // Go method receiver

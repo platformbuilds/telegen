@@ -6,7 +6,6 @@ package profiler
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -213,12 +212,9 @@ func (e *LogExporter) sampleToEvent(sample StackSample, profileType ProfileType,
 		// Build stack path (simplified call path)
 		event.StackPath = e.buildStackPath(sample.Frames)
 
-		// Serialize full stack trace
+		// Set full stack trace as proper JSON array (eBPF-specific)
 		if e.config.IncludeStackTrace {
-			stackFrames := e.convertFrames(sample.Frames)
-			if stackJSON, err := json.Marshal(stackFrames); err == nil {
-				event.StackTrace = string(stackJSON)
-			}
+			event.StackFrames = e.convertFrames(sample.Frames)
 		}
 	}
 
