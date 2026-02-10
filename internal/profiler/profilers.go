@@ -9,22 +9,54 @@ package profiler
 //go:generate $BPF2GO -cc $BPF_CLANG -cflags $BPF_CFLAGS -target amd64,arm64 OffcpuProfiler ../../bpf/profiler/offcpu_profiler.c -- -I../../bpf
 //go:generate $BPF2GO -cc $BPF_CLANG -cflags $BPF_CFLAGS -target amd64,arm64 MutexProfiler ../../bpf/profiler/mutex_profiler.c -- -I../../bpf
 //go:generate $BPF2GO -cc $BPF_CLANG -cflags $BPF_CFLAGS -target amd64,arm64 AllocProfiler ../../bpf/profiler/alloc_profiler.c -- -I../../bpf
+//go:generate $BPF2GO -cc $BPF_CLANG -cflags $BPF_CFLAGS -target amd64,arm64 WallProfiler ../../bpf/profiler/wall_profiler.c -- -I../../bpf
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
 
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
+	"github.com/cilium/ebpf/rlimit"
 	"golang.org/x/sys/unix"
 )
+
+// bpfTimeToWallClock converts BPF monotonic timestamps (from bpf_ktime_get_ns)
+// to wall-clock time. BPF uses CLOCK_MONOTONIC which counts nanoseconds since
+// system boot, not Unix epoch.
+func bpfTimeToWallClock(bpfNs uint64) time.Time {
+	if bpfNs == 0 {
+		return time.Time{}
+	}
+	// Get current monotonic time
+	var ts unix.Timespec
+	if err := unix.ClockGettime(unix.CLOCK_MONOTONIC, &ts); err != nil {
+		// Fallback: return current time if we can't get monotonic time
+		return time.Now()
+	}
+	monoNowNs := uint64(ts.Sec)*1e9 + uint64(ts.Nsec)
+
+	// Calculate age of the BPF timestamp relative to now
+	var ageNs int64
+	if monoNowNs >= bpfNs {
+		ageNs = int64(monoNowNs - bpfNs)
+	} else {
+		// BPF timestamp is in the future (shouldn't happen, but handle gracefully)
+		ageNs = 0
+	}
+
+	// Convert to wall-clock time: current time minus age
+	return time.Now().Add(-time.Duration(ageNs))
+}
 
 // CPUProfiler handles CPU profiling using eBPF perf events
 type CPUProfiler struct {
@@ -50,12 +82,15 @@ type CPUProfiler struct {
 }
 
 // NewCPUProfiler creates a new CPU profiler
-func NewCPUProfiler(cfg Config, log *slog.Logger) (*CPUProfiler, error) {
-	// Create symbol resolver
-	resolver, err := NewSymbolResolver(log)
-	if err != nil {
-		log.Warn("failed to create symbol resolver for CPU profiler", "error", err)
-		resolver = nil // Continue without symbol resolution
+func NewCPUProfiler(cfg Config, log *slog.Logger, resolver *SymbolResolver) (*CPUProfiler, error) {
+	// Use provided resolver (shared across profilers) or create new one
+	if resolver == nil {
+		var err error
+		resolver, err = NewSymbolResolver(log)
+		if err != nil {
+			log.Warn("failed to create symbol resolver for CPU profiler", "error", err)
+			resolver = nil // Continue without symbol resolution
+		}
 	}
 
 	return &CPUProfiler{
@@ -125,10 +160,9 @@ func (p *CPUProfiler) Stop() error {
 
 	close(p.stopCh)
 
-	// Close ring buffer reader
+	// Close ring buffer reader (Read() will return ErrClosed)
 	if p.ringReader != nil {
 		_ = p.ringReader.Close()
-		p.ringReader = nil
 	}
 
 	// Close perf event file descriptors
@@ -147,6 +181,26 @@ func (p *CPUProfiler) Stop() error {
 	return nil
 }
 
+// AddTargetPID dynamically adds a PID to the BPF target PID map
+func (p *CPUProfiler) AddTargetPID(pid uint32) error {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.objs != nil && p.objs.CpuTargetPids != nil {
+		return p.objs.CpuTargetPids.Put(uint32(pid), uint8(1))
+	}
+	return nil
+}
+
+// RemoveTargetPID removes a PID from the BPF target PID map
+func (p *CPUProfiler) RemoveTargetPID(pid uint32) error {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.objs != nil && p.objs.CpuTargetPids != nil {
+		return p.objs.CpuTargetPids.Delete(uint32(pid))
+	}
+	return nil
+}
+
 // Collect gathers current CPU profile data
 func (p *CPUProfiler) Collect(ctx context.Context) (*Profile, error) {
 	p.mu.RLock()
@@ -157,6 +211,7 @@ func (p *CPUProfiler) Collect(ctx context.Context) (*Profile, error) {
 		return nil, nil
 	}
 
+	collectStart := time.Now()
 	profile := NewProfile(ProfileTypeCPU)
 	profile.Metadata["sample_rate"] = fmt.Sprintf("%d", p.config.SampleRate)
 
@@ -185,8 +240,8 @@ func (p *CPUProfiler) Collect(ctx context.Context) (*Profile, error) {
 			Comm:      nullTermString(int8SliceToBytes(key.Comm[:])),
 			Value:     int64(value.Count),
 			Count:     int64(value.Count),
-			FirstSeen: time.Unix(0, int64(value.FirstSeenNs)),
-			LastSeen:  time.Unix(0, int64(value.LastSeenNs)),
+			FirstSeen: bpfTimeToWallClock(value.FirstSeenNs),
+			LastSeen:  bpfTimeToWallClock(value.LastSeenNs),
 		}
 
 		// Resolve user stack trace with symbols
@@ -227,6 +282,13 @@ func (p *CPUProfiler) Collect(ctx context.Context) (*Profile, error) {
 		}
 	}
 
+	// Set profile duration based on collection interval config
+	profile.Duration = p.config.CollectionInterval
+	if profile.Duration == 0 {
+		// Fallback: use elapsed time since collection started
+		profile.Duration = time.Since(collectStart)
+	}
+
 	p.log.Debug("collected CPU profile samples", "count", sampleCount, "deleted", deleted)
 	return profile, nil
 }
@@ -234,6 +296,11 @@ func (p *CPUProfiler) Collect(ctx context.Context) (*Profile, error) {
 // loadBPF loads the eBPF program using the generated code from bpf2go
 func (p *CPUProfiler) loadBPF() error {
 	p.log.Info("loading CPU profiler BPF program")
+
+	// Remove memory lock limit for BPF operations
+	if err := rlimit.RemoveMemlock(); err != nil {
+		p.log.Warn("failed to remove memlock rlimit, BPF loading may fail", "error", err)
+	}
 
 	p.objs = &CpuProfilerObjects{}
 	if err := LoadCpuProfilerObjects(p.objs, nil); err != nil {
@@ -250,31 +317,54 @@ func (p *CPUProfiler) configure() error {
 		return fmt.Errorf("BPF config map not loaded")
 	}
 
-	cfg := CpuProfilerCpuProfilerConfig{
-		SampleRateHz:  uint32(p.config.SampleRate),
-		CaptureKernel: 1,
-		CaptureUser:   1,
+	captureKernel := uint8(1)
+	if p.config.ExcludeKernel {
+		captureKernel = 0
+	}
+	captureUser := uint8(1)
+	if p.config.ExcludeUser {
+		captureUser = 0
 	}
 
-	// Set target PID filtering if specified
-	if len(p.config.TargetPIDs) > 0 {
+	cfg := CpuProfilerCpuProfilerConfig{
+		SampleRateHz:  uint32(p.config.SampleRate),
+		CaptureKernel: captureKernel,
+		CaptureUser:   captureUser,
+	}
+
+	// Set target PID filtering if specified (skip sentinel PID)
+	if len(p.config.TargetPIDs) > 0 && p.config.TargetPIDs[0] != 0xFFFFFFFF {
 		cfg.TargetPid = p.config.TargetPIDs[0]
+	}
+
+	// Tell BPF whether userspace has process filters active.
+	// When filter_active=1, BPF will ONLY profile PIDs in the target map
+	// rather than falling through to "profile everything" when target_pid==0.
+	if p.config.FilterActive {
+		cfg.FilterActive = 1
 	}
 
 	if err := p.objs.CpuProfilerCfg.Put(uint32(0), cfg); err != nil {
 		return fmt.Errorf("failed to configure BPF: %w", err)
 	}
 
-	// Populate target PIDs map if multiple PIDs specified
-	if len(p.config.TargetPIDs) > 1 && p.objs.CpuTargetPids != nil {
+	// Populate target PIDs map for all discovered PIDs
+	if len(p.config.TargetPIDs) > 0 && p.objs.CpuTargetPids != nil {
 		for _, pid := range p.config.TargetPIDs {
+			// Skip sentinel PID (0xFFFFFFFF = no processes matched yet)
+			if pid == 0xFFFFFFFF {
+				continue
+			}
 			if err := p.objs.CpuTargetPids.Put(uint32(pid), uint8(1)); err != nil {
 				p.log.Warn("failed to add target PID", "pid", pid, "error", err)
 			}
 		}
 	}
 
-	p.log.Info("BPF profiler configured", "sample_rate_hz", cfg.SampleRateHz, "target_pids", len(p.config.TargetPIDs))
+	p.log.Info("BPF profiler configured",
+		"sample_rate_hz", cfg.SampleRateHz,
+		"target_pids", len(p.config.TargetPIDs),
+		"filter_active", p.config.FilterActive)
 	return nil
 }
 
@@ -340,57 +430,7 @@ func (p *CPUProfiler) attachPerfEvents() (int, error) {
 
 // resolveStack resolves a stack trace from its ID
 func (p *CPUProfiler) resolveStack(stackID int32) []ResolvedFrame {
-	if p.objs == nil || p.objs.CpuStacks == nil || stackID < 0 {
-		return nil
-	}
-
-	// Read stack trace from map
-	var addrs [127]uint64
-	if err := p.objs.CpuStacks.Lookup(uint32(stackID), &addrs); err != nil {
-		return nil
-	}
-
-	// Extract non-zero addresses
-	validAddrs := make([]uint64, 0, len(addrs))
-	for _, addr := range addrs {
-		if addr == 0 {
-			break
-		}
-		validAddrs = append(validAddrs, addr)
-	}
-
-	if len(validAddrs) == 0 {
-		return nil
-	}
-
-	// If no resolver available, return unresolved frames
-	if p.resolver == nil {
-		frames := make([]ResolvedFrame, len(validAddrs))
-		for i, addr := range validAddrs {
-			frames[i] = ResolvedFrame{
-				Address:  addr,
-				Function: fmt.Sprintf("0x%x", addr),
-			}
-		}
-		return frames
-	}
-
-	// Resolve addresses to symbols
-	frames := make([]ResolvedFrame, 0, len(validAddrs))
-	for _, addr := range validAddrs {
-		frame, err := p.resolver.Resolve(0, addr) // PID should come from stack key
-		if err != nil || frame == nil {
-			// Fallback to unresolved
-			frames = append(frames, ResolvedFrame{
-				Address:  addr,
-				Function: fmt.Sprintf("0x%x", addr),
-			})
-		} else {
-			frames = append(frames, *frame)
-		}
-	}
-
-	return frames
+	return p.resolveStackWithPID(stackID, 0)
 }
 
 // resolveStackWithPID resolves a stack trace with PID context for proper symbol resolution
@@ -577,12 +617,15 @@ type OffCPUProfiler struct {
 }
 
 // NewOffCPUProfiler creates a new off-CPU profiler
-func NewOffCPUProfiler(cfg Config, log *slog.Logger) (*OffCPUProfiler, error) {
-	// Create symbol resolver
-	resolver, err := NewSymbolResolver(log)
-	if err != nil {
-		log.Warn("failed to create symbol resolver for off-CPU profiler", "error", err)
-		resolver = nil // Continue without symbol resolution
+func NewOffCPUProfiler(cfg Config, log *slog.Logger, resolver *SymbolResolver) (*OffCPUProfiler, error) {
+	// Use provided resolver (shared across profilers) or create new one
+	if resolver == nil {
+		var err error
+		resolver, err = NewSymbolResolver(log)
+		if err != nil {
+			log.Warn("failed to create symbol resolver for off-CPU profiler", "error", err)
+			resolver = nil // Continue without symbol resolution
+		}
 	}
 
 	return &OffCPUProfiler{
@@ -652,7 +695,6 @@ func (p *OffCPUProfiler) Stop() error {
 
 	if p.ringReader != nil {
 		_ = p.ringReader.Close()
-		p.ringReader = nil
 	}
 
 	if p.schedLink != nil {
@@ -669,6 +711,26 @@ func (p *OffCPUProfiler) Stop() error {
 	return nil
 }
 
+// AddTargetPID dynamically adds a PID to the BPF target PID map
+func (p *OffCPUProfiler) AddTargetPID(pid uint32) error {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.objs != nil && p.objs.OffcpuTargetPids != nil {
+		return p.objs.OffcpuTargetPids.Put(uint32(pid), uint8(1))
+	}
+	return nil
+}
+
+// RemoveTargetPID removes a PID from the BPF target PID map
+func (p *OffCPUProfiler) RemoveTargetPID(pid uint32) error {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.objs != nil && p.objs.OffcpuTargetPids != nil {
+		return p.objs.OffcpuTargetPids.Delete(uint32(pid))
+	}
+	return nil
+}
+
 // Collect gathers off-CPU profile data
 func (p *OffCPUProfiler) Collect(ctx context.Context) (*Profile, error) {
 	p.mu.RLock()
@@ -678,6 +740,7 @@ func (p *OffCPUProfiler) Collect(ctx context.Context) (*Profile, error) {
 		return nil, nil
 	}
 
+	collectStart := time.Now()
 	profile := NewProfile(ProfileTypeOffCPU)
 	profile.Metadata["min_block_ns"] = fmt.Sprintf("%d", p.config.MinBlockTimeNs)
 
@@ -743,6 +806,12 @@ func (p *OffCPUProfiler) Collect(ctx context.Context) (*Profile, error) {
 		}
 	}
 
+	// Set profile duration
+	profile.Duration = p.config.CollectionInterval
+	if profile.Duration == 0 {
+		profile.Duration = time.Since(collectStart)
+	}
+
 	p.log.Debug("collected off-CPU profile samples", "count", sampleCount, "deleted", deleted)
 	return profile, nil
 }
@@ -750,6 +819,11 @@ func (p *OffCPUProfiler) Collect(ctx context.Context) (*Profile, error) {
 // loadBPF loads the eBPF program using generated code
 func (p *OffCPUProfiler) loadBPF() error {
 	p.log.Info("loading off-CPU profiler BPF program")
+
+	// Remove memory lock limit for BPF operations
+	if err := rlimit.RemoveMemlock(); err != nil {
+		p.log.Warn("failed to remove memlock rlimit, BPF loading may fail", "error", err)
+	}
 
 	p.objs = &OffcpuProfilerObjects{}
 	if err := LoadOffcpuProfilerObjects(p.objs, nil); err != nil {
@@ -771,21 +845,50 @@ func (p *OffCPUProfiler) configure() error {
 		minBlockNs = 1000000 // Default 1ms
 	}
 
-	cfg := OffcpuProfilerOffcpuConfig{
-		MinBlockNs:    minBlockNs,
-		CaptureKernel: 1,
-		CaptureUser:   1,
+	captureKernel := uint8(1)
+	if p.config.ExcludeKernel {
+		captureKernel = 0
+	}
+	captureUser := uint8(1)
+	if p.config.ExcludeUser {
+		captureUser = 0
 	}
 
-	if len(p.config.TargetPIDs) > 0 {
+	cfg := OffcpuProfilerOffcpuConfig{
+		MinBlockNs:    minBlockNs,
+		CaptureKernel: captureKernel,
+		CaptureUser:   captureUser,
+	}
+
+	if len(p.config.TargetPIDs) > 0 && p.config.TargetPIDs[0] != 0xFFFFFFFF {
 		cfg.TargetPid = p.config.TargetPIDs[0]
+	}
+
+	// Tell BPF whether userspace has process filters active
+	if p.config.FilterActive {
+		cfg.FilterActive = 1
 	}
 
 	if err := p.objs.OffcpuCfg.Put(uint32(0), cfg); err != nil {
 		return fmt.Errorf("failed to configure BPF: %w", err)
 	}
 
-	p.log.Info("off-CPU BPF configured", "min_block_ns", minBlockNs)
+	// Populate target PIDs map for all discovered PIDs
+	if len(p.config.TargetPIDs) > 0 && p.objs.OffcpuTargetPids != nil {
+		for _, pid := range p.config.TargetPIDs {
+			if pid == 0xFFFFFFFF {
+				continue
+			}
+			if err := p.objs.OffcpuTargetPids.Put(uint32(pid), uint8(1)); err != nil {
+				p.log.Warn("failed to add off-CPU target PID", "pid", pid, "error", err)
+			}
+		}
+	}
+
+	p.log.Info("off-CPU BPF configured",
+		"min_block_ns", minBlockNs,
+		"target_pids", len(p.config.TargetPIDs),
+		"filter_active", p.config.FilterActive)
 	return nil
 }
 
@@ -941,28 +1044,96 @@ func (p *OffCPUProfiler) processRingBuffer(ctx context.Context) {
 	}
 }
 
-// WallProfiler handles wall clock profiling
+// WallProfiler handles wall clock profiling combining on-CPU + off-CPU time
+// It uses perf_event sampling and sched_switch tracing to measure total elapsed time
 type WallProfiler struct {
-	config  Config
-	log     *slog.Logger
-	running bool
+	config Config
+	log    *slog.Logger
+
+	// eBPF objects - uses generated types from bpf2go
+	objs *WallProfilerObjects
+
+	// Perf event file descriptors (one per CPU)
+	perfFDs []int
+
+	// Ring buffer reader for streaming samples
+	ringReader *ringbuf.Reader
+
+	// Symbol resolver for address symbolization
+	resolver *SymbolResolver
+
+	// State
 	mu      sync.RWMutex
+	running bool
+	stopCh  chan struct{}
 }
 
 // NewWallProfiler creates a new wall clock profiler
-func NewWallProfiler(cfg Config, log *slog.Logger) (*WallProfiler, error) {
+func NewWallProfiler(cfg Config, log *slog.Logger, resolver *SymbolResolver) (*WallProfiler, error) {
+	// Use provided resolver (shared across profilers) or create new one
+	if resolver == nil {
+		var err error
+		resolver, err = NewSymbolResolver(log)
+		if err != nil {
+			log.Warn("failed to create symbol resolver for wall profiler", "error", err)
+			resolver = nil // Continue without symbol resolution
+		}
+	}
+
 	return &WallProfiler{
-		config: cfg,
-		log:    log.With("profiler", "wall"),
+		config:   cfg,
+		log:      log.With("profiler", "wall"),
+		stopCh:   make(chan struct{}),
+		resolver: resolver,
 	}, nil
 }
 
-// Start starts wall clock profiling
+// Start loads the eBPF program and starts wall clock profiling
 func (p *WallProfiler) Start(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	p.log.Info("starting wall clock profiler")
+	if p.running {
+		return nil
+	}
+
+	sampleRate := p.config.WallSampleRate
+	if sampleRate <= 0 {
+		sampleRate = 19 // Default 19 Hz for wall profiler (lower than CPU to reduce overhead)
+	}
+	p.log.Info("starting wall clock profiler", "sample_rate", sampleRate)
+
+	// Load the BPF program from generated code
+	if err := p.loadBPF(); err != nil {
+		return fmt.Errorf("failed to load wall profiler BPF: %w", err)
+	}
+
+	// Configure the profiler
+	if err := p.configure(); err != nil {
+		return fmt.Errorf("failed to configure wall profiler: %w", err)
+	}
+
+	// Attach to perf events on each CPU (same as CPU profiler)
+	attached, err := p.attachPerfEvents(sampleRate)
+	if err != nil {
+		return fmt.Errorf("failed to attach perf events: %w", err)
+	}
+
+	p.log.Info("wall profiler BPF attached",
+		"attached_cpus", attached,
+		"sample_rate", sampleRate)
+
+	// Start ring buffer reader for streaming samples
+	if p.objs != nil && p.objs.WallEvents != nil {
+		rd, err := ringbuf.NewReader(p.objs.WallEvents)
+		if err != nil {
+			p.log.Warn("failed to create ring buffer reader", "error", err)
+		} else {
+			p.ringReader = rd
+			go p.processRingBuffer(ctx)
+		}
+	}
+
 	p.running = true
 	return nil
 }
@@ -972,8 +1143,52 @@ func (p *WallProfiler) Stop() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	if !p.running {
+		return nil
+	}
+
 	p.log.Info("stopping wall clock profiler")
+
+	close(p.stopCh)
+
+	// Close ring buffer reader
+	if p.ringReader != nil {
+		_ = p.ringReader.Close()
+	}
+
+	// Close perf event file descriptors
+	for _, fd := range p.perfFDs {
+		_ = unix.Close(fd)
+	}
+	p.perfFDs = nil
+
+	// Close eBPF objects
+	if p.objs != nil {
+		_ = p.objs.Close()
+		p.objs = nil
+	}
+
 	p.running = false
+	return nil
+}
+
+// AddTargetPID dynamically adds a PID to the BPF target PID map
+func (p *WallProfiler) AddTargetPID(pid uint32) error {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.objs != nil && p.objs.WallTargetPids != nil {
+		return p.objs.WallTargetPids.Put(uint32(pid), uint8(1))
+	}
+	return nil
+}
+
+// RemoveTargetPID removes a PID from the BPF target PID map
+func (p *WallProfiler) RemoveTargetPID(pid uint32) error {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.objs != nil && p.objs.WallTargetPids != nil {
+		return p.objs.WallTargetPids.Delete(uint32(pid))
+	}
 	return nil
 }
 
@@ -986,7 +1201,299 @@ func (p *WallProfiler) Collect(ctx context.Context) (*Profile, error) {
 		return nil, nil
 	}
 
-	return NewProfile(ProfileTypeWall), nil
+	collectStart := time.Now()
+	profile := NewProfile(ProfileTypeWall)
+
+	sampleRate := p.config.WallSampleRate
+	if sampleRate <= 0 {
+		sampleRate = 19
+	}
+	profile.Metadata["sample_rate"] = fmt.Sprintf("%d", sampleRate)
+
+	// Read aggregated counts from the BPF map
+	if p.objs == nil || p.objs.WallCounts == nil {
+		p.log.Debug("wall profiler counts map is nil, returning empty profile")
+		return profile, nil
+	}
+
+	var key WallProfilerWallKey
+	var value WallProfilerWallValue
+	var sampleCount int
+	const maxSamples = 10000
+	keysToDelete := make([]WallProfilerWallKey, 0, maxSamples)
+
+	iter := p.objs.WallCounts.Iterate()
+	for iter.Next(&key, &value) {
+		if sampleCount >= maxSamples {
+			p.log.Warn("wall profiler hit max sample limit", "max", maxSamples)
+			break
+		}
+
+		sample := StackSample{
+			PID:   key.Pid,
+			TGID:  key.Tid,
+			Comm:  nullTermString(int8SliceToBytes(key.Comm[:])),
+			Value: int64(value.TotalWallNs),
+			Count: int64(value.Count),
+		}
+
+		// Store additional wall time breakdown in sample metadata
+		// WallTime = CPUTime + OffCPUTime
+		sample.WallTimeNs = value.TotalWallNs
+		sample.CPUTimeNs = value.TotalCpuNs
+		sample.OffCPUTimeNs = value.TotalOffcpuNs
+
+		// Resolve user stack trace
+		if key.UserStackId >= 0 {
+			sample.Frames = p.resolveStackWithPID(key.UserStackId, key.Pid)
+		}
+
+		// Resolve kernel stack
+		if key.KernelStackId >= 0 {
+			kernelFrames := p.resolveStackWithPID(key.KernelStackId, 0)
+			for i := range kernelFrames {
+				kernelFrames[i].IsKernel = true
+			}
+			sample.Frames = append(sample.Frames, kernelFrames...)
+		}
+
+		profile.AddSample(sample)
+		keysToDelete = append(keysToDelete, key)
+		sampleCount++
+	}
+
+	if err := iter.Err(); err != nil {
+		p.log.Warn("error iterating wall counts", "error", err)
+		return profile, nil
+	}
+
+	// Clear collected samples from BPF map
+	deleted := 0
+	for _, k := range keysToDelete {
+		if err := p.objs.WallCounts.Delete(&k); err != nil {
+			if deleted == 0 {
+				p.log.Debug("error deleting wall count", "error", err)
+			}
+		} else {
+			deleted++
+		}
+	}
+
+	profile.Duration = p.config.CollectionInterval
+	if profile.Duration == 0 {
+		profile.Duration = time.Since(collectStart)
+	}
+
+	p.log.Debug("collected wall clock profile samples", "count", sampleCount, "deleted", deleted)
+	return profile, nil
+}
+
+// loadBPF loads the eBPF program using generated code
+func (p *WallProfiler) loadBPF() error {
+	p.log.Info("loading wall profiler BPF program")
+
+	// Remove memory lock limit for BPF operations
+	if err := rlimit.RemoveMemlock(); err != nil {
+		p.log.Warn("failed to remove memlock rlimit, BPF loading may fail", "error", err)
+	}
+
+	p.objs = &WallProfilerObjects{}
+	if err := LoadWallProfilerObjects(p.objs, nil); err != nil {
+		return fmt.Errorf("failed to load BPF objects: %w", err)
+	}
+
+	p.log.Info("wall BPF objects loaded successfully")
+	return nil
+}
+
+// configure sets up the profiler configuration in the BPF map
+func (p *WallProfiler) configure() error {
+	if p.objs == nil || p.objs.WallCfg == nil {
+		return fmt.Errorf("BPF config map not loaded")
+	}
+
+	sampleRate := p.config.WallSampleRate
+	if sampleRate <= 0 {
+		sampleRate = 19
+	}
+
+	// Sample interval in nanoseconds
+	sampleIntervalNs := uint64(1e9 / sampleRate)
+
+	cfg := WallProfilerWallConfig{
+		SampleIntervalNs: sampleIntervalNs,
+	}
+
+	if len(p.config.TargetPIDs) > 0 && p.config.TargetPIDs[0] != 0xFFFFFFFF {
+		cfg.TargetPid = p.config.TargetPIDs[0]
+	}
+
+	// Tell BPF whether userspace has process filters active
+	if p.config.FilterActive {
+		cfg.FilterActive = 1
+	}
+
+	if err := p.objs.WallCfg.Put(uint32(0), cfg); err != nil {
+		return fmt.Errorf("failed to configure BPF: %w", err)
+	}
+
+	// Populate target PIDs map
+	if len(p.config.TargetPIDs) > 0 && p.objs.WallTargetPids != nil {
+		for _, pid := range p.config.TargetPIDs {
+			if pid == 0xFFFFFFFF {
+				continue
+			}
+			if err := p.objs.WallTargetPids.Put(uint32(pid), uint8(1)); err != nil {
+				p.log.Warn("failed to add wall target PID", "pid", pid, "error", err)
+			}
+		}
+	}
+
+	p.log.Info("wall BPF configured",
+		"sample_interval_ns", sampleIntervalNs,
+		"target_pids", len(p.config.TargetPIDs),
+		"filter_active", p.config.FilterActive)
+	return nil
+}
+
+// attachPerfEvents attaches the BPF program to perf events for each CPU
+func (p *WallProfiler) attachPerfEvents(sampleRate int) (int, error) {
+	if p.objs == nil || p.objs.ProfileWall == nil {
+		return 0, fmt.Errorf("BPF program not loaded")
+	}
+
+	numCPUs := runtime.NumCPU()
+	attached := 0
+
+	// Create perf event on each CPU
+	for cpu := 0; cpu < numCPUs; cpu++ {
+		attr := &unix.PerfEventAttr{
+			Type:   unix.PERF_TYPE_SOFTWARE,
+			Config: unix.PERF_COUNT_SW_CPU_CLOCK,
+			Size:   uint32(unsafe.Sizeof(unix.PerfEventAttr{})),
+			Sample: uint64(sampleRate),
+			Bits:   unix.PerfBitFreq,
+		}
+
+		fd, err := unix.PerfEventOpen(attr, -1, cpu, -1, unix.PERF_FLAG_FD_CLOEXEC)
+		if err != nil {
+			p.log.Warn("failed to open perf event", "cpu", cpu, "error", err)
+			continue
+		}
+
+		// Attach BPF program to perf event
+		if err := unix.IoctlSetInt(fd, unix.PERF_EVENT_IOC_SET_BPF, p.objs.ProfileWall.FD()); err != nil {
+			p.log.Warn("failed to attach BPF to perf event", "cpu", cpu, "error", err)
+			unix.Close(fd)
+			continue
+		}
+
+		// Enable the perf event
+		if err := unix.IoctlSetInt(fd, unix.PERF_EVENT_IOC_ENABLE, 0); err != nil {
+			p.log.Warn("failed to enable perf event", "cpu", cpu, "error", err)
+			unix.Close(fd)
+			continue
+		}
+
+		p.perfFDs = append(p.perfFDs, fd)
+		attached++
+	}
+
+	if attached == 0 {
+		return 0, fmt.Errorf("failed to attach to any CPU")
+	}
+
+	return attached, nil
+}
+
+// resolveStackWithPID resolves a BPF stack trace to function names
+func (p *WallProfiler) resolveStackWithPID(stackID int32, pid uint32) []ResolvedFrame {
+	if stackID < 0 || p.objs == nil || p.objs.WallStacks == nil {
+		return nil
+	}
+
+	var addrs [127]uint64
+	if err := p.objs.WallStacks.Lookup(uint32(stackID), &addrs); err != nil {
+		return nil
+	}
+
+	var frames []ResolvedFrame
+	for _, addr := range addrs {
+		if addr == 0 {
+			break
+		}
+
+		frame := ResolvedFrame{
+			Address: addr,
+		}
+
+		// Try to resolve the address
+		if p.resolver != nil {
+			if resolved, err := p.resolver.Resolve(pid, addr); err == nil && resolved.Function != "" {
+				frame.Function = resolved.Function
+				frame.ShortName = resolved.ShortName
+				frame.Module = resolved.Module
+				frame.File = resolved.File
+				frame.Line = resolved.Line
+				frame.Inlined = resolved.Inlined
+				frame.Resolved = true
+				frame.Class = resolved.Class
+			}
+		}
+
+		if !frame.Resolved {
+			frame.Function = fmt.Sprintf("[unresolved] 0x%x", addr)
+		}
+
+		frames = append(frames, frame)
+	}
+
+	return frames
+}
+
+// processRingBuffer reads samples from the BPF ring buffer
+func (p *WallProfiler) processRingBuffer(ctx context.Context) {
+	if p.ringReader == nil {
+		return
+	}
+
+	p.log.Debug("starting wall profiler ring buffer reader")
+
+	var sampleCount uint64
+	var emptyReads uint64
+	lastStatsLog := time.Now()
+
+	for {
+		select {
+		case <-p.stopCh:
+			p.log.Debug("wall ring buffer reader stopped")
+			return
+		case <-ctx.Done():
+			p.log.Debug("wall ring buffer reader context cancelled")
+			return
+		default:
+		}
+
+		record, err := p.ringReader.Read()
+		if err != nil {
+			if errors.Is(err, ringbuf.ErrClosed) {
+				return
+			}
+			emptyReads++
+			continue
+		}
+
+		if len(record.RawSample) > 0 {
+			sampleCount++
+		}
+
+		// Log stats periodically
+		if time.Since(lastStatsLog) > 30*time.Second {
+			p.log.Debug("wall ring buffer stats",
+				"samples", sampleCount, "empty_reads", emptyReads)
+			lastStatsLog = time.Now()
+		}
+	}
 }
 
 // MemoryProfiler handles memory allocation profiling using uprobes on malloc/free
@@ -1019,12 +1526,15 @@ type MemoryProfiler struct {
 }
 
 // NewMemoryProfiler creates a new memory profiler
-func NewMemoryProfiler(cfg Config, log *slog.Logger) (*MemoryProfiler, error) {
-	// Create symbol resolver
-	resolver, err := NewSymbolResolver(log)
-	if err != nil {
-		log.Warn("failed to create symbol resolver for memory profiler", "error", err)
-		resolver = nil // Continue without symbol resolution
+func NewMemoryProfiler(cfg Config, log *slog.Logger, resolver *SymbolResolver) (*MemoryProfiler, error) {
+	// Use provided resolver (shared across profilers) or create new one
+	if resolver == nil {
+		var err error
+		resolver, err = NewSymbolResolver(log)
+		if err != nil {
+			log.Warn("failed to create symbol resolver for memory profiler", "error", err)
+			resolver = nil // Continue without symbol resolution
+		}
 	}
 
 	return &MemoryProfiler{
@@ -1094,7 +1604,6 @@ func (p *MemoryProfiler) Stop() error {
 
 	if p.ringReader != nil {
 		_ = p.ringReader.Close()
-		p.ringReader = nil
 	}
 
 	// Close uprobe links
@@ -1117,9 +1626,34 @@ func (p *MemoryProfiler) Stop() error {
 	return nil
 }
 
+// AddTargetPID dynamically adds a PID to the BPF target PID map
+func (p *MemoryProfiler) AddTargetPID(pid uint32) error {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.objs != nil && p.objs.AllocTargetPids != nil {
+		return p.objs.AllocTargetPids.Put(uint32(pid), uint8(1))
+	}
+	return nil
+}
+
+// RemoveTargetPID removes a PID from the BPF target PID map
+func (p *MemoryProfiler) RemoveTargetPID(pid uint32) error {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.objs != nil && p.objs.AllocTargetPids != nil {
+		return p.objs.AllocTargetPids.Delete(uint32(pid))
+	}
+	return nil
+}
+
 // loadBPF loads the BPF program
 func (p *MemoryProfiler) loadBPF() error {
 	p.log.Info("loading memory profiler BPF program")
+
+	// Remove memory lock limit for BPF operations
+	if err := rlimit.RemoveMemlock(); err != nil {
+		p.log.Warn("failed to remove memlock rlimit, BPF loading may fail", "error", err)
+	}
 
 	p.objs = &AllocProfilerObjects{}
 	if err := LoadAllocProfilerObjects(p.objs, nil); err != nil {
@@ -1149,40 +1683,118 @@ func (p *MemoryProfiler) configure() error {
 		TrackMmap:    0, // mmap requires kprobe, more complex
 	}
 
-	if len(p.config.TargetPIDs) > 0 {
+	if len(p.config.TargetPIDs) > 0 && p.config.TargetPIDs[0] != 0xFFFFFFFF {
 		cfg.TargetPid = p.config.TargetPIDs[0]
+	}
+
+	// Tell BPF whether userspace has process filters active
+	if p.config.FilterActive {
+		cfg.FilterActive = 1
 	}
 
 	if err := p.objs.AllocCfg.Put(uint32(0), cfg); err != nil {
 		return fmt.Errorf("failed to configure BPF: %w", err)
 	}
 
-	p.log.Info("memory BPF configured", "min_size", minSize)
+	// Populate target PIDs map
+	if len(p.config.TargetPIDs) > 0 && p.objs.AllocTargetPids != nil {
+		for _, pid := range p.config.TargetPIDs {
+			if pid == 0xFFFFFFFF {
+				continue
+			}
+			if err := p.objs.AllocTargetPids.Put(uint32(pid), uint8(1)); err != nil {
+				p.log.Warn("failed to add alloc target PID", "pid", pid, "error", err)
+			}
+		}
+	}
+
+	p.log.Info("memory BPF configured",
+		"min_size", minSize,
+		"target_pids", len(p.config.TargetPIDs),
+		"filter_active", p.config.FilterActive)
 	return nil
+}
+
+// findLibcForPID finds the libc path used by a specific process from /proc/<pid>/maps
+// Returns the path accessible from the host (via /proc/<pid>/root for containers)
+func findLibcForPID(pid uint32) (string, error) {
+	mapsPath := fmt.Sprintf("/proc/%d/maps", pid)
+	file, err := os.Open(mapsPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open %s: %w", mapsPath, err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		// Look for libc.so entries (glibc or musl)
+		// Format: address perms offset dev inode pathname
+		// e.g., 7f8b7c000000-7f8b7c200000 r-xp 00000000 fd:00 12345 /lib64/libc.so.6
+		if strings.Contains(line, "libc") && strings.Contains(line, ".so") {
+			fields := strings.Fields(line)
+			if len(fields) >= 6 {
+				libcPath := fields[5]
+				// For containerized processes, access via /proc/<pid>/root
+				containerPath := fmt.Sprintf("/proc/%d/root%s", pid, libcPath)
+				if _, err := os.Stat(containerPath); err == nil {
+					return containerPath, nil
+				}
+				// Fallback to direct path (host process)
+				if _, err := os.Stat(libcPath); err == nil {
+					return libcPath, nil
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("libc not found in /proc/%d/maps", pid)
 }
 
 // attachUprobes attaches uprobes to libc allocation functions
 func (p *MemoryProfiler) attachUprobes() error {
-	// Find libc path
-	libcPath := "/lib/x86_64-linux-gnu/libc.so.6"
-	// Try common paths including musl (Alpine), glibc, and architecture variants
-	for _, path := range []string{
-		"/lib/x86_64-linux-gnu/libc.so.6",
-		"/lib64/libc.so.6",
-		"/usr/lib/x86_64-linux-gnu/libc.so.6",
-		"/lib/aarch64-linux-gnu/libc.so.6",
-		"/usr/lib/libc.so.6",
-		"/lib/libc.so.6",
-		"/lib/libc.musl-x86_64.so.1",     // Alpine musl
-		"/lib/ld-musl-x86_64.so.1",       // Alpine musl alternative
-		"/usr/lib/libc.musl-x86_64.so.1", // musl in /usr
-		"/lib/libc.musl-aarch64.so.1",    // Alpine ARM64
-		"/lib/ld-musl-aarch64.so.1",      // Alpine ARM64 alternative
-	} {
-		if _, err := os.Stat(path); err == nil {
-			libcPath = path
-			break
+	var libcPath string
+	var err error
+
+	// If we have target PIDs, find libc from one of them (for container support)
+	if len(p.config.TargetPIDs) > 0 && p.config.TargetPIDs[0] != 0xFFFFFFFF {
+		for _, pid := range p.config.TargetPIDs {
+			if pid == 0 || pid == 0xFFFFFFFF {
+				continue
+			}
+			libcPath, err = findLibcForPID(pid)
+			if err == nil {
+				p.log.Info("found libc for target process", "pid", pid, "libc", libcPath)
+				break
+			}
+			p.log.Debug("failed to find libc for pid", "pid", pid, "error", err)
 		}
+	}
+
+	// Fallback to common host paths if no target PID libc found
+	if libcPath == "" {
+		hostPaths := []string{
+			"/lib/x86_64-linux-gnu/libc.so.6",
+			"/lib64/libc.so.6",
+			"/usr/lib/x86_64-linux-gnu/libc.so.6",
+			"/lib/aarch64-linux-gnu/libc.so.6",
+			"/usr/lib/libc.so.6",
+			"/lib/libc.so.6",
+			"/lib/libc.musl-x86_64.so.1",     // Alpine musl
+			"/lib/ld-musl-x86_64.so.1",       // Alpine musl alternative
+			"/usr/lib/libc.musl-x86_64.so.1", // musl in /usr
+			"/lib/libc.musl-aarch64.so.1",    // Alpine ARM64
+			"/lib/ld-musl-aarch64.so.1",      // Alpine ARM64 alternative
+		}
+		for _, path := range hostPaths {
+			if _, err := os.Stat(path); err == nil {
+				libcPath = path
+				break
+			}
+		}
+	}
+
+	if libcPath == "" {
+		return fmt.Errorf("could not find libc for uprobe attachment")
 	}
 
 	exe, err := link.OpenExecutable(libcPath)
@@ -1256,6 +1868,7 @@ func (p *MemoryProfiler) CollectHeap(ctx context.Context) (*Profile, error) {
 		return nil, nil
 	}
 
+	collectStart := time.Now()
 	profile := NewProfile(ProfileTypeHeap)
 
 	if p.objs == nil || p.objs.LiveAllocs == nil {
@@ -1283,7 +1896,7 @@ func (p *MemoryProfiler) CollectHeap(ctx context.Context) (*Profile, error) {
 		}
 
 		if info.StackId >= 0 {
-			sample.Frames = p.resolveStack(info.StackId)
+			sample.Frames = p.resolveStackWithPID(info.StackId, info.Pid)
 		}
 
 		profile.AddSample(sample)
@@ -1314,6 +1927,12 @@ func (p *MemoryProfiler) CollectHeap(ctx context.Context) (*Profile, error) {
 	profile.Metadata["total_bytes"] = fmt.Sprintf("%d", totalBytes)
 	profile.Metadata["alloc_count"] = fmt.Sprintf("%d", allocCount)
 
+	// Set profile duration
+	profile.Duration = p.config.CollectionInterval
+	if profile.Duration == 0 {
+		profile.Duration = time.Since(collectStart)
+	}
+
 	p.log.Debug("collected heap profile", "allocs", allocCount, "bytes", totalBytes, "deleted", deleted)
 	return profile, nil
 }
@@ -1327,6 +1946,7 @@ func (p *MemoryProfiler) CollectAllocs(ctx context.Context) (*Profile, error) {
 		return nil, nil
 	}
 
+	collectStart := time.Now()
 	profile := NewProfile(ProfileTypeAllocCount)
 
 	if p.objs == nil || p.objs.AllocStatsMap == nil {
@@ -1376,6 +1996,12 @@ func (p *MemoryProfiler) CollectAllocs(ctx context.Context) (*Profile, error) {
 		} else {
 			deleted++
 		}
+	}
+
+	// Set profile duration
+	profile.Duration = p.config.CollectionInterval
+	if profile.Duration == 0 {
+		profile.Duration = time.Since(collectStart)
 	}
 
 	p.log.Debug("collected alloc stats", "samples", sampleCount, "deleted", deleted)
@@ -1555,12 +2181,15 @@ type MutexProfiler struct {
 }
 
 // NewMutexProfiler creates a new mutex profiler
-func NewMutexProfiler(cfg Config, log *slog.Logger) (*MutexProfiler, error) {
-	// Create symbol resolver
-	resolver, err := NewSymbolResolver(log)
-	if err != nil {
-		log.Warn("failed to create symbol resolver for mutex profiler", "error", err)
-		resolver = nil // Continue without symbol resolution
+func NewMutexProfiler(cfg Config, log *slog.Logger, resolver *SymbolResolver) (*MutexProfiler, error) {
+	// Use provided resolver (shared across profilers) or create new one
+	if resolver == nil {
+		var err error
+		resolver, err = NewSymbolResolver(log)
+		if err != nil {
+			log.Warn("failed to create symbol resolver for mutex profiler", "error", err)
+			resolver = nil // Continue without symbol resolution
+		}
 	}
 
 	return &MutexProfiler{
@@ -1630,7 +2259,6 @@ func (p *MutexProfiler) Stop() error {
 
 	if p.ringReader != nil {
 		_ = p.ringReader.Close()
-		p.ringReader = nil
 	}
 
 	// Close uprobe links
@@ -1652,9 +2280,34 @@ func (p *MutexProfiler) Stop() error {
 	return nil
 }
 
+// AddTargetPID dynamically adds a PID to the BPF target PID map
+func (p *MutexProfiler) AddTargetPID(pid uint32) error {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.objs != nil && p.objs.MutexTargetPids != nil {
+		return p.objs.MutexTargetPids.Put(uint32(pid), uint8(1))
+	}
+	return nil
+}
+
+// RemoveTargetPID removes a PID from the BPF target PID map
+func (p *MutexProfiler) RemoveTargetPID(pid uint32) error {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.objs != nil && p.objs.MutexTargetPids != nil {
+		return p.objs.MutexTargetPids.Delete(uint32(pid))
+	}
+	return nil
+}
+
 // loadBPF loads the BPF program
 func (p *MutexProfiler) loadBPF() error {
 	p.log.Info("loading mutex profiler BPF program")
+
+	// Remove memory lock limit for BPF operations
+	if err := rlimit.RemoveMemlock(); err != nil {
+		p.log.Warn("failed to remove memlock rlimit, BPF loading may fail", "error", err)
+	}
 
 	p.objs = &MutexProfilerObjects{}
 	if err := LoadMutexProfilerObjects(p.objs, nil); err != nil {
@@ -1681,15 +2334,35 @@ func (p *MutexProfiler) configure() error {
 		HoldThresholdNs:       10000000, // Default 10ms hold warning
 	}
 
-	if len(p.config.TargetPIDs) > 0 {
+	if len(p.config.TargetPIDs) > 0 && p.config.TargetPIDs[0] != 0xFFFFFFFF {
 		cfg.TargetPid = p.config.TargetPIDs[0]
+	}
+
+	// Tell BPF whether userspace has process filters active
+	if p.config.FilterActive {
+		cfg.FilterActive = 1
 	}
 
 	if err := p.objs.MutexCfg.Put(uint32(0), cfg); err != nil {
 		return fmt.Errorf("failed to configure BPF: %w", err)
 	}
 
-	p.log.Info("mutex BPF configured", "threshold_ns", thresholdNs)
+	// Populate target PIDs map
+	if len(p.config.TargetPIDs) > 0 && p.objs.MutexTargetPids != nil {
+		for _, pid := range p.config.TargetPIDs {
+			if pid == 0xFFFFFFFF {
+				continue
+			}
+			if err := p.objs.MutexTargetPids.Put(uint32(pid), uint8(1)); err != nil {
+				p.log.Warn("failed to add mutex target PID", "pid", pid, "error", err)
+			}
+		}
+	}
+
+	p.log.Info("mutex BPF configured",
+		"threshold_ns", thresholdNs,
+		"target_pids", len(p.config.TargetPIDs),
+		"filter_active", p.config.FilterActive)
 	return nil
 }
 
@@ -1782,6 +2455,7 @@ func (p *MutexProfiler) Collect(ctx context.Context) (*Profile, error) {
 		return nil, nil
 	}
 
+	collectStart := time.Now()
 	profile := NewProfile(ProfileTypeMutex)
 	profile.Metadata["threshold_ns"] = fmt.Sprintf("%d", p.config.ContentionThresholdNs)
 
@@ -1803,8 +2477,9 @@ func (p *MutexProfiler) Collect(ctx context.Context) (*Profile, error) {
 		}
 
 		sample := StackSample{
-			Value: int64(stats.TotalWaitNs),
-			Count: int64(stats.ContentionCount),
+			Value:    int64(stats.TotalWaitNs),
+			Count:    int64(stats.ContentionCount),
+			LockAddr: key.LockAddr, // Preserve lock address
 		}
 
 		if key.StackId >= 0 {
@@ -1832,6 +2507,12 @@ func (p *MutexProfiler) Collect(ctx context.Context) (*Profile, error) {
 		} else {
 			deleted++
 		}
+	}
+
+	// Set profile duration
+	profile.Duration = p.config.CollectionInterval
+	if profile.Duration == 0 {
+		profile.Duration = time.Since(collectStart)
 	}
 
 	p.log.Debug("collected mutex contention samples", "count", sampleCount, "deleted", deleted)

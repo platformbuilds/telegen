@@ -240,7 +240,10 @@ func (a *Agent) Start(ctx context.Context) error {
 		profCfg := a.cfg.Profiling
 		profCfg.ServiceName = a.cfg.ServiceName
 
-		a.profilerRunner, err = profiler.NewRunner(profCfg, a.log)
+		// Note: passing nil for kubeStore since agent.go doesn't have access to it yet
+		// This means namespace filtering won't work when using agent.go directly
+		// For full functionality, use cmd/telegen/main.go which initializes kube.Store
+		a.profilerRunner, err = profiler.NewRunner(profCfg, a.log, nil)
 		if err != nil {
 			return fmt.Errorf("failed to create profiler runner: %w", err)
 		}

@@ -48,6 +48,7 @@ type StackSample struct {
 	// - Off-CPU: total block time in nanoseconds
 	// - Memory: bytes allocated
 	// - Mutex: total wait time in nanoseconds
+	// - Wall: total wall clock time in nanoseconds
 	Value int64
 
 	// Count of occurrences
@@ -65,6 +66,12 @@ type StackSample struct {
 	// Type-specific fields
 	BlockReason BlockReason // For off-CPU
 	AllocType   uint8       // For memory
+	LockAddr    uint64      // For mutex contention (lock object address)
+
+	// Wall clock profiling fields (breakdown of wall time)
+	WallTimeNs   uint64 // Total wall clock time (CPU + off-CPU)
+	CPUTimeNs    uint64 // Time spent on-CPU
+	OffCPUTimeNs uint64 // Time spent off-CPU (blocked/waiting)
 }
 
 // ResolvedFrame is a fully resolved stack frame

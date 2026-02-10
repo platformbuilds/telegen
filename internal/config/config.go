@@ -58,15 +58,8 @@ type Config struct {
 		} `yaml:"metrics"`
 		Traces struct{ Enabled bool } `yaml:"traces"`
 		Logs   struct {
-			Enabled bool
-			Filelog struct {
-				Include      []string `yaml:"include"`
-				PositionFile string   `yaml:"position_file"`
-				// ShipHistoricalEvents controls whether to ship log entries that existed before Telegen started.
-				// When false (default), only new log entries written after Telegen's start time are shipped.
-				// Set to true to ship all existing log content (useful for backfilling).
-				ShipHistoricalEvents bool `yaml:"ship_historical_events"`
-			} `yaml:"filelog"`
+			Enabled bool          `yaml:"enabled"`
+			Filelog FilelogConfig `yaml:"filelog"`
 		} `yaml:"logs"`
 		JFR JFRConfig `yaml:"jfr"`
 	} `yaml:"pipelines"`
@@ -86,6 +79,89 @@ type Config struct {
 
 	// Kubernetes configures Kubernetes metadata decoration
 	Kubernetes KubernetesConfig `yaml:"kubernetes"`
+}
+
+// FilelogConfig configures the file-based log collection pipeline.
+type FilelogConfig struct {
+	// Include is a list of file glob patterns to tail (e.g., /var/log/*.log).
+	// Used for both K8s and non-K8s environments.
+	Include []string `yaml:"include"`
+
+	// Exclude is a list of file glob patterns to skip, even if matched by Include
+	// or discovered via the Kubernetes section. Example: /var/log/containers/*telegen*.log
+	Exclude []string `yaml:"exclude"`
+
+	// PositionFile stores file read positions for resuming after restart.
+	PositionFile string `yaml:"position_file"`
+
+	// PollInterval controls how often to check for new log content (default: 500ms).
+	PollInterval string `yaml:"poll_interval"`
+
+	// ShipHistoricalEvents controls whether to ship log entries that existed before Telegen started.
+	// When false (default), only new log entries written after Telegen's start time are shipped.
+	// Set to true to ship all existing log content (useful for backfilling).
+	ShipHistoricalEvents bool `yaml:"ship_historical_events"`
+
+	// Kubernetes enables K8s-aware log discovery using informers.
+	// When set, telegen discovers pod log files dynamically based on
+	// namespace, deployment, app name, or labels — instead of (or in addition to) static globs.
+	// The discovered paths are merged with Include paths (both work together).
+	Kubernetes *K8sLogDiscovery `yaml:"kubernetes,omitempty"`
+}
+
+// PollIntervalDuration returns the poll interval as a time.Duration.
+func (f FilelogConfig) PollIntervalDuration() time.Duration {
+	if f.PollInterval == "" {
+		return 500 * time.Millisecond
+	}
+	d, err := time.ParseDuration(f.PollInterval)
+	if err != nil {
+		return 500 * time.Millisecond
+	}
+	return d
+}
+
+// K8sLogDiscovery configures Kubernetes-aware log file discovery.
+// Telegen subscribes to its kube.Store (the same informer infrastructure used
+// by eBPF discovery) and dynamically resolves log paths for matching pods.
+// All string fields support glob wildcards (*, ?).
+type K8sLogDiscovery struct {
+	// Namespaces to include. Glob patterns. Example: ["prod*", "staging"]
+	// If empty, all namespaces are included (subject to ExcludeNamespaces).
+	Namespaces []string `yaml:"namespaces"`
+
+	// ExcludeNamespaces to skip. Glob patterns. Example: ["kube-system"]
+	ExcludeNamespaces []string `yaml:"exclude_namespaces"`
+
+	// Deployments to include. Glob patterns. Matches against the top-level owner
+	// name (resolves through ReplicaSet → Deployment). Example: ["payment-*"]
+	Deployments []string `yaml:"deployments"`
+
+	// DaemonSets to include. Glob patterns.
+	DaemonSets []string `yaml:"daemonsets"`
+
+	// StatefulSets to include. Glob patterns.
+	StatefulSets []string `yaml:"statefulsets"`
+
+	// AppNames matches the app.kubernetes.io/name pod label. Glob patterns.
+	// Example: ["my-service-*", "frontend"]
+	AppNames []string `yaml:"app_names"`
+
+	// PodLabels matches pods by label key→glob value. All entries must match (AND logic).
+	// Example: {"team": "platform*", "env": "prod"}
+	PodLabels map[string]string `yaml:"pod_labels"`
+
+	// PodAnnotations matches pods by annotation key→glob value. All entries must match (AND logic).
+	// Example: {"telegen.io/logs": "true"}
+	PodAnnotations map[string]string `yaml:"pod_annotations"`
+
+	// ContainerNames filters to specific containers within matched pods.
+	// Glob patterns. If empty, all containers in the pod are tailed.
+	ContainerNames []string `yaml:"container_names"`
+
+	// LogPath is the base directory for K8s pod logs on the node.
+	// Default: /var/log/pods
+	LogPath string `yaml:"log_path"`
 }
 
 // KubernetesConfig holds Kubernetes discovery/decoration settings

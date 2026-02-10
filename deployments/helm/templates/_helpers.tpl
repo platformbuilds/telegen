@@ -488,6 +488,25 @@ profiling:
   output_format: {{ .Values.profiling.outputFormat | default "pprof" }}
   aggregate_stacks: {{ .Values.profiling.aggregateStacks | default true }}
   upload_interval: {{ .Values.profiling.uploadInterval | default "60s" }}
+  log_export:
+    enabled: {{ .Values.profiling.logExport.enabled | default false }}
+    endpoint: {{ .Values.profiling.logExport.endpoint | default "" | quote }}
+    headers: {{ .Values.profiling.logExport.headers | default dict | toJson }}
+    compression: {{ .Values.profiling.logExport.compression | default "gzip" | quote }}
+    timeout: {{ .Values.profiling.logExport.timeout | default "30s" }}
+    batch_size: {{ .Values.profiling.logExport.batchSize | default 100 }}
+    flush_interval: {{ .Values.profiling.logExport.flushInterval | default "10s" }}
+    include_stack_trace: {{ .Values.profiling.logExport.includeStackTrace | default true }}
+  metrics_export:
+    enabled: {{ .Values.profiling.metricsExport.enabled | default false }}
+    endpoint: {{ .Values.profiling.metricsExport.endpoint | default "" | quote }}
+    headers: {{ .Values.profiling.metricsExport.headers | default dict | toJson }}
+    compression: {{ .Values.profiling.metricsExport.compression | default "gzip" | quote }}
+    timeout: {{ .Values.profiling.metricsExport.timeout | default "30s" }}
+    histogram_buckets: {{ .Values.profiling.metricsExport.histogramBuckets | default list | toJson }}
+    memory_histogram_buckets: {{ .Values.profiling.metricsExport.memoryHistogramBuckets | default list | toJson }}
+    include_process_attributes: {{ .Values.profiling.metricsExport.includeProcessAttributes | default true }}
+    include_stack_attributes: {{ .Values.profiling.metricsExport.includeStackAttributes | default true }}
 
 # -----------------------------------------------------------------------------
 # Security Observability Configuration
@@ -732,6 +751,64 @@ pipelines:
       position_file: {{ .Values.pipelines.logs.filelog.positionFile | default "/var/lib/telegen/positions.json" }}
       poll_interval: {{ .Values.pipelines.logs.filelog.pollInterval | default "500ms" }}
       ship_historical_events: {{ .Values.pipelines.logs.filelog.shipHistoricalEvents | default false }}
+      {{- if .Values.pipelines.logs.filelog.kubernetes }}
+      kubernetes:
+        {{- if .Values.pipelines.logs.filelog.kubernetes.namespaces }}
+        namespaces:
+          {{- range .Values.pipelines.logs.filelog.kubernetes.namespaces }}
+          - {{ . | quote }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.pipelines.logs.filelog.kubernetes.excludeNamespaces }}
+        exclude_namespaces:
+          {{- range .Values.pipelines.logs.filelog.kubernetes.excludeNamespaces }}
+          - {{ . | quote }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.pipelines.logs.filelog.kubernetes.deployments }}
+        deployments:
+          {{- range .Values.pipelines.logs.filelog.kubernetes.deployments }}
+          - {{ . | quote }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.pipelines.logs.filelog.kubernetes.daemonSets }}
+        daemon_sets:
+          {{- range .Values.pipelines.logs.filelog.kubernetes.daemonSets }}
+          - {{ . | quote }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.pipelines.logs.filelog.kubernetes.statefulSets }}
+        stateful_sets:
+          {{- range .Values.pipelines.logs.filelog.kubernetes.statefulSets }}
+          - {{ . | quote }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.pipelines.logs.filelog.kubernetes.appNames }}
+        app_names:
+          {{- range .Values.pipelines.logs.filelog.kubernetes.appNames }}
+          - {{ . | quote }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.pipelines.logs.filelog.kubernetes.containerNames }}
+        container_names:
+          {{- range .Values.pipelines.logs.filelog.kubernetes.containerNames }}
+          - {{ . | quote }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.pipelines.logs.filelog.kubernetes.podLabels }}
+        pod_labels:
+          {{- range $key, $value := .Values.pipelines.logs.filelog.kubernetes.podLabels }}
+          {{ $key }}: {{ $value | quote }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.pipelines.logs.filelog.kubernetes.podAnnotations }}
+        pod_annotations:
+          {{- range $key, $value := .Values.pipelines.logs.filelog.kubernetes.podAnnotations }}
+          {{ $key }}: {{ $value | quote }}
+          {{- end }}
+        {{- end }}
+        log_path: {{ .Values.pipelines.logs.filelog.kubernetes.logPath | default "/var/log/pods" }}
+      {{- end }}
   jfr:
     enabled: {{ .Values.pipelines.jfr.enabled | default false }}
     input_dirs: {{ .Values.pipelines.jfr.inputDirs | default (list "/var/log/jfr") | toJson }}

@@ -76,7 +76,8 @@ type OffcpuProfilerConfig struct {
 	MinBlockNs    uint64
 	CaptureKernel uint8
 	CaptureUser   uint8
-	_pad2         [6]byte //nolint:unused
+	FilterActive  uint8
+	_pad2         [5]byte //nolint:unused
 }
 
 // OffcpuProfilerOffcpuConfig is an alias for bpf2go generated name

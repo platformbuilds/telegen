@@ -64,13 +64,31 @@ type ProfileEvent struct {
 	GCCause        string `json:"gcCause,omitempty"`
 
 	// eBPF-specific fields (empty for JFR)
-	PID          uint32 `json:"pid,omitempty"`
-	TID          uint32 `json:"tid,omitempty"`
-	Comm         string `json:"comm,omitempty"`         // Process name
-	ContainerID  string `json:"containerId,omitempty"`  // Container ID if available
-	BlockReason  string `json:"blockReason,omitempty"`  // For off-cpu profiles
-	KernelFrames int    `json:"kernelFrames,omitempty"` // Number of kernel frames
-	UserFrames   int    `json:"userFrames,omitempty"`   // Number of user frames
+	PID            uint32 `json:"pid,omitempty"`
+	TID            uint32 `json:"tid,omitempty"`
+	Comm           string `json:"comm,omitempty"`           // Process name
+	ContainerID    string `json:"containerId,omitempty"`    // Container ID if available
+	BlockReason    string `json:"blockReason,omitempty"`    // For off-cpu profiles
+	KernelFrames   int    `json:"kernelFrames,omitempty"`   // Number of kernel frames
+	UserFrames     int    `json:"userFrames,omitempty"`     // Number of user frames
+	LockAddress    string `json:"lockAddress,omitempty"`    // For mutex profiles (hex address)
+	LockClass      string `json:"lockClass,omitempty"`      // Lock type/class name from DWARF
+	AllocationType string `json:"allocationType,omitempty"` // Allocation type: "malloc", "calloc", "realloc", "mmap", "new"
+
+	// Application Artifact (language-agnostic)
+	AppBinary  string `json:"appBinary,omitempty"`  // Application binary/jar/script (e.g., "payment-service.jar", "api-gateway", "app.py")
+	AppVersion string `json:"appVersion,omitempty"` // App version extracted from artifact (e.g., "2.4.1")
+
+	// Language & Runtime (OpenTelemetry process.runtime.* conventions)
+	Language              string `json:"language,omitempty"`                // Language name: "java", "go", "python", "node", "rust", "ruby"
+	ProcessRuntimeName    string `json:"process.runtime.name,omitempty"`    // Runtime name: "OpenJ9", "HotSpot", "Go", "CPython", "Node.js", "GraalVM Native Image"
+	ProcessRuntimeVersion string `json:"process.runtime.version,omitempty"` // Runtime version: "1.8.0_352", "go1.21.5", "3.11.2", "v18.16.0"
+	ProcessRuntimeVendor  string `json:"process.runtime.vendor,omitempty"`  // Runtime vendor: "IBM", "Oracle", "Google", "Python Software Foundation"
+
+	// Process Information (OpenTelemetry process.* conventions)
+	ProcessExecutableName string `json:"process.executable.name,omitempty"` // Executable name: "java", "api-gateway", "python3", "node"
+	ProcessExecutablePath string `json:"process.executable.path,omitempty"` // Full executable path: "/usr/bin/java", "/app/api-gateway"
+	ProcessCommandLine    string `json:"process.command_line,omitempty"`    // Full command line for debugging
 }
 
 // StackFrame represents a single frame in the stack trace

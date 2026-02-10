@@ -132,3 +132,81 @@ pipelines:
     jfr_command: "jfr"
     workers: 2
     pretty_json: false
+# =============================================================================
+# eBPF Profiling Configuration
+# =============================================================================
+profiling:
+  enabled: true
+  
+  # CPU profiling samples on-CPU execution
+  cpu:
+    enabled: true
+    sample_rate: 99            # Hz (samples per second)
+    max_stack_depth: 127       # Maximum stack frames
+  
+  # Off-CPU profiling captures blocking/sleep time
+  off_cpu:
+    enabled: true
+    min_block_time_ns: 1000000  # 1ms minimum block time
+  
+  # Memory profiling tracks allocations
+  memory:
+    enabled: true
+    min_alloc_size: 1024       # Track allocations >= 1KB
+  
+  # Mutex profiling captures lock contention
+  mutex:
+    enabled: true
+    contention_threshold_ns: 1000000  # 1ms minimum contention
+  
+  # Wall clock profiling
+  wall:
+    enabled: false
+  
+  # Collection settings
+  collection_interval: "10s"   # Native collection interval
+  upload_interval: "60s"       # Export interval
+  
+  # Symbol resolution
+  symbols:
+    cache_size: 10000
+    debug_info_enabled: true
+    demangling_enabled: true
+    go_symbols: true
+    kernel_symbols: true
+  
+  # Export profiles as OTLP Logs (detailed per-sample data)
+  log_export:
+    enabled: false
+    endpoint: "http://localhost:4318/v1/logs"
+    headers: {}
+    compression: "gzip"
+    timeout: "30s"
+    batch_size: 100
+    flush_interval: "10s"
+    include_stack_trace: true
+  
+  # Export profiles as OTLP Metrics (aggregated profiling metrics)
+  # Generates metrics like:
+  #   - profiler.cpu.samples (count of CPU samples)
+  #   - profiler.cpu.duration_seconds (histogram)
+  #   - profiler.offcpu.duration_seconds (histogram)
+  #   - profiler.memory.allocations (count)
+  #   - profiler.memory.allocation_bytes (total bytes)
+  #   - profiler.memory.allocation_size_bytes (histogram)
+  #   - profiler.mutex.contentions (count)
+  #   - profiler.mutex.wait_time_seconds (histogram)
+  metrics_export:
+    enabled: false
+    endpoint: "http://localhost:4318/v1/metrics"
+    headers: {}
+    compression: "gzip"
+    timeout: "30s"
+    # Histogram buckets for duration metrics (seconds): 1ms to 60s
+    histogram_buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60]
+    # Histogram buckets for memory metrics (bytes): 64B to 64MB
+    memory_histogram_buckets: [64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864]
+    # Include process attributes (pid, executable name)
+    include_process_attributes: true
+    # Include stack attributes (top function, class)
+    include_stack_attributes: true

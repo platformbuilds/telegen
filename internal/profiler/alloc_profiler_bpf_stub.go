@@ -119,7 +119,8 @@ type AllocProfilerConfig struct {
 	TrackCalloc  uint8
 	TrackRealloc uint8
 	TrackMmap    uint8
-	_pad2        [4]byte //nolint:unused
+	FilterActive uint8
+	_pad2        [3]byte //nolint:unused
 }
 
 // AllocProfilerAllocConfig is an alias for bpf2go generated name

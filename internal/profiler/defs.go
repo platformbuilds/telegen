@@ -89,12 +89,14 @@ type Config struct {
 
 	// Sampling configuration
 	SampleRate         int           // Samples per second for CPU profiling
+	WallSampleRate     int           // Samples per second for wall profiling (typically lower than CPU)
 	CollectionInterval time.Duration // How often to collect/aggregate samples
 
 	// Filtering
 	TargetPID          uint32   // Specific PID to profile (0 = all)
 	TargetPIDs         []uint32 // Multiple PIDs to profile
 	TargetContainerIDs []string // Container IDs to profile
+	FilterActive       bool     // When true, BPF only profiles PIDs in the target map
 	ExcludeKernel      bool     // Exclude kernel stacks
 	ExcludeUser        bool     // Exclude user stacks
 
@@ -211,6 +213,15 @@ type Profiler interface {
 
 	// Collect returns collected profile since last call
 	Collect(ctx context.Context) (*Profile, error)
+}
+
+// PIDMapUpdater is an optional interface that profilers can implement
+// to support dynamic PID filter updates after startup.
+type PIDMapUpdater interface {
+	// AddTargetPID adds a PID to the profiler's BPF target PID map
+	AddTargetPID(pid uint32) error
+	// RemoveTargetPID removes a PID from the profiler's BPF target PID map
+	RemoveTargetPID(pid uint32) error
 }
 
 // TimeRange represents a time range for profile queries

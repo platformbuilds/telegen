@@ -92,7 +92,8 @@ type MutexProfilerConfig struct {
 	_pad                  [4]byte
 	ContentionThresholdNs uint64
 	HoldThresholdNs       uint64
-	_pad2                 [4]byte
+	FilterActive          uint8
+	_pad2                 [3]byte
 }
 
 // MutexProfilerMutexConfig is an alias for bpf2go generated name

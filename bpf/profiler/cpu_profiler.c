@@ -51,11 +51,12 @@ struct cpu_sample_event {
 
 // Configuration from userspace
 struct cpu_profiler_config {
-    __u32 target_pid;      // 0 = all pids
+    __u32 target_pid;      // 0 = all pids (only when filter_active == 0)
     __u32 sample_rate_hz;  // Sampling frequency
     __u8 capture_kernel;   // Whether to capture kernel stacks
     __u8 capture_user;     // Whether to capture user stacks
-    __u8 _pad[2];
+    __u8 filter_active;    // 1 = only profile PIDs in cpu_target_pids map
+    __u8 _pad[1];
 };
 
 // Stack traces map - stores actual stack frames
@@ -109,19 +110,32 @@ static __always_inline bool should_profile_pid(__u32 pid) {
         return false;
     }
 
-    // Check if we have a PID filter
+    // Check if PID is in the target PIDs map
     __u8 *exists = bpf_map_lookup_elem(&cpu_target_pids, &pid);
     if (exists) {
         return true;
     }
 
-    // Check if PID filter is empty (profile all)
     struct cpu_profiler_config *cfg = get_config();
-    if (cfg && cfg->target_pid == 0) {
-        return true;
+    if (!cfg) {
+        return false;
     }
 
-    return false;
+    // If a specific single PID is targeted, only profile that PID
+    if (cfg->target_pid != 0) {
+        return pid == cfg->target_pid;
+    }
+
+    // If userspace has process filters active (target_process_names,
+    // target_namespaces, etc.), only profile PIDs explicitly added to
+    // the cpu_target_pids map. Without this check, the profiler would
+    // profile ALL processes when no PIDs have been discovered yet.
+    if (cfg->filter_active) {
+        return false;
+    }
+
+    // No filters configured at all — profile everything
+    return true;
 }
 
 // Main CPU profiler entry point - attached to perf_event

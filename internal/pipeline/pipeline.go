@@ -17,6 +17,7 @@ import (
 	"github.com/platformbuilds/telegen/internal/instrumenter"
 	"github.com/platformbuilds/telegen/internal/jfr/converter"
 	"github.com/platformbuilds/telegen/internal/jfr/watcher"
+	"github.com/platformbuilds/telegen/internal/kube"
 	"github.com/platformbuilds/telegen/internal/logs/filetailer"
 	awsm "github.com/platformbuilds/telegen/internal/metadata/aws"
 	"github.com/platformbuilds/telegen/internal/metrics/host"
@@ -170,10 +171,26 @@ func (p *Pipeline) Start(ctx context.Context) error {
 	p.signals["logs"] = &SignalStatus{Name: "logs", Enabled: p.cfg.Pipelines.Logs.Enabled, Running: false}
 	if p.cfg.Pipelines.Logs.Enabled {
 		if p.ot != nil && p.ot.Log != nil {
-			ft := filetailer.New(p.cfg.Pipelines.Logs.Filelog.Include, p.cfg.Pipelines.Logs.Filelog.PositionFile, p.ot.Log)
+			fCfg := p.cfg.Pipelines.Logs.Filelog
+
+			opts := filetailer.Options{
+				Globs:                fCfg.Include,
+				Excludes:             fCfg.Exclude,
+				PositionFile:         fCfg.PositionFile,
+				LoggerProvider:       p.ot.Log,
+				ShipHistoricalEvents: fCfg.ShipHistoricalEvents,
+				StartTime:            time.Now(),
+				PollInterval:         fCfg.PollIntervalDuration(),
+				ParserConfig:         filetailer.DefaultParserConfig(),
+			}
+
+			ft := filetailer.NewWithOptions(opts)
 			go func() { _ = ft.Run(p.stop) }()
 			p.signals["logs"].Running = true
-			logger.Info("logs file tailer started")
+			logger.Info("logs file tailer started",
+				"include", fCfg.Include,
+				"exclude", fCfg.Exclude,
+				"k8s_discovery", fCfg.Kubernetes != nil)
 		} else {
 			p.signals["logs"].Error = "OTLP log exporter not available"
 			logger.Warn("logs enabled but OTLP log exporter not available", "status", "continuing_without_logs")
@@ -540,6 +557,16 @@ func (p *Pipeline) GetTracesExporter() exporter.Traces {
 		return nil
 	}
 	return p.ot.CollectorTraces
+}
+
+// GetKubeStore returns the Kubernetes metadata store used by eBPF instrumentation.
+// Returns nil if eBPF is not enabled or Kubernetes is not configured.
+// The profiler can use this to access the same kube.Store for namespace resolution.
+func (p *Pipeline) GetKubeStore(ctx context.Context) (*kube.Store, error) {
+	if p.ebpfCtxInfo == nil || p.ebpfCtxInfo.K8sInformer == nil {
+		return nil, nil
+	}
+	return p.ebpfCtxInfo.K8sInformer.Get(ctx)
 }
 
 // startEBPFPipeline initializes and starts the eBPF auto-instrumentation pipeline

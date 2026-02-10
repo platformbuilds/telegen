@@ -802,6 +802,29 @@ data:
           # Ship log entries that existed before Telegen started (default: false)
           # When false, only new log entries written after Telegen starts are shipped
           ship_historical_events: false
+          # Kubernetes-aware log discovery (optional)
+          # When configured, Telegen watches pod events via K8s informers and
+          # discovers log files by deployment, namespace, app name, or labels.
+          # Discovered paths are merged with the static 'include' globs above.
+          # kubernetes:
+          #   namespaces:
+          #     - "default"
+          #     - "myapp-*"
+          #   exclude_namespaces:
+          #     - "kube-system"
+          #     - "telegen"
+          #   deployments:
+          #     - "frontend-*"
+          #     - "api-server"
+          #   daemon_sets: []
+          #   stateful_sets: []
+          #   app_names:
+          #     - "my-service-*"
+          #   pod_labels:
+          #     team: "platform*"
+          #   pod_annotations: {}
+          #   container_names: []
+          #   log_path: /var/log/pods
       jfr:
         enabled: false
         # Directories to watch for JFR files

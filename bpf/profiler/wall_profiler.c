@@ -66,7 +66,8 @@ struct wall_value {
 struct wall_config {
     __u32 target_pid;
     __u64 sample_interval_ns;  // Periodic sampling interval
-    __u8 _pad[4];
+    __u8 filter_active;    // 1 = only profile PIDs in wall_target_pids map
+    __u8 _pad[3];
 };
 
 // Stack traces map
@@ -133,11 +134,19 @@ static __always_inline bool should_profile_pid(__u32 pid) {
     }
 
     struct wall_config *cfg = get_config();
-    if (cfg && cfg->target_pid == 0) {
-        return true;
+    if (!cfg) {
+        return false;
     }
 
-    return false;
+    if (cfg->target_pid != 0) {
+        return pid == cfg->target_pid;
+    }
+
+    if (cfg->filter_active) {
+        return false;
+    }
+
+    return true;
 }
 
 // Correlate wall time with trace spans (CP-007)
@@ -188,16 +197,23 @@ int trace_span_end(struct pt_regs *ctx) {
     
     __u64 off_cpu_time = wall_time > cpu_time ? wall_time - cpu_time : 0;
     
+    // Get stack ID before ringbuf operations (verifier requires this)
+    __s32 user_stack_id = bpf_get_stackid(ctx, &wall_stacks, BPF_F_USER_STACK);
+    
+    // Store timing values locally before map delete (verifier safety)
+    __u32 timing_pid = timing->pid;
+    __u32 timing_tid = timing->tid;
+    
     // Build sample
     struct wall_sample *sample;
     sample = bpf_ringbuf_reserve(&wall_events, sizeof(*sample), 0);
     if (sample) {
-        sample->pid = timing->pid;
-        sample->tid = timing->tid;
+        sample->pid = timing_pid;
+        sample->tid = timing_tid;
         sample->wall_time_ns = wall_time;
         sample->cpu_time_ns = cpu_time;
         sample->off_cpu_time_ns = off_cpu_time;
-        sample->user_stack_id = bpf_get_stackid(ctx, &wall_stacks, BPF_F_USER_STACK);
+        sample->user_stack_id = user_stack_id;
         sample->kernel_stack_id = -1;  // Usually not relevant for span end
         bpf_get_current_comm(&sample->comm, sizeof(sample->comm));
         
@@ -206,9 +222,9 @@ int trace_span_end(struct pt_regs *ctx) {
     
     // Update aggregated stats
     struct wall_key key = {};
-    key.pid = timing->pid;
-    key.tid = timing->tid;
-    key.user_stack_id = sample ? sample->user_stack_id : -1;
+    key.pid = timing_pid;
+    key.tid = timing_tid;
+    key.user_stack_id = user_stack_id;
     key.kernel_stack_id = -1;
     bpf_get_current_comm(&key.comm, sizeof(key.comm));
     
@@ -244,13 +260,13 @@ int trace_span_end(struct pt_regs *ctx) {
 // Track context switches to update CPU time for active spans
 SEC("tp_btf/sched_switch")
 int BPF_PROG(wall_sched_switch, bool preempt, struct task_struct *prev, struct task_struct *next) {
-    __u64 now = bpf_ktime_get_ns();
-    __u32 prev_pid = BPF_CORE_READ(prev, pid);
-    __u32 next_pid = BPF_CORE_READ(next, pid);
-    
     // For each active span belonging to prev_pid, accumulate CPU time
     // Note: This is simplified - in practice we'd need to iterate spans or use per-thread tracking
     // This implementation focuses on single-span-per-thread scenarios
+    // Variables prev_pid, next_pid, and timestamp would be used in full implementation
+    (void)preempt;
+    (void)prev;
+    (void)next;
     
     return 0;
 }

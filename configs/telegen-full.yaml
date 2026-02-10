@@ -1300,6 +1300,42 @@ pipelines:
       # Ship log entries that existed before Telegen started (default: false)
       # When false, only new log entries written after Telegen starts are shipped
       ship_historical_events: false
+      # Kubernetes-aware log discovery (optional)
+      # When configured, Telegen watches pod events via K8s informers and
+      # discovers log files by deployment, namespace, app name, or labels.
+      # Discovered paths are merged with the static 'include' globs above.
+      # In non-K8s environments, leave this unconfigured and use 'include' for
+      # filepath-based discovery.
+      # kubernetes:
+      #   # Only discover logs from these namespaces (glob patterns supported)
+      #   namespaces:
+      #     - "default"
+      #     - "myapp-*"
+      #   # Exclude logs from these namespaces
+      #   exclude_namespaces:
+      #     - "kube-system"
+      #     - "telegen"
+      #   # Only discover logs from pods owned by these Deployments (glob patterns)
+      #   deployments:
+      #     - "frontend-*"
+      #     - "api-server"
+      #   # Only discover logs from pods owned by these DaemonSets (glob patterns)
+      #   daemon_sets: []
+      #   # Only discover logs from pods owned by these StatefulSets (glob patterns)
+      #   stateful_sets: []
+      #   # Match pods by app.kubernetes.io/name label (glob patterns supported)
+      #   app_names:
+      #     - "my-service-*"
+      #   # Match pods by label selectors (glob patterns supported for values)
+      #   pod_labels:
+      #     team: "platform*"
+      #     env: "staging"
+      #   # Match pods by annotation selectors (glob patterns supported for values)
+      #   pod_annotations: {}
+      #   # Only discover logs from these containers within matched pods
+      #   container_names: []
+      #   # Base path for pod logs on the node (default: /var/log/pods)
+      #   log_path: /var/log/pods
   
   # JFR pipeline (Java Flight Recorder)
   jfr:
