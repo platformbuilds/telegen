@@ -57,7 +57,8 @@ type CpuProfilerConfig struct {
 	SampleRateHz  uint32
 	CaptureKernel uint8
 	CaptureUser   uint8
-	_pad          [2]byte
+	FilterActive  uint8
+	_pad          [1]byte
 }
 
 // CpuProfilerCpuProfilerConfig is an alias for bpf2go generated name

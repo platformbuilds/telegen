@@ -9,6 +9,8 @@ import (
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
+
+	"github.com/platformbuilds/telegen/internal/sigdef"
 )
 
 // Converter converts ProfileEvents to OTLP Logs
@@ -206,5 +208,48 @@ func (c *Converter) profileEventToLogRecord(event *ProfileEvent, lr plog.LogReco
 	}
 	if event.GCName != "" {
 		attrs.PutStr("profile.gc_name", event.GCName)
+	}
+
+	// Add telegen signal metadata based on profile type
+	signalMeta := getSignalMetadataForProfile(event.ProfileType)
+	addSignalMetadataToLogRecord(signalMeta, attrs)
+}
+
+// getSignalMetadataForProfile returns the appropriate signal metadata for a profile type.
+// This ensures all eBPF profile exports include proper telegen metadata for indexing and discovery.
+func getSignalMetadataForProfile(profileType string) *sigdef.SignalMetadata {
+	switch profileType {
+	case "cpu":
+		return sigdef.ProfileCPUMetrics
+	case "off-cpu":
+		return sigdef.ProfileOffCPUMetrics
+	case "memory", "heap", "alloc_bytes", "alloc_count", "allocs":
+		return sigdef.ProfileMemoryMetrics
+	case "mutex":
+		return sigdef.ProfileMutexMetrics
+	case "block":
+		// Block profiling is similar to mutex contention
+		return sigdef.ProfileMutexMetrics
+	case "wall":
+		// Wall clock profiling is similar to CPU profiling
+		return sigdef.ProfileCPUMetrics
+	case "goroutine":
+		// Goroutine profiling is similar to CPU profiling
+		return sigdef.ProfileCPUMetrics
+	default:
+		// Default to CPU for unknown types to ensure metadata is always present
+		return sigdef.ProfileCPUMetrics
+	}
+}
+
+// addSignalMetadataToLogRecord adds telegen signal metadata attributes to a log record.
+// This is consistent with how JFR and security logs add metadata for proper signal classification.
+func addSignalMetadataToLogRecord(metadata *sigdef.SignalMetadata, attrs pcommon.Map) {
+	if metadata == nil {
+		return
+	}
+	metadataAttrs := metadata.ToAttributes()
+	for _, attr := range metadataAttrs {
+		attrs.PutStr(string(attr.Key), attr.Value.AsString())
 	}
 }

@@ -59,6 +59,49 @@ pipelines:
 Java App (JFR) → /var/log/jfr/*.jfr → Telegen JFR Pipeline → /var/log/jfr-json/*.json → OTel Collector → Backend
 ```
 
+## Java Profiling (eBPF Continuous Profiling)
+
+Telegen includes production-ready eBPF continuous profiling with **symbol resolution for Java applications**. Native functions, kernel symbols, and JIT-compiled Java methods are all resolved to human-readable function names.
+
+### Quick Start - IBM OpenJ9
+
+```yaml
+# Add to your Java application deployment
+env:
+- name: OPENJ9_JAVA_OPTIONS
+  value: "-Xjit:perfTool"  # Enables perf map generation
+```
+
+### Quick Start - Oracle/OpenJDK HotSpot
+
+```yaml
+# Requires perf-map-agent (see docs/java-profiling-quick-start.md)
+env:
+- name: JAVA_TOOL_OPTIONS
+  value: "-XX:+PreserveFramePointer -agentpath:/opt/perf-map/libperfmap.so"
+```
+
+### Validate Configuration
+
+```bash
+./scripts/validate-java-profiling.sh <namespace> <deployment-name>
+```
+
+### Documentation
+
+- **Quick Start:** [docs/java-profiling-quick-start.md](docs/java-profiling-quick-start.md) - TL;DR configuration and validation
+- **OpenJ9 Deep Dive:** [docs/java-openj9-profiling.md](docs/java-openj9-profiling.md) - Comprehensive OpenJ9 guide with troubleshooting
+- **OpenShift Deployment:** [deployments/openshift/java-openj9-profiling.yaml](deployments/openshift/java-openj9-profiling.yaml) - Production-ready manifests
+
+### What Gets Resolved?
+
+✅ **Native/C++ functions** (libjvm.so, glibc, etc.) - Always works  
+✅ **Kernel functions** (syscalls, page faults, etc.) - Always works  
+✅ **Go functions** (pclntab-based) - Always works for Go binaries  
+✅ **Java JIT methods** - Requires perf map configuration (see above)  
+
+Without JIT perf maps, Java methods show as `[unresolved] 0x...` addresses.
+
 ## AWS Metadata (optional)
 When enabled, Telegen enriches traces, logs, and metrics with AWS resource attributes and labels using IMDSv2.
 

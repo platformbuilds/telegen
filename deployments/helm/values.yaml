@@ -752,6 +752,19 @@ profiling:
     batchSize: 100
     flushInterval: 10s
     includeStackTrace: true
+  # Export profiles as OTLP Metrics (profiler.cpu.*, profiler.memory.*, etc.)
+  metricsExport:
+    enabled: false
+    endpoint: ""              # e.g., "http://otel-collector:4318/v1/metrics"
+    headers: {}
+    compression: gzip
+    timeout: 30s
+    # Histogram buckets for duration metrics (seconds): 1ms to 60s
+    histogramBuckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60]
+    # Histogram buckets for memory metrics (bytes): 64B to 64MB
+    memoryHistogramBuckets: [64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864]
+    includeProcessAttributes: true
+    includeStackAttributes: true
 
 # =============================================================================
 # Security Observability Configuration
@@ -1063,6 +1076,40 @@ pipelines:
       # Ship log entries that existed before Telegen started (default: false)
       # When false, only new log entries written after Telegen starts are shipped
       shipHistoricalEvents: false
+      # Kubernetes-aware log discovery (optional)
+      # When configured, Telegen watches pod events via K8s informers and
+      # discovers log files by deployment, namespace, app name, or labels.
+      # Paths discovered this way are merged with the static 'include' globs.
+      # kubernetes:
+      #   # Only discover logs from these namespaces (glob patterns supported)
+      #   namespaces:
+      #     - "default"
+      #     - "myapp-*"
+      #   # Exclude logs from these namespaces
+      #   excludeNamespaces:
+      #     - "kube-system"
+      #     - "telegen"
+      #   # Only discover logs from pods owned by these Deployments
+      #   deployments:
+      #     - "frontend-*"
+      #     - "api-server"
+      #   # Only discover logs from pods owned by these DaemonSets
+      #   daemonSets: []
+      #   # Only discover logs from pods owned by these StatefulSets
+      #   statefulSets: []
+      #   # Match pods by app.kubernetes.io/name label (glob patterns supported)
+      #   appNames:
+      #     - "my-service-*"
+      #   # Match pods by label selectors (glob patterns supported for values)
+      #   podLabels:
+      #     team: "platform*"
+      #     env: "staging"
+      #   # Match pods by annotation selectors (glob patterns supported for values)
+      #   podAnnotations: {}
+      #   # Only discover logs from these containers within matched pods
+      #   containerNames: []
+      #   # Base path for pod logs on the node (default: /var/log/pods)
+      #   logPath: /var/log/pods
   jfr:
     enabled: false
     inputDirs:

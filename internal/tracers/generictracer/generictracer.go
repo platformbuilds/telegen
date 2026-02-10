@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -47,6 +48,11 @@ type Tracer struct {
 	instrumentedLibs ebpfcommon.InstrumentedLibsT
 	libsMux          sync.Mutex
 	iters            []*ebpfcommon.Iter
+
+	// Synchronization for BPF PID filter updates
+	pidFilterMux    sync.Mutex
+	bpfReady        bool // true once Run() has verified BPF objects
+	pidFilterBroken bool // true if BPF map updates fail persistently (kernel restriction)
 }
 
 func tlog() *slog.Logger {
@@ -105,6 +111,20 @@ func (p *Tracer) buildPidFilter() []uint64 {
 }
 
 func (p *Tracer) rebuildValidPids() {
+	p.pidFilterMux.Lock()
+	defer p.pidFilterMux.Unlock()
+
+	// Skip if BPF isn't ready yet (Run() hasn't been called)
+	if !p.bpfReady {
+		p.log.Debug("BPF not ready yet, skipping PID filter rebuild")
+		return
+	}
+
+	// Skip if we've determined map updates don't work on this kernel
+	if p.pidFilterBroken {
+		return
+	}
+
 	if p.bpfObjects.ValidPids == nil {
 		p.log.Warn("ValidPids map is nil, skipping PID filter rebuild")
 		return
@@ -127,31 +147,57 @@ func (p *Tracer) rebuildValidPids() {
 		p.log.Debug("ValidPids map info", "id", mapID, "name", info.Name)
 	}
 
-	// Update map entries
+	// Update map entries - try first entry to detect kernel restrictions early
+	if err := p.bpfObjects.ValidPids.Put(uint32(0), v[0]); err != nil {
+		// Check if this is a persistent permission issue (common on hardened RHEL 8 kernels)
+		if isPermissionError(err) {
+			p.pidFilterBroken = true
+			p.log.Warn("BPF map updates not permitted on this kernel, disabling BPF-side PID filtering",
+				"error", err,
+				"hint", "Userspace filtering still works. This is common on RHEL 8 with kernel.unprivileged_bpf_disabled=1",
+			)
+			return
+		}
+		p.log.Error("Error updating pid filter in BPF map", "error", err, "index", 0)
+	}
+
+	// Update remaining entries
 	var errorCount int
-	for i, segment := range v {
-		if err := p.bpfObjects.ValidPids.Put(uint32(i), segment); err != nil {
+	for i := 1; i < len(v); i++ {
+		if err := p.bpfObjects.ValidPids.Put(uint32(i), v[i]); err != nil {
 			errorCount++
-			if errorCount <= 3 {
-				// Only log first few errors to avoid log spam
-				p.log.Error("Error updating pid filter in BPF map",
+			// If we get permission errors after the first succeeded, something is very wrong
+			if isPermissionError(err) && errorCount == 1 {
+				p.pidFilterBroken = true
+				p.log.Warn("BPF map updates failing mid-operation, disabling BPF-side PID filtering",
 					"error", err,
 					"index", i,
-					"segment", segment,
-					"mapID", mapID,
 				)
+				return
 			}
 		}
 	}
 
 	if errorCount > 0 {
-		p.log.Error("Failed to update some pid filter entries",
+		p.log.Warn("Some pid filter entries failed to update",
 			"totalErrors", errorCount,
 			"totalEntries", len(v),
 		)
 	} else {
 		p.log.Debug("Successfully updated all pid filter entries", "count", len(v))
 	}
+}
+
+// isPermissionError checks if the error is a permission-related error (EPERM/EACCES)
+func isPermissionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "operation not permitted") ||
+		strings.Contains(errStr, "permission denied") ||
+		strings.Contains(errStr, "EPERM") ||
+		strings.Contains(errStr, "EACCES")
 }
 
 func (p *Tracer) AllowPID(pid, ns uint32, svc *svc.Attrs) {
@@ -517,6 +563,11 @@ func (p *Tracer) AlreadyInstrumentedLib(id uint64) bool {
 }
 
 func (p *Tracer) Run(ctx context.Context, ebpfEventContext *ebpfcommon.EBPFEventContext, eventsChan *msg.Queue[[]request.Span]) {
+	// Mark BPF as ready - now AllowPID/BlockPID calls can update the map
+	p.pidFilterMux.Lock()
+	p.bpfReady = true
+	p.pidFilterMux.Unlock()
+
 	// At this point we now have loaded the bpf objects, which means we should insert any
 	// pids that are allowed into the bpf map
 	if p.bpfObjects.ValidPids != nil {

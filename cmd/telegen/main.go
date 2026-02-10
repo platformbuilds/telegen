@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/platformbuilds/telegen/internal/config"
+	"github.com/platformbuilds/telegen/internal/kube"
 	"github.com/platformbuilds/telegen/internal/kubemetrics"
 	"github.com/platformbuilds/telegen/internal/nodeexporter"
 	"github.com/platformbuilds/telegen/internal/pipeline"
@@ -122,6 +123,20 @@ func main() {
 		signalsStarted++
 	}
 
+	// Get kube.Store from pipeline's eBPF context (reuse what's already working)
+	// The pipeline already initialized kube.Store for eBPF instrumentation
+	var kubeStore *kube.Store
+	if cfg.EBPF.Enabled {
+		var err error
+		kubeStore, err = pl.GetKubeStore(ctx)
+		if err != nil {
+			logger.Warn("failed to get kube.Store from pipeline for profiler",
+				"error", err)
+		} else if kubeStore != nil {
+			logger.Info("profiler will use pipeline's kube.Store for namespace resolution")
+		}
+	}
+
 	// Start eBPF profiler if enabled
 	var profilerRunner *profiler.Runner
 	if cfg.Profiling.Enabled {
@@ -130,7 +145,7 @@ func main() {
 		profCfg := cfg.Profiling
 		profCfg.ServiceName = cfg.Agent.ServiceName
 
-		profilerRunner, err = profiler.NewRunner(profCfg, logger)
+		profilerRunner, err = profiler.NewRunner(profCfg, logger, kubeStore)
 		if err != nil {
 			logger.Warn("profiler failed to initialize, continuing without profiling",
 				"error", err,
@@ -147,7 +162,11 @@ func main() {
 					"cpu_enabled", cfg.Profiling.CPU.Enabled,
 					"offcpu_enabled", cfg.Profiling.OffCPU.Enabled,
 					"memory_enabled", cfg.Profiling.Memory.Enabled,
+					"mutex_enabled", cfg.Profiling.Mutex.Enabled,
+					"wall_enabled", cfg.Profiling.Wall.Enabled,
 					"log_export_enabled", cfg.Profiling.LogExport.Enabled,
+					"metrics_export_enabled", cfg.Profiling.MetricsExport.Enabled,
+					"metrics_export_endpoint", cfg.Profiling.MetricsExport.Endpoint,
 				)
 			}
 		}

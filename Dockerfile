@@ -132,8 +132,9 @@ LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 WORKDIR /
 
-# Copy binary
+# Copy binary to both / and /usr/bin for compatibility
 COPY --from=build /out/telegen /telegen
+RUN mkdir -p /usr/bin && ln -s /telegen /usr/bin/telegen
 
 # Copy Java agent jar (must be in same directory as telegen executable)
 COPY --from=java-build /src/internal/java/build/obi-java-agent.jar /obi-java-agent.jar
@@ -209,7 +210,10 @@ RUN apk add --no-cache \
 
 WORKDIR /
 
+# Copy binary to both / and /usr/bin for compatibility
 COPY --from=build /out/telegen /telegen
+RUN mkdir -p /usr/bin && ln -s /telegen /usr/bin/telegen
+
 COPY --from=java-build /src/internal/java/build/obi-java-agent.jar /obi-java-agent.jar
 COPY --from=perfmap-build /src/perf-map-agent/out/attach-main.jar /opt/perf-map-agent/attach-main.jar
 COPY --from=perfmap-build /src/perf-map-agent/out/libperfmap.so /opt/perf-map-agent/libperfmap.so

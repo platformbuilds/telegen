@@ -84,7 +84,8 @@ struct mutex_config {
     __u32 target_pid;
     __u64 contention_threshold_ns;  // Minimum wait time to record
     __u64 hold_threshold_ns;        // Warn if held longer than this
-    __u8 _pad[4];
+    __u8 filter_active;     // 1 = only profile PIDs in mutex_target_pids map
+    __u8 _pad[3];
 };
 
 // Stack traces map
@@ -159,11 +160,19 @@ static __always_inline bool should_profile_pid(__u32 pid) {
     }
 
     struct mutex_config *cfg = get_config();
-    if (cfg && cfg->target_pid == 0) {
-        return true;
+    if (!cfg) {
+        return false;
     }
 
-    return false;
+    if (cfg->target_pid != 0) {
+        return pid == cfg->target_pid;
+    }
+
+    if (cfg->filter_active) {
+        return false;
+    }
+
+    return true;
 }
 
 // pthread_mutex_lock entry - record when lock acquisition starts

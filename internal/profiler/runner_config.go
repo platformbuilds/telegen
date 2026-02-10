@@ -29,12 +29,22 @@ type RunnerConfig struct {
 	// Wall clock profiling
 	Wall WallConfig `mapstructure:"wall" yaml:"wall"`
 
-	// Target filtering
-	TargetPID          uint32   `mapstructure:"target_pid" yaml:"target_pid"`
-	TargetPIDs         []uint32 `mapstructure:"target_pids" yaml:"target_pids"`
-	TargetContainerIDs []string `mapstructure:"target_container_ids" yaml:"target_container_ids"`
-	ExcludeKernel      bool     `mapstructure:"exclude_kernel" yaml:"exclude_kernel"`
-	ExcludeUser        bool     `mapstructure:"exclude_user" yaml:"exclude_user"`
+	// Target filtering - Process-based
+	TargetPID          uint32   `mapstructure:"target_pid" yaml:"target_pid"`                     // Single PID to profile
+	TargetPIDs         []uint32 `mapstructure:"target_pids" yaml:"target_pids"`                   // Multiple PIDs to profile
+	TargetContainerIDs []string `mapstructure:"target_container_ids" yaml:"target_container_ids"` // Container IDs to profile
+	TargetProcessNames []string `mapstructure:"target_process_names" yaml:"target_process_names"` // Process names to profile (e.g., "java", "python", "node")
+	TargetExecutables  []string `mapstructure:"target_executables" yaml:"target_executables"`     // Full executable paths to profile
+	ExcludeKernel      bool     `mapstructure:"exclude_kernel" yaml:"exclude_kernel"`             // Exclude kernel stacks
+	ExcludeUser        bool     `mapstructure:"exclude_user" yaml:"exclude_user"`                 // Exclude user stacks
+
+	// Target filtering - Kubernetes-based
+	TargetNamespaces   []string          `mapstructure:"target_namespaces" yaml:"target_namespaces"`     // K8s namespaces to profile
+	TargetDeployments  []string          `mapstructure:"target_deployments" yaml:"target_deployments"`   // K8s deployment names to profile
+	TargetDaemonSets   []string          `mapstructure:"target_daemonsets" yaml:"target_daemonsets"`     // K8s daemonset names to profile
+	TargetStatefulSets []string          `mapstructure:"target_statefulsets" yaml:"target_statefulsets"` // K8s statefulset names to profile
+	TargetLabels       map[string]string `mapstructure:"target_labels" yaml:"target_labels"`             // K8s labels to match (e.g., app=myapp)
+	ExcludeNamespaces  []string          `mapstructure:"exclude_namespaces" yaml:"exclude_namespaces"`   // K8s namespaces to exclude (e.g., kube-system)
 
 	// Symbol resolution
 	Symbols SymbolsConfig `mapstructure:"symbols" yaml:"symbols"`
@@ -48,6 +58,9 @@ type RunnerConfig struct {
 
 	// OTLP Log export
 	LogExport LogExportRunnerConfig `mapstructure:"log_export" yaml:"log_export"`
+
+	// OTLP Metrics export (generates metrics from profiling data)
+	MetricsExport MetricsExportRunnerConfig `mapstructure:"metrics_export" yaml:"metrics_export"`
 
 	// Service metadata (injected by agent)
 	ServiceName   string
@@ -87,7 +100,8 @@ type MutexConfig struct {
 
 // WallConfig holds wall clock profiling configuration
 type WallConfig struct {
-	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+	Enabled    bool `mapstructure:"enabled" yaml:"enabled"`
+	SampleRate int  `mapstructure:"sample_rate" yaml:"sample_rate"`
 }
 
 // SymbolsConfig holds symbol resolution configuration
@@ -97,6 +111,12 @@ type SymbolsConfig struct {
 	DemanglingEnabled bool `mapstructure:"demangling_enabled" yaml:"demangling_enabled"`
 	GoSymbols         bool `mapstructure:"go_symbols" yaml:"go_symbols"`
 	KernelSymbols     bool `mapstructure:"kernel_symbols" yaml:"kernel_symbols"`
+	// PerfMapPaths: list of glob paths to search for perf-<pid>.map files.
+	// Supports `<pid>` substitution and simple globs like `*` and `?`.
+	PerfMapPaths []string `mapstructure:"perf_map_paths" yaml:"perf_map_paths"`
+	// PerfMapRecursive: if true, allow recursive directory walks for patterns
+	// containing `**` (best-effort implementation).
+	PerfMapRecursive bool `mapstructure:"perf_map_recursive" yaml:"perf_map_recursive"`
 }
 
 // JavaEBPFConfig holds Java eBPF profiling configuration
@@ -121,6 +141,39 @@ type LogExportRunnerConfig struct {
 	BatchSize         int               `mapstructure:"batch_size" yaml:"batch_size"`
 	FlushInterval     time.Duration     `mapstructure:"flush_interval" yaml:"flush_interval"`
 	IncludeStackTrace bool              `mapstructure:"include_stack_trace" yaml:"include_stack_trace"`
+}
+
+// MetricsExportRunnerConfig holds OTLP metrics export configuration for profiling data.
+// This generates metrics like profiler.cpu.samples, profiler.cpu.duration_seconds, etc.
+type MetricsExportRunnerConfig struct {
+	// Enabled enables metrics export from profiling data
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Endpoint is the OTLP metrics endpoint (e.g., "http://localhost:4318/v1/metrics")
+	Endpoint string `mapstructure:"endpoint" yaml:"endpoint"`
+
+	// Headers are custom HTTP headers to send with requests
+	Headers map[string]string `mapstructure:"headers" yaml:"headers"`
+
+	// Compression algorithm: "gzip" or "" (none)
+	Compression string `mapstructure:"compression" yaml:"compression"`
+
+	// Timeout for export requests
+	Timeout time.Duration `mapstructure:"timeout" yaml:"timeout"`
+
+	// HistogramBuckets for duration distributions (in seconds)
+	// Default: latency-optimized buckets from 1ms to 60s
+	HistogramBuckets []float64 `mapstructure:"histogram_buckets" yaml:"histogram_buckets"`
+
+	// MemoryHistogramBuckets for allocation size distributions (in bytes)
+	// Default: power-of-2 buckets from 64B to 64MB
+	MemoryHistogramBuckets []float64 `mapstructure:"memory_histogram_buckets" yaml:"memory_histogram_buckets"`
+
+	// IncludeProcessAttributes includes process.pid, process.executable.name
+	IncludeProcessAttributes bool `mapstructure:"include_process_attributes" yaml:"include_process_attributes"`
+
+	// IncludeStackAttributes includes code.function, code.class from top-of-stack
+	IncludeStackAttributes bool `mapstructure:"include_stack_attributes" yaml:"include_stack_attributes"`
 }
 
 // DefaultRunnerConfig returns default profiling configuration
@@ -155,6 +208,8 @@ func DefaultRunnerConfig() RunnerConfig {
 			DemanglingEnabled: true,
 			GoSymbols:         true,
 			KernelSymbols:     true,
+			PerfMapPaths:      nil,
+			PerfMapRecursive:  false,
 		},
 		OutputFormat:    "pprof",
 		AggregateStacks: true,
@@ -176,6 +231,22 @@ func DefaultRunnerConfig() RunnerConfig {
 			BatchSize:         100,
 			FlushInterval:     10 * time.Second,
 			IncludeStackTrace: true,
+		},
+		MetricsExport: MetricsExportRunnerConfig{
+			Enabled:     false,
+			Endpoint:    "http://localhost:4318/v1/metrics",
+			Compression: "gzip",
+			Timeout:     30 * time.Second,
+			// Default histogram buckets for latency (seconds): 1ms to 60s
+			HistogramBuckets: []float64{
+				0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60,
+			},
+			// Default histogram buckets for memory (bytes): 64B to 64MB
+			MemoryHistogramBuckets: []float64{
+				64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864,
+			},
+			IncludeProcessAttributes: true,
+			IncludeStackAttributes:   true,
 		},
 	}
 }

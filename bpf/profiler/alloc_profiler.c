@@ -106,7 +106,8 @@ struct alloc_config {
     __u8 track_calloc;      // Whether to track calloc (CP-013)
     __u8 track_realloc;     // Whether to track realloc (CP-013)
     __u8 track_mmap;        // Whether to track mmap (CP-013)
-    __u8 _pad[4];
+    __u8 filter_active;     // 1 = only profile PIDs in alloc_target_pids map
+    __u8 _pad[3];
 };
 
 // Stack traces map
@@ -197,11 +198,19 @@ static __always_inline bool should_profile_pid(__u32 pid) {
     }
 
     struct alloc_config *cfg = get_config();
-    if (cfg && cfg->target_pid == 0) {
-        return true;
+    if (!cfg) {
+        return false;
     }
 
-    return false;
+    if (cfg->target_pid != 0) {
+        return pid == cfg->target_pid;
+    }
+
+    if (cfg->filter_active) {
+        return false;
+    }
+
+    return true;
 }
 
 // Check if we should sample this allocation

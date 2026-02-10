@@ -10,6 +10,7 @@ import (
 	"log/slog"
 
 	"github.com/platformbuilds/telegen/internal/exporters/otlp/logs"
+	"github.com/platformbuilds/telegen/internal/kube"
 	"github.com/platformbuilds/telegen/internal/version"
 )
 
@@ -17,7 +18,7 @@ import (
 type Runner struct{}
 
 // NewRunner creates a stub runner on non-Linux systems
-func NewRunner(cfg RunnerConfig, log *slog.Logger) (*Runner, error) {
+func NewRunner(cfg RunnerConfig, log *slog.Logger, kubeStore *kube.Store) (*Runner, error) {
 	if log != nil {
 		log.Info("eBPF profiling is not supported on this platform")
 	}

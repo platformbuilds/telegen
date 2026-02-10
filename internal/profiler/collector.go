@@ -1,6 +1,8 @@
 // Copyright The Telegen Authors
 // SPDX-License-Identifier: Apache-2.0
 
+//go:build linux
+
 package profiler
 
 import (
@@ -97,9 +99,17 @@ func (c *Collector) Aggregate(profileType ProfileType) *AggregatedProfile {
 		return nil
 	}
 
+	// Calculate the actual start time by subtracting the first profile's duration
+	// from its timestamp. The timestamp represents when collection finished,
+	// so StartTime = Timestamp - Duration gives us when profiling actually began.
+	startTime := profiles[0].Timestamp
+	if profiles[0].Duration > 0 {
+		startTime = startTime.Add(-profiles[0].Duration)
+	}
+
 	agg := &AggregatedProfile{
 		Type:      profileType,
-		StartTime: profiles[0].Timestamp,
+		StartTime: startTime,
 		EndTime:   profiles[len(profiles)-1].Timestamp,
 		Stacks:    make(map[string]*AggregatedStack),
 	}

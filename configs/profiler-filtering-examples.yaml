@@ -1,0 +1,199 @@
+# Telegen Profiler - Process Filtering Examples
+# This configuration shows how to profile only specific applications
+
+profiler:
+  enabled: true
+  collection_interval: 10s
+  
+  # =============================================================================
+  # EXAMPLE 1: Profile only Java applications
+  # =============================================================================
+  target_process_names:
+    - "java"
+  
+  # =============================================================================
+  # EXAMPLE 2: Profile specific executables
+  # =============================================================================
+  # target_executables:
+  #   - "/usr/bin/python3"
+  #   - "/usr/local/bin/node"
+  
+  # =============================================================================
+  # EXAMPLE 3: Profile by PID (for testing/debugging)
+  # =============================================================================
+  # target_pid: 12345
+  # OR multiple PIDs:
+  # target_pids:
+  #   - 12345
+  #   - 67890
+  
+  # =============================================================================
+  # EXAMPLE 4: Profile specific Kubernetes namespaces
+  # =============================================================================
+  # target_namespaces:
+  #   - "production"
+  #   - "staging"
+  # 
+  # Exclude system namespaces:
+  # exclude_namespaces:
+  #   - "kube-system"
+  #   - "kube-public"
+  #   - "kube-node-lease"
+  
+  # =============================================================================
+  # EXAMPLE 5: Profile specific Kubernetes deployments
+  # =============================================================================
+  # target_deployments:
+  #   - "api-server"
+  #   - "worker-service"
+  #   - "backend"
+  
+  # =============================================================================
+  # EXAMPLE 6: Profile specific DaemonSets (useful for monitoring agents)
+  # =============================================================================
+  # target_daemonsets:
+  #   - "node-exporter"
+  #   - "fluentd"
+  
+  # =============================================================================
+  # EXAMPLE 7: Profile by Kubernetes labels
+  # =============================================================================
+  # target_labels:
+  #   app: "myapp"              # Only pods with label app=myapp
+  #   environment: "production" # AND label environment=production
+  #   tier: "backend"           # AND label tier=backend
+  
+  # =============================================================================
+  # EXAMPLE 8: Combine multiple filters (ANY match)
+  # =============================================================================
+  # Multiple filter types work with OR logic:
+  # - All Java processes
+  # - OR processes in "production" namespace
+  # - OR processes with label app=myapp
+  # 
+  # target_process_names:
+  #   - "java"
+  #   - "python3"
+  # target_namespaces:
+  #   - "production"
+  # target_labels:
+  #   app: "myapp"
+  
+  # =============================================================================
+  # EXAMPLE 9: Production use case - Profile application workloads only
+  # =============================================================================
+  # Profile applications in specific namespaces, excluding system namespaces
+  # target_namespaces:
+  #   - "app-production"
+  #   - "app-staging"
+  # exclude_namespaces:
+  #   - "kube-system"
+  #   - "kube-public"
+  #   - "telemetry"
+  #   - "monitoring"
+  # target_process_names:
+  #   - "java"
+  #   - "node"
+  #   - "python"
+  
+  # =============================================================================
+  # Profiler Types (Enable specific profilers)
+  # =============================================================================
+  cpu:
+    enabled: true
+    sample_rate: 99        # Hz - Samples per second
+    max_stack_depth: 127
+  
+  off_cpu:
+    enabled: true
+    min_block_time_ns: 1000000  # 1ms - Minimum blocking time to capture
+  
+  memory:
+    enabled: false
+    min_alloc_size: 1024  # bytes - Minimum allocation size to track
+  
+  mutex:
+    enabled: false
+    contention_threshold_ns: 1000000  # 1ms - Minimum contention time
+  
+  # =============================================================================
+  # Symbol Resolution
+  # =============================================================================
+  symbols:
+    cache_size: 10000
+    debug_info_enabled: true
+    demangling_enabled: true
+    go_symbols: true
+    kernel_symbols: true
+  
+  # =============================================================================
+  # Java-specific Configuration
+  # =============================================================================
+  java_ebpf:
+    enabled: true
+    agent_jar_path: "/opt/perf-map-agent/attach-main.jar"
+    refresh_interval: 60s
+    unfold_all: true
+  
+  # =============================================================================
+  # OTLP Export
+  # =============================================================================
+  log_export:
+    enabled: true
+    endpoint: "http://localhost:4318/v1/logs"
+    batch_size: 100
+    flush_interval: 10s
+    include_stack_trace: true
+
+
+# =============================================================================
+# REAL-WORLD EXAMPLES
+# =============================================================================
+
+# --- Production Java Microservices ---
+# profiler:
+#   target_process_names:
+#     - "java"
+#   target_namespaces:
+#     - "microservices-prod"
+#   exclude_namespaces:
+#     - "kube-system"
+#     - "monitoring"
+#   cpu:
+#     enabled: true
+#     sample_rate: 49  # Lower rate for production
+
+# --- Specific Application by Label ---
+# profiler:
+#   target_labels:
+#     app: "payment-service"
+#     version: "v2"
+#   cpu:
+#     enabled: true
+
+# --- Troubleshooting High Memory Usage ---
+# profiler:
+#   target_deployments:
+#     - "problematic-service"
+#   cpu:
+#     enabled: true
+#   memory:
+#     enabled: true
+#     min_alloc_size: 10240  # Track larger allocations
+
+# --- Monitoring Critical DaemonSets ---
+# profiler:
+#   target_daemonsets:
+#     - "critical-daemon"
+#   cpu:
+#     enabled: true
+#   off_cpu:
+#     enabled: true
+
+# --- Development Environment (Profile Everything) ---
+# profiler:
+#   enabled: true
+#   # No target filters = profile all processes
+#   cpu:
+#     enabled: true
+#     sample_rate: 99

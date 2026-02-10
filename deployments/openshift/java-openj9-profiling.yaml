@@ -1,0 +1,302 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: java-app-openj9-config
+  namespace: your-namespace
+data:
+  # OpenJ9 JVM options for profiling
+  OPENJ9_JAVA_OPTIONS: |-
+    -Xjit:perfTool
+    -Xjit:optLevel=warm
+    -Xmx2g
+    -Xms512m
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-app-openj9
+  namespace: your-namespace
+  labels:
+    app: java-app
+    profiling: enabled
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: java-app
+  template:
+    metadata:
+      labels:
+        app: java-app
+        profiling: enabled
+      annotations:
+        # Annotation to indicate profiling is enabled
+        telegen.io/profiling: "true"
+        telegen.io/jvm-type: "openj9"
+    spec:
+      containers:
+      - name: app
+        image: your-registry/your-java-app:latest
+        
+        # Environment variables for OpenJ9 profiling
+        env:
+        - name: JAVA_TOOL_OPTIONS
+          value: "-Xjit:perfTool"
+        
+        # Alternative: Use ConfigMap for more complex JVM options
+        # envFrom:
+        # - configMapRef:
+        #     name: java-app-openj9-config
+        
+        # Ensure /tmp is writable for perf maps
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        
+        # Resource limits
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      
+      # Security context for OpenShift
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 1000
+---
+# Service for the Java application
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-app-openj9
+  namespace: your-namespace
+spec:
+  selector:
+    app: java-app
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 8080
+  type: ClusterIP
+---
+# Telegen DaemonSet with access to Java process namespaces
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: telegen-agent
+  namespace: telegen-system
+spec:
+  selector:
+    matchLabels:
+      app: telegen-agent
+  template:
+    metadata:
+      labels:
+        app: telegen-agent
+    spec:
+      # Run in host PID namespace to see all processes
+      hostPID: true
+      hostNetwork: true
+      
+      serviceAccountName: telegen-agent
+      
+      containers:
+      - name: telegen
+        image: your-registry/telegen:latest
+        
+        securityContext:
+          privileged: true  # Required for eBPF
+          capabilities:
+            add:
+            - SYS_ADMIN
+            - SYS_RESOURCE
+            - SYS_PTRACE
+            - NET_ADMIN
+            - BPF
+        
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        
+        # Enable debug logging for Java profiling troubleshooting
+        - name: TELEGEN_DEBUG_LOGGING
+          value: "true"
+        
+        # Telegen configuration
+        - name: TELEGEN_PROFILER_ENABLED
+          value: "true"
+        - name: TELEGEN_PROFILER_SAMPLE_RATE
+          value: "99"  # 99Hz
+        - name: TELEGEN_SYMBOL_CACHE_TTL
+          value: "5m"
+        - name: TELEGEN_LIFECYCLE_CHECK
+          value: "true"
+        
+        volumeMounts:
+        # Access to host proc filesystem
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+        
+        # Access to host sys for BPF
+        - name: sys
+          mountPath: /sys
+          readOnly: false
+        
+        # BPF filesystem
+        - name: bpffs
+          mountPath: /sys/fs/bpf
+        
+        # Debug filesystem
+        - name: debugfs
+          mountPath: /sys/kernel/debug
+        
+        # Access to container runtime socket (for namespace awareness)
+        - name: containerd-sock
+          mountPath: /run/containerd/containerd.sock
+          readOnly: true
+        
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+          type: Directory
+      
+      - name: sys
+        hostPath:
+          path: /sys
+          type: Directory
+      
+      - name: bpffs
+        hostPath:
+          path: /sys/fs/bpf
+          type: DirectoryOrCreate
+      
+      - name: debugfs
+        hostPath:
+          path: /sys/kernel/debug
+          type: Directory
+      
+      - name: containerd-sock
+        hostPath:
+          path: /run/containerd/containerd.sock
+          type: Socket
+      
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
+---
+# ServiceAccount for Telegen
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: telegen-agent
+  namespace: telegen-system
+---
+# ClusterRole for Telegen to read pod metadata
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: telegen-agent
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - pods
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups: ["apps"]
+  resources:
+  - deployments
+  - daemonsets
+  - statefulsets
+  verbs:
+  - get
+  - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: telegen-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: telegen-agent
+subjects:
+- kind: ServiceAccount
+  name: telegen-agent
+  namespace: telegen-system
+---
+# SecurityContextConstraints for OpenShift
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: telegen-agent-scc
+allowHostDirVolumePlugin: true
+allowHostIPC: false
+allowHostNetwork: true
+allowHostPID: true
+allowHostPorts: false
+allowPrivilegedContainer: true
+allowedCapabilities:
+- SYS_ADMIN
+- SYS_RESOURCE
+- SYS_PTRACE
+- NET_ADMIN
+- BPF
+defaultAddCapabilities: []
+fsGroup:
+  type: RunAsAny
+priority: null
+readOnlyRootFilesystem: false
+requiredDropCapabilities: []
+runAsUser:
+  type: RunAsAny
+seLinuxContext:
+  type: RunAsAny
+supplementalGroups:
+  type: RunAsAny
+users:
+- system:serviceaccount:telegen-system:telegen-agent
+volumes:
+- hostPath
+- configMap
+- secret
+- emptyDir

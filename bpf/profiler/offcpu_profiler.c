@@ -79,11 +79,12 @@ struct offcpu_start {
 
 // Configuration from userspace
 struct offcpu_config {
-    __u32 target_pid;       // 0 = all pids
+    __u32 target_pid;       // 0 = all pids (only when filter_active == 0)
     __u64 min_block_ns;     // Minimum block time to record
     __u8 capture_kernel;    // Whether to capture kernel stacks
     __u8 capture_user;      // Whether to capture user stacks
-    __u8 _pad[6];
+    __u8 filter_active;     // 1 = only profile PIDs in offcpu_target_pids map
+    __u8 _pad[5];
 };
 
 // Stack traces map
@@ -150,11 +151,23 @@ static __always_inline bool should_profile_pid(__u32 pid) {
     }
 
     struct offcpu_config *cfg = get_config();
-    if (cfg && cfg->target_pid == 0) {
-        return true;
+    if (!cfg) {
+        return false;
     }
 
-    return false;
+    // If a specific single PID is targeted, only profile that PID
+    if (cfg->target_pid != 0) {
+        return pid == cfg->target_pid;
+    }
+
+    // If userspace has process filters active, only accept PIDs
+    // explicitly added to the offcpu_target_pids map
+    if (cfg->filter_active) {
+        return false;
+    }
+
+    // No filters configured — profile everything
+    return true;
 }
 
 // Classify block reason from task state (CP-004)
