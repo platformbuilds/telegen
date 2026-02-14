@@ -1,0 +1,185 @@
+# Example Kafka Logs Receiver Configuration for Telegen
+#
+# This configuration enables Telegen to consume raw logs from a Kafka cluster
+# and export them to an OpenTelemetry Collector endpoint with embedded telegen metadata.
+#
+# The Kafka receiver:
+# 1. Consumes raw log messages from Kafka topics
+# 2. Parses them using existing telegen parsers (Docker JSON, CRI-O, Spring Boot, Log4j, etc.)
+# 3. Enriches them with Kafka metadata (topic, partition, offset) and Telegen metadata (signal category, source module)
+# 4. Exports them to OTEL Collector via OTLP gRPC or HTTP/protobuf
+#
+# Multi-pod coordination: On DaemonSets, all pods with the same group_id automatically
+# coordinate via Kafka consumer groups for partition assignment.
+
+agent:
+  service_name: my-app
+  environment: production
+
+pipelines:
+  kafka:
+    enabled: true
+
+    # Kafka broker connection
+    brokers:
+      - "kafka-broker-1:9092"
+      - "kafka-broker-2:9092"
+      - "kafka-broker-3:9092"
+
+    # Consumer group ID - same on all pod replicas for automatic coordination
+    group_id: "telegen-logs-consumer-group"
+    client_id: "telegen-${POD_NAME:-local}"  # Can use environment variable expansion
+
+    # Topics to consume from
+    topics:
+      - "application-logs"
+      - "system-logs"
+    
+    # (Optional) Topics to exclude
+    # exclude_topics:
+    #   - "internal-logs"
+
+    # Initial offset: "earliest" or "latest" (default: "latest")
+    initial_offset: "latest"
+
+    # Consumer group session management
+    session_timeout: "10s"      # How long broker waits before removing idle consumer
+    heartbeat_interval: "3s"    # How often to send heartbeats to broker
+    rebalance_timeout: "30s"    # How long for rebalancing to complete
+    group_rebalance_strategy: "cooperative-sticky"  # Options: cooperative-sticky, eager-sticky, roundrobin, range
+
+    # Message processing
+    message_marking:
+      after: true              # Mark offset after successful processing
+      on_error: false          # Mark offset even on parsing errors
+      on_permanent_error: true # Mark offset on permanent (non-transient) errors
+
+    # Log parsing configuration
+    parser:
+      enable_runtime_parsing: true       # Auto-detect Docker JSON, CRI-O, containerd formats
+      enable_application_parsing: true   # Parse Spring Boot, Log4j, JSON, etc.
+      default_severity: "INFO"           # Default severity for unparsed logs
+      extract_trace_context: true        # Extract trace_id/span_id from logs
+      enable_kube_metadata_extract: true # Extract K8s metadata from pod containers
+
+    # Message batching
+    batch:
+      size: 100               # Number of messages to batch before sending
+      timeout: "500ms"        # Max time to wait before flushing batch
+      max_partition_bytes: 1048576  # Max partition bytes to fetch (1MB)
+
+    # Telemetry/metrics to emit
+    telemetry:
+      emit_records_processed_metric: true       # Track records consumed/parsed/exported
+      emit_lag_metric: true                     # Track consumer lag per partition
+      emit_client_lag_metric: true              # Track overall client lag
+      emit_partition_level_metrics: false       # Per-partition metrics (verbose)
+      emit_processing_delay_metric: true        # Track end-to-end latency
+      emit_broker_rebalance_event_metric: true  # Track rebalancing events
+
+    # Authentication (optional)
+    auth:
+      sasl:
+        mechanism: "PLAIN"        # Options: PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, none
+        username: "kafka_user"
+        password: "kafka_password"
+
+    # TLS configuration (optional)
+    tls:
+      enabled: false
+      # ca_file: "/etc/kafka/ca.crt"
+      # cert_file: "/etc/kafka/client.crt"
+      # key_file: "/etc/kafka/client.key"
+      # insecure_skip_verify: false
+
+    # Error handling with exponential backoff
+    error_backoff:
+      enabled: true
+      initial_interval: "1s"      # Initial wait time before retry
+      max_interval: "30s"         # Maximum wait time between retries
+      multiplier: 2.0             # Backoff multiplier (exponential)
+      jitter: true                # Add randomization to prevent thundering herd
+
+exports:
+  otlp:
+    send_mode: "span"  # For logs: "span", "sequence", or "batch"
+    
+    grpc:
+      enabled: true
+      endpoint: "otel-collector:4317"
+      insecure: true
+      # headers:
+      #   Authorization: "Bearer <token>"
+      timeout: "10s"
+      gzip: true
+
+    # HTTP alternative (if gRPC is not available)
+    # http:
+    #   enabled: false
+    #   endpoint: "http://otel-collector:4318"
+    #   insecure: true
+    #   timeout: "10s"
+    #   gzip: true
+    #   headers:
+    #     Authorization: "Bearer <token>"
+
+logs:
+  enabled: true
+  filelog:
+    include:
+      - "/var/log/**/*.log"
+    exclude:
+      - "/var/log/telegen/**"
+    position_file: "/var/lib/telegen/logs.pos"
+    poll_interval_duration: "5s"
+    ship_historical_events: false
+
+# Example with environment variables (for Kubernetes DaemonSet deployment):
+#
+# kind: ConfigMap
+# metadata:
+#   name: telegen-config
+# data:
+#   telegen.yaml: |
+#     agent:
+#       service_name: my-app
+#     pipelines:
+#       kafka:
+#         enabled: true
+#         brokers:
+#           - ${KAFKA_BROKERS:-kafka:9092}
+#         group_id: "telegen-logs-dg"
+#         topics:
+#           - "app-logs"
+#         # ... rest of config
+#     exports:
+#       otlp:
+#         grpc:
+#           endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-localhost:4317}
+#
+# ---
+# kind: DaemonSet
+# metadata:
+#   name: telegen
+# spec:
+#   template:
+#     spec:
+#       containers:
+#       - name: telegen
+#         image: telegen:latest
+#         env:
+#           - name: POD_NAME
+#             valueFrom:
+#               fieldRef:
+#                 fieldPath: metadata.name
+#           - name: KAFKA_BROKERS
+#             value: kafka-0.kafka:9092,kafka-1.kafka:9092,kafka-2.kafka:9092
+#           - name: OTEL_EXPORTER_OTLP_ENDPOINT
+#             value: http://otel-collector:4317
+#         volumeMounts:
+#           - name: config
+#             mountPath: /etc/telegen
+#       volumes:
+#         - name: config
+#           configMap:
+#             name: telegen-config
