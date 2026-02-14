@@ -84,12 +84,16 @@ require (
 )
 
 require (
+	github.com/cenkalti/backoff/v4 v4.3.0
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/snappy v1.0.0
 	github.com/gosnmp/gosnmp v1.43.2
 	github.com/grafana/jfr-parser v0.12.0
 	github.com/jsimonetti/rtnetlink/v2 v2.1.0
 	github.com/openconfig/gnmi v0.14.1
+	github.com/twmb/franz-go v1.20.6
+	go.opentelemetry.io/collector/consumer/consumererror v0.145.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.40.0
 	golang.org/x/time v0.14.0
 )
@@ -119,7 +123,6 @@ require (
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/foxboron/go-tpm-keyfiles v0.0.0-20260124215100-6450fa7133e1 // indirect
-	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
@@ -167,6 +170,7 @@ require (
 	github.com/shoenig/go-m1cpu v0.1.7 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
+	github.com/twmb/franz-go/pkg/kmsg v1.12.0 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
@@ -177,7 +181,6 @@ require (
 	go.opentelemetry.io/collector/config/configmiddleware v1.51.0 // indirect
 	go.opentelemetry.io/collector/config/confignet v1.51.0 // indirect
 	go.opentelemetry.io/collector/confmap/xconfmap v0.145.0 // indirect
-	go.opentelemetry.io/collector/consumer/consumererror v0.145.0 // indirect
 	go.opentelemetry.io/collector/consumer/consumererror/xconsumererror v0.145.0 // indirect
 	go.opentelemetry.io/collector/consumer/xconsumer v0.145.0 // indirect
 	go.opentelemetry.io/collector/exporter/exporterhelper/xexporterhelper v0.145.0 // indirect

@@ -8,13 +8,13 @@ package logenricher // import "github.com/platformbuilds/telegen/internal/tracer
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -22,8 +22,6 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"golang.org/x/sys/unix"
-
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/platformbuilds/telegen/internal/appolly/app/request"
 	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
@@ -364,31 +362,25 @@ func (p *Tracer) handle(e LogEvent) {
 		return
 	}
 
-	var (
-		b       bytes.Buffer
-		spanID  = trace.SpanID(e.orig.PidTp.Tp.SpanId)
-		traceID = trace.TraceID(e.orig.PidTp.Tp.TraceId)
-	)
+	// Create trace context for multi-format enrichment
+	traceID := correlation.TraceID(e.orig.PidTp.Tp.TraceId)
+	spanID := correlation.SpanID(e.orig.PidTp.Tp.SpanId)
+	traceFlags := correlation.TraceFlags(e.orig.PidTp.Tp.Flags)
 
-	var m map[string]any
-	if err := json.Unmarshal([]byte(e.logLine), &m); err == nil {
-		// JSON -> enrich with context
-		m["trace_id"] = traceID.String()
-		m["span_id"] = spanID.String()
+	tc := &correlation.TraceContext{
+		TraceID: traceID,
+		SpanID:  spanID,
+		Flags:   traceFlags,
+	}
 
-		out, err2 := json.Marshal(m)
-		if err2 != nil {
-			p.log.Warn("failed to marshal enriched log line, writing original", "error", err2)
-			b.Write([]byte(e.logLine))
-			return
-		}
+	// Use multi-format enricher for enhanced log format support
+	enricher := correlation.NewMultiFormatEnricher()
+	enriched := enricher.EnrichWithSource(e.filePath(), e.logLine, tc)
 
-		b.Write(out)
+	var b bytes.Buffer
+	b.WriteString(enriched.Enriched)
+	if !strings.HasSuffix(enriched.Enriched, "\n") {
 		b.WriteByte('\n')
-	} else {
-		// Not JSON -> preserve the original logline
-		// Trace context is still recorded to correlator above, so filelog can correlate later
-		b.Write([]byte(e.logLine[:e.orig.Len]))
 	}
 
 	_, err := f.Write(b.Bytes())

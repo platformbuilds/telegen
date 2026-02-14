@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/exporter"
 
 	appollycore "github.com/platformbuilds/telegen/internal/appolly/core"
@@ -17,6 +18,7 @@ import (
 	"github.com/platformbuilds/telegen/internal/instrumenter"
 	"github.com/platformbuilds/telegen/internal/jfr/converter"
 	"github.com/platformbuilds/telegen/internal/jfr/watcher"
+	"github.com/platformbuilds/telegen/internal/kafka"
 	"github.com/platformbuilds/telegen/internal/kube"
 	"github.com/platformbuilds/telegen/internal/logs/filetailer"
 	awsm "github.com/platformbuilds/telegen/internal/metadata/aws"
@@ -27,6 +29,7 @@ import (
 	"github.com/platformbuilds/telegen/pkg/pipe/global"
 
 	"github.com/prometheus/prometheus/prompb"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.uber.org/zap"
@@ -546,6 +549,27 @@ func (p *Pipeline) GetMetricsExporter() sdkmetric.Exporter {
 		return nil
 	}
 	return p.ot.Metrics
+}
+
+// GetLogsConsumer returns a logs consumer that can be used by the Kafka receiver to export logs.
+// Returns nil if OTLP was not initialized or logs export is not available.
+// This enables the telegen design principle: all signals share one exporter connection.
+func (p *Pipeline) GetLogsConsumer() consumer.Logs {
+	if p.ot == nil || p.ot.Log == nil {
+		return nil
+	}
+	// Use the kafka adapter to convert plog.Logs to SDK log records
+	return kafka.NewLogsConsumerAdapter(p.ot.Log)
+}
+
+// GetLogsLoggerProvider returns the SDK LoggerProvider for use by the Kafka receiver.
+// Returns nil if OTLP was not initialized or logs export is not available.
+// This provides direct access to the LoggerProvider bypassing the consumer.Logs adapter.
+func (p *Pipeline) GetLogsLoggerProvider() *sdklog.LoggerProvider {
+	if p.ot == nil || p.ot.Log == nil {
+		return nil
+	}
+	return p.ot.Log
 }
 
 // GetTracesExporter returns the Collector-compatible OTLP traces exporter for use by eBPF traces.

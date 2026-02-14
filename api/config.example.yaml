@@ -121,6 +121,100 @@ pipelines:
     filelog:
       include: ["/var/log/*.log", "/var/log/*/*.log"]
       position_file: "/var/lib/telegen/positions.json"
+  
+  # =============================================================================
+  # Kafka Logs Receiver - Stream logs from Kafka topics
+  # =============================================================================
+  # Consumes raw log messages from Kafka, parses them using telegen's
+  # multi-format parser (Docker JSON, CRI-O, Spring Boot, Log4j, etc.),
+  # and exports via the shared OTLP exporter.
+  # =============================================================================
+  kafka:
+    enabled: false
+    
+    # Kafka broker addresses
+    brokers:
+      - "localhost:9092"
+    
+    # Consumer group ID for coordinated consumption
+    group_id: "telegen-logs"
+    
+    # Client ID (optional, auto-generated if empty)
+    client_id: ""
+    
+    # Topics to consume (supports wildcards)
+    topics:
+      - "application-logs"
+      - "system-logs"
+    
+    # Topics to exclude (regex patterns)
+    exclude_topics:
+      - ".*-debug$"
+      - "test-.*"
+    
+    # Starting position: "earliest" or "latest"
+    initial_offset: "latest"
+    
+    # Consumer group timeouts
+    session_timeout: "10s"
+    heartbeat_interval: "3s"
+    rebalance_timeout: "30s"
+    
+    # Partition assignment strategy:
+    # "range", "roundrobin", "sticky", "cooperative-sticky"
+    group_rebalance_strategy: "cooperative-sticky"
+    
+    # Offset commit behavior
+    message_marking:
+      after: true                # Commit after successful processing
+      on_error: false            # Commit even on transient errors
+      on_permanent_error: true   # Commit on permanent errors (e.g., parse failures)
+    
+    # Batch settings
+    batch:
+      size: 100                  # Max messages per batch
+      timeout: "500ms"           # Max batch wait time
+      max_partition_bytes: 1048576  # 1MB max per partition
+    
+    # Log parsing configuration
+    parser:
+      enable_runtime_parsing: true       # Docker JSON, CRI-O, containerd
+      enable_application_parsing: true   # Spring Boot, Log4j, JSON
+      enable_k8s_enrichment: true        # Kubernetes metadata extraction
+      enable_trace_context_enrichment: true  # eBPF trace correlation
+      default_severity: "INFO"
+    
+    # Telemetry metrics (exposed via /metrics endpoint)
+    telemetry:
+      kafka_receiver_records: true       # Records received/processed/failed
+      kafka_receiver_offset_lag: true    # Consumer lag per partition
+      kafka_receiver_records_delay: true # Message age histogram
+      kafka_broker_connects: true        # Broker connection events
+      kafka_broker_disconnects: true     # Broker disconnection events
+    
+    # SASL authentication (for secured clusters)
+    auth:
+      enabled: false
+      mechanism: "PLAIN"  # PLAIN, SCRAM-SHA-256, SCRAM-SHA-512
+      username: ""
+      password: ""
+    
+    # TLS configuration
+    tls:
+      enable: false
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      insecure_skip_verify: false
+    
+    # Error handling with exponential backoff
+    error_backoff:
+      enabled: true
+      initial_interval: "1s"
+      max_interval: "30s"
+      multiplier: 2.0
+      jitter: 0.1
+
   jfr:
     enabled: false
     input_dirs:

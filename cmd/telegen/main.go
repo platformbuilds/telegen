@@ -13,14 +13,17 @@ import (
 	"time"
 
 	"github.com/platformbuilds/telegen/internal/config"
+	"github.com/platformbuilds/telegen/internal/kafka"
 	"github.com/platformbuilds/telegen/internal/kube"
 	"github.com/platformbuilds/telegen/internal/kubemetrics"
+	"github.com/platformbuilds/telegen/internal/logs/parsers"
 	"github.com/platformbuilds/telegen/internal/nodeexporter"
 	"github.com/platformbuilds/telegen/internal/pipeline"
 	"github.com/platformbuilds/telegen/internal/profiler"
 	"github.com/platformbuilds/telegen/internal/selftelemetry"
 	"github.com/platformbuilds/telegen/internal/version"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.uber.org/zap"
 )
 
 // Global JSON logger - all telegen logs are structured JSON
@@ -59,7 +62,12 @@ func main() {
 		"profiling_enabled", cfg.Profiling.Enabled,
 		"jfr_enabled", cfg.Pipelines.JFR.Enabled,
 		"logs_enabled", cfg.Pipelines.Logs.Enabled,
+		"kafka_enabled", cfg.Pipelines.Kafka.Enabled,
 	)
+
+	// Create zap logger for internal use (some components may require it)
+	zapLogger, _ := zap.NewProduction()
+	defer zapLogger.Sync()
 
 	mux := http.NewServeMux()
 	st := selftelemetry.InstallHandlers(mux, cfg.SelfTelemetry.Listen)
@@ -178,6 +186,42 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info("telegen ready", "signals_started", signalsStarted)
+
+	// Start Kafka logs receiver if enabled
+	if cfg.Pipelines.Kafka.Enabled {
+		// Convert config to kafka.Config
+		kafkaCfg := convertKafkaConfig(cfg.Pipelines.Kafka)
+		
+		// Get the logger provider from the OTLP exporter - shared across all signals
+		loggerProvider := pl.GetLogsLoggerProvider()
+		if loggerProvider == nil {
+			logger.Warn("kafka logs receiver enabled but OTLP logs exporter not configured, skipping")
+		} else {
+			kafkaReceiver, err := kafka.NewReceiver(
+				kafkaCfg,
+				cfg.Agent.ServiceName,
+				logger,
+				loggerProvider,
+			)
+			if err != nil {
+				logger.Warn("kafka receiver failed to initialize, continuing without kafka logs",
+					"error", err,
+					"status", "degraded")
+			} else {
+				if err := kafkaReceiver.Start(ctx); err != nil {
+					logger.Warn("kafka receiver failed to start, continuing without kafka logs",
+						"error", err,
+						"status", "degraded")
+				} else {
+					signalsStarted++
+					logger.Info("kafka receiver started successfully",
+						"brokers", kafkaCfg.Brokers,
+						"group_id", kafkaCfg.GroupID,
+						"topics", kafkaCfg.Topics)
+				}
+			}
+		}
+	}
 
 	// Wire up node_exporter OTLP streaming if enabled
 	if nodeExp != nil && cfg.NodeExporter.Export.Enabled && cfg.NodeExporter.Export.UseOTLP {
@@ -309,4 +353,90 @@ func configureKubeMetricsStreaming(ctx context.Context, provider *kubemetrics.Pr
 	}
 
 	logger.Info("kube_metrics OTLP streaming enabled", "interval", cfg.KubeMetrics.Streaming.Interval)
+}
+
+// convertKafkaConfig converts the config.KafkaLogsConfig to kafka.Config
+func convertKafkaConfig(cfg config.KafkaLogsConfig) kafka.Config {
+	rebalanceStrategy := "cooperative-sticky"
+	if cfg.GroupRebalanceStrategy != "" {
+		rebalanceStrategy = cfg.GroupRebalanceStrategy
+	}
+
+	kafkaCfg := kafka.Config{
+		Brokers:                 cfg.Brokers,
+		GroupID:                 cfg.GroupID,
+		ClientID:                cfg.ClientID,
+		Topics:                  cfg.Topics,
+		ExcludeTopics:           cfg.ExcludeTopics,
+		InitialOffset:           cfg.InitialOffset,
+		SessionTimeout:          parseDuration(cfg.SessionTimeout, 10*time.Second),
+		HeartbeatInterval:       parseDuration(cfg.HeartbeatInterval, 3*time.Second),
+		RebalanceTimeout:        parseDuration(cfg.RebalanceTimeout, 30*time.Second),
+		GroupRebalanceStrategy:  rebalanceStrategy,
+		MessageMarking: kafka.MessageMarking{
+			After:               cfg.MessageMarking.After,
+			OnError:             cfg.MessageMarking.OnError,
+			OnPermanentError:    cfg.MessageMarking.OnPermanentError,
+		},
+		Batch: kafka.BatchConfig{
+			Size:                cfg.Batch.Size,
+			Timeout:             parseDuration(cfg.Batch.Timeout, 500*time.Millisecond),
+			MaxPartitionBytes:   cfg.Batch.MaxPartitionBytes,
+		},
+		Parser: parsers.PipelineConfig{
+			EnableRuntimeParsing:                cfg.Parser.EnableRuntimeParsing,
+			EnableApplicationParsing:            cfg.Parser.EnableApplicationParsing,
+			DefaultSeverity:                     cfg.Parser.DefaultSeverity,
+			EnableTraceContextEnrichment:        cfg.Parser.EnableTraceContextEnrichment,
+			EnableK8sEnrichment:                 cfg.Parser.EnableK8sEnrichment,
+		},
+		Telemetry: kafka.TelemetryConfig{
+			KafkaReceiverRecords:       cfg.Telemetry.KafkaReceiverRecords,
+			KafkaReceiverOffsetLag:     cfg.Telemetry.KafkaReceiverOffsetLag,
+			KafkaReceiverRecordsDelay:  cfg.Telemetry.KafkaReceiverRecordsDelay,
+			KafkaBrokerConnects:        cfg.Telemetry.KafkaBrokerConnects,
+			KafkaBrokerDisconnects:     cfg.Telemetry.KafkaBrokerDisconnects,
+		},
+		Auth: kafka.AuthConfig{
+			Enabled:   cfg.Auth.Enabled,
+			Mechanism: cfg.Auth.Mechanism,
+			Username:  cfg.Auth.Username,
+			Password:  cfg.Auth.Password,
+		},
+	}
+	
+	// TLS: manually assign fields due to struct tag differences
+	kafkaCfg.TLS.Enable = cfg.TLS.Enable
+	kafkaCfg.TLS.CAFile = cfg.TLS.CAFile
+	kafkaCfg.TLS.CertFile = cfg.TLS.CertFile
+	kafkaCfg.TLS.KeyFile = cfg.TLS.KeyFile
+	kafkaCfg.TLS.InsecureSkipVerify = cfg.TLS.InsecureSkipVerify
+	
+	// ErrorBackoff: manually assign fields
+	kafkaCfg.ErrorBackoff.Enabled = cfg.ErrorBackoff.Enabled
+	kafkaCfg.ErrorBackoff.InitialInterval = parseDuration(cfg.ErrorBackoff.InitialInterval, 1*time.Second)
+	kafkaCfg.ErrorBackoff.MaxInterval = parseDuration(cfg.ErrorBackoff.MaxInterval, 30*time.Second)
+	kafkaCfg.ErrorBackoff.Multiplier = cfg.ErrorBackoff.Multiplier
+	kafkaCfg.ErrorBackoff.Jitter = cfg.ErrorBackoff.Jitter
+	
+	// UseLeaderEpoch: default to true (Kafka 2.1.0+) if not explicitly set
+	kafkaCfg.UseLeaderEpoch = cfg.UseLeaderEpoch
+	
+	// HeaderExtraction: extract Kafka headers as resource attributes
+	kafkaCfg.HeaderExtraction.ExtractHeaders = cfg.HeaderExtraction.ExtractHeaders
+	kafkaCfg.HeaderExtraction.Headers = cfg.HeaderExtraction.Headers
+	
+	return kafkaCfg
+}
+
+// parseDuration parses a duration string with a fallback default
+func parseDuration(durationStr string, defaultDuration time.Duration) time.Duration {
+	if durationStr == "" {
+		return defaultDuration
+	}
+	d, err := time.ParseDuration(durationStr)
+	if err != nil {
+		return defaultDuration
+	}
+	return d
 }
