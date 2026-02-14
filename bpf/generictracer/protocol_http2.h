@@ -100,6 +100,21 @@ static __always_inline void http2_grpc_start(
             &h2g_info->conn_info, h2g_info->type == EVENT_HTTP_CLIENT, orig_dport);
         bpf_probe_read(h2g_info->data, k_kprobes_http2_buf_size, u_buf);
 
+        // Initialize trace context - look for existing correlation or generate new
+        u32 trace_type = (h2g_info->type == EVENT_HTTP_CLIENT) ? TRACE_TYPE_CLIENT : TRACE_TYPE_SERVER;
+        tp_info_pid_t *tp_p = trace_info_for_connection(&h2g_info->conn_info, trace_type);
+        if (tp_p) {
+            h2g_info->tp = tp_p->tp;
+        } else {
+            // No existing trace info - generate new trace context
+            bpf_dbg_printk("HTTP2/gRPC: generating new trace context");
+            new_trace_id(&h2g_info->tp);
+            urand_bytes(h2g_info->tp.span_id, SPAN_ID_SIZE_BYTES);
+            __builtin_memset(h2g_info->tp.parent_id, 0, sizeof(h2g_info->tp.parent_id));
+            h2g_info->tp.flags = 1;
+            h2g_info->tp.ts = bpf_ktime_get_ns();
+        }
+
         bpf_map_update_elem(&ongoing_http2_grpc, s_key, h2g_info, BPF_ANY);
     }
 }

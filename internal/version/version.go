@@ -1,9 +1,13 @@
 package version
 
+// These variables are set at build time via ldflags:
+//   -X 'github.com/platformbuilds/telegen/internal/version.version=...
+//   -X 'github.com/platformbuilds/telegen/internal/version.commit=...
+//   -X 'github.com/platformbuilds/telegen/internal/version.buildDate=...
 var (
-	version   = "v2.12.37"
-	commit    = "release"
-	buildDate = "2026-02-14"
+	version   = "dev"
+	commit    = "unknown"
+	buildDate = "unknown"
 )
 
 func Version() string   { return version }

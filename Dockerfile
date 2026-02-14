@@ -97,18 +97,22 @@ COPY --from=bpf-gen /src/internal/ ./internal/
 COPY --from=bpf-gen /src/pkg/ ./pkg/
 
 # Build arguments for version info
-ARG VERSION=2.0.0
+ARG VERSION=dev
 ARG REVISION=unknown
-ARG BUILD_DATE
+ARG BUILD_DATE=unknown
 
 # Build the binary - Go cross-compilation (no QEMU needed)
 # CGO_ENABLED=0 allows cross-compilation without C toolchain
+# Sets version in both pkg/buildinfo and internal/version packages
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -trimpath \
     -ldflags="-s -w \
         -X 'github.com/platformbuilds/telegen/pkg/buildinfo.Version=${VERSION}' \
         -X 'github.com/platformbuilds/telegen/pkg/buildinfo.Revision=${REVISION}' \
-        -X 'github.com/platformbuilds/telegen/pkg/buildinfo.BuildDate=${BUILD_DATE}'" \
+        -X 'github.com/platformbuilds/telegen/pkg/buildinfo.BuildDate=${BUILD_DATE}' \
+        -X 'github.com/platformbuilds/telegen/internal/version.version=${VERSION}' \
+        -X 'github.com/platformbuilds/telegen/internal/version.commit=${REVISION}' \
+        -X 'github.com/platformbuilds/telegen/internal/version.buildDate=${BUILD_DATE}'" \
     -o /out/telegen ./cmd/telegen
 
 # =============================================================================
