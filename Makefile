@@ -5,17 +5,18 @@ MAIN_GO_FILE ?= cmd/$(CMD)/main.go
 GOOS ?= linux
 GOARCH ?= $(shell go env GOARCH || echo amd64)
 
-# Build info
-RELEASE_VERSION := $(shell git describe --all 2>/dev/null | cut -d/ -f2 || echo "dev")
-RELEASE_REVISION := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+# Build info - VERSION is the single source of truth for version string
+# Can be overridden: make docker-for-server VERSION=v2.12.37
+VERSION ?= $(shell git describe --tags 2>/dev/null || git describe --all 2>/dev/null | cut -d/ -f2 || echo "dev")
+REVISION := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 BUILDINFO_PKG ?= github.com/platformbuilds/telegen/pkg/buildinfo
+VERSION_PKG ?= github.com/platformbuilds/telegen/internal/version
 
 # Container image
 IMG_REGISTRY ?= docker.io
 IMG_ORG ?= platformbuilds
 IMG_NAME ?= telegen
-VERSION ?= dev
 IMG ?= $(IMG_REGISTRY)/$(IMG_ORG)/$(IMG_NAME):$(VERSION)
 
 # BPF code generator dependencies
@@ -91,7 +92,8 @@ build:
 	@echo "### Building telegen..."
 	go mod tidy
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
-		-ldflags="-X '$(BUILDINFO_PKG).Version=$(RELEASE_VERSION)' -X '$(BUILDINFO_PKG).Revision=$(RELEASE_REVISION)'" \
+		-ldflags="-X '$(BUILDINFO_PKG).Version=$(VERSION)' -X '$(BUILDINFO_PKG).Revision=$(REVISION)' \
+		         -X '$(VERSION_PKG).version=$(VERSION)' -X '$(VERSION_PKG).commit=$(REVISION)' -X '$(VERSION_PKG).buildDate=$(BUILD_DATE)'" \
 		-a -o bin/$(CMD) $(MAIN_GO_FILE)
 	@echo "Built bin/$(CMD)"
 
@@ -149,8 +151,8 @@ docker-buildx-setup:
 docker-buildx: docker-buildx-setup
 	$(OCI_BIN) buildx build \
 		--platform $(PLATFORMS) \
-		--build-arg VERSION=$(RELEASE_VERSION) \
-		--build-arg REVISION=$(RELEASE_REVISION) \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg REVISION=$(REVISION) \
 		--build-arg BUILD_DATE=$(BUILD_DATE) \
 		-t $(IMG) \
 		.
@@ -160,8 +162,8 @@ docker-buildx: docker-buildx-setup
 docker-buildx-push: docker-buildx-setup
 	$(OCI_BIN) buildx build \
 		--platform $(PLATFORMS) \
-		--build-arg VERSION=$(RELEASE_VERSION) \
-		--build-arg REVISION=$(RELEASE_REVISION) \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg REVISION=$(REVISION) \
 		--build-arg BUILD_DATE=$(BUILD_DATE) \
 		-t $(IMG) \
 		--push \
@@ -172,8 +174,8 @@ docker-buildx-push: docker-buildx-setup
 docker-for-server: docker-buildx-setup
 	$(OCI_BIN) buildx build \
 		--platform linux/amd64 \
-		--build-arg VERSION=$(RELEASE_VERSION) \
-		--build-arg REVISION=$(RELEASE_REVISION) \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg REVISION=$(REVISION) \
 		--build-arg BUILD_DATE=$(BUILD_DATE) \
 		-t $(IMG) \
 		--load \
@@ -184,8 +186,8 @@ docker-for-server: docker-buildx-setup
 docker-local: docker-buildx-setup
 	$(OCI_BIN) buildx build \
 		--platform linux/$(GOARCH) \
-		--build-arg VERSION=$(RELEASE_VERSION) \
-		--build-arg REVISION=$(RELEASE_REVISION) \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg REVISION=$(REVISION) \
 		--build-arg BUILD_DATE=$(BUILD_DATE) \
 		-t $(IMG) \
 		--load \

@@ -519,10 +519,23 @@ static __always_inline int __obi_continue2_protocol_http(struct pt_regs *ctx,
                 __builtin_memcpy(&info->tp.parent_id, &args->self_ref_parent_id, sizeof(u64));
             }
         } else {
-            bpf_dbg_printk("Can't find trace info, this is a bug!");
+            // Fallback: generate new trace context when lookup fails
+            // This ensures spans always have valid trace IDs
+            bpf_dbg_printk("Can't find trace info, generating fallback trace context");
+            new_trace_id(&info->tp);
+            urand_bytes(info->tp.span_id, SPAN_ID_SIZE_BYTES);
+            __builtin_memset(info->tp.parent_id, 0, sizeof(info->tp.parent_id));
+            info->tp.flags = 1;
+            info->tp.ts = bpf_ktime_get_ns();
         }
     } else {
-        bpf_dbg_printk("No META!");
+        // No meta - generate trace context anyway
+        bpf_dbg_printk("No META, generating fallback trace context");
+        new_trace_id(&info->tp);
+        urand_bytes(info->tp.span_id, SPAN_ID_SIZE_BYTES);
+        __builtin_memset(info->tp.parent_id, 0, sizeof(info->tp.parent_id));
+        info->tp.flags = 1;
+        info->tp.ts = bpf_ktime_get_ns();
     }
 
     http_send_large_buffer(info,
