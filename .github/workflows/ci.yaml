@@ -56,13 +56,15 @@ jobs:
                 go generate ./internal/rdns/... && \
                 go generate ./internal/profiler/..."
 
+      - name: List generated files
+        run: find internal -name '*_bpfel*' -type f | head -20
+
       - name: Upload generated eBPF artifacts
         uses: actions/upload-artifact@v6
         with:
           name: generated-ebpf
-          path: |
-            internal/**/*_bpfel*.go
-            internal/**/*_bpfel*.o
+          path: internal/
+          include-hidden-files: false
           retention-days: 1
 
   lint:
@@ -77,6 +79,13 @@ jobs:
         uses: actions/download-artifact@v6
         with:
           name: generated-ebpf
+          path: internal/
+
+      - name: Verify generated files exist
+        run: |
+          echo "Checking for generated eBPF files..."
+          ls -la internal/profiler/*_bpfel*.go || echo "WARNING: No profiler generated files found"
+          ls -la internal/tracers/*_bpfel*.go || echo "WARNING: No tracer generated files found"
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -102,6 +111,7 @@ jobs:
         uses: actions/download-artifact@v6
         with:
           name: generated-ebpf
+          path: internal/
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -135,6 +145,7 @@ jobs:
         uses: actions/download-artifact@v6
         with:
           name: generated-ebpf
+          path: internal/
 
       - name: Set up Go
         uses: actions/setup-go@v6
