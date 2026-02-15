@@ -574,7 +574,7 @@ func (e *LogExporter) lookupLockClass(pid uint32, addr uint64) string {
 	if err != nil {
 		return ""
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// Load DWARF debug information
 	dwarfData, err := f.DWARF()

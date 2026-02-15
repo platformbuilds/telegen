@@ -39,9 +39,8 @@ type Baggage struct {
 
 // baggage key validation regex per W3C spec
 var (
-	baggageTokenRegex    = regexp.MustCompile(`^[a-zA-Z0-9!#$%&'*+\-.^_\x60|~]+$`)
-	baggageKeyRegex      = baggageTokenRegex
-	baggagePropertyRegex = regexp.MustCompile(`^[a-zA-Z0-9!#$%&'*+\-.^_\x60|~]*$`)
+	baggageTokenRegex = regexp.MustCompile(`^[a-zA-Z0-9!#$%&'*+\-.^_\x60|~]+$`)
+	baggageKeyRegex   = baggageTokenRegex
 )
 
 // NewBaggage creates an empty baggage.

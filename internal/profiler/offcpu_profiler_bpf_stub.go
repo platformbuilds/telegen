@@ -27,7 +27,7 @@ type OffcpuProfilerKey struct {
 	KernelStackId int32
 	Comm          [16]int8
 	BlockReason   uint8
-	_pad          [3]byte
+	_pad          [3]byte //nolint:unused // struct alignment padding for BPF compatibility
 }
 
 // OffcpuProfilerOffcpuKey is an alias for bpf2go generated name
@@ -49,7 +49,7 @@ type OffcpuProfilerOffcpuValue = OffcpuProfilerValue
 type OffcpuProfilerEvent struct {
 	Type          uint8
 	BlockReason   uint8
-	_pad          [2]byte
+	_pad          [2]byte //nolint:unused // struct alignment padding for BPF compatibility
 	Pid           uint32
 	Tgid          uint32
 	WakerPid      uint32
@@ -66,7 +66,7 @@ type OffcpuProfilerStart struct {
 	UserStackId   int32
 	KernelStackId int32
 	Reason        uint8
-	_pad          [7]byte
+	_pad          [7]byte //nolint:unused // struct alignment padding for BPF compatibility
 }
 
 // OffcpuProfilerConfig matches struct offcpu_config in offcpu_profiler.c

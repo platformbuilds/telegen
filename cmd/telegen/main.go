@@ -67,7 +67,7 @@ func main() {
 
 	// Create zap logger for internal use (some components may require it)
 	zapLogger, _ := zap.NewProduction()
-	defer zapLogger.Sync()
+	defer func() { _ = zapLogger.Sync() }()
 
 	mux := http.NewServeMux()
 	st := selftelemetry.InstallHandlers(mux, cfg.SelfTelemetry.Listen)
@@ -213,7 +213,6 @@ func main() {
 						"error", err,
 						"status", "degraded")
 				} else {
-					signalsStarted++
 					logger.Info("kafka receiver started successfully",
 						"brokers", kafkaCfg.Brokers,
 						"group_id", kafkaCfg.GroupID,

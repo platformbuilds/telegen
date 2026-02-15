@@ -82,7 +82,7 @@ func (h *HTTPHeaderInjector) ExtractAndCacheBaggage(data []byte, tc *TraceContex
 	// Find baggage header
 	baggageRegex := regexp.MustCompile(`(?i)baggage:\s*([^\r\n]+)\r?\n`)
 	match := baggageRegex.FindSubmatch(data)
-	if match == nil || len(match) < 2 {
+	if len(match) < 2 {
 		return
 	}
 
@@ -98,20 +98,12 @@ func (h *HTTPHeaderInjector) ExtractAndCacheBaggage(data []byte, tc *TraceContex
 // BPFBaggageIntegration provides baggage integration with BPF tracing.
 type BPFBaggageIntegration struct {
 	injector *HTTPHeaderInjector
-	mu       sync.RWMutex
-	pending  map[string]*pendingBaggage
-}
-
-type pendingBaggage struct {
-	baggage   *Baggage
-	timestamp int64
 }
 
 // NewBPFBaggageIntegration creates a new BPF baggage integration.
 func NewBPFBaggageIntegration(log *slog.Logger) *BPFBaggageIntegration {
 	return &BPFBaggageIntegration{
 		injector: NewHTTPHeaderInjector(log),
-		pending:  make(map[string]*pendingBaggage),
 	}
 }
 
@@ -159,7 +151,7 @@ func NewTraceparentExtractor() *TraceparentExtractor {
 // Extract extracts trace context from HTTP data.
 func (e *TraceparentExtractor) Extract(data []byte) *TraceContext {
 	match := e.regex.FindSubmatch(data)
-	if match == nil || len(match) < 5 {
+	if len(match) < 5 {
 		return nil
 	}
 
@@ -269,7 +261,6 @@ func (b *HeaderBuilder) Reset() {
 // baggage is propagated separately using an application-layer approach.
 type TCPOptionBaggageHandler struct {
 	cache *BaggageCache
-	mu    sync.RWMutex
 }
 
 // NewTCPOptionBaggageHandler creates a new TCP option baggage handler.

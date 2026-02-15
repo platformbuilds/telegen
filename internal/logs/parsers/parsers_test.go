@@ -503,6 +503,7 @@ func TestPipeline(t *testing.T) {
 			log := pipeline.Parse(tt.line, tt.path)
 			if log == nil {
 				t.Fatal("expected log, got nil")
+				return
 			}
 			if log.Format != tt.wantFormat {
 				t.Errorf("format = %q, want %q", log.Format, tt.wantFormat)

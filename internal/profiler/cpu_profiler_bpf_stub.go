@@ -41,7 +41,7 @@ type CpuProfilerStackCount struct {
 // CpuProfilerSampleEvent matches struct cpu_sample_event in cpu_profiler.c
 type CpuProfilerSampleEvent struct {
 	Type          uint8
-	_pad          [3]byte
+	_pad          [3]byte //nolint:unused // struct alignment padding for BPF compatibility
 	Pid           uint32
 	Tgid          uint32
 	Cpu           uint32
@@ -58,7 +58,7 @@ type CpuProfilerConfig struct {
 	CaptureKernel uint8
 	CaptureUser   uint8
 	FilterActive  uint8
-	_pad          [1]byte
+	_pad          [1]byte //nolint:unused // struct alignment padding for BPF compatibility
 }
 
 // CpuProfilerCpuProfilerConfig is an alias for bpf2go generated name
