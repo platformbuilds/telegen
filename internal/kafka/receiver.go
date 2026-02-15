@@ -50,7 +50,8 @@ var (
 		Help:      "Total number of records that failed processing",
 	}, []string{"topic", "partition", "error_type"})
 
-	kafkaOffsetLag = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	// TODO: Use this metric when offset lag tracking is implemented
+	_ = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "telegen",
 		Subsystem: "kafka_receiver",
 		Name:      "offset_lag",
@@ -185,7 +186,6 @@ type partitionConsumer struct {
 	wg            sync.WaitGroup // Tracks in-flight message processing goroutines
 	backoff       *backoff.ExponentialBackOff
 	lastOffset    atomic.Int64   // Last successfully processed offset
-	recordsCount  atomic.Int64   // Records processed in current batch
 }
 
 // isPermanentError checks if an error should not be retried

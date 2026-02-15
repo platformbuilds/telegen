@@ -30,8 +30,6 @@ type SymbolResolver struct {
 	log        *slog.Logger
 	cache      *LRUCache // pid -> *ProcessSymbols with LRU eviction
 	jitCache   *LRUCache // pid -> *V8PerfMap for JIT symbols
-	elfCache   sync.Map  // path -> *ELFSymbolInfo
-	dwarfCache sync.Map  // path -> *dwarf.Data
 	kernel     *KernelSymbolResolver
 	metrics    *SymbolMetrics
 	namespace  *NamespaceResolver
@@ -45,7 +43,6 @@ type SymbolResolver struct {
 	stopOnce sync.Once
 
 	// Process lifecycle tracking
-	lastExecCheck sync.Map // pid -> time.Time of last check
 	procStartTime sync.Map // pid -> uint64 boot time at process start
 }
 
@@ -466,7 +463,7 @@ func (r *SymbolResolver) getProcessSymbols(pid uint32) (*ProcessSymbols, error) 
 	// Try to load Go symbol table from the process executable
 	if execErr == nil && exePath != "" {
 		if ef, err := elf.Open(exePath); err == nil {
-			defer ef.Close()
+			defer func() { _ = ef.Close() }()
 
 			// Check for .gopclntab section
 			if sec := ef.Section(".gopclntab"); sec != nil {
@@ -533,7 +530,7 @@ func (r *SymbolResolver) parseProcMaps(pid uint32) ([]MemoryMapping, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var mappings []MemoryMapping
 	scanner := bufio.NewScanner(file)
@@ -607,7 +604,7 @@ func (r *SymbolResolver) loadPerfMap(pid uint32) (*V8PerfMap, error) {
 	// Build list of candidate perf map paths.
 	// Support user-configured patterns with <pid>, shell-style globs (*, ?) and recursive ** when enabled.
 	var perfMapPaths []string
-	if r.config.PerfMapPaths != nil && len(r.config.PerfMapPaths) > 0 {
+	if len(r.config.PerfMapPaths) > 0 {
 		for _, p := range r.config.PerfMapPaths {
 			// For paths that go through /proc/<pid>/root (container filesystem access),
 			// we need to use the namespace-local PID for the actual file name.
@@ -640,7 +637,7 @@ func (r *SymbolResolver) loadPerfMap(pid uint32) (*V8PerfMap, error) {
 				if root == "" {
 					root = "/"
 				}
-				filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+				_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 					if err != nil {
 						return nil
 					}
@@ -709,7 +706,7 @@ func (r *SymbolResolver) loadPerfMap(pid uint32) (*V8PerfMap, error) {
 		r.debugLog("no perf map found for process", "pid", pid, "tried_paths", len(perfMapPaths))
 		return nil, fmt.Errorf("perf map not found for pid %d", pid)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	r.debugLog("found perf map", "pid", pid, "path", perfMapPath)
 
@@ -868,7 +865,7 @@ func (r *SymbolResolver) loadELFSymbols(pid uint32, path string) (*ELFSymbolInfo
 			return nil, err
 		}
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	info := &ELFSymbolInfo{
 		Path:    path, // Store original path for mapping lookups
@@ -1206,7 +1203,7 @@ func (r *SymbolResolver) lifecycleCheckLoop() {
 
 // WatchPerfMapDirs sets up watchers for configured perf map directories and triggers reloads
 func (r *SymbolResolver) WatchPerfMapDirs() error {
-	if r.config.PerfMapPaths == nil || len(r.config.PerfMapPaths) == 0 {
+	if len(r.config.PerfMapPaths) == 0 {
 		return nil
 	}
 
@@ -1221,7 +1218,7 @@ func (r *SymbolResolver) WatchPerfMapDirs() error {
 		pattern := strings.ReplaceAll(p, "<pid>", "*")
 
 		// Determine dir to watch (up to first wildcard)
-		dir := pattern
+		var dir string
 		if idx := strings.IndexAny(pattern, "*?"); idx != -1 {
 			dir = filepath.Dir(pattern[:idx])
 		} else {
@@ -1232,7 +1229,7 @@ func (r *SymbolResolver) WatchPerfMapDirs() error {
 		}
 
 		if r.config.PerfMapRecursive {
-			filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 				if err != nil {
 					return nil
 				}
@@ -1260,7 +1257,7 @@ func (r *SymbolResolver) WatchPerfMapDirs() error {
 		for {
 			select {
 			case <-r.ctx.Done():
-				watcher.Close()
+				_ = watcher.Close()
 				return
 			case ev, ok := <-watcher.Events:
 				if !ok {

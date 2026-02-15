@@ -50,7 +50,7 @@ type MutexProfilerLockState struct {
 	OwnerTid       uint32
 	WaiterCount    uint32
 	OwnerStackId   int32
-	_pad           int32
+	_pad           int32 //nolint:unused // struct alignment padding for BPF compatibility
 }
 
 // MutexProfilerPendingLock matches struct pending_lock in mutex_profiler.c
@@ -58,14 +58,14 @@ type MutexProfilerPendingLock struct {
 	LockAddr uint64
 	StartNs  uint64
 	StackId  int32
-	_pad     int32
+	_pad     int32 //nolint:unused // struct alignment padding for BPF compatibility
 }
 
 // MutexProfilerKey matches struct mutex_key in mutex_profiler.c
 type MutexProfilerKey struct {
 	LockAddr uint64
 	StackId  int32
-	_pad     uint32
+	_pad     uint32 //nolint:unused // struct alignment padding for BPF compatibility
 }
 
 // MutexProfilerMutexKey is an alias for bpf2go generated name
@@ -89,11 +89,11 @@ type MutexProfilerMutexStats = MutexProfilerStats
 // MutexProfilerConfig matches struct mutex_config in mutex_profiler.c
 type MutexProfilerConfig struct {
 	TargetPid             uint32
-	_pad                  [4]byte
+	_pad                  [4]byte   //nolint:unused // struct alignment padding for BPF compatibility
 	ContentionThresholdNs uint64
 	HoldThresholdNs       uint64
 	FilterActive          uint8
-	_pad2                 [3]byte
+	_pad2                 [3]byte //nolint:unused // struct alignment padding for BPF compatibility
 }
 
 // MutexProfilerMutexConfig is an alias for bpf2go generated name

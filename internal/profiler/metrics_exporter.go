@@ -798,8 +798,7 @@ func (e *MetricsExporter) parseAggregationKey(key string, profileType ProfileTyp
 		if parts[2] != "" {
 			// Parse PID
 			var pid int64
-			fmt.Sscanf(parts[2], "%d", &pid)
-			if pid > 0 {
+			if _, err := fmt.Sscanf(parts[2], "%d", &pid); err == nil && pid > 0 {
 				attrs = append(attrs, attribute.Int64("process.pid", pid))
 			}
 		}

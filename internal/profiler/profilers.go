@@ -403,14 +403,14 @@ func (p *CPUProfiler) attachPerfEvents() (int, error) {
 
 		// Attach BPF program to perf event using ioctl
 		if err := unix.IoctlSetInt(fd, unix.PERF_EVENT_IOC_SET_BPF, p.objs.ProfileCpu.FD()); err != nil {
-			unix.Close(fd)
+			_ = unix.Close(fd)
 			p.log.Warn("failed to attach BPF program to perf event", "cpu", cpu, "error", err)
 			continue
 		}
 
 		// Enable the perf event
 		if err := unix.IoctlSetInt(fd, unix.PERF_EVENT_IOC_ENABLE, 0); err != nil {
-			unix.Close(fd)
+			_ = unix.Close(fd)
 			p.log.Warn("failed to enable perf event", "cpu", cpu, "error", err)
 			continue
 		}
@@ -426,11 +426,6 @@ func (p *CPUProfiler) attachPerfEvents() (int, error) {
 
 	p.log.Info("BPF profiler attached to perf events", "total_cpus", numCPUs, "attached", attachedCount)
 	return attachedCount, nil
-}
-
-// resolveStack resolves a stack trace from its ID
-func (p *CPUProfiler) resolveStack(stackID int32) []ResolvedFrame {
-	return p.resolveStackWithPID(stackID, 0)
 }
 
 // resolveStackWithPID resolves a stack trace with PID context for proper symbol resolution
@@ -655,13 +650,13 @@ func (p *OffCPUProfiler) Start(ctx context.Context) error {
 
 	// Configure the profiler
 	if err := p.configure(); err != nil {
-		p.objs.Close()
+		_ = p.objs.Close()
 		return fmt.Errorf("failed to configure off-CPU profiler: %w", err)
 	}
 
 	// Attach to sched_switch tracepoint
 	if err := p.attachTracepoints(); err != nil {
-		p.objs.Close()
+		_ = p.objs.Close()
 		return fmt.Errorf("failed to attach tracepoints: %w", err)
 	}
 
@@ -909,11 +904,6 @@ func (p *OffCPUProfiler) attachTracepoints() error {
 
 	p.log.Info("attached to sched_switch tracepoint")
 	return nil
-}
-
-// resolveStack resolves a stack trace from its ID (legacy - use resolveStackWithPID)
-func (p *OffCPUProfiler) resolveStack(stackID int32) []ResolvedFrame {
-	return p.resolveStackWithPID(stackID, 0)
 }
 
 // resolveStackWithPID resolves a stack trace with PID context for proper symbol resolution
@@ -1384,14 +1374,14 @@ func (p *WallProfiler) attachPerfEvents(sampleRate int) (int, error) {
 		// Attach BPF program to perf event
 		if err := unix.IoctlSetInt(fd, unix.PERF_EVENT_IOC_SET_BPF, p.objs.ProfileWall.FD()); err != nil {
 			p.log.Warn("failed to attach BPF to perf event", "cpu", cpu, "error", err)
-			unix.Close(fd)
+			_ = unix.Close(fd)
 			continue
 		}
 
 		// Enable the perf event
 		if err := unix.IoctlSetInt(fd, unix.PERF_EVENT_IOC_ENABLE, 0); err != nil {
 			p.log.Warn("failed to enable perf event", "cpu", cpu, "error", err)
-			unix.Close(fd)
+			_ = unix.Close(fd)
 			continue
 		}
 
@@ -1564,13 +1554,13 @@ func (p *MemoryProfiler) Start(ctx context.Context) error {
 
 	// Configure the profiler
 	if err := p.configure(); err != nil {
-		p.objs.Close()
+		_ = p.objs.Close()
 		return fmt.Errorf("failed to configure memory profiler: %w", err)
 	}
 
 	// Attach uprobes to libc
 	if err := p.attachUprobes(); err != nil {
-		p.objs.Close()
+		_ = p.objs.Close()
 		return fmt.Errorf("failed to attach uprobes: %w", err)
 	}
 
@@ -1723,7 +1713,7 @@ func findLibcForPID(pid uint32) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to open %s: %w", mapsPath, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {

@@ -455,8 +455,12 @@ func (r *ProcessMetadataResolver) LookupLockClass(pid uint32, addr uint64) strin
 		}
 
 		var startAddr, endAddr uint64
-		fmt.Sscanf(addrRange[0], "%x", &startAddr)
-		fmt.Sscanf(addrRange[1], "%x", &endAddr)
+		if _, err := fmt.Sscanf(addrRange[0], "%x", &startAddr); err != nil {
+			continue
+		}
+		if _, err := fmt.Sscanf(addrRange[1], "%x", &endAddr); err != nil {
+			continue
+		}
 
 		if addr >= startAddr && addr < endAddr {
 			// Found the region - could look up DWARF info here
