@@ -2209,13 +2209,13 @@ func (p *MutexProfiler) Start(ctx context.Context) error {
 
 	// Configure the profiler
 	if err := p.configure(); err != nil {
-		p.objs.Close()
+		_ = p.objs.Close()
 		return fmt.Errorf("failed to configure mutex profiler: %w", err)
 	}
 
 	// Attach uprobes
 	if err := p.attachUprobes(); err != nil {
-		p.objs.Close()
+		_ = p.objs.Close()
 		return fmt.Errorf("failed to attach uprobes: %w", err)
 	}
 
