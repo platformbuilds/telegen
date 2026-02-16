@@ -76,7 +76,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download generated eBPF code
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: generated-ebpf
           path: internal/
@@ -108,7 +108,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download generated eBPF code
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: generated-ebpf
           path: internal/
@@ -142,7 +142,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download generated eBPF code
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: generated-ebpf
           path: internal/
