@@ -431,10 +431,128 @@ func (j JFRConfig) PollIntervalDuration() time.Duration {
 	return d
 }
 
-// KafkaLogsConfig holds Kafka receiver configuration for log streaming
+// KafkaClusterConfig holds configuration for a single Kafka cluster
+type KafkaClusterConfig struct {
+	// Name is a unique identifier for this cluster (required for multi-cluster)
+	Name string `yaml:"name"`
+
+	// Brokers is a list of Kafka broker addresses
+	Brokers []string `yaml:"brokers"`
+
+	// GroupID is the consumer group identifier for coordinated consumption
+	GroupID string `yaml:"group_id"`
+
+	// ClientID is the unique client identifier (auto-generated if empty)
+	ClientID string `yaml:"client_id"`
+
+	// Topics is a list of topic names to consume from
+	Topics []string `yaml:"topics"`
+
+	// ExcludeTopics is a regex pattern for topics to exclude
+	ExcludeTopics []string `yaml:"exclude_topics"`
+
+	// InitialOffset is the starting position: "latest" or "earliest"
+	InitialOffset string `yaml:"initial_offset"`
+
+	// SessionTimeout is the broker's heartbeat detection timeout
+	SessionTimeout string `yaml:"session_timeout"`
+
+	// HeartbeatInterval is the frequency of heartbeats
+	HeartbeatInterval string `yaml:"heartbeat_interval"`
+
+	// RebalanceTimeout is the maximum time for rebalance completion
+	RebalanceTimeout string `yaml:"rebalance_timeout"`
+
+	// GroupRebalanceStrategy for partition assignment
+	// Valid: "range", "roundrobin", "sticky", "cooperative-sticky"
+	GroupRebalanceStrategy string `yaml:"group_rebalance_strategy"`
+
+	// MessageMarking controls offset commit behavior
+	MessageMarking struct {
+		After            bool `yaml:"after"`
+		OnError          bool `yaml:"on_error"`
+		OnPermanentError bool `yaml:"on_permanent_error"`
+	} `yaml:"message_marking"`
+
+	// Batch configuration
+	Batch struct {
+		Size              int    `yaml:"size"`
+		Timeout           string `yaml:"timeout"`
+		MaxPartitionBytes int64  `yaml:"max_partition_bytes"`
+	} `yaml:"batch"`
+
+	// Parser configuration for log format detection and parsing
+	Parser struct {
+		EnableRuntimeParsing         bool     `yaml:"enable_runtime_parsing"`
+		EnableApplicationParsing     bool     `yaml:"enable_application_parsing"`
+		EnableK8sEnrichment          bool     `yaml:"enable_k8s_enrichment"`
+		EnableTraceContextEnrichment bool     `yaml:"enable_trace_context_enrichment"`
+		TraceContextTolerance        string   `yaml:"trace_context_tolerance"`
+		ApplicationParsers           []string `yaml:"application_parsers"`
+		DefaultSeverity              string   `yaml:"default_severity"`
+	} `yaml:"parser"`
+
+	// Telemetry configuration
+	Telemetry struct {
+		KafkaReceiverRecords      bool `yaml:"kafka_receiver_records"`
+		KafkaReceiverOffsetLag    bool `yaml:"kafka_receiver_offset_lag"`
+		KafkaReceiverRecordsDelay bool `yaml:"kafka_receiver_records_delay"`
+		KafkaBrokerConnects       bool `yaml:"kafka_broker_connects"`
+		KafkaBrokerDisconnects    bool `yaml:"kafka_broker_disconnects"`
+		KafkaBrokerReadLatency    bool `yaml:"kafka_broker_read_latency"`
+		KafkaFetchBatchMetrics    bool `yaml:"kafka_fetch_batch_metrics"`
+	} `yaml:"telemetry"`
+
+	// Authentication via SASL
+	Auth struct {
+		Enabled   bool   `yaml:"enabled"`
+		Mechanism string `yaml:"mechanism"`
+		Username  string `yaml:"username"`
+		Password  string `yaml:"password"`
+	} `yaml:"auth"`
+
+	// TLS configuration
+	TLS struct {
+		Enable             bool   `yaml:"enable"`
+		CAFile             string `yaml:"ca_file"`
+		CertFile           string `yaml:"cert_file"`
+		KeyFile            string `yaml:"key_file"`
+		InsecureSkipVerify bool   `yaml:"insecure_skip_verify"`
+	} `yaml:"tls"`
+
+	// Error handling with exponential backoff retry
+	ErrorBackoff struct {
+		Enabled         bool    `yaml:"enabled"`
+		InitialInterval string  `yaml:"initial_interval"`
+		MaxInterval     string  `yaml:"max_interval"`
+		Multiplier      float64 `yaml:"multiplier"`
+		Jitter          float64 `yaml:"jitter"`
+	} `yaml:"error_backoff"`
+
+	// UseLeaderEpoch enables leader epoch for offset validation (requires Kafka >= 2.1.0)
+	UseLeaderEpoch bool `yaml:"use_leader_epoch"`
+
+	// HeaderExtraction controls extraction of Kafka message headers as resource attributes
+	HeaderExtraction struct {
+		ExtractHeaders bool     `yaml:"extract_headers"`
+		Headers        []string `yaml:"headers"`
+	} `yaml:"header_extraction"`
+}
+
+// KafkaLogsConfig holds Kafka receiver configuration for log streaming.
+// Supports both single-cluster (backward compatible) and multi-cluster configurations.
 type KafkaLogsConfig struct {
 	// Enabled enables the Kafka logs receiver pipeline
 	Enabled bool `yaml:"enabled"`
+
+	// Clusters contains multi-cluster configurations (takes precedence over single-cluster fields)
+	// When Clusters is non-empty, the single-cluster fields below are ignored.
+	Clusters []KafkaClusterConfig `yaml:"clusters"`
+
+	// ========================================================================
+	// Single-cluster configuration (backward compatible)
+	// These fields are used when Clusters is empty
+	// ========================================================================
 
 	// Brokers is a list of Kafka broker addresses
 	Brokers []string `yaml:"brokers"`
@@ -499,6 +617,8 @@ type KafkaLogsConfig struct {
 		KafkaReceiverRecordsDelay bool `yaml:"kafka_receiver_records_delay"`
 		KafkaBrokerConnects       bool `yaml:"kafka_broker_connects"`
 		KafkaBrokerDisconnects    bool `yaml:"kafka_broker_disconnects"`
+		KafkaBrokerReadLatency    bool `yaml:"kafka_broker_read_latency"`
+		KafkaFetchBatchMetrics    bool `yaml:"kafka_fetch_batch_metrics"`
 	} `yaml:"telemetry"`
 
 	// Authentication via SASL

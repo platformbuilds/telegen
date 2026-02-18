@@ -188,35 +188,65 @@ func main() {
 	logger.Info("telegen ready", "signals_started", signalsStarted)
 
 	// Start Kafka logs receiver if enabled
+	var kafkaMultiReceiver *kafka.MultiReceiver
 	if cfg.Pipelines.Kafka.Enabled {
-		// Convert config to kafka.Config
-		kafkaCfg := convertKafkaConfig(cfg.Pipelines.Kafka)
-		
 		// Get the logger provider from the OTLP exporter - shared across all signals
 		loggerProvider := pl.GetLogsLoggerProvider()
 		if loggerProvider == nil {
 			logger.Warn("kafka logs receiver enabled but OTLP logs exporter not configured, skipping")
 		} else {
-			kafkaReceiver, err := kafka.NewReceiver(
-				kafkaCfg,
-				cfg.Agent.ServiceName,
-				logger,
-				loggerProvider,
-			)
-			if err != nil {
-				logger.Warn("kafka receiver failed to initialize, continuing without kafka logs",
-					"error", err,
-					"status", "degraded")
-			} else {
-				if err := kafkaReceiver.Start(ctx); err != nil {
-					logger.Warn("kafka receiver failed to start, continuing without kafka logs",
+			// Check if multi-cluster or single-cluster configuration
+			if len(cfg.Pipelines.Kafka.Clusters) > 0 {
+				// Multi-cluster mode
+				clusterConfigs := convertMultiKafkaConfig(cfg.Pipelines.Kafka)
+				var err error
+				kafkaMultiReceiver, err = kafka.NewMultiReceiver(
+					clusterConfigs,
+					cfg.Agent.ServiceName,
+					logger,
+					loggerProvider,
+				)
+				if err != nil {
+					logger.Warn("kafka multi-receiver failed to initialize, continuing without kafka logs",
 						"error", err,
 						"status", "degraded")
 				} else {
-					logger.Info("kafka receiver started successfully",
-						"brokers", kafkaCfg.Brokers,
-						"group_id", kafkaCfg.GroupID,
-						"topics", kafkaCfg.Topics)
+					if err := kafkaMultiReceiver.Start(ctx); err != nil {
+						logger.Warn("kafka multi-receiver failed to start, continuing without kafka logs",
+							"error", err,
+							"status", "degraded")
+					} else {
+						clusterNames := kafkaMultiReceiver.ClusterNames()
+						logger.Info("kafka multi-receiver started successfully",
+							"clusters", clusterNames,
+							"cluster_count", len(clusterNames))
+					}
+				}
+			} else {
+				// Single-cluster mode (backward compatible)
+				kafkaCfg := convertKafkaConfig(cfg.Pipelines.Kafka)
+				kafkaReceiver, err := kafka.NewReceiver(
+					kafkaCfg,
+					cfg.Agent.ServiceName,
+					logger,
+					loggerProvider,
+					kafka.WithClusterName("default"),
+				)
+				if err != nil {
+					logger.Warn("kafka receiver failed to initialize, continuing without kafka logs",
+						"error", err,
+						"status", "degraded")
+				} else {
+					if err := kafkaReceiver.Start(ctx); err != nil {
+						logger.Warn("kafka receiver failed to start, continuing without kafka logs",
+							"error", err,
+							"status", "degraded")
+					} else {
+						logger.Info("kafka receiver started successfully",
+							"brokers", kafkaCfg.Brokers,
+							"group_id", kafkaCfg.GroupID,
+							"topics", kafkaCfg.Topics)
+					}
 				}
 			}
 		}
@@ -242,6 +272,9 @@ func main() {
 	logger.Info("telegen shutting down")
 	cancel()
 	pl.Close()
+	if kafkaMultiReceiver != nil {
+		_ = kafkaMultiReceiver.Stop(context.Background())
+	}
 	if profilerRunner != nil {
 		_ = profilerRunner.Stop(context.Background())
 	}
@@ -395,6 +428,8 @@ func convertKafkaConfig(cfg config.KafkaLogsConfig) kafka.Config {
 			KafkaReceiverRecordsDelay:  cfg.Telemetry.KafkaReceiverRecordsDelay,
 			KafkaBrokerConnects:        cfg.Telemetry.KafkaBrokerConnects,
 			KafkaBrokerDisconnects:     cfg.Telemetry.KafkaBrokerDisconnects,
+			KafkaBrokerReadLatency:     cfg.Telemetry.KafkaBrokerReadLatency,
+			KafkaFetchBatchMetrics:     cfg.Telemetry.KafkaFetchBatchMetrics,
 		},
 		Auth: kafka.AuthConfig{
 			Enabled:   cfg.Auth.Enabled,
@@ -438,4 +473,87 @@ func parseDuration(durationStr string, defaultDuration time.Duration) time.Durat
 		return defaultDuration
 	}
 	return d
+}
+
+// convertMultiKafkaConfig converts config.KafkaLogsConfig with multi-cluster to []kafka.ClusterConfig
+func convertMultiKafkaConfig(cfg config.KafkaLogsConfig) []kafka.ClusterConfig {
+	clusterConfigs := make([]kafka.ClusterConfig, 0, len(cfg.Clusters))
+	
+	for _, cluster := range cfg.Clusters {
+		rebalanceStrategy := "cooperative-sticky"
+		if cluster.GroupRebalanceStrategy != "" {
+			rebalanceStrategy = cluster.GroupRebalanceStrategy
+		}
+
+		kafkaCfg := kafka.Config{
+			Brokers:                 cluster.Brokers,
+			GroupID:                 cluster.GroupID,
+			ClientID:                cluster.ClientID,
+			Topics:                  cluster.Topics,
+			ExcludeTopics:           cluster.ExcludeTopics,
+			InitialOffset:           cluster.InitialOffset,
+			SessionTimeout:          parseDuration(cluster.SessionTimeout, 10*time.Second),
+			HeartbeatInterval:       parseDuration(cluster.HeartbeatInterval, 3*time.Second),
+			RebalanceTimeout:        parseDuration(cluster.RebalanceTimeout, 30*time.Second),
+			GroupRebalanceStrategy:  rebalanceStrategy,
+			MessageMarking: kafka.MessageMarking{
+				After:               cluster.MessageMarking.After,
+				OnError:             cluster.MessageMarking.OnError,
+				OnPermanentError:    cluster.MessageMarking.OnPermanentError,
+			},
+			Batch: kafka.BatchConfig{
+				Size:                cluster.Batch.Size,
+				Timeout:             parseDuration(cluster.Batch.Timeout, 500*time.Millisecond),
+				MaxPartitionBytes:   cluster.Batch.MaxPartitionBytes,
+			},
+			Parser: parsers.PipelineConfig{
+				EnableRuntimeParsing:                cluster.Parser.EnableRuntimeParsing,
+				EnableApplicationParsing:            cluster.Parser.EnableApplicationParsing,
+				DefaultSeverity:                     cluster.Parser.DefaultSeverity,
+				EnableTraceContextEnrichment:        cluster.Parser.EnableTraceContextEnrichment,
+				EnableK8sEnrichment:                 cluster.Parser.EnableK8sEnrichment,
+			},
+			Telemetry: kafka.TelemetryConfig{
+				KafkaReceiverRecords:       cluster.Telemetry.KafkaReceiverRecords,
+				KafkaReceiverOffsetLag:     cluster.Telemetry.KafkaReceiverOffsetLag,
+				KafkaReceiverRecordsDelay:  cluster.Telemetry.KafkaReceiverRecordsDelay,
+				KafkaBrokerConnects:        cluster.Telemetry.KafkaBrokerConnects,
+				KafkaBrokerDisconnects:     cluster.Telemetry.KafkaBrokerDisconnects,
+				KafkaBrokerReadLatency:     cluster.Telemetry.KafkaBrokerReadLatency,
+				KafkaFetchBatchMetrics:     cluster.Telemetry.KafkaFetchBatchMetrics,
+			},
+			Auth: kafka.AuthConfig{
+				Enabled:   cluster.Auth.Enabled,
+				Mechanism: cluster.Auth.Mechanism,
+				Username:  cluster.Auth.Username,
+				Password:  cluster.Auth.Password,
+			},
+			UseLeaderEpoch: cluster.UseLeaderEpoch,
+		}
+		
+		// TLS: manually assign fields
+		kafkaCfg.TLS.Enable = cluster.TLS.Enable
+		kafkaCfg.TLS.CAFile = cluster.TLS.CAFile
+		kafkaCfg.TLS.CertFile = cluster.TLS.CertFile
+		kafkaCfg.TLS.KeyFile = cluster.TLS.KeyFile
+		kafkaCfg.TLS.InsecureSkipVerify = cluster.TLS.InsecureSkipVerify
+		
+		// ErrorBackoff: manually assign fields
+		kafkaCfg.ErrorBackoff.Enabled = cluster.ErrorBackoff.Enabled
+		kafkaCfg.ErrorBackoff.InitialInterval = parseDuration(cluster.ErrorBackoff.InitialInterval, 1*time.Second)
+		kafkaCfg.ErrorBackoff.MaxInterval = parseDuration(cluster.ErrorBackoff.MaxInterval, 30*time.Second)
+		kafkaCfg.ErrorBackoff.Multiplier = cluster.ErrorBackoff.Multiplier
+		kafkaCfg.ErrorBackoff.Jitter = cluster.ErrorBackoff.Jitter
+		
+		// HeaderExtraction
+		kafkaCfg.HeaderExtraction.ExtractHeaders = cluster.HeaderExtraction.ExtractHeaders
+		kafkaCfg.HeaderExtraction.Headers = cluster.HeaderExtraction.Headers
+		
+		clusterConfigs = append(clusterConfigs, kafka.ClusterConfig{
+			Name:   cluster.Name,
+			Config: kafkaCfg,
+		})
+	}
+	
+	return clusterConfigs
 }
