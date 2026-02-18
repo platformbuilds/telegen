@@ -164,6 +164,12 @@ type TelemetryConfig struct {
 
 	// Metrics::KafkaBrokerDisconnects tracks broker disconnections
 	KafkaBrokerDisconnects bool `yaml:"kafka_broker_disconnects"`
+
+	// Metrics::KafkaBrokerReadLatency tracks broker read latency (OnBrokerRead hook)
+	KafkaBrokerReadLatency bool `yaml:"kafka_broker_read_latency"`
+
+	// Metrics::KafkaFetchBatchMetrics tracks per-batch metrics (OnFetchBatchRead hook)
+	KafkaFetchBatchMetrics bool `yaml:"kafka_fetch_batch_metrics"`
 }
 
 // DefaultConfig returns sensible defaults for Kafka receiver configuration
@@ -198,6 +204,8 @@ func DefaultConfig() Config {
 			KafkaReceiverRecordsDelay: false,
 			KafkaBrokerConnects:       true,
 			KafkaBrokerDisconnects:    true,
+			KafkaBrokerReadLatency:    true,
+			KafkaFetchBatchMetrics:    true,
 		},
 		Auth: AuthConfig{
 			Enabled: false,

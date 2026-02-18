@@ -101,7 +101,50 @@ var (
 		Help:      "Duration of broker throttling in seconds",
 		Buckets:   []float64{0.001, 0.01, 0.1, 0.5, 1, 5, 10, 30, 60},
 	}, []string{"broker"})
+
+	kafkaBrokerReadLatency = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "telegen",
+		Subsystem: "kafka_receiver",
+		Name:      "broker_read_latency_seconds",
+		Help:      "Time to read from broker in seconds (readWait + timeToRead)",
+		Buckets:   []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
+	}, []string{"broker", "outcome"})
+
+	kafkaFetchBatchRecords = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "telegen",
+		Subsystem: "kafka_receiver",
+		Name:      "fetch_batch_records_total",
+		Help:      "Total number of records received per fetch batch",
+	}, []string{"topic", "partition", "compression"})
+
+	kafkaFetchBatchBytes = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "telegen",
+		Subsystem: "kafka_receiver",
+		Name:      "fetch_batch_bytes_total",
+		Help:      "Total bytes received per fetch batch (compressed)",
+	}, []string{"topic", "partition"})
+
+	kafkaFetchBatchBytesUncompressed = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "telegen",
+		Subsystem: "kafka_receiver",
+		Name:      "fetch_batch_bytes_uncompressed_total",
+		Help:      "Total bytes received per fetch batch (uncompressed)",
+	}, []string{"topic", "partition"})
 )
+
+// ComponentStatus represents the lifecycle status of a Kafka receiver
+type ComponentStatus string
+
+const (
+	StatusStarting ComponentStatus = "starting"
+	StatusOK       ComponentStatus = "ok"
+	StatusStopping ComponentStatus = "stopping"
+	StatusStopped  ComponentStatus = "stopped"
+	StatusError    ComponentStatus = "error"
+)
+
+// StatusReporter is an optional callback for reporting component status changes
+type StatusReporter func(status ComponentStatus, err error)
 
 // Receiver implements a Kafka consumer for logs using franz-go.
 // It follows the OpenTelemetry Kafka receiver pattern adapted for telegen's architecture:
@@ -113,6 +156,7 @@ var (
 // Receiver implements kgo.Hook interface for telemetry hooks.
 type Receiver struct {
 	config           Config
+	clusterName      string // Cluster identifier for multi-cluster support
 	logger           *slog.Logger
 	serviceName      string
 	parserPipeline   *parsers.Pipeline
@@ -135,6 +179,10 @@ type Receiver struct {
 	
 	// Metrics collection enabled flags
 	metricsEnabled bool
+	
+	// Component status reporting
+	status         ComponentStatus
+	statusReporter StatusReporter
 }
 
 // Compile-time check that Receiver implements kgo.Hook
@@ -169,6 +217,53 @@ func (r *Receiver) OnBrokerThrottle(meta kgo.BrokerMetadata, throttleInterval ti
 			slog.String("broker", brokerName),
 			slog.Duration("duration", throttleInterval),
 		)
+	}
+}
+
+// OnBrokerRead is called after a read from a broker completes.
+// Tracks read latency for performance monitoring.
+// Implements kgo.HookBrokerRead.
+func (r *Receiver) OnBrokerRead(meta kgo.BrokerMetadata, _ int16, bytesRead int, readWait, timeToRead time.Duration, err error) {
+	if r.metricsEnabled && r.config.Telemetry.KafkaBrokerReadLatency {
+		brokerName := fmt.Sprintf("%s:%d", meta.Host, meta.Port)
+		outcome := "success"
+		if err != nil {
+			outcome = "failure"
+		}
+		totalLatency := (readWait + timeToRead).Seconds()
+		kafkaBrokerReadLatency.WithLabelValues(brokerName, outcome).Observe(totalLatency)
+	}
+}
+
+// OnFetchBatchRead is called once per batch read from Kafka.
+// Tracks batch-level metrics for throughput monitoring.
+// Implements kgo.HookFetchBatchRead.
+func (r *Receiver) OnFetchBatchRead(meta kgo.BrokerMetadata, topic string, partition int32, metrics kgo.FetchBatchMetrics) {
+	if r.metricsEnabled && r.config.Telemetry.KafkaFetchBatchMetrics {
+		partitionStr := fmt.Sprintf("%d", partition)
+		compression := compressionCodecToString(metrics.CompressionType)
+		
+		kafkaFetchBatchRecords.WithLabelValues(topic, partitionStr, compression).Add(float64(metrics.NumRecords))
+		kafkaFetchBatchBytes.WithLabelValues(topic, partitionStr).Add(float64(metrics.CompressedBytes))
+		kafkaFetchBatchBytesUncompressed.WithLabelValues(topic, partitionStr).Add(float64(metrics.UncompressedBytes))
+	}
+}
+
+// compressionCodecToString converts a compression codec byte to a string
+func compressionCodecToString(c uint8) string {
+	switch c {
+	case 0:
+		return "none"
+	case 1:
+		return "gzip"
+	case 2:
+		return "snappy"
+	case 3:
+		return "lz4"
+	case 4:
+		return "zstd"
+	default:
+		return "unknown"
 	}
 }
 
@@ -207,12 +302,30 @@ func isPermanentError(err error) bool {
 // ErrParseFailed indicates a log line could not be parsed
 var ErrParseFailed = errors.New("failed to parse log")
 
+// ReceiverOption is a functional option for configuring a Receiver
+type ReceiverOption func(*Receiver)
+
+// WithClusterName sets the cluster name for multi-cluster identification
+func WithClusterName(name string) ReceiverOption {
+	return func(r *Receiver) {
+		r.clusterName = name
+	}
+}
+
+// WithStatusReporter sets a callback for component status changes
+func WithStatusReporter(reporter StatusReporter) ReceiverOption {
+	return func(r *Receiver) {
+		r.statusReporter = reporter
+	}
+}
+
 // NewReceiver creates a new Kafka receiver
 func NewReceiver(
 	cfg Config,
 	serviceName string,
 	logger *slog.Logger,
 	lp *sdklog.LoggerProvider,
+	opts ...ReceiverOption,
 ) (*Receiver, error) {
 	if len(cfg.Brokers) == 0 {
 		return nil, errors.New("no kafka brokers configured")
@@ -266,13 +379,16 @@ func NewReceiver(
 		cfg.Telemetry.KafkaReceiverOffsetLag ||
 		cfg.Telemetry.KafkaReceiverRecordsDelay ||
 		cfg.Telemetry.KafkaBrokerConnects ||
-		cfg.Telemetry.KafkaBrokerDisconnects
+		cfg.Telemetry.KafkaBrokerDisconnects ||
+		cfg.Telemetry.KafkaBrokerReadLatency ||
+		cfg.Telemetry.KafkaFetchBatchMetrics
 
 	// Create parser pipeline with configured settings
 	parserPipeline := parsers.NewPipeline(cfg.Parser, logger)
 
-	return &Receiver{
+	receiver := &Receiver{
 		config:          cfg,
+		clusterName:     "default", // Default cluster name
 		logger:          logger,
 		serviceName:     serviceName,
 		parserPipeline:  parserPipeline,
@@ -283,7 +399,15 @@ func NewReceiver(
 		excludePatterns: excludePatterns,
 		headerKeys:      headerKeys,
 		metricsEnabled:  metricsEnabled,
-	}, nil
+		status:          StatusStopped,
+	}
+	
+	// Apply functional options
+	for _, opt := range opts {
+		opt(receiver)
+	}
+	
+	return receiver, nil
 }
 
 // Start initializes and starts the Kafka consumer
@@ -299,6 +423,9 @@ func (r *Receiver) Start(ctx context.Context) error {
 	default:
 		close(r.started)
 	}
+
+	// Report starting status
+	r.reportStatus(StatusStarting, nil)
 
 	// Filter topics based on exclusion patterns
 	filteredTopics := r.filterTopics(r.config.Topics)
@@ -398,6 +525,7 @@ func (r *Receiver) Start(ctx context.Context) error {
 	}
 
 	r.logger.Info("kafka receiver started",
+		slog.String("cluster", r.clusterName),
 		slog.Any("brokers", r.config.Brokers),
 		slog.String("group_id", r.config.GroupID),
 		slog.Any("topics", filteredTopics),
@@ -405,6 +533,9 @@ func (r *Receiver) Start(ctx context.Context) error {
 		slog.Bool("use_leader_epoch", r.config.UseLeaderEpoch),
 		slog.Bool("header_extraction", r.config.HeaderExtraction.ExtractHeaders),
 	)
+
+	// Report OK status after successful start
+	r.reportStatus(StatusOK, nil)
 
 	// Start consume loop in background
 	r.wg.Add(1)
@@ -415,6 +546,9 @@ func (r *Receiver) Start(ctx context.Context) error {
 
 // Stop gracefully shuts down the receiver
 func (r *Receiver) Stop(ctx context.Context) error {
+	// Report stopping status
+	r.reportStatus(StatusStopping, nil)
+	
 	r.mu.Lock()
 	
 	select {
@@ -441,11 +575,44 @@ func (r *Receiver) Stop(ctx context.Context) error {
 
 	select {
 	case <-done:
-		r.logger.Info("kafka receiver stopped")
+		r.logger.Info("kafka receiver stopped", slog.String("cluster", r.clusterName))
+		r.reportStatus(StatusStopped, nil)
 		return nil
 	case <-ctx.Done():
 		return fmt.Errorf("shutdown timeout: %w", ctx.Err())
 	}
+}
+
+// reportStatus updates the receiver status and notifies the status reporter if configured
+func (r *Receiver) reportStatus(status ComponentStatus, err error) {
+	r.status = status
+	if r.statusReporter != nil {
+		r.statusReporter(status, err)
+	}
+	
+	// Also log status changes
+	if err != nil {
+		r.logger.Error("kafka receiver status change",
+			slog.String("cluster", r.clusterName),
+			slog.String("status", string(status)),
+			slog.Any("error", err),
+		)
+	} else {
+		r.logger.Debug("kafka receiver status change",
+			slog.String("cluster", r.clusterName),
+			slog.String("status", string(status)),
+		)
+	}
+}
+
+// Status returns the current component status
+func (r *Receiver) Status() ComponentStatus {
+	return r.status
+}
+
+// ClusterName returns the cluster name for this receiver
+func (r *Receiver) ClusterName() string {
+	return r.clusterName
 }
 
 // getGroupBalancer returns the configured rebalance strategy
@@ -863,4 +1030,204 @@ func clearLeaderEpochAdjuster(_ context.Context, topics map[string]map[int32]kgo
 		}
 	}
 	return topics, nil
+}
+
+// ============================================================================
+// Multi-Cluster Support
+// ============================================================================
+
+// MultiReceiver manages multiple Kafka cluster receivers for multi-cluster support.
+// Each cluster operates independently with its own config, consumer group, and partitions.
+type MultiReceiver struct {
+	receivers      []*Receiver
+	logger         *slog.Logger
+	mu             sync.RWMutex
+	started        bool
+	statusReporter StatusReporter
+}
+
+// MultiReceiverConfig holds configs for multiple Kafka clusters
+type MultiReceiverConfig struct {
+	// Clusters is a list of per-cluster configurations
+	Clusters []ClusterConfig `yaml:"clusters"`
+}
+
+// ClusterConfig wraps a cluster-specific Kafka configuration with a name
+type ClusterConfig struct {
+	// Name is a unique identifier for this cluster
+	Name string `yaml:"name"`
+
+	// Config is the Kafka receiver configuration for this cluster
+	Config
+}
+
+// NewMultiReceiver creates a new multi-cluster Kafka receiver
+func NewMultiReceiver(
+	configs []ClusterConfig,
+	serviceName string,
+	logger *slog.Logger,
+	lp *sdklog.LoggerProvider,
+	opts ...ReceiverOption,
+) (*MultiReceiver, error) {
+	if len(configs) == 0 {
+		return nil, errors.New("no kafka clusters configured")
+	}
+
+	mr := &MultiReceiver{
+		receivers: make([]*Receiver, 0, len(configs)),
+		logger:    logger,
+	}
+
+	// Extract status reporter if provided
+	var statusReporter StatusReporter
+	for _, opt := range opts {
+		// Create a temp receiver to extract options
+		tempR := &Receiver{}
+		opt(tempR)
+		if tempR.statusReporter != nil {
+			statusReporter = tempR.statusReporter
+			mr.statusReporter = statusReporter
+		}
+	}
+
+	// Create a receiver for each cluster
+	for _, clusterCfg := range configs {
+		if clusterCfg.Name == "" {
+			return nil, errors.New("cluster name is required for each cluster configuration")
+		}
+
+		// Create cluster-specific logger
+		clusterLogger := logger.With(slog.String("cluster", clusterCfg.Name))
+
+		// Build options for this receiver
+		receiverOpts := []ReceiverOption{
+			WithClusterName(clusterCfg.Name),
+		}
+		if statusReporter != nil {
+			receiverOpts = append(receiverOpts, WithStatusReporter(statusReporter))
+		}
+
+		receiver, err := NewReceiver(clusterCfg.Config, serviceName, clusterLogger, lp, receiverOpts...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create receiver for cluster %q: %w", clusterCfg.Name, err)
+		}
+
+		mr.receivers = append(mr.receivers, receiver)
+	}
+
+	return mr, nil
+}
+
+// Start starts all cluster receivers
+func (mr *MultiReceiver) Start(ctx context.Context) error {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+
+	if mr.started {
+		return errors.New("multi-receiver already started")
+	}
+
+	var startedReceivers []*Receiver
+	var startErrors []error
+
+	for _, receiver := range mr.receivers {
+		if err := receiver.Start(ctx); err != nil {
+			mr.logger.Warn("failed to start kafka receiver",
+				slog.String("cluster", receiver.ClusterName()),
+				slog.Any("error", err),
+			)
+			startErrors = append(startErrors, fmt.Errorf("cluster %s: %w", receiver.ClusterName(), err))
+		} else {
+			startedReceivers = append(startedReceivers, receiver)
+			mr.logger.Info("kafka receiver started",
+				slog.String("cluster", receiver.ClusterName()),
+			)
+		}
+	}
+
+	// If no receivers started, return combined error
+	if len(startedReceivers) == 0 && len(startErrors) > 0 {
+		return fmt.Errorf("failed to start any kafka receivers: %v", startErrors)
+	}
+
+	mr.started = true
+
+	// Log summary
+	mr.logger.Info("multi-cluster kafka receiver started",
+		slog.Int("clusters_started", len(startedReceivers)),
+		slog.Int("clusters_failed", len(startErrors)),
+		slog.Int("clusters_total", len(mr.receivers)),
+	)
+
+	return nil
+}
+
+// Stop stops all cluster receivers
+func (mr *MultiReceiver) Stop(ctx context.Context) error {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+
+	if !mr.started {
+		return nil
+	}
+
+	var stopErrors []error
+
+	for _, receiver := range mr.receivers {
+		if err := receiver.Stop(ctx); err != nil {
+			mr.logger.Warn("failed to stop kafka receiver",
+				slog.String("cluster", receiver.ClusterName()),
+				slog.Any("error", err),
+			)
+			stopErrors = append(stopErrors, fmt.Errorf("cluster %s: %w", receiver.ClusterName(), err))
+		} else {
+			mr.logger.Info("kafka receiver stopped",
+				slog.String("cluster", receiver.ClusterName()),
+			)
+		}
+	}
+
+	mr.started = false
+
+	if len(stopErrors) > 0 {
+		return fmt.Errorf("errors stopping kafka receivers: %v", stopErrors)
+	}
+
+	return nil
+}
+
+// Receivers returns all managed receivers (for testing/inspection)
+func (mr *MultiReceiver) Receivers() []*Receiver {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+	
+	// Return a copy to prevent external modification
+	result := make([]*Receiver, len(mr.receivers))
+	copy(result, mr.receivers)
+	return result
+}
+
+// ClusterNames returns the names of all configured clusters
+func (mr *MultiReceiver) ClusterNames() []string {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+	
+	names := make([]string, len(mr.receivers))
+	for i, r := range mr.receivers {
+		names[i] = r.ClusterName()
+	}
+	return names
+}
+
+// GetReceiver returns the receiver for a specific cluster name
+func (mr *MultiReceiver) GetReceiver(clusterName string) *Receiver {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+	
+	for _, r := range mr.receivers {
+		if r.ClusterName() == clusterName {
+			return r
+		}
+	}
+	return nil
 }
