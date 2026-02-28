@@ -38,6 +38,7 @@ See {doc}`full-reference` for the complete architecture diagram.
 :maxdepth: 2
 
 minimal-config
+v3-pipeline
 full-reference
 agent-mode
 collector-mode

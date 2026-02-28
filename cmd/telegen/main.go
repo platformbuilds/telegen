@@ -189,14 +189,92 @@ func main() {
 
 	// Start Kafka logs receiver if enabled
 	var kafkaMultiReceiver *kafka.MultiReceiver
+	var kafkaAutoDiscovery *kafka.AutoDiscovery
 	if cfg.Pipelines.Kafka.Enabled {
 		// Get the logger provider from the OTLP exporter - shared across all signals
 		loggerProvider := pl.GetLogsLoggerProvider()
 		if loggerProvider == nil {
 			logger.Warn("kafka logs receiver enabled but OTLP logs exporter not configured, skipping")
 		} else {
-			// Check if multi-cluster or single-cluster configuration
-			if len(cfg.Pipelines.Kafka.Clusters) > 0 {
+			// Priority order:
+			// 1. Auto-discovery mode (simplest - just namespace + topics)
+			// 2. Multi-cluster explicit config
+			// 3. Single-cluster legacy config
+
+			if cfg.Pipelines.Kafka.AutoDiscovery.Enabled {
+				// AUTO-DISCOVERY MODE - the easy way
+				autoDiscoveryCfg := kafka.AutoDiscoveryConfig{
+					Enabled:       true,
+					Namespace:     cfg.Pipelines.Kafka.AutoDiscovery.Namespace,
+					Topics:        cfg.Pipelines.Kafka.AutoDiscovery.Topics,
+					GroupID:       cfg.Pipelines.Kafka.AutoDiscovery.GroupID,
+					InitialOffset: cfg.Pipelines.Kafka.AutoDiscovery.InitialOffset,
+				}
+
+				var err error
+				kafkaAutoDiscovery, err = kafka.NewAutoDiscovery(autoDiscoveryCfg, logger)
+				if err != nil {
+					logger.Warn("kafka auto-discovery failed to initialize",
+						"error", err,
+						"status", "degraded")
+				} else if kafkaAutoDiscovery != nil {
+					// Set handler to create receivers when clusters are discovered
+					kafkaAutoDiscovery.SetHandler(func(event kafka.AutoDiscoveryEvent) {
+						logger.Info("kafka discovery event",
+							"type", event.Type,
+							"cluster", event.Cluster.Name,
+							"message", event.Message)
+					})
+
+					// Start discovery
+					if err := kafkaAutoDiscovery.Start(ctx); err != nil {
+						logger.Warn("kafka auto-discovery failed to start",
+							"error", err,
+							"status", "degraded")
+					} else {
+						// Wait a moment for initial discovery, then create receivers
+						go func() {
+							// Give discovery time to find clusters
+							time.Sleep(3 * time.Second)
+
+							kafkaAutoDiscovery.PrintDiscoverySummary()
+
+							clusterConfigs := kafkaAutoDiscovery.GetClusterConfigs()
+							if len(clusterConfigs) == 0 {
+								logger.Warn("kafka auto-discovery found no ready clusters",
+									"status", "waiting",
+									"hint", "ensure Kafka CRDs are deployed and ready")
+								return
+							}
+
+							// Create MultiReceiver with discovered clusters
+							var err error
+							kafkaMultiReceiver, err = kafka.NewMultiReceiver(
+								clusterConfigs,
+								cfg.Agent.ServiceName,
+								logger,
+								loggerProvider,
+							)
+							if err != nil {
+								logger.Error("failed to create kafka receiver from discovered clusters",
+									"error", err)
+								return
+							}
+
+							if err := kafkaMultiReceiver.Start(ctx); err != nil {
+								logger.Error("failed to start kafka receiver from discovered clusters",
+									"error", err)
+								return
+							}
+
+							clusterNames := kafkaMultiReceiver.ClusterNames()
+							logger.Info("kafka receivers started from auto-discovery",
+								"clusters", clusterNames,
+								"cluster_count", len(clusterNames))
+						}()
+					}
+				}
+			} else if len(cfg.Pipelines.Kafka.Clusters) > 0 {
 				// Multi-cluster mode
 				clusterConfigs := convertMultiKafkaConfig(cfg.Pipelines.Kafka)
 				var err error
@@ -272,6 +350,9 @@ func main() {
 	logger.Info("telegen shutting down")
 	cancel()
 	pl.Close()
+	if kafkaAutoDiscovery != nil {
+		kafkaAutoDiscovery.Stop()
+	}
 	if kafkaMultiReceiver != nil {
 		_ = kafkaMultiReceiver.Stop(context.Background())
 	}

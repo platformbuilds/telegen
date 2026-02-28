@@ -1,0 +1,183 @@
+# Telegen V3 Architecture Approach
+# Documents the architectural decisions and implementation approach
+
+version: "3.0"
+last_updated: "2025-01-20"
+
+approach:
+  name: "Branch-Based Implementation"
+  description: |
+    V3 code is implemented directly in the main internal/ directory.
+    V2 collectors remain unchanged; adapter layer bridges them to V3 unified exporter.
+  
+  rationale:
+    - No code duplication
+    - V2 features continue to work during migration
+    - Gradual rollout via feature flags
+    - Single codebase to maintain
+
+architecture:
+  pattern: "Adapter Pattern"
+  flow: "V2 Collectors → CollectorAdapter → SignalSink → UnifiedExporter → Exporters"
+  
+  components:
+    - name: "CollectorAdapter"
+      description: "Interface that wraps V2 collectors"
+      location: "internal/pipeline/adapters/registry.go"
+      
+    - name: "SignalSink"
+      description: "Interface for sending pdata signals (traces, logs, metrics)"
+      location: "internal/pipeline/adapters/registry.go"
+      
+    - name: "AdapterRegistry"
+      description: "Manages lifecycle of all adapters"
+      location: "internal/pipeline/adapters/registry.go"
+      
+    - name: "UnifiedPipelineSink"
+      description: "Bridges adapters to UnifiedExporter"
+      location: "internal/pipeline/adapters/sink.go"
+      
+    - name: "UnifiedExporter"
+      description: "Routes signals to configured exporters"
+      location: "internal/pipeline/unified_exporter.go"
+
+wave_3_implementation:
+  status: "completed"
+  completed_date: "2025-01-20"
+  
+  created_files:
+    - path: "internal/pipeline/adapters/registry.go"
+      purpose: "Core interfaces and adapter registry"
+      exports:
+        - "CollectorType"
+        - "SignalSink"
+        - "CollectorAdapter"
+        - "AdapterRegistry"
+        - "NewAdapterRegistry"
+        
+    - path: "internal/pipeline/adapters/agent_collectors.go"
+      purpose: "Adapters for agent-mode collectors"
+      exports:
+        - "BaseAdapter"
+        - "EBPFTracesAdapter"
+        - "EBPFProfilingAdapter"
+        - "JFRProfilingAdapter"
+        - "FileLogsAdapter"
+        - "HostMetricsAdapter"
+        - "KubeMetricsAdapter"
+        - "NetworkFlowsAdapter"
+        
+    - path: "internal/pipeline/adapters/v2_features.go"
+      purpose: "Adapters for V2 recent features"
+      exports:
+        - "KafkaLogsAdapter"
+        - "SecurityAdapter"
+        - "GPUAdapter"
+        - "DatabaseTracingAdapter"
+        - "LogTraceCorrelationAdapter"
+        
+    - path: "internal/pipeline/adapters/sink.go"
+      purpose: "Bridge to unified exporter"
+      exports:
+        - "SignalExporter"
+        - "UnifiedPipelineSink"
+        - "DefaultAdapterSet"
+        - "SinkStats"
+        
+    - path: "internal/pipeline/adapters/adapters_test.go"
+      purpose: "Unit tests for adapters"
+      coverage:
+        - "AdapterRegistry"
+        - "All agent collectors"
+        - "V2 feature adapters"
+        - "DefaultAdapterSet"
+
+collector_mapping:
+  ebpf_traces:
+    collector_type: "CollectorEBPFTraces"
+    v2_source: "internal/ebpf/"
+    signal_type: "traces"
+    adapter: "EBPFTracesAdapter"
+    
+  ebpf_profiling:
+    collector_type: "CollectorEBPFProfiling"
+    v2_source: "internal/profiler/"
+    signal_type: "logs, metrics"
+    adapter: "EBPFProfilingAdapter"
+    
+  jfr_profiling:
+    collector_type: "CollectorJFRProfiling"
+    v2_source: "internal/jfr/"
+    signal_type: "logs"
+    adapter: "JFRProfilingAdapter"
+    
+  file_logs:
+    collector_type: "CollectorFileLogs"
+    v2_source: "internal/logs/"
+    signal_type: "logs"
+    adapter: "FileLogsAdapter"
+    
+  host_metrics:
+    collector_type: "CollectorHostMetrics"
+    v2_source: "internal/nodeexporter/"
+    signal_type: "metrics"
+    adapter: "HostMetricsAdapter"
+    
+  kube_metrics:
+    collector_type: "CollectorKubeMetrics"
+    v2_source: "internal/kubestate/"
+    signal_type: "metrics"
+    adapter: "KubeMetricsAdapter"
+    
+  network_flows:
+    collector_type: "CollectorNetworkFlows"
+    v2_source: "internal/netolly/"
+    signal_type: "logs, metrics"
+    adapter: "NetworkFlowsAdapter"
+    
+  kafka_logs:
+    collector_type: "CollectorKafkaLogs"
+    v2_source: "internal/kafka/"
+    signal_type: "logs"
+    adapter: "KafkaLogsAdapter"
+    
+  security:
+    collector_type: "CollectorSecurity"
+    v2_source: "internal/security/"
+    signal_type: "logs, metrics"
+    adapter: "SecurityAdapter"
+    
+  gpu:
+    collector_type: "CollectorGPU"
+    v2_source: "internal/aiml/"
+    signal_type: "traces, metrics"
+    adapter: "GPUAdapter"
+    
+  database_tracing:
+    collector_type: "CollectorDatabaseTracing"
+    v2_source: "internal/database/"
+    signal_type: "traces"
+    adapter: "DatabaseTracingAdapter"
+    
+  log_trace_correlation:
+    collector_type: "CollectorLogTrace"
+    v2_source: "internal/correlation/"
+    signal_type: "logs"
+    adapter: "LogTraceCorrelationAdapter"
+
+next_steps:
+  - id: "W4"
+    name: "Integration Testing"
+    status: "not-started"
+    tasks:
+      - "Integration tests with real V2 collectors"
+      - "End-to-end pipeline tests"
+      - "Performance benchmarks"
+      
+  - id: "W5"
+    name: "Configuration"
+    status: "not-started"
+    tasks:
+      - "YAML config schema for adapter selection"
+      - "Feature flags for V3 pipeline"
+      - "Migration guide documentation"

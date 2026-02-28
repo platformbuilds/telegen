@@ -81,15 +81,14 @@ func TestNewReceiver(t *testing.T) {
 			errContains: "invalid exclude topic pattern",
 		},
 		{
-			name: "exclude_topics without regex topic",
+			name: "exclude_topics with literal topic",
 			config: Config{
 				Brokers:       []string{"localhost:9092"},
-				Topics:        []string{"test-topic"},  // Non-regex topic
+				Topics:        []string{"test-topic"},  // Literal topic name
 				GroupID:       "test-group",
 				ExcludeTopics: []string{".*-debug$"},
 			},
-			wantErr:     true,
-			errContains: "exclude_topics is configured but none of the configured topics use regex pattern",
+			wantErr: false, // exclude_topics works with any topic pattern
 		},
 	}
 
@@ -115,27 +114,52 @@ func TestFilterTopics(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		topics         []string
-		excludeTopics  []string
-		expectedTopics []string
+		configTopics   []string   // Topics in config (can be patterns for validation)
+		excludeTopics  []string   // Exclusion patterns
+		resolvedTopics []string   // Input to filterTopics (resolved concrete topic names)
+		expectedTopics []string   // Expected output from filterTopics
 	}{
 		{
 			name:           "no exclusions",
-			topics:         []string{"app-logs", "system-logs"},
+			configTopics:   []string{"app-logs", "system-logs"},
 			excludeTopics:  []string{},
+			resolvedTopics: []string{"app-logs", "system-logs"},
 			expectedTopics: []string{"app-logs", "system-logs"},
 		},
 		{
-			name:           "exclude debug topics",
-			topics:         []string{"^app-.*"},  // Must be regex topic for exclusions
-			excludeTopics:  []string{".*-debug$"},
-			expectedTopics: []string{"^app-.*"},  // filterTopics only filters concrete topics, not patterns
+			name:           "exclude dlq and retry topics",
+			configTopics:   []string{"^mcx-app-.*"},  // Regex pattern in config
+			excludeTopics:  []string{".*-dlq$", ".*-retry$"},
+			resolvedTopics: []string{"mcx-app-logs", "mcx-app-events", "mcx-app-logs-dlq", "mcx-app-events-retry"},
+			expectedTopics: []string{"mcx-app-logs", "mcx-app-events"},
 		},
 		{
-			name:           "exclude prefix",
-			topics:         []string{"^.*-app$"},  // Regex topic pattern
-			excludeTopics:  []string{"^test-"},
-			expectedTopics: []string{"^.*-app$"},
+			name:           "exclude debug topics by suffix",
+			configTopics:   []string{"^app-.*"},  // Regex pattern in config
+			excludeTopics:  []string{".*-debug$"},
+			resolvedTopics: []string{"app-main", "app-debug", "app-logs", "app-test-debug"},
+			expectedTopics: []string{"app-main", "app-logs"},
+		},
+		{
+			name:           "exclude by prefix pattern",
+			configTopics:   []string{"^.*-app$"},  // Regex pattern in config
+			excludeTopics:  []string{"^test-", "^staging-"},
+			resolvedTopics: []string{"prod-app", "test-app", "staging-app", "dev-app"},
+			expectedTopics: []string{"prod-app", "dev-app"},
+		},
+		{
+			name:           "exact topic name exclusion",
+			configTopics:   []string{"^myapp-.*"},
+			excludeTopics:  []string{"^myapp-internal$"},  // Exact match with anchors
+			resolvedTopics: []string{"myapp-logs", "myapp-internal", "myapp-events"},
+			expectedTopics: []string{"myapp-logs", "myapp-events"},
+		},
+		{
+			name:           "all topics excluded",
+			configTopics:   []string{"^test-.*"},
+			excludeTopics:  []string{"^test-"},  // Excludes everything starting with test-
+			resolvedTopics: []string{"test-a", "test-b"},
+			expectedTopics: []string{},  // All filtered out
 		},
 	}
 
@@ -143,15 +167,16 @@ func TestFilterTopics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := Config{
 				Brokers:       []string{"localhost:9092"},
-				Topics:        tt.topics,
+				Topics:        tt.configTopics,
 				GroupID:       "test-group",
 				ExcludeTopics: tt.excludeTopics,
 			}
 			receiver, err := NewReceiver(cfg, "test-service", logger, nil)
 			require.NoError(t, err)
 
-			filtered := receiver.filterTopics(tt.topics)
-			assert.Equal(t, tt.expectedTopics, filtered)
+			// filterTopics should be called with RESOLVED topic names, not patterns
+			filtered := receiver.filterTopics(tt.resolvedTopics)
+			assert.ElementsMatch(t, tt.expectedTopics, filtered)
 		})
 	}
 }
@@ -262,16 +287,17 @@ func TestGetSASLMechanism(t *testing.T) {
 				},
 			}
 			receiver, err := NewReceiver(cfg, "test-service", logger, nil)
+			if tt.wantErr {
+				// Invalid mechanism now caught at receiver creation time
+				assert.Error(t, err)
+				assert.Nil(t, receiver)
+				return
+			}
 			require.NoError(t, err)
 
 			opt, err := receiver.getSASLMechanism()
-			if tt.wantErr {
-				assert.Error(t, err)
-				assert.Nil(t, opt)
-			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, opt)
-			}
+			assert.NoError(t, err)
+			assert.NotNil(t, opt)
 		})
 	}
 }
@@ -518,11 +544,10 @@ func TestTopicPatternValidation(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:        "non-regex topic with exclude",
-			topics:      []string{"app-logs"},
-			exclude:     []string{".*-debug$"},
-			wantErr:     true,
-			errContains: "use regex pattern",
+			name:    "literal topic with exclude",
+			topics:  []string{"app-logs"},
+			exclude: []string{".*-debug$"},
+			wantErr: false, // exclude_topics works with any topic pattern
 		},
 		{
 			name:        "empty exclude pattern",

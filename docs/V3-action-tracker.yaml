@@ -1,0 +1,314 @@
+# Telegen V3 Action Tracker
+# Tracks progress for V3 collector architecture upgrade
+
+version: "3.0"
+last_updated: "2026-02-28"
+
+phases:
+  - id: P1
+    name: "Foundation & Collector Wiring"
+    status: "completed"
+    waves:
+      - id: W1
+        name: "Health & Metrics Endpoints"
+        status: "completed"
+        completed_date: "2025-01-15"
+        notes: "Already exists in V2 selftelemetry package"
+        tasks:
+          - id: W1-01
+            name: "/healthz endpoint"
+            status: "completed"
+            location: "internal/selftelemetry/metrics.go"
+          - id: W1-02
+            name: "/readyz endpoint"
+            status: "completed"
+            location: "internal/selftelemetry/metrics.go"
+          - id: W1-03
+            name: "/metrics endpoint"
+            status: "completed"
+            location: "internal/selftelemetry/metrics.go"
+
+      - id: W2
+        name: "Signal Interface & Unified Exporter"
+        status: "completed"
+        completed_date: "2025-01-18"
+        tasks:
+          - id: W2-01
+            name: "Signal interface"
+            status: "completed"
+            location: "internal/pipeline/signal.go"
+          - id: W2-02
+            name: "UnifiedExporter"
+            status: "completed"
+            location: "internal/pipeline/unified_exporter.go"
+          - id: W2-03
+            name: "K8s detection"
+            status: "completed"
+            location: "internal/kube/"
+          - id: W2-04
+            name: "Authentication"
+            status: "completed"
+            location: "internal/config/"
+
+      - id: W3
+        name: "V2 Collector Wiring"
+        status: "completed"
+        completed_date: "2025-01-20"
+        notes: "Created adapter layer to bridge V2 collectors to V3 unified exporter"
+        tasks:
+          - id: W3-01
+            name: "Wire eBPF Traces"
+            status: "completed"
+            adapter: "EBPFTracesAdapter"
+            location: "internal/pipeline/adapters/agent_collectors.go"
+          - id: W3-02
+            name: "Wire eBPF Profiling"
+            status: "completed"
+            adapter: "EBPFProfilingAdapter"
+            location: "internal/pipeline/adapters/agent_collectors.go"
+          - id: W3-03
+            name: "Wire JFR Profiling"
+            status: "completed"
+            adapter: "JFRProfilingAdapter"
+            location: "internal/pipeline/adapters/agent_collectors.go"
+          - id: W3-04
+            name: "Wire File Logs"
+            status: "completed"
+            adapter: "FileLogsAdapter"
+            location: "internal/pipeline/adapters/agent_collectors.go"
+          - id: W3-05
+            name: "Wire Host Metrics"
+            status: "completed"
+            adapter: "HostMetricsAdapter"
+            location: "internal/pipeline/adapters/agent_collectors.go"
+          - id: W3-06
+            name: "Wire Kube Metrics"
+            status: "completed"
+            adapter: "KubeMetricsAdapter"
+            location: "internal/pipeline/adapters/agent_collectors.go"
+          - id: W3-07
+            name: "Wire Network Flows"
+            status: "completed"
+            adapter: "NetworkFlowsAdapter"
+            location: "internal/pipeline/adapters/agent_collectors.go"
+          - id: W3-08
+            name: "Wire Kafka Logs"
+            status: "completed"
+            adapter: "KafkaLogsAdapter"
+            location: "internal/pipeline/adapters/v2_features.go"
+          - id: W3-09
+            name: "Wire Security"
+            status: "completed"
+            adapter: "SecurityAdapter"
+            location: "internal/pipeline/adapters/v2_features.go"
+          - id: W3-10
+            name: "Wire GPU/AI-ML"
+            status: "completed"
+            adapter: "GPUAdapter"
+            location: "internal/pipeline/adapters/v2_features.go"
+          - id: W3-11
+            name: "Wire Log-Trace Correlation"
+            status: "completed"
+            adapter: "LogTraceCorrelationAdapter"
+            location: "internal/pipeline/adapters/v2_features.go"
+          - id: W3-12
+            name: "Preserve /metrics endpoint"
+            status: "completed"
+            notes: "Already exists in V2 selftelemetry"
+
+  - id: P2
+    name: "Collector Mode Integration"
+    status: "completed"
+    completed_date: "2026-02-28"
+    waves:
+      - id: W4
+        name: "Infrastructure Collectors"
+        status: "completed"
+        completed_date: "2026-02-28"
+        notes: "Wire V2 infrastructure collectors via adapter layer"
+        tasks:
+          - id: W4-01
+            name: "SNMP Adapter"
+            status: "completed"
+            adapter: "SNMPAdapter"
+            location: "internal/pipeline/collector/snmp_adapter.go"
+          - id: W4-02
+            name: "Storage Adapter"
+            status: "completed"
+            adapter: "StorageAdapter"
+            location: "internal/pipeline/collector/storage_adapter.go"
+            notes: "Dell PowerStore, HPE Primera, Pure FlashArray, NetApp ONTAP"
+          - id: W4-03
+            name: "Network Infrastructure Adapter"
+            status: "completed"
+            adapter: "NetInfraAdapter"
+            location: "internal/pipeline/collector/netinfra_adapter.go"
+            notes: "Arista CloudVision, Cisco ACI"
+          - id: W4-04
+            name: "Service Discovery"
+            status: "completed"
+            location: "internal/pipeline/collector/discovery.go"
+            notes: "K8s, Consul, DNS-SD, File-based discovery"
+
+      - id: W5
+        name: "REST API Collector"
+        status: "completed"
+        completed_date: "2026-02-28"
+        notes: "HTTP-based API scraping with JSONPath extraction"
+        tasks:
+          - id: W5-01
+            name: "REST API Adapter"
+            status: "completed"
+            adapter: "RESTAPIAdapter"
+            location: "internal/pipeline/collector/restapi_adapter.go"
+          - id: W5-02
+            name: "Authentication Support"
+            status: "completed"
+            location: "internal/pipeline/collector/restapi_adapter.go"
+            notes: "Basic, Bearer, API Key, OAuth2 client credentials"
+
+      - id: W6
+        name: "Prometheus Collector"
+        status: "completed"
+        completed_date: "2026-02-28"
+        notes: "Native Prometheus scraping with OTLP conversion"
+        tasks:
+          - id: W6-01
+            name: "Prometheus Adapter"
+            status: "completed"
+            adapter: "PrometheusAdapter"
+            location: "internal/pipeline/collector/prometheus_adapter.go"
+          - id: W6-02
+            name: "Prometheus Text Parsing"
+            status: "completed"
+            location: "internal/pipeline/collector/prometheus_adapter.go"
+            notes: "Counter, Gauge, Histogram, Summary support"
+          - id: W6-03
+            name: "Prometheus → OTLP Conversion"
+            status: "completed"
+            location: "internal/pipeline/collector/prometheus_adapter.go"
+            notes: "Full type mapping to OTLP metric types"
+
+  - id: P3
+    name: "Data Quality & Transformation"
+    status: "completed"
+    waves:
+      - id: W7
+        name: "Data Quality Limits"
+        status: "completed"
+        completed_date: "2026-02-28"
+        notes: "Cardinality, rate, and attribute limiting"
+        tasks:
+          - id: W7-01
+            name: "Cardinality Limiter"
+            status: "completed"
+            location: "internal/pipeline/limits/cardinality.go"
+            notes: "Per-metric and global series limits, TTL-based cleanup"
+          - id: W7-02
+            name: "Rate Limiter"
+            status: "completed"
+            location: "internal/pipeline/limits/rate_limiter.go"
+            notes: "Token bucket for metrics/traces/logs"
+          - id: W7-03
+            name: "Attribute Limiter"
+            status: "completed"
+            location: "internal/pipeline/limits/attribute_limiter.go"
+            notes: "Count/size limits, value truncation, protected attributes"
+      - id: W8
+        name: "Signal Transformation"
+        status: "completed"
+        completed_date: "2026-02-28"
+        notes: "Rule-based transformation with PII redaction"
+        tasks:
+          - id: W8-01
+            name: "Transformation Engine"
+            status: "completed"
+            location: "internal/pipeline/transform/engine.go"
+            notes: "Set/delete/rename/hash/filter actions"
+          - id: W8-02
+            name: "PII Redaction"
+            status: "completed"
+            location: "internal/pipeline/transform/pii_redaction.go"
+            notes: "Email, phone, SSN, CC, JWT, API key patterns"
+
+  - id: P4
+    name: "Operations & Testing"
+    status: "completed"
+    waves:
+      - id: W9
+        name: "Operational Features"
+        status: "completed"
+        completed_date: "2026-02-28"
+        notes: "Hot reload with SIGHUP, graceful shutdown with drain"
+        tasks:
+          - id: W9-01
+            name: "Hot Reload"
+            status: "completed"
+            location: "internal/pipeline/operations/hot_reload.go"
+            notes: "File watch, SIGHUP, validation, rollback"
+          - id: W9-02
+            name: "Graceful Shutdown"
+            status: "completed"
+            location: "internal/pipeline/operations/shutdown.go"
+            notes: "Priority-based, draining, health integration"
+      - id: W10
+        name: "Testing & Documentation"
+        status: "completed"
+        completed_date: "2026-02-28"
+        notes: "Integration tests and architecture documentation"
+        tasks:
+          - id: W10-01
+            name: "Integration Tests"
+            status: "completed"
+            location: "internal/pipeline/integration_test.go"
+            notes: "10 integration tests for full pipeline"
+          - id: W10-02
+            name: "Documentation"
+            status: "completed"
+            location: "docs/V3-ARCHITECTURE.md"
+            notes: "Complete V3 architecture documentation"
+
+  - id: P5
+    name: "V3 Integration & Deployment"
+    status: "completed"
+    waves:
+      - id: W11
+        name: "V2→V3 Full Integration"
+        status: "completed"
+        completed_date: "2026-02-28"
+        notes: "Bridge layer for 100% V2→V3 coverage"
+        tasks:
+          - id: W11-01
+            name: "V3 Integration Layer"
+            status: "completed"
+            location: "internal/pipeline/v3_integration.go"
+            notes: "Routes V2 collector outputs through V3 pipeline"
+          - id: W11-02
+            name: "V3 Config Reference"
+            status: "completed"
+            location: "configs/v3-pipeline.yaml"
+            notes: "Complete V3 configuration examples"
+
+      - id: W12
+        name: "Deployment Documentation"
+        status: "completed"
+        completed_date: "2026-02-28"
+        notes: "Comprehensive deployment guides for all platforms"
+        tasks:
+          - id: W12-01
+            name: "V3 Deployment Guide"
+            status: "completed"
+            location: "docs/installation/v3-deployment.md"
+            notes: "Bare metal, Docker, K8s, Helm, OpenShift, ECS"
+          - id: W12-02
+            name: "V3 Pipeline Config Docs"
+            status: "completed"
+            location: "docs/configuration/v3-pipeline.md"
+            notes: "Complete configuration reference"
+
+summary:
+  total_tasks: 38
+  completed: 38
+  in_progress: 0
+  not_started: 0
+  completion_percentage: 100.0

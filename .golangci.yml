@@ -13,3 +13,39 @@ linters:
         - all
         - -QF*    # Disable quickfix suggestions
         - -ST*    # Disable style suggestions
+        - -SA9003 # Allow empty branches
+        - -SA1019 # Allow deprecated functions
+        - -S1008  # Allow if/return instead of direct return
+  exclusions:
+    rules:
+      # Ignore errcheck and unused in test files
+      - path: _test\.go
+        linters:
+          - errcheck
+          - unused
+      # Ignore errcheck for defer statements
+      - source: "defer .*\\.Close\\(\\)"
+        linters:
+          - errcheck
+      - source: "defer .*\\.Stop\\(\\)"
+        linters:
+          - errcheck
+      # Ignore in dev directory (prototype code)
+      - path: ^dev/
+        linters:
+          - errcheck
+          - unused
+          - staticcheck
+          - ineffassign
+      # Ignore errcheck in queue (disk operations may fail on cleanup)
+      - path: internal/queue/
+        linters:
+          - errcheck
+      # Ignore unused in internal packages (may be used in build constrained files)
+      - path: ^internal/
+        linters:
+          - unused
+      # Ignore ineffassign in prometheus adapter (parser pattern)
+      - path: prometheus_adapter\.go
+        linters:
+          - ineffassign

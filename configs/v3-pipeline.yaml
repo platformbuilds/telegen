@@ -1,0 +1,403 @@
+# Telegen V3 Configuration Reference
+#
+# This file documents all V3 pipeline configuration options.
+# For a quick start, see the minimal examples at the end.
+
+# =============================================================================
+# V3 PIPELINE CONFIGURATION
+# =============================================================================
+
+# The V3 pipeline provides a unified data path for all signals (metrics, traces, logs)
+# with data quality controls, transformation, and flexible export options.
+
+v3_pipeline:
+  # Enable V3 pipeline. When enabled, all signals flow through the unified pipeline.
+  # When disabled, signals use the legacy V2 direct export paths.
+  enabled: true
+
+  # ---------------------------------------------------------------------------
+  # DATA QUALITY LIMITS
+  # ---------------------------------------------------------------------------
+  # Protect your backend from cardinality explosion, excessive data rates,
+  # and oversized payloads.
+
+  limits:
+    # Cardinality limiter - prevents metric cardinality explosion
+    cardinality:
+      enabled: true
+      # Per-metric series limit (unique label combinations)
+      default_max_series: 10000
+      # Global limit across all metrics
+      global_max_series: 100000
+      # Per-metric overrides for high-cardinality metrics
+      metric_limits:
+        http_request_duration_seconds: 50000  # Allow more for this metric
+        api_requests_total: 20000
+      # How long to remember series (for cleanup)
+      series_ttl: 1h
+      # Action when limit reached: "drop" or "hash_labels"
+      on_limit: drop
+
+    # Rate limiter - controls data ingestion rate
+    rate:
+      enabled: true
+      # Maximum data points per second
+      metrics_per_second: 100000
+      traces_per_second: 50000
+      logs_per_second: 200000
+      # Burst multiplier (allow temporary spikes)
+      burst_multiplier: 2.0
+      # Action when limit reached: "drop" or "pause"
+      on_limit: drop
+
+    # Attribute limiter - controls attribute counts and sizes
+    attributes:
+      enabled: true
+      # Maximum attributes per level
+      max_resource_attributes: 128
+      max_scope_attributes: 64
+      max_data_point_attributes: 32
+      # Maximum value sizes
+      max_attribute_value_size: 4096
+      max_attribute_key_size: 256
+      # Protected attributes (never dropped or truncated)
+      protected_attributes:
+        - service.name
+        - service.namespace
+        - k8s.pod.name
+        - k8s.namespace.name
+
+  # ---------------------------------------------------------------------------
+  # SIGNAL TRANSFORMATION
+  # ---------------------------------------------------------------------------
+  # Modify, filter, or enrich signals before export.
+
+  transform:
+    enabled: true
+    rules:
+      # Add cluster information to all signals
+      - name: add-cluster-info
+        enabled: true
+        match:
+          signal_types: [metrics, traces, logs]
+        actions:
+          - type: set_attribute
+            set_attribute:
+              key: k8s.cluster.name
+              value: production-us-east-1
+          - type: set_attribute
+            set_attribute:
+              key: environment
+              value: production
+
+      # Drop debug metrics
+      - name: drop-debug-metrics
+        enabled: true
+        match:
+          signal_types: [metrics]
+          metric_names:
+            - "^debug_.*"
+            - "^internal_.*"
+        actions:
+          - type: filter
+            filter:
+              drop: true
+
+      # Hash user IDs for privacy
+      - name: hash-user-ids
+        enabled: true
+        match:
+          signal_types: [traces, logs]
+          resource_attributes:
+            service.name: "user-service"
+        actions:
+          - type: hash_attribute
+            hash_attribute:
+              key: user.id
+              algorithm: sha256
+              salt: "${HASH_SALT}"  # From environment variable
+
+      # Rename legacy attributes
+      - name: rename-legacy-attrs
+        enabled: true
+        match:
+          signal_types: [metrics, traces]
+        actions:
+          - type: rename_attribute
+            rename_attribute:
+              old_key: host.hostname
+              new_key: host.name
+
+  # ---------------------------------------------------------------------------
+  # PII REDACTION
+  # ---------------------------------------------------------------------------
+  # Automatically detect and mask personally identifiable information.
+
+  pii_redaction:
+    enabled: true
+    # Mask string to use for redaction
+    redaction_string: "[REDACTED]"
+    # Scan log message bodies (can impact performance)
+    scan_log_bodies: true
+    # Scan span names
+    scan_span_names: false
+    # Attributes that should never be scanned (even if they match patterns)
+    allowed_attributes:
+      - service.name
+      - k8s.pod.name
+      - http.route
+    # PII detection rules
+    rules:
+      - name: email
+        type: email
+        enabled: true
+      - name: phone
+        type: phone
+        enabled: true
+      - name: ssn
+        type: ssn
+        enabled: true
+      - name: credit_card
+        type: credit_card
+        enabled: true
+      - name: jwt
+        type: jwt
+        enabled: true
+      - name: api_key
+        type: api_key
+        enabled: true
+      # Custom pattern
+      - name: internal_id
+        type: regex
+        enabled: true
+        pattern: "INTERNAL-[A-Z0-9]{8}"
+
+  # ---------------------------------------------------------------------------
+  # EXPORT CONFIGURATION
+  # ---------------------------------------------------------------------------
+
+  export:
+    # Primary OTLP endpoint
+    otlp:
+      endpoint: otel-collector:4317
+      protocol: grpc  # grpc or http
+      insecure: true
+      headers:
+        X-API-Key: "${OTLP_API_KEY}"
+      timeout: 30s
+      retry:
+        enabled: true
+        max_attempts: 3
+        initial_interval: 1s
+        max_interval: 30s
+
+    # Batching configuration
+    batch:
+      size: 1000           # Items per batch
+      timeout: 5s          # Max wait before flush
+      send_batch_size: 500 # Minimum batch size to send immediately
+
+    # Multi-endpoint configuration (for failover or fan-out)
+    multi_endpoint:
+      enabled: false
+      mode: failover  # failover, round_robin, or fanout
+      endpoints:
+        - name: primary
+          endpoint: primary-collector:4317
+          priority: 1
+        - name: secondary
+          endpoint: secondary-collector:4317
+          priority: 2
+          # Only used if primary fails
+        - name: archive
+          endpoint: archive-collector:4317
+          mode: fanout  # Always send to archive regardless of mode
+
+    # Persistent queue (survive restarts)
+    queue:
+      enabled: false
+      directory: /var/lib/telegen/queue
+      max_size_bytes: 500000000  # 500MB
+      max_items: 100000
+
+  # ---------------------------------------------------------------------------
+  # OPERATIONS
+  # ---------------------------------------------------------------------------
+
+  operations:
+    # Hot reload configuration
+    hot_reload:
+      enabled: true
+      config_path: /etc/telegen/config.yaml
+      check_interval: 30s
+      enable_sighup: true
+      validation_timeout: 10s
+      rollback_on_error: true
+
+    # Graceful shutdown
+    shutdown:
+      timeout: 30s
+      drain_timeout: 10s
+      # Enable health check integration (marks unhealthy during shutdown)
+      enable_health_check: true
+
+# =============================================================================
+# COLLECTORS CONFIGURATION
+# =============================================================================
+# Collector adapters for various data sources.
+
+collectors:
+  # ---------------------------------------------------------------------------
+  # PROMETHEUS SCRAPING
+  # ---------------------------------------------------------------------------
+  prometheus:
+    enabled: true
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    honor_labels: true
+    honor_timestamps: true
+
+    targets:
+      - name: node-exporter
+        address: localhost:9100
+        metrics_path: /metrics
+        scheme: http
+        labels:
+          job: node
+          env: production
+
+      - name: app-metrics
+        address: localhost:8080
+        metrics_path: /metrics
+        scheme: https
+        tls_config:
+          insecure_skip_verify: true
+        basic_auth:
+          username: prometheus
+          password_file: /etc/telegen/secrets/prometheus-password
+        labels:
+          job: app
+
+    # Service discovery modes
+    discovery:
+      kubernetes:
+        enabled: true
+        role: pod
+        namespaces:
+          - default
+          - kube-system
+        selectors:
+          - prometheus.io/scrape=true
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+            target_label: __address__
+            regex: (.+)
+            replacement: ${1}:${2}
+
+  # ---------------------------------------------------------------------------
+  # REST API SCRAPING
+  # ---------------------------------------------------------------------------
+  restapi:
+    enabled: true
+    endpoints:
+      - name: health-api
+        url: http://localhost:8080/api/v1/health
+        method: GET
+        interval: 60s
+        timeout: 10s
+        metric_prefix: api_health
+        mappings:
+          - json_path: $.status
+            metric_name: status
+            type: gauge
+            value_map:
+              healthy: 1
+              unhealthy: 0
+          - json_path: $.response_time_ms
+            metric_name: response_time_ms
+            type: gauge
+
+      - name: inventory-api
+        url: http://inventory-service:8080/api/v1/stats
+        method: GET
+        interval: 300s
+        auth:
+          type: bearer
+          token: "${INVENTORY_API_TOKEN}"
+        metric_prefix: inventory
+        mappings:
+          - json_path: $.items.total
+            metric_name: items_total
+            type: gauge
+          - json_path: $.items.by_category[*]
+            metric_name: items_by_category
+            type: gauge
+            label_from_key: category
+
+  # ---------------------------------------------------------------------------
+  # SNMP POLLING
+  # ---------------------------------------------------------------------------
+  snmp:
+    enabled: false
+    targets:
+      - name: network-switch
+        address: 192.168.1.1:161
+        version: 2c
+        community: public
+        interval: 60s
+        walk:
+          - 1.3.6.1.2.1.2.2  # ifTable
+          - 1.3.6.1.2.1.31.1.1  # ifXTable
+
+  # ---------------------------------------------------------------------------
+  # STORAGE ARRAYS
+  # ---------------------------------------------------------------------------
+  storage:
+    enabled: false
+    adapters:
+      - name: dell-powerstore
+        type: dell_powerstore
+        endpoint: https://powerstore.example.com
+        username: "${DELL_USER}"
+        password: "${DELL_PASSWORD}"
+        interval: 300s
+
+# =============================================================================
+# MINIMAL CONFIGURATION EXAMPLES
+# =============================================================================
+
+# --- Minimal Agent Mode (eBPF + profiling) ---
+# telegen:
+#   mode: agent
+# otlp:
+#   endpoint: otel-collector:4317
+# agent:
+#   ebpf:
+#     enabled: true
+#   profiling:
+#     enabled: true
+
+# --- Minimal Collector Mode (Prometheus scraping) ---
+# telegen:
+#   mode: collector
+# otlp:
+#   endpoint: otel-collector:4317
+# collectors:
+#   prometheus:
+#     enabled: true
+#     targets:
+#       - name: app
+#         address: localhost:8080
+
+# --- V3 Pipeline with full data quality ---
+# v3_pipeline:
+#   enabled: true
+#   limits:
+#     cardinality:
+#       enabled: true
+#       default_max_series: 10000
+#     rate:
+#       enabled: true
+#       metrics_per_second: 100000
+#   pii_redaction:
+#     enabled: true
