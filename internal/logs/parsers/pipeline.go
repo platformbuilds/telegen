@@ -29,12 +29,16 @@ type PipelineConfig struct {
 	TraceContextTolerance time.Duration `yaml:"trace_context_tolerance"`
 
 	// ApplicationParsers specifies which application parsers to enable
-	// Valid values: "spring_boot", "log4j", "json", "generic"
+	// Valid values: "spring_boot", "log4j", "json", "xml", "generic"
 	// If empty, all parsers are enabled
 	ApplicationParsers []string `yaml:"application_parsers"`
 
 	// DefaultSeverity is the default severity for logs that don't have one
 	DefaultSeverity string `yaml:"default_severity"`
+
+	// PreserveOriginalBody preserves the original body in body.original attribute
+	// when the body is modified (e.g., unescaped from JSON string)
+	PreserveOriginalBody bool `yaml:"preserve_original_body"`
 }
 
 // DefaultPipelineConfig returns a default pipeline configuration
@@ -143,6 +147,15 @@ func (p *Pipeline) initApplicationParsers() {
 	if enableAll || enabledParsers["json"] {
 		p.appParsers = append(p.appParsers, NewJSONLogParser())
 	}
+	if enableAll || enabledParsers["fixml"] {
+		p.appParsers = append(p.appParsers, NewFIXMLParser())
+	}
+	if enableAll || enabledParsers["iso8583"] {
+		p.appParsers = append(p.appParsers, NewISO8583Parser())
+	}
+	if enableAll || enabledParsers["xml"] {
+		p.appParsers = append(p.appParsers, NewXMLLogParser())
+	}
 	if enableAll || enabledParsers["generic"] {
 		p.appParsers = append(p.appParsers, NewGenericTimestampParser())
 	}
@@ -157,7 +170,8 @@ func (p *Pipeline) Parse(line string, filePath string) *ParsedLog {
 	var log *ParsedLog
 	var err error
 
-	// Stage 1: Try runtime format parsing first
+	// Stage 1: Try runtime format parsing first (Docker JSON, CRI-O, containerd)
+	// These are container runtime wrappers, not application log formats
 	if p.runtimeRouter != nil {
 		log, err = p.runtimeRouter.Parse(line)
 		if err == nil && log != nil {
@@ -167,6 +181,16 @@ func (p *Pipeline) Parse(line string, filePath string) *ParsedLog {
 				if parsedBody != nil {
 					// Merge: keep runtime metadata, use parsed body data
 					mergeApplicationLog(log, parsedBody)
+				}
+			}
+			// If runtime parse succeeded but body is still empty, try parsing the original line
+			// as an application log (runtime parser may have matched incorrectly)
+			if log.Body == "" {
+				if appLog := p.parseApplicationLog(line); appLog != nil {
+					log = appLog
+				} else {
+					// Last resort: use original line as body
+					log.Body = line
 				}
 			}
 		}
@@ -190,6 +214,9 @@ func (p *Pipeline) Parse(line string, filePath string) *ParsedLog {
 	for _, enricher := range p.enrichers {
 		enricher.Enrich(log, filePath)
 	}
+
+	// Stage 5: Set body content type and optionally preserve original
+	p.setBodyAttributes(log, line)
 
 	// Ensure timestamp is set
 	if log.Timestamp.IsZero() {
@@ -237,6 +264,28 @@ func mergeApplicationLog(runtime, app *ParsedLog) {
 
 	// Note the application format
 	runtime.Attributes["app.log.format"] = app.Format
+}
+
+// setBodyAttributes sets body.content_type and optionally body.original attributes
+func (p *Pipeline) setBodyAttributes(log *ParsedLog, originalLine string) {
+	if log == nil {
+		return
+	}
+
+	// Map format to content type
+	contentType := "text"
+	switch log.Format {
+	case "json", "json_array":
+		contentType = "json"
+	case "xml", "log4j_xml":
+		contentType = "xml"
+	}
+	log.Attributes[AttrBodyContentType] = contentType
+
+	// Optionally preserve original body if it was modified
+	if p.config.PreserveOriginalBody && log.Body != originalLine && originalLine != "" {
+		log.Attributes[AttrBodyOriginal] = originalLine
+	}
 }
 
 // ParseBatch processes multiple log lines

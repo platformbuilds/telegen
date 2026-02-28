@@ -50,6 +50,15 @@ const (
 	AttrTracingExported  = "telegen.tracing.exported"  // Spring Boot tracing exported flag
 	AttrContainerRuntime = "telegen.container.runtime" // Docker, CRI-O, containerd
 	AttrLogPartial       = "telegen.log.partial"       // Partial log line (CRI-O P tag)
+
+	// Body content attributes
+	AttrBodyContentType = "body.content_type" // Detected content type: json, xml, text
+	AttrBodyOriginal    = "body.original"     // Original body before transformation (optional)
+
+	// XML-specific attributes (for XML log formats)
+	AttrXMLFormat     = "xml.format"      // Specific XML format: log4j_xml, nlog_xml, serilog_xml, windows_event_xml, generic_xml
+	AttrXMLNamespace  = "xml.namespace"   // XML namespace if present
+	AttrXMLRootElement = "xml.root_element" // Root element name
 )
 
 // ParsedLog represents a parsed log entry with extracted fields.
@@ -204,8 +213,8 @@ func (p *ParsedLog) ToOTelRecord() log.Record {
 		rec.SetObservedTimestamp(time.Now())
 	}
 
-	// Set body (the log message)
-	rec.SetBody(log.StringValue(p.Body))
+	// Set body (the log message) - sanitize for valid UTF-8
+	rec.SetBody(log.StringValue(sanitizeUTF8(p.Body)))
 
 	// Set severity number (OTLP SeverityNumber field)
 	if p.SeverityNumber > 0 {
@@ -269,20 +278,20 @@ func (p *ParsedLog) ToOTelRecord() log.Record {
 		attrs = append(attrs, log.String("span_id", p.SpanID))
 	}
 
-	// Add log record attributes
+	// Add log record attributes - sanitize values for valid UTF-8
 	for k, v := range p.Attributes {
 		// Skip trace_id/span_id if already added above
 		if k == "trace_id" || k == "span_id" {
 			continue
 		}
-		attrs = append(attrs, log.String(k, v))
+		attrs = append(attrs, log.String(sanitizeUTF8(k), sanitizeUTF8(v)))
 	}
 
-	// Add resource attributes
+	// Add resource attributes - sanitize values for valid UTF-8
 	// Note: Ideally these go on the Resource, but we add them as attributes
 	// for visibility until we have full Resource support in the pipeline
 	for k, v := range p.ResourceAttributes {
-		attrs = append(attrs, log.String(k, v))
+		attrs = append(attrs, log.String(sanitizeUTF8(k), sanitizeUTF8(v)))
 	}
 
 	rec.AddAttributes(attrs...)
@@ -339,4 +348,119 @@ func parseJSON(s string) (map[string]interface{}, error) {
 	var result map[string]interface{}
 	err := json.Unmarshal([]byte(s), &result)
 	return result, err
+}
+
+// sanitizeUTF8 ensures a string contains only valid UTF-8 characters.
+// Invalid UTF-8 sequences are replaced with the Unicode replacement character (U+FFFD).
+// This is necessary because gRPC/protobuf requires valid UTF-8 for string fields.
+func sanitizeUTF8(s string) string {
+	if s == "" {
+		return s
+	}
+	
+	// Fast path: check if string is already valid UTF-8
+	valid := true
+	for i := 0; i < len(s); {
+		if s[i] < 0x80 {
+			// ASCII character - always valid
+			i++
+			continue
+		}
+		// Check for valid UTF-8 multi-byte sequences
+		r, size := decodeRune(s[i:])
+		if r == 0xFFFD && size == 1 {
+			// Invalid UTF-8 sequence detected
+			valid = false
+			break
+		}
+		i += size
+	}
+	
+	if valid {
+		return s
+	}
+	
+	// Slow path: rebuild string with invalid bytes replaced
+	result := make([]byte, 0, len(s))
+	for i := 0; i < len(s); {
+		if s[i] < 0x80 {
+			result = append(result, s[i])
+			i++
+			continue
+		}
+		r, size := decodeRune(s[i:])
+		if r == 0xFFFD && size == 1 {
+			// Replace invalid byte with replacement character
+			result = append(result, 0xEF, 0xBF, 0xBD) // UTF-8 encoding of U+FFFD
+			i++
+		} else {
+			result = append(result, s[i:i+size]...)
+			i += size
+		}
+	}
+	
+	return string(result)
+}
+
+// decodeRune decodes a UTF-8 rune from the start of the string.
+// Returns the rune and its size in bytes. Returns (0xFFFD, 1) for invalid UTF-8.
+func decodeRune(s string) (rune, int) {
+	if len(s) == 0 {
+		return 0xFFFD, 0
+	}
+	
+	b := s[0]
+	
+	// 1-byte sequence (ASCII)
+	if b < 0x80 {
+		return rune(b), 1
+	}
+	
+	// Invalid start byte
+	if b < 0xC0 || b > 0xF7 {
+		return 0xFFFD, 1
+	}
+	
+	// Determine expected length
+	var size int
+	var min rune
+	switch {
+	case b < 0xE0:
+		size = 2
+		min = 0x80
+	case b < 0xF0:
+		size = 3
+		min = 0x800
+	default:
+		size = 4
+		min = 0x10000
+	}
+	
+	if len(s) < size {
+		return 0xFFFD, 1
+	}
+	
+	// Extract continuation bytes
+	var r rune
+	switch size {
+	case 2:
+		r = rune(b&0x1F)<<6 | rune(s[1]&0x3F)
+	case 3:
+		r = rune(b&0x0F)<<12 | rune(s[1]&0x3F)<<6 | rune(s[2]&0x3F)
+	case 4:
+		r = rune(b&0x07)<<18 | rune(s[1]&0x3F)<<12 | rune(s[2]&0x3F)<<6 | rune(s[3]&0x3F)
+	}
+	
+	// Validate continuation bytes and check for overlong encoding
+	for i := 1; i < size; i++ {
+		if s[i]&0xC0 != 0x80 {
+			return 0xFFFD, 1
+		}
+	}
+	
+	if r < min || (r >= 0xD800 && r <= 0xDFFF) || r > 0x10FFFF {
+		return 0xFFFD, 1
+	}
+	
+	return r, size
 }

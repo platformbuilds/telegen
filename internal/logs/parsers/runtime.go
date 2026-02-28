@@ -52,8 +52,11 @@ func (p *DockerJSONParser) Parse(line string) (*ParsedLog, error) {
 		return nil, ErrNotMatched
 	}
 
-	// Must have log field to be valid Docker format
-	if entry.Log == "" && entry.Time == "" {
+	// Docker JSON format MUST have the "log" field - this is what distinguishes it
+	// from generic application JSON logs. The "time" field alone is not sufficient
+	// because many JSON log formats have a "time" field.
+	// Docker wraps the actual log message in {"log": "actual message\n", "stream": "stdout", "time": "..."}
+	if entry.Log == "" {
 		return nil, ErrNotMatched
 	}
 
@@ -103,15 +106,15 @@ func (p *CRIOParser) Name() string {
 // Parse parses a CRI-O log line
 func (p *CRIOParser) Parse(line string) (*ParsedLog, error) {
 	// Quick check - CRI-O timestamps have + or - for timezone
-	if len(line) < 30 {
-		return nil, ErrNotMatched
-	}
-	// Check for timezone offset pattern around position 25-30
-	if !strings.Contains(line[20:35], "+") && !strings.Contains(line[20:35], "-") {
+	if len(line) < 35 {
 		return nil, ErrNotMatched
 	}
 	// Must not start with { (that's Docker JSON)
 	if strings.HasPrefix(line, "{") {
+		return nil, ErrNotMatched
+	}
+	// Check for timezone offset pattern around position 25-30
+	if !strings.Contains(line[20:35], "+") && !strings.Contains(line[20:35], "-") {
 		return nil, ErrNotMatched
 	}
 

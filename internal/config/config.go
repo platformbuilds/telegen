@@ -545,6 +545,31 @@ type KafkaLogsConfig struct {
 	// Enabled enables the Kafka logs receiver pipeline
 	Enabled bool `yaml:"enabled"`
 
+	// ========================================================================
+	// AUTO-DISCOVERY MODE (simplest configuration)
+	// Just specify namespace and topics - everything else is auto-detected
+	// ========================================================================
+	AutoDiscovery struct {
+		// Enabled enables automatic Kafka cluster discovery from K8s CRDs
+		// When enabled, you only need to specify Namespace and Topics
+		// Telegen will automatically detect Strimzi/Confluent clusters,
+		// extract connection details, and fetch credentials from secrets
+		Enabled bool `yaml:"enabled"`
+
+		// Namespace to scan for Kafka deployments
+		// Supports wildcards: "kafka-*" for prefix match, "*" for all namespaces
+		Namespace string `yaml:"namespace"`
+
+		// Topics to subscribe to (required)
+		Topics []string `yaml:"topics"`
+
+		// GroupID for the consumer group (optional, auto-generated if empty)
+		GroupID string `yaml:"group_id"`
+
+		// InitialOffset: "latest" or "earliest" (default: "latest")
+		InitialOffset string `yaml:"initial_offset"`
+	} `yaml:"auto_discovery"`
+
 	// Clusters contains multi-cluster configurations (takes precedence over single-cluster fields)
 	// When Clusters is non-empty, the single-cluster fields below are ignored.
 	Clusters []KafkaClusterConfig `yaml:"clusters"`
@@ -656,6 +681,61 @@ type KafkaLogsConfig struct {
 		ExtractHeaders bool     `yaml:"extract_headers"` // Enable header extraction
 		Headers        []string `yaml:"headers"`         // Specific headers to extract (empty = all)
 	} `yaml:"header_extraction"`
+
+	// Discovery configures automatic discovery of Kafka clusters from Kubernetes CRDs
+	// (Strimzi and Confluent for Kubernetes operators)
+	Discovery struct {
+		// Enabled enables automatic cluster discovery from Kubernetes CRDs
+		Enabled bool `yaml:"enabled"`
+
+		// Namespaces to watch for Kafka CRDs (empty = all namespaces)
+		Namespaces []string `yaml:"namespaces"`
+
+		// LabelSelector filters which Kafka CRs to discover (standard k8s label selector)
+		LabelSelector string `yaml:"label_selector"`
+
+		// ResyncInterval is how often to re-list all CRDs (default: 5m)
+		ResyncInterval string `yaml:"resync_interval"`
+
+		// Strimzi configures Strimzi Kafka operator discovery
+		Strimzi struct {
+			// Enabled enables discovery of Strimzi Kafka CRs (kafka.strimzi.io/v1beta2)
+			Enabled bool `yaml:"enabled"`
+
+			// ListenerName is the listener to use for broker addresses (e.g., "plain", "tls")
+			ListenerName string `yaml:"listener_name"`
+
+			// UseInternalListener prefers internal/cluster-local addresses (default: true)
+			UseInternalListener bool `yaml:"use_internal_listener"`
+		} `yaml:"strimzi"`
+
+		// Confluent configures Confluent for Kubernetes discovery
+		Confluent struct {
+			// Enabled enables discovery of Confluent Kafka CRs (platform.confluent.io/v1beta1)
+			Enabled bool `yaml:"enabled"`
+
+			// UseInternalEndpoint prefers internal/cluster-local addresses (default: true)
+			UseInternalEndpoint bool `yaml:"use_internal_endpoint"`
+		} `yaml:"confluent"`
+
+		// DefaultConfig provides default values applied to all discovered clusters
+		DefaultConfig struct {
+			// GroupIDPrefix is prepended to cluster name for consumer group ID
+			GroupIDPrefix string `yaml:"group_id_prefix"`
+
+			// Topics to consume from all discovered clusters
+			Topics []string `yaml:"topics"`
+
+			// InitialOffset for discovered clusters: "latest" or "earliest"
+			InitialOffset string `yaml:"initial_offset"`
+
+			// UseLeaderEpoch for discovered clusters
+			UseLeaderEpoch bool `yaml:"use_leader_epoch"`
+
+			// SessionTimeout for discovered clusters
+			SessionTimeout string `yaml:"session_timeout"`
+		} `yaml:"default_config"`
+	} `yaml:"discovery"`
 }
 
 type Q struct {

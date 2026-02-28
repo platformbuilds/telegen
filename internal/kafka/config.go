@@ -80,6 +80,16 @@ type Config struct {
 
 	// HeaderExtraction controls extraction of Kafka message headers as resource attributes
 	HeaderExtraction HeaderExtractionConfig `yaml:"header_extraction"`
+
+	// MaxBodySize is the maximum size of the log body in bytes.
+	// Messages exceeding this size will be truncated.
+	// Set to 0 to disable truncation (default).
+	// Recommended: 2000000 (2MB) for VictoriaLogs compatibility.
+	MaxBodySize int `yaml:"max_body_size"`
+
+	// SkipOversizedMessages drops messages exceeding MaxBodySize instead of truncating.
+	// Only applies when MaxBodySize > 0.
+	SkipOversizedMessages bool `yaml:"skip_oversized_messages"`
 }
 
 // HeaderExtractionConfig controls extraction of headers from Kafka records
