@@ -251,7 +251,17 @@ func (p *ParsedLog) ToOTelRecord() log.Record {
 	}
 
 	// Build attributes list with estimated capacity
-	attrCount := len(p.Attributes) + len(p.ResourceAttributes) + 5
+	// Use min to prevent theoretical overflow with huge slices
+	attrLen := len(p.Attributes)
+	resAttrLen := len(p.ResourceAttributes)
+	const maxAttrs = 1 << 20 // 1M attrs is way more than any real log
+	if attrLen > maxAttrs {
+		attrLen = maxAttrs
+	}
+	if resAttrLen > maxAttrs {
+		resAttrLen = maxAttrs
+	}
+	attrCount := attrLen + resAttrLen + 5
 	attrs := make([]log.KeyValue, 0, attrCount)
 
 	// Add log format (telegen-specific)

@@ -25,8 +25,10 @@ func roundTripExample() {
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, os.Getenv("TARGET_URL")+"/pingrt", nil)
 	checkErr(err, "during new request")
 
+	// This is a test/inspection binary - TLS verification intentionally disabled
+	// for offset detection against test targets. Not used in production.
 	tr := &http2.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // intentional for testing
 	}
 
 	resp, err := tr.RoundTrip(req)

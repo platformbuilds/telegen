@@ -71,8 +71,10 @@ func buildTLSConfig(cfg HTTPClientConfig) (*tls.Config, error) {
 		MinVersion: tls.VersionTLS12,
 	}
 
+	// User configuration controls TLS verification - this is intentional
+	// for cases like self-signed certs or internal PKI
 	if !cfg.VerifySSL || cfg.TLS.InsecureSkipVerify {
-		tlsConfig.InsecureSkipVerify = true
+		tlsConfig.InsecureSkipVerify = true //nolint:gosec // user-configured
 	}
 
 	if cfg.TLS.CAFile != "" {

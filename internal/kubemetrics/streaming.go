@@ -6,6 +6,7 @@ package kubemetrics
 import (
 	"context"
 	"log/slog"
+	"math"
 	"sync"
 	"time"
 
@@ -388,6 +389,16 @@ func (s *StreamingExporter) collectCadvisorMetrics() []metricdata.Metrics {
 
 		// Memory metrics
 		if stat.Memory != nil {
+			// Memory values are uint64 but OTLP uses int64. Cap at MaxInt64
+			// (>9 exabytes, practically impossible for container memory)
+			usageBytes := stat.Memory.UsageBytes
+			if usageBytes > uint64(math.MaxInt64) {
+				usageBytes = uint64(math.MaxInt64)
+			}
+			workingSetBytes := stat.Memory.WorkingSetBytes
+			if workingSetBytes > uint64(math.MaxInt64) {
+				workingSetBytes = uint64(math.MaxInt64)
+			}
 			metrics = append(metrics, metricdata.Metrics{
 				Name:        "container_memory_usage_bytes",
 				Description: "Current memory usage in bytes",
@@ -396,7 +407,7 @@ func (s *StreamingExporter) collectCadvisorMetrics() []metricdata.Metrics {
 					DataPoints: []metricdata.DataPoint[int64]{
 						{
 							Time:       now,
-							Value:      int64(stat.Memory.UsageBytes),
+							Value:      int64(usageBytes),
 							Attributes: attrSet,
 						},
 					},
@@ -410,7 +421,7 @@ func (s *StreamingExporter) collectCadvisorMetrics() []metricdata.Metrics {
 					DataPoints: []metricdata.DataPoint[int64]{
 						{
 							Time:       now,
-							Value:      int64(stat.Memory.WorkingSetBytes),
+							Value:      int64(workingSetBytes),
 							Attributes: attrSet,
 						},
 					},
