@@ -1,5 +1,5 @@
 {{- if eq .Values.mode "collector" }}
-# Telegen v2.0 Collector Deployment
+# Telegen v3.0 Collector Deployment
 # Task: DEP-008
 apiVersion: apps/v1
 kind: Deployment

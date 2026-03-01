@@ -1,4 +1,4 @@
-# Telegen v2.0 Service
+# Telegen v3.0 Service
 # Task: DEP-008
 apiVersion: v1
 kind: Service

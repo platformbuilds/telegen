@@ -1,5 +1,5 @@
 # =============================================================================
-# Telegen v2.0 Agent Configuration for Docker Compose
+# Telegen v3.0 Agent Configuration for Docker Compose
 # Fully loaded configuration with all features enabled
 # =============================================================================
 
@@ -25,6 +25,41 @@ selfTelemetry:
   prometheus_namespace: "telegen"
   pprof_enabled: false
   pprof_port: 6060
+
+# -----------------------------------------------------------------------------
+# Unified Pipeline Configuration
+# -----------------------------------------------------------------------------
+pipeline:
+  limits:
+    cardinality:
+      enabled: true
+      default_max_series: 10000
+      global_max_series: 100000
+    rate:
+      enabled: true
+      metrics_per_second: 100000
+      traces_per_second: 50000
+      logs_per_second: 200000
+    attributes:
+      enabled: true
+      max_resource_attributes: 128
+  transform:
+    enabled: true
+    pii_redaction:
+      enabled: true
+      scan_log_bodies: true
+  export:
+    batch_size: 1000
+    batch_timeout: 5s
+    retry:
+      enabled: true
+      max_attempts: 3
+  operations:
+    hot_reload:
+      enabled: true
+      check_interval: 30s
+    graceful_shutdown:
+      timeout: 30s
 
 # -----------------------------------------------------------------------------
 # Node Exporter Configuration (Prometheus node_exporter compatible)

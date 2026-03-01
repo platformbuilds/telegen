@@ -1,4 +1,4 @@
-# Telegen v2.0 Service
+# Telegen v3.0 Service
 # Exposes metrics and health endpoints
 apiVersion: v1
 kind: Service
@@ -8,7 +8,7 @@ metadata:
   labels:
     app.kubernetes.io/name: telegen
     app.kubernetes.io/component: agent
-    app.kubernetes.io/version: "2.1.0"
+    app.kubernetes.io/version: "3.0.0"
   annotations:
     prometheus.io/scrape: "true"
     prometheus.io/port: "19090"
@@ -42,7 +42,7 @@ metadata:
   labels:
     app.kubernetes.io/name: telegen
     app.kubernetes.io/component: monitoring
-    app.kubernetes.io/version: "2.1.0"
+    app.kubernetes.io/version: "3.0.0"
 spec:
   selector:
     matchLabels:

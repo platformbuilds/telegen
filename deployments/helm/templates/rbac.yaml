@@ -1,4 +1,4 @@
-# Telegen v2.0 RBAC
+# Telegen v3.0 RBAC
 # Task: DEP-008
 {{- if .Values.rbac.create }}
 ---

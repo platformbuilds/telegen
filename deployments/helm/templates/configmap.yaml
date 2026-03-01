@@ -1,4 +1,4 @@
-# Telegen v2.0 ConfigMap
+# Telegen v3.0 ConfigMap
 # Task: DEP-008
 apiVersion: v1
 kind: ConfigMap

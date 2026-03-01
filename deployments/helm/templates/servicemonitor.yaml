@@ -1,4 +1,4 @@
-# Telegen v2.0 ServiceMonitor for Prometheus Operator
+# Telegen v3.0 ServiceMonitor for Prometheus Operator
 # Task: DEP-008
 {{- if .Values.serviceMonitor.enabled }}
 apiVersion: monitoring.coreos.com/v1
