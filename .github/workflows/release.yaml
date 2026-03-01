@@ -29,10 +29,7 @@ jobs:
             goarch: amd64
           - goos: linux
             goarch: arm64
-          - goos: darwin
-            goarch: amd64
-          - goos: darwin
-            goarch: arm64
+          # Note: darwin builds removed - telegen requires Linux kernel for eBPF support
     steps:
       - name: Checkout
         uses: actions/checkout@v6
