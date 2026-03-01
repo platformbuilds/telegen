@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package xdp // import "github.com/platformbuilds/telegen/internal/rdns/ebpf/xdp"
+package xdp // import "github.com/mirastacklabs-ai/telegen/internal/rdns/ebpf/xdp"
 
 // types here are mostly used for debugging purposes
 // TODO: consider removing some types and functions here to simplify the code, as they remain mostly unused

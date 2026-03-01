@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/discover/autodiscover"
+	"github.com/mirastacklabs-ai/telegen/internal/discover/autodiscover"
 )
 
 // UnifiedAgent is the main integration point for cloud and discovery services.

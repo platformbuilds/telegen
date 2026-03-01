@@ -3,7 +3,7 @@
 
 //go:build !linux
 
-package ringbuf // import "github.com/platformbuilds/telegen/internal/ringbuf"
+package ringbuf // import "github.com/mirastacklabs-ai/telegen/internal/ringbuf"
 
 import (
 	"errors"

@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package metric // import "github.com/platformbuilds/telegen/pkg/export/otel/metric"
+package metric // import "github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric"
 
 import (
 	"os"
@@ -10,7 +10,7 @@ import (
 
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
-	"github.com/platformbuilds/telegen/pkg/export/otel/metric/components/exemplar"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric/components/exemplar"
 )
 
 // reservoirFunc returns the appropriately configured exemplar reservoir

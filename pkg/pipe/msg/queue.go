@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package msg provides tools for message passing and queues between the different nodes of the Beyla pipelines.
-package msg // import "github.com/platformbuilds/telegen/pkg/pipe/msg"
+package msg // import "github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
 
 import (
 	"context"

@@ -17,7 +17,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 
-	"github.com/platformbuilds/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
 // StreamingConfig holds configuration for streaming export to OTLP
@@ -254,7 +254,7 @@ func (s *StreamingExporter) collectResourceMetrics() *metricdata.ResourceMetrics
 		if len(kubeMetrics) > 0 {
 			scopeMetrics = append(scopeMetrics, metricdata.ScopeMetrics{
 				Scope: instrumentation.Scope{
-					Name:    "github.com/platformbuilds/telegen/kubestate",
+					Name:    "github.com/mirastacklabs-ai/telegen/kubestate",
 					Version: "1.0.0",
 				},
 				Metrics: kubeMetrics,
@@ -268,7 +268,7 @@ func (s *StreamingExporter) collectResourceMetrics() *metricdata.ResourceMetrics
 		if len(cadvisorMetrics) > 0 {
 			scopeMetrics = append(scopeMetrics, metricdata.ScopeMetrics{
 				Scope: instrumentation.Scope{
-					Name:    "github.com/platformbuilds/telegen/cadvisor",
+					Name:    "github.com/mirastacklabs-ai/telegen/cadvisor",
 					Version: "1.0.0",
 				},
 				Metrics: cadvisorMetrics,
@@ -300,7 +300,7 @@ func (s *StreamingExporter) collectKubestateMetrics() []metricdata.Metrics {
 		meta := &sigdef.SignalMetadata{
 			Category:      "Kubernetes State",
 			SubCategory:   "Object Metrics",
-			SourceModule:  "github.com/platformbuilds/telegen/internal/kubestate",
+			SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubestate",
 			CollectorType: sigdef.CollectorTypeAPI,
 			SignalType:    sigdef.SignalMetrics,
 		}
@@ -347,7 +347,7 @@ func (s *StreamingExporter) collectCadvisorMetrics() []metricdata.Metrics {
 		meta := &sigdef.SignalMetadata{
 			Category:      "Container Metrics",
 			SubCategory:   "Resource Utilization",
-			SourceModule:  "github.com/platformbuilds/telegen/internal/cadvisor",
+			SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/cadvisor",
 			CollectorType: sigdef.CollectorTypeProcFS,
 			SignalType:    sigdef.SignalMetrics,
 		}

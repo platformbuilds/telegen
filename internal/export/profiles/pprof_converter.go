@@ -12,7 +12,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/profiler"
+	"github.com/mirastacklabs-ai/telegen/internal/profiler"
 )
 
 // PprofConverter converts internal profiles to pprof format

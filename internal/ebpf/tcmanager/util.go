@@ -3,7 +3,7 @@
 
 //go:build linux
 
-package tcmanager // import "github.com/platformbuilds/telegen/internal/ebpf/tcmanager"
+package tcmanager // import "github.com/mirastacklabs-ai/telegen/internal/ebpf/tcmanager"
 
 func removeIf[T any](s []T, pred func(T) bool) []T {
 	i := 0

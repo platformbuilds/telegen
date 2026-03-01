@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package ebpfcommon // import "github.com/platformbuilds/telegen/internal/ebpf/common/http"
+package ebpfcommon // import "github.com/mirastacklabs-ai/telegen/internal/ebpf/common/http"
 
 import (
 	"bytes"
@@ -14,7 +14,7 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/parser"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
 )
 
 type (

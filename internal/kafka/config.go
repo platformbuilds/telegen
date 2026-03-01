@@ -6,7 +6,7 @@ package kafka
 import (
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/logs/parsers"
+	"github.com/mirastacklabs-ai/telegen/internal/logs/parsers"
 )
 
 // Config defines the Kafka receiver configuration

@@ -3,7 +3,7 @@
 
 // Package connector provides tools for sharing the connection of diverse exporters
 // (Prometheus, OTEL...) from different nodes
-package connector // import "github.com/platformbuilds/telegen/pkg/export/connector"
+package connector // import "github.com/mirastacklabs-ai/telegen/pkg/export/connector"
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/platformbuilds/telegen/internal/helpers/maps"
+	"github.com/mirastacklabs-ai/telegen/internal/helpers/maps"
 )
 
 func log() *slog.Logger {

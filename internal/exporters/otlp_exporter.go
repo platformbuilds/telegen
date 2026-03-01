@@ -20,8 +20,8 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/platformbuilds/telegen/internal/selftelemetry"
-	"github.com/platformbuilds/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
 // OTLPExporter exports signals via OpenTelemetry Protocol

@@ -10,7 +10,7 @@
 //
 // See http://tools.ietf.org/html/draft-ietf-httpbis-header-compression-09
 
-package bhpack // import "github.com/platformbuilds/telegen/internal/parsers/bhpack"
+package bhpack // import "github.com/mirastacklabs-ai/telegen/internal/parsers/bhpack"
 
 import (
 	"bytes"

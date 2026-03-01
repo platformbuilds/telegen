@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package prom // import "github.com/platformbuilds/telegen/pkg/export/prom"
+package prom // import "github.com/mirastacklabs-ai/telegen/pkg/export/prom"
 
 import (
 	"github.com/cilium/ebpf"

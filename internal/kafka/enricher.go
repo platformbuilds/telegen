@@ -10,8 +10,8 @@ import (
 
 	"github.com/twmb/franz-go/pkg/kgo"
 
-	"github.com/platformbuilds/telegen/internal/logs/parsers"
-	"github.com/platformbuilds/telegen/internal/version"
+	"github.com/mirastacklabs-ai/telegen/internal/logs/parsers"
+	"github.com/mirastacklabs-ai/telegen/internal/version"
 )
 
 // LogEnricher adds Kafka metadata and Telegen metadata to parsed logs

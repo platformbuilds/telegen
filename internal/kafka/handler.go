@@ -12,7 +12,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 
-	"github.com/platformbuilds/telegen/internal/logs/parsers"
+	"github.com/mirastacklabs-ai/telegen/internal/logs/parsers"
 )
 
 // MessageHandler handles the conversion of Kafka messages to OTLP log records

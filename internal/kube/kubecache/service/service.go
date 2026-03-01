@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package service // import "github.com/platformbuilds/telegen/internal/kube/kubecache/service"
+package service // import "github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/service"
 
 import (
 	"context"
@@ -15,11 +15,11 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/peer"
 
-	"github.com/platformbuilds/telegen/internal/helpers/sync"
-	"github.com/platformbuilds/telegen/internal/kube/kubecache"
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/instrument"
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/meta"
+	"github.com/mirastacklabs-ai/telegen/internal/helpers/sync"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/informer"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/instrument"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/meta"
 )
 
 const defaultSendTimeout = 10 * time.Second

@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package fastelf // import "github.com/platformbuilds/telegen/internal/fastelf"
+package fastelf // import "github.com/mirastacklabs-ai/telegen/internal/fastelf"
 
 import (
 	"errors"

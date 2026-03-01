@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package export // import "github.com/platformbuilds/telegen/pkg/export"
+package export // import "github.com/mirastacklabs-ai/telegen/pkg/export"
 
 // Buckets defines the histograms bucket boundaries, and allows users to
 // redefine them

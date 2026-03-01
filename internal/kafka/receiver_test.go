@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/platformbuilds/telegen/internal/logs/parsers"
+	"github.com/mirastacklabs-ai/telegen/internal/logs/parsers"
 )
 
 func TestNewReceiver(t *testing.T) {

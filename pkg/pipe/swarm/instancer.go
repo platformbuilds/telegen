@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package swarm // import "github.com/platformbuilds/telegen/pkg/pipe/swarm"
+package swarm // import "github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
 
 import (
 	"context"

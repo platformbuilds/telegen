@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/platformbuilds/telegen/internal/selftelemetry"
-	"github.com/platformbuilds/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
 // FanoutExporter exports signals to multiple destinations in parallel

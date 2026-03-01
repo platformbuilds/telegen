@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/kubestate/sharding"
+	"github.com/mirastacklabs-ai/telegen/internal/kubestate/sharding"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"

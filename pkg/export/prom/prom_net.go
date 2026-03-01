@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package prom // import "github.com/platformbuilds/telegen/pkg/export/prom"
+package prom // import "github.com/mirastacklabs-ai/telegen/pkg/export/prom"
 
 import (
 	"context"
@@ -10,14 +10,14 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/platformbuilds/telegen/internal/netollyebpf"
-	"github.com/platformbuilds/telegen/pkg/export/attributes"
-	"github.com/platformbuilds/telegen/pkg/export/connector"
-	"github.com/platformbuilds/telegen/pkg/export/expire"
-	"github.com/platformbuilds/telegen/pkg/export/otel/perapp"
-	"github.com/platformbuilds/telegen/pkg/pipe/global"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
+	"github.com/mirastacklabs-ai/telegen/internal/netollyebpf"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/connector"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/expire"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/perapp"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/global"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
 )
 
 // injectable function reference for testing

@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/platformbuilds/telegen/internal/selftelemetry"
+	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
 )
 
 // AttributeAction defines what to do with an attribute

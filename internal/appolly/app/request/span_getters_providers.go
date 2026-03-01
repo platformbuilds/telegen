@@ -1,12 +1,12 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package request // import "github.com/platformbuilds/telegen/internal/appolly/app/request"
+package request // import "github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
 
 import (
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/platformbuilds/telegen/pkg/export/attributes"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
 )
 
 type UnresolvedNames struct {

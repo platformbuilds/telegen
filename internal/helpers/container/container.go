@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package container provides helper tools to inspect container information
-package container // import "github.com/platformbuilds/telegen/internal/helpers/container"
+package container // import "github.com/mirastacklabs-ai/telegen/internal/helpers/container"
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/platformbuilds/telegen/internal/procs"
+	"github.com/mirastacklabs-ai/telegen/internal/procs"
 )
 
 // injectable values for testing

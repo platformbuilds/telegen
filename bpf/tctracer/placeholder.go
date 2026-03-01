@@ -3,4 +3,4 @@
 
 //go:build obi_bpf
 
-package tctracer // import "github.com/platformbuilds/telegen/bpf/tctracer"
+package tctracer // import "github.com/mirastacklabs-ai/telegen/bpf/tctracer"

@@ -9,7 +9,7 @@
 // To regenerate it, manually run:
 // $ make regenerate-port-lookup
 
-package transport // import "github.com/platformbuilds/telegen/internal/flow/transport"
+package transport // import "github.com/mirastacklabs-ai/telegen/internal/flow/transport"
 
 var generatedPortLookupTable = map[uint16]string{
 	1:     "tcpmux",

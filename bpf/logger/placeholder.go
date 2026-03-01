@@ -3,4 +3,4 @@
 
 //go:build obi_bpf
 
-package logger // import "github.com/platformbuilds/telegen/bpf/logger"
+package logger // import "github.com/mirastacklabs-ai/telegen/bpf/logger"

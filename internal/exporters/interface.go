@@ -8,7 +8,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
 // Exporter is the interface that all exporters must implement

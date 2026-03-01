@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/testutil"
+	"github.com/mirastacklabs-ai/telegen/internal/testutil"
 )
 
 // TestProcessNotFound tests that InspectOffsets process exits on context cancellation

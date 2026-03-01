@@ -16,11 +16,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/agent/memory"
-	"github.com/platformbuilds/telegen/internal/exporters"
-	"github.com/platformbuilds/telegen/internal/pipeline"
-	"github.com/platformbuilds/telegen/internal/profiler"
-	"github.com/platformbuilds/telegen/internal/selftelemetry"
+	"github.com/mirastacklabs-ai/telegen/internal/agent/memory"
+	"github.com/mirastacklabs-ai/telegen/internal/exporters"
+	"github.com/mirastacklabs-ai/telegen/internal/pipeline"
+	"github.com/mirastacklabs-ai/telegen/internal/profiler"
+	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
 )
 
 // Mode represents the operating mode of the agent

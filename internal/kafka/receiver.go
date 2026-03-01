@@ -24,7 +24,7 @@ import (
 	"github.com/twmb/franz-go/pkg/sasl/scram"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 
-	"github.com/platformbuilds/telegen/internal/logs/parsers"
+	"github.com/mirastacklabs-ai/telegen/internal/logs/parsers"
 )
 
 // Telemetry metrics for the Kafka receiver

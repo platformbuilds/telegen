@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package xdp // import "github.com/platformbuilds/telegen/internal/rdns/ebpf/xdp"
+package xdp // import "github.com/mirastacklabs-ai/telegen/internal/rdns/ebpf/xdp"
 
 import (
 	"errors"
@@ -13,8 +13,8 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 
-	"github.com/platformbuilds/telegen/internal/ringbuf"
-	convenience "github.com/platformbuilds/telegen/internal/tracers/convenience"
+	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
+	convenience "github.com/mirastacklabs-ai/telegen/internal/tracers/convenience"
 )
 
 // tracer represents the main structure for DNS response tracking.

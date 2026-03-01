@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package request // import "github.com/platformbuilds/telegen/internal/appolly/app/request"
+package request // import "github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
 
 import (
 	"encoding/json"
@@ -19,7 +19,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
 )
 
 type EventType uint8

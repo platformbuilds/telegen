@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/storagedef"
+	"github.com/mirastacklabs-ai/telegen/internal/storagedef"
 )
 
 // FlashArrayCollector collects metrics from Pure FlashArray via REST API v2

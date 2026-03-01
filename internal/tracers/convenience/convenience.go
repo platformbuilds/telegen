@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package ebpfconvenience // import "github.com/platformbuilds/telegen/internal/tracers/convenience"
+package ebpfconvenience // import "github.com/mirastacklabs-ai/telegen/internal/tracers/convenience"
 
 import (
 	"fmt"

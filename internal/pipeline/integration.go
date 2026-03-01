@@ -10,9 +10,9 @@ import (
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 
-	"github.com/platformbuilds/telegen/internal/pipeline/adapters"
-	"github.com/platformbuilds/telegen/internal/pipeline/limits"
-	"github.com/platformbuilds/telegen/internal/pipeline/transform"
+	"github.com/mirastacklabs-ai/telegen/internal/pipeline/adapters"
+	"github.com/mirastacklabs-ai/telegen/internal/pipeline/limits"
+	"github.com/mirastacklabs-ai/telegen/internal/pipeline/transform"
 )
 
 // IntegrationConfig configures the V3 integration layer.

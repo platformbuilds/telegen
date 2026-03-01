@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package request // import "github.com/platformbuilds/telegen/internal/appolly/app/request"
+package request // import "github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
 
 import (
 	"strings"
@@ -9,7 +9,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
 )
 
 func HTTPRequestMethod(val string) attribute.KeyValue {

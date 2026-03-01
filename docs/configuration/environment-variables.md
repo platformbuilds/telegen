@@ -270,7 +270,7 @@ docker run -d --name telegen \
   -e TELEGEN_OTLP_ENDPOINT=otel-collector:4317 \
   -e TELEGEN_AGENT_PROFILING_ENABLED=true \
   -e TELEGEN_AGENT_SECURITY_ENABLED=true \
-  ghcr.io/platformbuilds/telegen:latest
+  ghcr.io/mirastacklabs-ai/telegen:latest
 ```
 
 ### Kubernetes ConfigMap

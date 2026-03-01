@@ -10,10 +10,10 @@ version: 3.0.0
 appVersion: "3.0.0"
 
 # Chart metadata
-home: https://github.com/platformbuilds/telegen
-icon: https://raw.githubusercontent.com/platformbuilds/telegen/main/docs/logo.png
+home: https://github.com/mirastacklabs-ai/telegen
+icon: https://raw.githubusercontent.com/mirastacklabs-ai/telegen/main/docs/logo.png
 sources:
-  - https://github.com/platformbuilds/telegen
+  - https://github.com/mirastacklabs-ai/telegen
 
 keywords:
   - observability
@@ -27,12 +27,12 @@ keywords:
 
 maintainers:
   - name: Platform Builds
-    email: platform@platformbuilds.io
-    url: https://platformbuilds.io
+    email: platform@mirastacklabs.ai
+    url: https://mirastacklabs.ai
 
 annotations:
   artifacthub.io/license: Apache-2.0
   artifacthub.io/category: observability
   artifacthub.io/signKey: |
     fingerprint: TBD
-    url: https://platformbuilds.io/gpg-key.asc
+    url: https://mirastacklabs.ai/gpg-key.asc

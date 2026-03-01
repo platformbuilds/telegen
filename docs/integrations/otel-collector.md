@@ -88,7 +88,7 @@ spec:
     spec:
       containers:
         - name: telegen
-          image: ghcr.io/platformbuilds/telegen:latest
+          image: ghcr.io/mirastacklabs-ai/telegen:latest
           env:
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "localhost:4317"

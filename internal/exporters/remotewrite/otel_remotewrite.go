@@ -22,7 +22,7 @@ import (
 	"github.com/golang/snappy"
 	"github.com/prometheus/prometheus/prompb"
 
-	"github.com/platformbuilds/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
 // OTelCollectorConfig holds configuration for Remote Write to OTel Collector

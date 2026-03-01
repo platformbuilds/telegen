@@ -19,7 +19,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 
-	"github.com/platformbuilds/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
 // OTLPBridge bridges node_exporter metrics to telegen's OTLP export pipeline.
@@ -133,7 +133,7 @@ func (b *OTLPBridge) convertToResourceMetrics(batch *MetricsBatch) *metricdata.R
 	if len(metrics) > 0 {
 		scopeMetrics = append(scopeMetrics, metricdata.ScopeMetrics{
 			Scope: instrumentation.Scope{
-				Name:    "github.com/platformbuilds/telegen/nodeexporter",
+				Name:    "github.com/mirastacklabs-ai/telegen/nodeexporter",
 				Version: "1.0.0",
 			},
 			Metrics: metrics,

@@ -13,7 +13,7 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
 )
 
 func TestSpanClientServer(t *testing.T) {

@@ -3,4 +3,4 @@
 
 //go:build obi_bpf
 
-package common // import "github.com/platformbuilds/telegen/bpf/common"
+package common // import "github.com/mirastacklabs-ai/telegen/bpf/common"

@@ -3,14 +3,14 @@
 
 // Copyright 2020 New Relic Corporation. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-package hostname // import "github.com/platformbuilds/telegen/internal/traces/hostname"
+package hostname // import "github.com/mirastacklabs-ai/telegen/internal/traces/hostname"
 
 import (
 	"errors"
 	"net"
 	"strings"
 
-	"github.com/platformbuilds/telegen/internal/helpers"
+	"github.com/mirastacklabs-ai/telegen/internal/helpers"
 )
 
 // attempts to determine the hostname, gracefully falling back until we

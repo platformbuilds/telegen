@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package aggregate // import "github.com/platformbuilds/telegen/pkg/export/otel/metric/components/aggregate"
+package aggregate // import "github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric/components/aggregate"
 
 import "go.opentelemetry.io/otel/attribute"
 

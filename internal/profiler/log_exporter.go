@@ -20,10 +20,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/exporters/otlp/logs"
-	"github.com/platformbuilds/telegen/internal/helpers/container"
-	"github.com/platformbuilds/telegen/internal/profiler/perfmap"
-	"github.com/platformbuilds/telegen/internal/version"
+	"github.com/mirastacklabs-ai/telegen/internal/exporters/otlp/logs"
+	"github.com/mirastacklabs-ai/telegen/internal/helpers/container"
+	"github.com/mirastacklabs-ai/telegen/internal/profiler/perfmap"
+	"github.com/mirastacklabs-ai/telegen/internal/version"
 )
 
 // Allocation type constants (from bpf/profiler/alloc_profiler.c)

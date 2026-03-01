@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package testutil // import "github.com/platformbuilds/telegen/internal/testutil"
+package testutil // import "github.com/mirastacklabs-ai/telegen/internal/testutil"
 
 import (
 	"testing"

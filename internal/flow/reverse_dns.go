@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package flow // import "github.com/platformbuilds/telegen/internal/flow"
+package flow // import "github.com/mirastacklabs-ai/telegen/internal/flow"
 
 import (
 	"context"
@@ -16,11 +16,11 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"golang.org/x/sync/singleflight"
 
-	ebpf "github.com/platformbuilds/telegen/internal/netollyebpf"
-	"github.com/platformbuilds/telegen/internal/rdns/ebpf/xdp"
-	"github.com/platformbuilds/telegen/internal/rdns/store"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
+	ebpf "github.com/mirastacklabs-ai/telegen/internal/netollyebpf"
+	"github.com/mirastacklabs-ai/telegen/internal/rdns/ebpf/xdp"
+	"github.com/mirastacklabs-ai/telegen/internal/rdns/store"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
 )
 
 const (

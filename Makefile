@@ -10,12 +10,12 @@ GOARCH ?= $(shell go env GOARCH || echo amd64)
 VERSION ?= $(shell git describe --tags 2>/dev/null || git describe --all 2>/dev/null | cut -d/ -f2 || echo "dev")
 REVISION := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-BUILDINFO_PKG ?= github.com/platformbuilds/telegen/pkg/buildinfo
-VERSION_PKG ?= github.com/platformbuilds/telegen/internal/version
+BUILDINFO_PKG ?= github.com/mirastacklabs-ai/telegen/pkg/buildinfo
+VERSION_PKG ?= github.com/mirastacklabs-ai/telegen/internal/version
 
 # Container image
 IMG_REGISTRY ?= docker.io
-IMG_ORG ?= platformbuilds
+IMG_ORG ?= mirastacklabs-ai
 IMG_NAME ?= telegen
 IMG ?= $(IMG_REGISTRY)/$(IMG_ORG)/$(IMG_NAME):$(VERSION)
 

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/cloud/unified"
+	"github.com/mirastacklabs-ai/telegen/internal/cloud/unified"
 	"golang.org/x/sys/unix"
 )
 

@@ -2,19 +2,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package transform provides some intermediate nodes that might filter/process/transform the events
-package transform // import "github.com/platformbuilds/telegen/internal/transform"
+package transform // import "github.com/mirastacklabs-ai/telegen/internal/transform"
 
 import (
 	"context"
 	"fmt"
 	"log/slog"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/internal/route"
-	"github.com/platformbuilds/telegen/internal/route/clusterurl"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm/swarms"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/route"
+	"github.com/mirastacklabs-ai/telegen/internal/route/clusterurl"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm/swarms"
 )
 
 // UnmatchType defines which actions to do when a route pattern is not recognized

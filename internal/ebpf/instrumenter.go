@@ -3,7 +3,7 @@
 
 //go:build linux
 
-package ebpf // import "github.com/platformbuilds/telegen/internal/ebpf"
+package ebpf // import "github.com/mirastacklabs-ai/telegen/internal/ebpf"
 
 import (
 	"debug/elf"
@@ -24,10 +24,10 @@ import (
 	"github.com/prometheus/procfs"
 	"golang.org/x/sys/unix"
 
-	ebpfcommon "github.com/platformbuilds/telegen/internal/ebpf/common"
-	"github.com/platformbuilds/telegen/internal/goexec"
-	"github.com/platformbuilds/telegen/internal/procs"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
+	ebpfcommon "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
+	"github.com/mirastacklabs-ai/telegen/internal/goexec"
+	"github.com/mirastacklabs-ai/telegen/internal/procs"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
 )
 
 func ilog() *slog.Logger {

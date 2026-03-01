@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/correlation"
+	"github.com/mirastacklabs-ai/telegen/internal/correlation"
 )
 
 // PipelineConfig configures the parser pipeline

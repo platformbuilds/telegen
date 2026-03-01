@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package tcmanager // import "github.com/platformbuilds/telegen/internal/ebpf/tcmanager"
+package tcmanager // import "github.com/mirastacklabs-ai/telegen/internal/ebpf/tcmanager"
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/ifaces"
+	"github.com/mirastacklabs-ai/telegen/internal/ifaces"
 )
 
 type IMIfaceMap map[int]*ifaces.Interface

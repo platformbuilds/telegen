@@ -17,7 +17,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ebpf // import "github.com/platformbuilds/telegen/internal/netollyebpf"
+package ebpf // import "github.com/mirastacklabs-ai/telegen/internal/netollyebpf"
 
 import (
 	"context"
@@ -34,8 +34,8 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 	"golang.org/x/sys/unix"
 
-	"github.com/platformbuilds/telegen/internal/ringbuf"
-	convenience "github.com/platformbuilds/telegen/internal/tracers/convenience"
+	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
+	convenience "github.com/mirastacklabs-ai/telegen/internal/tracers/convenience"
 )
 
 // $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.

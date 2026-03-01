@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package exec // import "github.com/platformbuilds/telegen/internal/discover/exec"
+package exec // import "github.com/mirastacklabs-ai/telegen/internal/discover/exec"
 
 type ProcessEventType int
 

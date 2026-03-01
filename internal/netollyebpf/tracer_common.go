@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package ebpf // import "github.com/platformbuilds/telegen/internal/netollyebpf"
+package ebpf // import "github.com/mirastacklabs-ai/telegen/internal/netollyebpf"
 
 const (
 	// DirectionUnset is a convenience value to specify an unset/removed direction field

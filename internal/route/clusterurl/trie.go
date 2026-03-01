@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package clusterurl // import "github.com/platformbuilds/telegen/internal/route/clusterurl"
+package clusterurl // import "github.com/mirastacklabs-ai/telegen/internal/route/clusterurl"
 
 import (
 	"strings"

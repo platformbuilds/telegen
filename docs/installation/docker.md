@@ -24,7 +24,7 @@ docker run -d --name telegen \
   -v /sys/kernel/debug:/sys/kernel/debug \
   -v /sys/fs/bpf:/sys/fs/bpf \
   -e TELEGEN_OTLP_ENDPOINT=otel-collector:4317 \
-  ghcr.io/platformbuilds/telegen:latest
+  ghcr.io/mirastacklabs-ai/telegen:latest
 ```
 
 ### With Configuration File
@@ -68,7 +68,7 @@ docker run -d --name telegen \
   -v /sys/kernel/debug:/sys/kernel/debug \
   -v /sys/fs/bpf:/sys/fs/bpf \
   -v /etc/telegen:/etc/telegen:ro \
-  ghcr.io/platformbuilds/telegen:latest \
+  ghcr.io/mirastacklabs-ai/telegen:latest \
   --config=/etc/telegen/config.yaml
 ```
 
@@ -85,7 +85,7 @@ version: '3.8'
 
 services:
   telegen:
-    image: ghcr.io/platformbuilds/telegen:latest
+    image: ghcr.io/mirastacklabs-ai/telegen:latest
     container_name: telegen
     restart: unless-stopped
     privileged: true
@@ -120,7 +120,7 @@ version: '3.8'
 
 services:
   telegen-collector:
-    image: ghcr.io/platformbuilds/telegen:latest
+    image: ghcr.io/mirastacklabs-ai/telegen:latest
     container_name: telegen-collector
     restart: unless-stopped
     
@@ -168,7 +168,7 @@ services:
   
   # Telegen Agent
   telegen-agent:
-    image: ghcr.io/platformbuilds/telegen:latest
+    image: ghcr.io/mirastacklabs-ai/telegen:latest
     container_name: telegen-agent
     restart: unless-stopped
     privileged: true
@@ -191,7 +191,7 @@ services:
   
   # Telegen Collector (optional)
   telegen-collector:
-    image: ghcr.io/platformbuilds/telegen:latest
+    image: ghcr.io/mirastacklabs-ai/telegen:latest
     container_name: telegen-collector
     restart: unless-stopped
     depends_on:

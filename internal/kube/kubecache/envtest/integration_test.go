@@ -28,11 +28,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
-	"github.com/platformbuilds/telegen/internal/kube/kubecache"
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/meta"
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/service"
-	"github.com/platformbuilds/telegen/internal/testutil"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/informer"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/meta"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/service"
+	"github.com/mirastacklabs-ai/telegen/internal/testutil"
 )
 
 var (

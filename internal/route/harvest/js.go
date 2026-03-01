@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package harvest // import "github.com/platformbuilds/telegen/internal/route/harvest"
+package harvest // import "github.com/mirastacklabs-ai/telegen/internal/route/harvest"
 
 import (
 	"bufio"
@@ -14,7 +14,7 @@ import (
 	"regexp"
 	"strings"
 
-	ebpfcommon "github.com/platformbuilds/telegen/internal/ebpf/common"
+	ebpfcommon "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
 )
 
 // /root is purposefully missing, since we need it to star the file walk

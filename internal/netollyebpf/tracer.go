@@ -21,7 +21,7 @@
 // This implementation is a derivation of the code in
 // https://github.com/netobserv/netobserv-ebpf-agent/tree/release-1.4
 
-package ebpf // import "github.com/platformbuilds/telegen/internal/netollyebpf"
+package ebpf // import "github.com/mirastacklabs-ai/telegen/internal/netollyebpf"
 
 import (
 	"context"
@@ -34,10 +34,10 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/rlimit"
 
-	"github.com/platformbuilds/telegen/internal/ebpf/tcmanager"
-	config "github.com/platformbuilds/telegen/internal/obiconfig"
-	"github.com/platformbuilds/telegen/internal/ringbuf"
-	convenience "github.com/platformbuilds/telegen/internal/tracers/convenience"
+	"github.com/mirastacklabs-ai/telegen/internal/ebpf/tcmanager"
+	config "github.com/mirastacklabs-ai/telegen/internal/obiconfig"
+	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
+	convenience "github.com/mirastacklabs-ai/telegen/internal/tracers/convenience"
 )
 
 // $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.

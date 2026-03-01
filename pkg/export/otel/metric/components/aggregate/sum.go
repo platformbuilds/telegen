@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package aggregate // import "github.com/platformbuilds/telegen/pkg/export/otel/metric/components/aggregate"
+package aggregate // import "github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric/components/aggregate"
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetricdata "go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"github.com/platformbuilds/telegen/pkg/export/otel/metric/components/exemplar"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric/components/exemplar"
 )
 
 type sumValue[N int64 | float64] struct {

@@ -1,15 +1,15 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package request // import "github.com/platformbuilds/telegen/internal/appolly/app/request"
+package request // import "github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
 
 import (
 	"net"
 
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/platformbuilds/telegen/pkg/export/attributes"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
 )
 
 func willReplaceIP(value, replacement string) bool {

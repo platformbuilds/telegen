@@ -107,6 +107,6 @@ If you encounter issues:
    - Verify /sys/kernel/debug is mounted
    - Check that BPF filesystem is available at /sys/fs/bpf
 
-Documentation: https://github.com/platformbuilds/telegen
+Documentation: https://github.com/mirastacklabs-ai/telegen
 
 Thank you for using Telegen! 🚀

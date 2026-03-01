@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/cloud/unified"
+	"github.com/mirastacklabs-ai/telegen/internal/cloud/unified"
 )
 
 // NutanixCollector collects metrics and resources from Nutanix Prism.

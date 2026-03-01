@@ -1,27 +1,27 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package discover // import "github.com/platformbuilds/telegen/internal/discover"
+package discover // import "github.com/mirastacklabs-ai/telegen/internal/discover"
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/internal/ebpf"
-	ebpfcommon "github.com/platformbuilds/telegen/internal/ebpf/common"
-	msgh "github.com/platformbuilds/telegen/internal/helpers/msg"
-	"github.com/platformbuilds/telegen/internal/obi"
-	"github.com/platformbuilds/telegen/internal/tracers/generictracer"
-	"github.com/platformbuilds/telegen/internal/tracers/gotracer"
-	"github.com/platformbuilds/telegen/internal/tracers/gpuevent"
-	"github.com/platformbuilds/telegen/internal/tracers/logenricher"
-	"github.com/platformbuilds/telegen/internal/tracers/tctracer"
-	"github.com/platformbuilds/telegen/internal/tracers/tpinjector"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
-	"github.com/platformbuilds/telegen/pkg/pipe/global"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/ebpf"
+	ebpfcommon "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
+	msgh "github.com/mirastacklabs-ai/telegen/internal/helpers/msg"
+	"github.com/mirastacklabs-ai/telegen/internal/obi"
+	"github.com/mirastacklabs-ai/telegen/internal/tracers/generictracer"
+	"github.com/mirastacklabs-ai/telegen/internal/tracers/gotracer"
+	"github.com/mirastacklabs-ai/telegen/internal/tracers/gpuevent"
+	"github.com/mirastacklabs-ai/telegen/internal/tracers/logenricher"
+	"github.com/mirastacklabs-ai/telegen/internal/tracers/tctracer"
+	"github.com/mirastacklabs-ai/telegen/internal/tracers/tpinjector"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/global"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
 )
 
 type ProcessFinder struct {

@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package procs // import "github.com/platformbuilds/telegen/internal/procs"
+package procs // import "github.com/mirastacklabs-ai/telegen/internal/procs"
 
 import (
 	"debug/elf"
@@ -10,8 +10,8 @@ import (
 	"os"
 	"slices"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/internal/fastelf"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/internal/fastelf"
 )
 
 func FindProcLanguage(pid int32) svc.InstrumentableType {

@@ -10,9 +10,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/exporters"
-	"github.com/platformbuilds/telegen/internal/selftelemetry"
-	"github.com/platformbuilds/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/internal/exporters"
+	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
 // Signal is an alias to sigdef.Signal for backwards compatibility

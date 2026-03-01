@@ -3,4 +3,4 @@
 
 //go:build obi_bpf
 
-package gotracer // import "github.com/platformbuilds/telegen/bpf/gotracer"
+package gotracer // import "github.com/mirastacklabs-ai/telegen/bpf/gotracer"

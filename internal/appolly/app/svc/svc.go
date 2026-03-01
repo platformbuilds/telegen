@@ -1,17 +1,17 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package svc // import "github.com/platformbuilds/telegen/internal/appolly/app/svc"
+package svc // import "github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
 
 import (
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 
-	"github.com/platformbuilds/telegen/internal/appolly/services"
-	"github.com/platformbuilds/telegen/internal/route"
-	"github.com/platformbuilds/telegen/internal/route/clusterurl"
-	"github.com/platformbuilds/telegen/pkg/export"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/services"
+	"github.com/mirastacklabs-ai/telegen/internal/route"
+	"github.com/mirastacklabs-ai/telegen/internal/route/clusterurl"
+	"github.com/mirastacklabs-ai/telegen/pkg/export"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
 )
 
 type InstrumentableType int

@@ -1,4 +1,4 @@
-module github.com/platformbuilds/telegen
+module github.com/mirastacklabs-ai/telegen
 
 go 1.25.0
 

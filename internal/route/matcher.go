@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package route // import "github.com/platformbuilds/telegen/internal/route"
+package route // import "github.com/mirastacklabs-ai/telegen/internal/route"
 
 import (
 	"regexp"

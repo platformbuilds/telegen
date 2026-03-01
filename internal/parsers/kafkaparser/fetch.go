@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package kafkaparser // import "github.com/platformbuilds/telegen/internal/parsers/kafkaparser"
+package kafkaparser // import "github.com/mirastacklabs-ai/telegen/internal/parsers/kafkaparser"
 
 import "errors"
 

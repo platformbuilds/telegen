@@ -6,7 +6,7 @@
 // This file provides stub types for the netolly BPF generated code.
 // These stubs allow the code to compile on non-linux platforms (darwin, windows).
 
-package ebpf // import "github.com/platformbuilds/telegen/internal/netollyebpf"
+package ebpf // import "github.com/mirastacklabs-ai/telegen/internal/netollyebpf"
 
 // NetFlowIdT - flow ID stub
 type NetFlowIdT struct {

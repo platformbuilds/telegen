@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //go:build darwin
 
-package hostname // import "github.com/platformbuilds/telegen/internal/traces/hostname"
+package hostname // import "github.com/mirastacklabs-ai/telegen/internal/traces/hostname"
 
 import "os"
 

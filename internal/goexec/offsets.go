@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package goexec helps analyzing Go executables
-package goexec // import "github.com/platformbuilds/telegen/internal/goexec"
+package goexec // import "github.com/mirastacklabs-ai/telegen/internal/goexec"
 
 import (
 	"errors"
 	"fmt"
 	"log/slog"
 
-	"github.com/platformbuilds/telegen/internal/discover/exec"
+	"github.com/mirastacklabs-ai/telegen/internal/discover/exec"
 )
 
 type Offsets struct {

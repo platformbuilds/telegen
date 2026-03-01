@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package mqttparser // import "github.com/platformbuilds/telegen/internal/parsers/mqttparser"
+package mqttparser // import "github.com/mirastacklabs-ai/telegen/internal/parsers/mqttparser"
 
 // QoSLevel represents the Quality of Service level for MQTT messages.
 type QoSLevel uint8

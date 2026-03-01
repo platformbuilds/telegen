@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package kube // import "github.com/platformbuilds/telegen/internal/kube"
+package kube // import "github.com/mirastacklabs-ai/telegen/internal/kube"
 
 import (
 	"context"
@@ -20,9 +20,9 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/meta"
-	"github.com/platformbuilds/telegen/internal/kube/kubeflags"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/meta"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubeflags"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
 )
 
 const (

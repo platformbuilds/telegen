@@ -3,7 +3,7 @@
 
 //go:build linux
 
-package tcmanager // import "github.com/platformbuilds/telegen/internal/ebpf/tcmanager"
+package tcmanager // import "github.com/mirastacklabs-ai/telegen/internal/ebpf/tcmanager"
 
 import (
 	"fmt"
@@ -13,7 +13,7 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 
-	"github.com/platformbuilds/telegen/internal/ifaces"
+	"github.com/mirastacklabs-ai/telegen/internal/ifaces"
 )
 
 type attachedProg struct {

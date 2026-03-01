@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/cloud/unified"
+	"github.com/mirastacklabs-ai/telegen/internal/cloud/unified"
 )
 
 // AlibabaProvider implements CloudProvider for Alibaba Cloud (Aliyun).

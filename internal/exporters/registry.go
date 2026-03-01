@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/platformbuilds/telegen/internal/selftelemetry"
-	"github.com/platformbuilds/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
 // Registry manages multiple exporters and routes signals to them

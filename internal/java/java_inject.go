@@ -3,7 +3,7 @@
 
 //go:build linux
 
-package javaagent // import "github.com/platformbuilds/telegen/internal/java"
+package javaagent // import "github.com/mirastacklabs-ai/telegen/internal/java"
 
 import (
 	"bufio"
@@ -20,10 +20,10 @@ import (
 
 	"github.com/grafana/jvmtools/jvm"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/internal/ebpf"
-	ebpfcommon "github.com/platformbuilds/telegen/internal/ebpf/common"
-	"github.com/platformbuilds/telegen/internal/obi"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/internal/ebpf"
+	ebpfcommon "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
+	"github.com/mirastacklabs-ai/telegen/internal/obi"
 )
 
 const ObiJavaAgentFileName = "obi-java-agent.jar"

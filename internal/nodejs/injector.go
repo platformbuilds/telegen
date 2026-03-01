@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package nodejs // import "github.com/platformbuilds/telegen/internal/nodejs"
+package nodejs // import "github.com/mirastacklabs-ai/telegen/internal/nodejs"
 
 import (
 	"bufio"

@@ -3,7 +3,7 @@
 
 // Package attr contains definition of the attribute names of for the metrics, especially
 // for the metrics whose reported attributes are selected in the attributes.select YAML option
-package attr // import "github.com/platformbuilds/telegen/pkg/export/attributes/names"
+package attr // import "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
 
 import (
 	"strings"

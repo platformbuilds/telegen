@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package instrumenter // import "github.com/platformbuilds/telegen/internal/instrumenter"
+package instrumenter // import "github.com/mirastacklabs-ai/telegen/internal/instrumenter"
 
 import (
 	"context"
@@ -14,17 +14,17 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"golang.org/x/sync/errgroup"
 
-	appolly "github.com/platformbuilds/telegen/internal/appolly/core"
-	"github.com/platformbuilds/telegen/internal/kube"
-	"github.com/platformbuilds/telegen/internal/netolly/agent"
-	"github.com/platformbuilds/telegen/internal/netolly/flowdef"
-	"github.com/platformbuilds/telegen/internal/obi"
-	"github.com/platformbuilds/telegen/pkg/export/attributes"
-	"github.com/platformbuilds/telegen/pkg/export/connector"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
-	"github.com/platformbuilds/telegen/pkg/export/otel"
-	"github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
-	"github.com/platformbuilds/telegen/pkg/pipe/global"
+	appolly "github.com/mirastacklabs-ai/telegen/internal/appolly/core"
+	"github.com/mirastacklabs-ai/telegen/internal/kube"
+	"github.com/mirastacklabs-ai/telegen/internal/netolly/agent"
+	"github.com/mirastacklabs-ai/telegen/internal/netolly/flowdef"
+	"github.com/mirastacklabs-ai/telegen/internal/obi"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/connector"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/global"
 )
 
 // Run in the foreground process. This is a blocking function and won't exit

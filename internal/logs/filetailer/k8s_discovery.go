@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/platformbuilds/telegen/internal/config"
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
-	ikube "github.com/platformbuilds/telegen/internal/kubei"
+	"github.com/mirastacklabs-ai/telegen/internal/config"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/informer"
+	ikube "github.com/mirastacklabs-ai/telegen/internal/kubei"
 )
 
 // K8sLogStore is the subset of kube.Store that the discoverer needs.

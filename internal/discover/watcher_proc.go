@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package discover // import "github.com/platformbuilds/telegen/internal/discover"
+package discover // import "github.com/mirastacklabs-ai/telegen/internal/discover"
 
 import (
 	"context"
@@ -20,15 +20,15 @@ import (
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/tklauser/go-sysconf"
 
-	"github.com/platformbuilds/telegen/internal/appolly/services"
-	"github.com/platformbuilds/telegen/internal/ebpf"
-	ebpfcommon "github.com/platformbuilds/telegen/internal/ebpf/common"
-	logger "github.com/platformbuilds/telegen/internal/ebpflogger"
-	watcher "github.com/platformbuilds/telegen/internal/ebpfwatcher"
-	"github.com/platformbuilds/telegen/internal/obi"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm/swarms"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/services"
+	"github.com/mirastacklabs-ai/telegen/internal/ebpf"
+	ebpfcommon "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
+	logger "github.com/mirastacklabs-ai/telegen/internal/ebpflogger"
+	watcher "github.com/mirastacklabs-ai/telegen/internal/ebpfwatcher"
+	"github.com/mirastacklabs-ai/telegen/internal/obi"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm/swarms"
 )
 
 const (

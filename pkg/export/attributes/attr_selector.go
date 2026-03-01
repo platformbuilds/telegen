@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package attributes // import "github.com/platformbuilds/telegen/pkg/export/attributes"
+package attributes // import "github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
 
 import (
 	"fmt"
@@ -9,8 +9,8 @@ import (
 	"maps"
 	"slices"
 
-	maps2 "github.com/platformbuilds/telegen/internal/helpers/maps"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
+	maps2 "github.com/mirastacklabs-ai/telegen/internal/helpers/maps"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
 )
 
 func alog() *slog.Logger {

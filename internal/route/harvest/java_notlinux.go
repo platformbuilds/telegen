@@ -3,7 +3,7 @@
 
 //go:build !linux
 
-package harvest // import "github.com/platformbuilds/telegen/internal/route/harvest"
+package harvest // import "github.com/mirastacklabs-ai/telegen/internal/route/harvest"
 
 type (
 	JavaRoutes   struct{ Attacher JavaAttacher }

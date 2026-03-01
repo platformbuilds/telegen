@@ -7,7 +7,7 @@
 
 [Unit]
 Description=Telegen Observability Collector
-Documentation=https://github.com/platformbuilds/telegen
+Documentation=https://github.com/mirastacklabs-ai/telegen
 After=network-online.target
 Wants=network-online.target
 

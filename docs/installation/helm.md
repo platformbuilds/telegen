@@ -15,7 +15,7 @@ Deploy Telegen using the official Helm chart for simplified configuration manage
 ### Install from OCI Registry
 
 ```bash
-helm install telegen oci://ghcr.io/platformbuilds/charts/telegen \
+helm install telegen oci://ghcr.io/mirastacklabs-ai/charts/telegen \
   --namespace telegen \
   --create-namespace \
   --set otlp.endpoint="otel-collector.observability:4317"
@@ -24,7 +24,7 @@ helm install telegen oci://ghcr.io/platformbuilds/charts/telegen \
 With a specific version:
 
 ```bash
-helm install telegen oci://ghcr.io/platformbuilds/charts/telegen \
+helm install telegen oci://ghcr.io/mirastacklabs-ai/charts/telegen \
   --version 3.0.0 \
   --namespace telegen \
   --create-namespace \
@@ -328,7 +328,7 @@ collector:
 
 ```yaml
 image:
-  repository: ghcr.io/platformbuilds/telegen
+  repository: ghcr.io/mirastacklabs-ai/telegen
   tag: "latest"  # Or specific version like "3.0.0"
   pullPolicy: IfNotPresent
 
@@ -470,7 +470,7 @@ agent:
 ## Upgrade
 
 ```bash
-helm upgrade telegen oci://ghcr.io/platformbuilds/charts/telegen \
+helm upgrade telegen oci://ghcr.io/mirastacklabs-ai/charts/telegen \
   --namespace telegen \
   -f values.yaml
 ```

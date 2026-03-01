@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	ebpf "github.com/platformbuilds/telegen/internal/netollyebpf"
+	ebpf "github.com/mirastacklabs-ai/telegen/internal/netollyebpf"
 )
 
 func TestMaxMindLookup(t *testing.T) {

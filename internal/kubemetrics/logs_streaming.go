@@ -17,7 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/platformbuilds/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
 // LogsStreamingConfig holds configuration for streaming Kubernetes events as OTLP logs
@@ -334,7 +334,7 @@ func (l *LogsStreamingExporter) convertToLogs(events []*corev1.Event) []OTLPLogR
 			meta := &sigdef.SignalMetadata{
 				Category:      "Kubernetes Events",
 				SubCategory:   "Cluster Events",
-				SourceModule:  "github.com/platformbuilds/telegen/internal/kubemetrics",
+				SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubemetrics",
 				CollectorType: sigdef.CollectorTypeAPI,
 				SignalType:    sigdef.SignalLogs,
 			}

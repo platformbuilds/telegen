@@ -1,12 +1,12 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package config // import "github.com/platformbuilds/telegen/internal/obiconfig"
+package config // import "github.com/mirastacklabs-ai/telegen/internal/obiconfig"
 
 import (
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/appolly/services"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/services"
 )
 
 type LogEnricherConfig struct {

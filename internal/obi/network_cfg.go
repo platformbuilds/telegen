@@ -19,7 +19,7 @@
 // This implementation is a derivation of the code in
 // https://github.com/netobserv/netobserv-ebpf-agent/tree/release-1.4
 
-package obi // import "github.com/platformbuilds/telegen/internal/obi"
+package obi // import "github.com/mirastacklabs-ai/telegen/internal/obi"
 
 import (
 	"strings"
@@ -27,9 +27,9 @@ import (
 
 	"github.com/go-playground/validator/v10"
 
-	"github.com/platformbuilds/telegen/internal/flow"
-	"github.com/platformbuilds/telegen/internal/netolly/cidr"
-	"github.com/platformbuilds/telegen/internal/netolly/flowdef"
+	"github.com/mirastacklabs-ai/telegen/internal/flow"
+	"github.com/mirastacklabs-ai/telegen/internal/netolly/cidr"
+	"github.com/mirastacklabs-ai/telegen/internal/netolly/flowdef"
 )
 
 const (

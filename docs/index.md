@@ -49,7 +49,7 @@ DNS tracing, TCP metrics, XDP packet analysis, and service mesh integration.
 
 ```bash
 # Kubernetes (Helm)
-helm install telegen oci://ghcr.io/platformbuilds/charts/telegen \
+helm install telegen oci://ghcr.io/mirastacklabs-ai/charts/telegen \
   --namespace telegen --create-namespace \
   --set otlp.endpoint="otel-collector:4317"
 ```
@@ -116,8 +116,8 @@ reference/index
 ## Support
 
 - **Documentation**: [telegen.mirastacklabs.ai](https://telegen.mirastacklabs.ai)
-- **GitHub Issues**: [github.com/platformbuilds/telegen/issues](https://github.com/platformbuilds/telegen/issues)
-- **Discussions**: [github.com/platformbuilds/telegen/discussions](https://github.com/platformbuilds/telegen/discussions)
+- **GitHub Issues**: [github.com/mirastacklabs-ai/telegen/issues](https://github.com/mirastacklabs-ai/telegen/issues)
+- **Discussions**: [github.com/mirastacklabs-ai/telegen/discussions](https://github.com/mirastacklabs-ai/telegen/discussions)
 
 ## License
 

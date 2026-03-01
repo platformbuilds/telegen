@@ -17,11 +17,11 @@ Deploy Telegen on bare-metal Linux or VMs using systemd.
 
 ```bash
 # Get latest version
-VERSION=$(curl -s https://api.github.com/repos/platformbuilds/telegen/releases/latest | grep tag_name | cut -d '"' -f4)
+VERSION=$(curl -s https://api.github.com/repos/mirastacklabs-ai/telegen/releases/latest | grep tag_name | cut -d '"' -f4)
 VERSION=${VERSION#release/mark-v}  # Strip tag prefix
 
 # Download for amd64
-curl -LO "https://github.com/platformbuilds/telegen/releases/download/release/mark-v${VERSION}/telegen-linux-amd64.tar.gz"
+curl -LO "https://github.com/mirastacklabs-ai/telegen/releases/download/release/mark-v${VERSION}/telegen-linux-amd64.tar.gz"
 
 # Extract and install
 tar xzf telegen-linux-amd64.tar.gz
@@ -34,7 +34,7 @@ telegen --version
 
 For ARM64:
 ```bash
-curl -LO "https://github.com/platformbuilds/telegen/releases/download/release/mark-v${VERSION}/telegen-linux-arm64.tar.gz"
+curl -LO "https://github.com/mirastacklabs-ai/telegen/releases/download/release/mark-v${VERSION}/telegen-linux-arm64.tar.gz"
 ```
 
 ### Step 2: Create Configuration

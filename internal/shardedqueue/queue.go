@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package shardedqueue // import "github.com/platformbuilds/telegen/internal/shardedqueue"
+package shardedqueue // import "github.com/mirastacklabs-ai/telegen/internal/shardedqueue"
 
 import (
 	"context"

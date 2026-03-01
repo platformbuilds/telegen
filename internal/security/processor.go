@@ -13,8 +13,8 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 
-	"github.com/platformbuilds/telegen/internal/security/rules"
-	"github.com/platformbuilds/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/internal/security/rules"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
 // Processor processes security events from eBPF and exports them as OTel logs

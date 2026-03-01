@@ -3,7 +3,7 @@
 
 // Copyright 2020 New Relic Corporation. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-package helpers // import "github.com/platformbuilds/telegen/internal/helpers"
+package helpers // import "github.com/mirastacklabs-ai/telegen/internal/helpers"
 
 import (
 	"bytes"

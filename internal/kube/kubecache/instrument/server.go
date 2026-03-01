@@ -1,12 +1,12 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package instrument // import "github.com/platformbuilds/telegen/internal/kube/kubecache/instrument"
+package instrument // import "github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/instrument"
 
 import (
 	"context"
 
-	"github.com/platformbuilds/telegen/pkg/export/connector"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/connector"
 )
 
 const defaultMetricsPath = "/metrics"

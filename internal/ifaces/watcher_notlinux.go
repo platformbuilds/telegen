@@ -3,7 +3,7 @@
 
 //go:build !linux
 
-package ifaces // import "github.com/platformbuilds/telegen/internal/ifaces"
+package ifaces // import "github.com/mirastacklabs-ai/telegen/internal/ifaces"
 
 import (
 	"context"

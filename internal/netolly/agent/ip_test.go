@@ -30,7 +30,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/platformbuilds/telegen/internal/obi"
+	"github.com/mirastacklabs-ai/telegen/internal/obi"
 )
 
 var (

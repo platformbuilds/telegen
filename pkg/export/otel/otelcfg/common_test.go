@@ -12,8 +12,8 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/pkg/export/attributes"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
 )
 
 func TestOtlpOptions_AsMetricHTTP(t *testing.T) {

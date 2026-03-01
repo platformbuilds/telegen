@@ -1,13 +1,13 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package meta // import "github.com/platformbuilds/telegen/internal/kube/kubecache/meta"
+package meta // import "github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/meta"
 
 import (
 	"log/slog"
 	"sync"
 
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/informer"
 )
 
 // Observer can be subscribed to a Notifier to receive events

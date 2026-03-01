@@ -6,7 +6,7 @@
 
 [Unit]
 Description=Telegen Observability Agent
-Documentation=https://github.com/platformbuilds/telegen
+Documentation=https://github.com/mirastacklabs-ai/telegen
 After=network-online.target
 Wants=network-online.target
 

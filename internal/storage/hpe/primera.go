@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/storagedef"
+	"github.com/mirastacklabs-ai/telegen/internal/storagedef"
 )
 
 // PrimeraCollector collects metrics from HPE Primera/3PAR arrays via WSAPI

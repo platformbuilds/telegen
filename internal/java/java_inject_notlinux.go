@@ -3,7 +3,7 @@
 
 //go:build !linux
 
-package javaagent // import "github.com/platformbuilds/telegen/internal/java"
+package javaagent // import "github.com/mirastacklabs-ai/telegen/internal/java"
 
 // placeholder to avoid compilation errors in non-linux platforms
 

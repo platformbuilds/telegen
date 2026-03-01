@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package ebpfcommon // import "github.com/platformbuilds/telegen/internal/ebpf/common"
+package ebpfcommon // import "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
 
 import (
 	"bufio"
@@ -14,9 +14,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	ebpfhttp "github.com/platformbuilds/telegen/internal/ebpf/common/http"
-	"github.com/platformbuilds/telegen/internal/ringbuf"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	ebpfhttp "github.com/mirastacklabs-ai/telegen/internal/ebpf/common/http"
+	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
 )
 
 func removeQuery(url string) string {

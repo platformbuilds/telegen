@@ -76,8 +76,8 @@ sudo bpftool map list | grep telegen
 curl -I https://github.com
 
 # Download latest release manually
-VERSION=$(curl -s https://api.github.com/repos/platformbuilds/telegen/releases/latest | grep tag_name | cut -d '"' -f4)
-wget "https://github.com/platformbuilds/telegen/releases/download/${VERSION}/telegen-linux-amd64.tar.gz"
+VERSION=$(curl -s https://api.github.com/repos/mirastacklabs-ai/telegen/releases/latest | grep tag_name | cut -d '"' -f4)
+wget "https://github.com/mirastacklabs-ai/telegen/releases/download/${VERSION}/telegen-linux-amd64.tar.gz"
 
 # Check for proxy settings
 echo $http_proxy $https_proxy
@@ -116,7 +116,7 @@ uname -m
 # - aarch64 (arm64)
 
 # For other architectures, build from source
-git clone https://github.com/platformbuilds/telegen.git
+git clone https://github.com/mirastacklabs-ai/telegen.git
 cd telegen
 make build
 ```
@@ -656,8 +656,8 @@ top -b -n1 | grep telegen
 
 ### Community Support
 
-- **GitHub Issues**: https://github.com/platformbuilds/telegen/issues
-- **Discussions**: https://github.com/platformbuilds/telegen/discussions
+- **GitHub Issues**: https://github.com/mirastacklabs-ai/telegen/issues
+- **Discussions**: https://github.com/mirastacklabs-ai/telegen/discussions
 - **Slack**: #telegen on observability-community.slack.com
 
 ### Commercial Support

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/cloud/unified"
+	"github.com/mirastacklabs-ai/telegen/internal/cloud/unified"
 )
 
 // VMwareCollector collects metrics and resources from VMware vSphere.

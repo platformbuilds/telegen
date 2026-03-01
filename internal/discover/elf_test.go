@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
 )
 
 func TestSetServiceEnvVariables(t *testing.T) {

@@ -5,7 +5,7 @@
 // https://github.com/DataDog/datadog-agent,
 // published under Apache License 2.0
 
-package transform // import "github.com/platformbuilds/telegen/internal/transform"
+package transform // import "github.com/mirastacklabs-ai/telegen/internal/transform"
 
 import (
 	"bytes"
@@ -18,8 +18,8 @@ import (
 
 	"go.opentelemetry.io/contrib/detectors/aws/eks"
 
-	"github.com/platformbuilds/telegen/internal/kube"
-	attr2 "github.com/platformbuilds/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/internal/kube"
+	attr2 "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
 )
 
 const (
