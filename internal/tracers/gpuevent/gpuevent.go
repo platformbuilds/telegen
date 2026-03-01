@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"strings"
 	"sync"
 
@@ -455,6 +456,11 @@ func (p *Tracer) establishCudaPID(pid uint32, fi *exec.FileInfo, mods []*procfs.
 	}
 
 	for _, nsPid := range allPids {
+		// PIDs are bounded by kernel PID_MAX (typically 4194304), safe for int32
+		if nsPid > uint32(math.MaxInt32) {
+			p.log.Warn("PID exceeds int32 range, skipping", "nsPid", nsPid)
+			continue
+		}
 		k := pidKey{Pid: int32(nsPid), Ns: fi.Ns}
 		p.baseMap[k] = bases
 		p.pidMap[k] = fi.Ino

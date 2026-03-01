@@ -234,9 +234,9 @@ func httpRequestToSpan(event *BPFHTTPInfo, requestBuffer []byte) request.Span {
 		bufHost, bufPort = httpHostFromBuf(requestBuffer)
 		parsedHost = true
 
-		if bufPort >= 0 {
+		if bufPort >= 0 && bufPort <= 65535 {
 			result.Host = bufHost
-			result.ConnInfo.D_port = uint16(bufPort)
+			result.ConnInfo.D_port = uint16(bufPort) // Safe: validated above
 		}
 	}
 	result.URL = httpURLFromBuf(requestBuffer)

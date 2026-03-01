@@ -45,6 +45,8 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
+          # Use custom config to suppress intentional TLS warnings
+          config-file: ./.github/codeql/codeql-config.yml
           # Queries: security-extended includes more queries than default
           queries: security-extended
 

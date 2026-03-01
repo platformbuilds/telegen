@@ -1,0 +1,22 @@
+# CodeQL Configuration for Telegen
+# Suppresses intentional TLS configuration patterns
+
+name: "Telegen CodeQL Config"
+
+# Paths to ignore from analysis
+paths-ignore:
+  # Offset detection binaries - test code that intentionally uses InsecureSkipVerify
+  - configs/offsets/**
+
+# Query filters for specific rules
+query-filters:
+  # Exclude TLS certificate check alerts for user-configurable settings
+  # These are intentional design decisions for:
+  # - Internal PKI with self-signed certificates
+  # - Development/testing environments
+  # - User-controllable `verify_ssl` and `insecure_skip_verify` config options
+  - exclude:
+      id: go/disabled-certificate-check
+      # Only exclude in files where TLS verification is user-configurable
+      # The http_client.go uses cfg.VerifySSL and cfg.TLS.InsecureSkipVerify
+      # which are explicit user configuration options

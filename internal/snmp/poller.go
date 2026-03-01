@@ -109,14 +109,14 @@ func (p *Poller) getConnection(target Target) (*gosnmp.GoSNMP, error) {
 		portStr = "161"
 	}
 	port, _ := strconv.Atoi(portStr)
-	if port == 0 {
-		port = 161
+	if port <= 0 || port > 65535 {
+		port = 161 // Default SNMP port
 	}
 
 	// Create new connection
 	conn := &gosnmp.GoSNMP{
 		Target:  host,
-		Port:    uint16(port),
+		Port:    uint16(port), // Safe: validated above
 		Timeout: p.config.Timeout,
 		Retries: p.config.Retries,
 	}
