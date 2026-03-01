@@ -6,7 +6,7 @@ Comprehensive guides for deploying Telegen across all supported platforms.
 
 | Platform | Mode | Guide |
 |----------|------|-------|
-| **V3 Pipeline** | All Platforms | {doc}`v3-deployment` |
+| **Unified Pipeline** | All Platforms | {doc}`deployment` |
 | **Kubernetes** | Agent (DaemonSet) | {doc}`kubernetes` |
 | **Helm** | Agent/Collector | {doc}`helm` |
 | **Docker** | Agent/Collector | {doc}`docker` |
@@ -15,7 +15,7 @@ Comprehensive guides for deploying Telegen across all supported platforms.
 | **AWS ECS** | Agent (Daemon) | {doc}`ecs` |
 
 ```{tip}
-New deployments should use the **V3 Pipeline** guide which includes data quality controls, transformation, and PII redaction.
+New deployments should use the **Unified Pipeline** guide which includes data quality controls, transformation, and PII redaction.
 ```
 
 ## Quick Reference
@@ -45,7 +45,7 @@ graph TD
 ```{toctree}
 :maxdepth: 2
 
-v3-deployment
+deployment
 kubernetes
 helm
 docker

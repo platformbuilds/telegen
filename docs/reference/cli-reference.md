@@ -78,7 +78,7 @@ telegen version --long
 **Output:**
 
 ```
-telegen version 2.0.0
+telegen version 3.0.0
   commit: abc1234
   built: 2024-01-15T10:00:00Z
   go: go1.21.5

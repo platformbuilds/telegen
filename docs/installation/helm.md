@@ -25,7 +25,7 @@ With a specific version:
 
 ```bash
 helm install telegen oci://ghcr.io/platformbuilds/charts/telegen \
-  --version 2.0.0 \
+  --version 3.0.0 \
   --namespace telegen \
   --create-namespace \
   --set otlp.endpoint="otel-collector.observability:4317"
@@ -329,7 +329,7 @@ collector:
 ```yaml
 image:
   repository: ghcr.io/platformbuilds/telegen
-  tag: "latest"  # Or specific version like "2.0.0"
+  tag: "latest"  # Or specific version like "3.0.0"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []

@@ -18,7 +18,8 @@ Telegen follows semantic versioning:
 |------|-----|-------|
 | 1.x | 2.x | Config migration required |
 | 2.0.x | 2.1.x | Direct upgrade |
-| 2.x | 2.y | Direct upgrade |
+| 2.x | 3.0.0 | Add `pipeline:` section, review data quality limits |
+| 3.0.x | 3.y | Direct upgrade |
 
 ---
 
@@ -62,13 +63,13 @@ helm search repo telegen --versions
 # Upgrade
 helm upgrade telegen oci://ghcr.io/platformbuilds/charts/telegen \
   --namespace monitoring \
-  --version 2.1.0 \
+  --version 3.0.0 \
   --reuse-values
 
 # Or with new values
 helm upgrade telegen oci://ghcr.io/platformbuilds/charts/telegen \
   --namespace monitoring \
-  --version 2.1.0 \
+  --version 3.0.0 \
   -f values.yaml
 ```
 
@@ -108,7 +109,7 @@ helm rollback telegen 3 -n monitoring
 docker pull ghcr.io/platformbuilds/telegen:latest
 
 # Or specific version
-docker pull ghcr.io/platformbuilds/telegen:2.1.0
+docker pull ghcr.io/platformbuilds/telegen:3.0.0
 ```
 
 ### Replace Container
@@ -126,7 +127,7 @@ docker run -d --name telegen \
   -v /sys/kernel/debug:/sys/kernel/debug \
   -v /sys/fs/bpf:/sys/fs/bpf \
   -v /etc/telegen:/etc/telegen:ro \
-  ghcr.io/platformbuilds/telegen:2.1.0
+  ghcr.io/platformbuilds/telegen:3.0.0
 ```
 
 ### Docker Compose
@@ -135,7 +136,7 @@ docker run -d --name telegen \
 # docker-compose.yaml
 services:
   telegen:
-    image: ghcr.io/platformbuilds/telegen:2.1.0
+    image: ghcr.io/platformbuilds/telegen:3.0.0
     # ... rest of config
 ```
 
@@ -245,7 +246,7 @@ spec:
     spec:
       containers:
         - name: telegen
-          image: ghcr.io/platformbuilds/telegen:2.1.0
+          image: ghcr.io/platformbuilds/telegen:3.0.0
 ```
 
 Steps:
@@ -359,17 +360,71 @@ kubectl get configmap telegen-config -o yaml
 
 ## Version-Specific Notes
 
-### Upgrading to 2.0.0
+### Upgrading to 3.0.0
 
 Key changes:
-- Configuration structure redesigned
-- New OTLP export path
-- eBPF CO-RE enabled by default
+- **Unified Pipeline Architecture**: All signals (metrics, traces, logs, profiles) flow through a single configurable pipeline
+- **Data Quality Controls**: Built-in cardinality limiting, rate limiting, and attribute limits
+- **Signal Transformation**: Rule-based transformations with PII redaction support
+- **Hot Reload**: Configuration changes without restart (SIGHUP support)
+- **Graceful Shutdown**: Drain in-flight data on shutdown
+
+Configuration changes:
+- New `pipeline:` section replaces legacy V2 direct exports
+- Unified `limits:` configuration for data quality
+- New `transform:` section for signal modification
+- New `pii_redaction:` for automatic PII detection and masking
 
 Required actions:
-1. Migrate configuration file
-2. Update any automation scripts
-3. Verify OTLP connectivity
+1. Add `pipeline:` section to configuration
+2. Review and configure data quality limits
+3. Test PII redaction rules if handling sensitive data
+4. Verify OTLP connectivity with new export paths
+
+**Migration example:**
+
+```yaml
+# Add to existing config
+pipeline:
+  enabled: true
+  
+  limits:
+    cardinality:
+      enabled: true
+      default_max_series: 10000
+      global_max_series: 100000
+    rate:
+      enabled: true
+      metrics_per_second: 100000
+      traces_per_second: 50000
+      logs_per_second: 200000
+    attributes:
+      enabled: true
+      max_resource_attributes: 128
+      protected_attributes:
+        - service.name
+        - k8s.namespace.name
+  
+  transform:
+    enabled: true
+    rules:
+      - name: add-environment
+        match:
+          signal_types: [metrics, traces, logs]
+        actions:
+          - type: set_attribute
+            set_attribute:
+              key: environment
+              value: production
+  
+  operations:
+    hot_reload:
+      enabled: true
+      enable_sighup: true
+    shutdown:
+      timeout: 30s
+      drain_timeout: 10s
+```
 
 ### Upgrading to 2.1.0
 

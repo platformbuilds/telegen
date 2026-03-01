@@ -1,16 +1,16 @@
-# Telegen V3 Pipeline Architecture
+# Telegen Unified Pipeline Architecture
 
-This document describes the V3 unified observability pipeline architecture for Telegen.
+This document describes the unified observability pipeline architecture for Telegen.
 
 ## Overview
 
-The V3 architecture introduces a unified pipeline that handles metrics, traces, and logs through a common data path while maintaining signal-specific optimizations. The design follows OpenTelemetry conventions and uses `pdata` (Protocol Data) types for all signal processing.
+The unified pipeline architecture handles metrics, traces, and logs through a common data path while maintaining signal-specific optimizations. The design follows OpenTelemetry conventions and uses `pdata` (Protocol Data) types for all signal processing.
 
 ## Key Components
 
 ### 1. Signal Interface (`internal/pipeline/signal.go`)
 
-The foundation of the V3 architecture is the `Signal` interface, which provides a unified abstraction for all signal types:
+The foundation of the unified pipeline architecture is the `Signal` interface, which provides a unified abstraction for all signal types:
 
 ```go
 type Signal interface {
