@@ -240,13 +240,13 @@ jobs:
           echo "Releasing version: ${VERSION}"
 
       - name: Download binary artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           pattern: telegen-*
 
       - name: Download helm chart artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           pattern: helm-chart
