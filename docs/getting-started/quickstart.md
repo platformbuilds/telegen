@@ -135,7 +135,7 @@ curl http://localhost:8080/healthz
 
 Expected response:
 ```json
-{"status": "healthy", "version": "2.0.0"}
+{"status": "healthy", "version": "3.0.0"}
 ```
 
 ### Check Metrics

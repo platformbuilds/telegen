@@ -1,10 +1,10 @@
 # Pipeline Configuration
 
-Complete reference for the V3 unified pipeline configuration.
+Complete reference for the unified pipeline configuration.
 
 ## Overview
 
-The V3 pipeline provides enhanced data quality controls, transformation capabilities, and operational features. Enable it by setting:
+The unified pipeline provides enhanced data quality controls, transformation capabilities, and operational features. Enable it by setting:
 
 ```yaml
 pipeline:

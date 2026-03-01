@@ -126,7 +126,7 @@ Detailed status information.
 
 ```json
 {
-  "version": "2.0.0",
+  "version": "3.0.0",
   "commit": "abc1234",
   "built": "2024-01-15T10:00:00Z",
   "uptime": "24h15m30s",

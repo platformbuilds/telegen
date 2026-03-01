@@ -7,8 +7,8 @@
 project = 'Telegen'
 copyright = '2026, Telegen Authors'
 author = 'Telegen Authors'
-release = '2.0.0'
-version = '2.0'
+release = '3.0.0'
+version = '3.0'
 
 # -- General configuration ---------------------------------------------------
 extensions = [

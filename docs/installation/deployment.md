@@ -1,10 +1,10 @@
 # Pipeline Deployment Guide
 
-Complete deployment guide for Telegen V3 unified pipeline across all environments.
+Complete deployment guide for Telegen unified pipeline across all environments.
 
 ## Overview
 
-The V3 pipeline provides a unified data path for metrics, traces, and logs with:
+The unified pipeline provides a unified data path for metrics, traces, and logs with:
 
 - **Data Quality Controls**: Cardinality limiting, rate limiting, attribute limits
 - **Signal Transformation**: Rule-based transformations with PII redaction
@@ -16,7 +16,7 @@ The V3 pipeline provides a unified data path for metrics, traces, and logs with:
 
 ## Configuration Reference
 
-All V3 features are configured under the `v3_pipeline` section:
+All pipeline features are configured under the `pipeline` section:
 
 ```yaml
 pipeline:
@@ -1019,8 +1019,8 @@ curl http://localhost:19090/readyz
 # Check metrics
 curl http://localhost:19090/metrics | head -20
 
-# Check V3 pipeline stats
-curl http://localhost:19090/debug/v3/stats
+# Check pipeline stats
+curl http://localhost:19090/debug/pipeline/stats
 
 # View logs
 # systemd: journalctl -u telegen -f

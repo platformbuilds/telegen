@@ -311,7 +311,7 @@ curl http://localhost:19090/status
 
 # Response
 {
-  "version": "2.0.0",
+  "version": "3.0.0",
   "uptime": "24h15m30s",
   "mode": "agent",
   "ebpf": {
