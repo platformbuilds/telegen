@@ -1,4 +1,4 @@
-# Telegen v2.1 Helm Chart
+# Telegen v3.0 Helm Chart
 # Task: DEP-006
 apiVersion: v2
 name: telegen
@@ -6,8 +6,8 @@ description: |
   Telegen - Zero-config universal observability agent powered by eBPF.
   Collects metrics, traces, logs, and profiles with automatic instrumentation.
 type: application
-version: 2.1.0
-appVersion: "2.1.0"
+version: 3.0.0
+appVersion: "3.0.0"
 
 # Chart metadata
 home: https://github.com/platformbuilds/telegen

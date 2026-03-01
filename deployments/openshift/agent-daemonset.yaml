@@ -1,4 +1,4 @@
-# Telegen v2.0 OpenShift Agent DaemonSet
+# Telegen v3.0 OpenShift Agent DaemonSet
 # Task: DEP-017
 # Deploys Telegen agent on all OpenShift nodes
 ---
@@ -96,7 +96,7 @@ metadata:
 data:
   config.yaml: |
     # =============================================================================
-    # Telegen v2.0 Agent Configuration for OpenShift
+    # Telegen v3.0 Agent Configuration for OpenShift
     # Fully loaded configuration with all features enabled
     # =============================================================================
 
@@ -988,7 +988,7 @@ metadata:
   labels:
     app.kubernetes.io/name: telegen
     app.kubernetes.io/component: agent
-    app.kubernetes.io/version: "2.1.0"
+    app.kubernetes.io/version: "3.0.0"
 spec:
   selector:
     matchLabels:
@@ -1021,7 +1021,7 @@ spec:
       
       containers:
         - name: telegen
-          image: ghcr.io/platformbuilds/telegen:v2.1.0
+          image: ghcr.io/platformbuilds/telegen:3.0.0
           imagePullPolicy: IfNotPresent
           args:
             - "--config=/etc/telegen/config.yaml"

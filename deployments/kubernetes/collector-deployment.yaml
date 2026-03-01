@@ -1,4 +1,4 @@
-# Telegen v2.0 Collector Mode Deployment
+# Telegen v3.0 Collector Mode Deployment
 # For remote device monitoring (SNMP, storage arrays, etc.)
 apiVersion: apps/v1
 kind: Deployment
@@ -8,7 +8,7 @@ metadata:
   labels:
     app.kubernetes.io/name: telegen
     app.kubernetes.io/component: collector
-    app.kubernetes.io/version: "2.1.0"
+    app.kubernetes.io/version: "3.0.0"
 spec:
   replicas: 2
   selector:
@@ -25,7 +25,7 @@ spec:
       labels:
         app.kubernetes.io/name: telegen
         app.kubernetes.io/component: collector
-        app.kubernetes.io/version: "2.1.0"
+        app.kubernetes.io/version: "3.0.0"
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "19090"
@@ -45,7 +45,7 @@ spec:
       
       containers:
         - name: telegen
-          image: ghcr.io/platformbuilds/telegen:v2.1.0
+          image: ghcr.io/platformbuilds/telegen:3.0.0
           imagePullPolicy: IfNotPresent
           args:
             - "--config=/etc/telegen/collector.yaml"

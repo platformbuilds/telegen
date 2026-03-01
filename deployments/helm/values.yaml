@@ -1,4 +1,4 @@
-# Telegen v2.0 Helm Values
+# Telegen v3.0 Helm Values
 # Task: DEP-007
 # Full configuration reference for Telegen deployment
 
@@ -58,7 +58,7 @@ signalMetadata:
 # =============================================================================
 image:
   repository: ghcr.io/platformbuilds/telegen
-  tag: "2.1.0"
+  tag: "3.0.0"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -171,6 +171,64 @@ selfTelemetry:
   prometheusNamespace: "telegen"
   pprofEnabled: false
   pprofPort: 6060
+
+# =============================================================================
+# Unified Pipeline Configuration
+# =============================================================================
+# The unified pipeline provides data quality controls, transformation, and
+# flexible export options for all telemetry signals (metrics, traces, logs).
+pipeline:
+  # Data quality limits protect backends from excessive data
+  limits:
+    # Cardinality limiter prevents metric explosion
+    cardinality:
+      enabled: true
+      defaultMaxSeries: 10000
+      globalMaxSeries: 100000
+      seriesTtl: 1h
+      onLimit: drop
+    
+    # Rate limiter controls ingestion rate
+    rate:
+      enabled: true
+      metricsPerSecond: 100000
+      tracesPerSecond: 50000
+      logsPerSecond: 200000
+      burstMultiplier: 2.0
+      onLimit: drop
+    
+    # Attribute limiter controls payload sizes
+    attributes:
+      enabled: true
+      maxResourceAttributes: 128
+      maxAttributeValueSize: 4096
+  
+  # Transformation rules
+  transform:
+    enabled: true
+    piiRedaction:
+      enabled: true
+      scanLogBodies: true
+      redactionString: "[REDACTED]"
+  
+  # Export configuration
+  export:
+    batchSize: 1000
+    batchTimeout: 5s
+    retry:
+      enabled: true
+      maxAttempts: 3
+      initialBackoff: 1s
+  
+  # Operational features
+  operations:
+    hotReload:
+      enabled: true
+      checkInterval: 30s
+      enableSighup: true
+    gracefulShutdown:
+      timeout: 30s
+      drainTimeout: 10s
 
 # =============================================================================
 # Node Exporter Configuration (Prometheus node_exporter compatible)

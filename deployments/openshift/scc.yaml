@@ -1,4 +1,4 @@
-# Telegen v2.0 OpenShift SecurityContextConstraints
+# Telegen v3.0 OpenShift SecurityContextConstraints
 # Task: DEP-016
 # Provides privileged access required for eBPF instrumentation
 #
@@ -12,7 +12,7 @@ metadata:
   labels:
     app.kubernetes.io/name: telegen
     app.kubernetes.io/component: security
-    app.kubernetes.io/version: "2.1.0"
+    app.kubernetes.io/version: "3.0.0"
   annotations:
     kubernetes.io/description: |
       telegen-scc provides privileged access for the Telegen observability agent.
@@ -119,7 +119,7 @@ metadata:
   labels:
     app.kubernetes.io/name: telegen
     app.kubernetes.io/component: security
-    app.kubernetes.io/version: "2.1.0"
+    app.kubernetes.io/version: "3.0.0"
   annotations:
     kubernetes.io/description: |
       telegen-collector-scc provides minimal access for the Telegen collector.

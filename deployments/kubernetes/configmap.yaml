@@ -1,4 +1,4 @@
-# Telegen v2.0 ConfigMap
+# Telegen v3.0 ConfigMap
 # Task: DEP-002
 # Fully loaded configuration for Telegen agent
 apiVersion: v1
@@ -9,11 +9,11 @@ metadata:
   labels:
     app.kubernetes.io/name: telegen
     app.kubernetes.io/component: config
-    app.kubernetes.io/version: "2.1.0"
+    app.kubernetes.io/version: "3.0.0"
 data:
   config.yaml: |
     # =============================================================================
-    # Telegen v2.0 Agent Configuration for Kubernetes
+    # Telegen v3.0 Agent Configuration for Kubernetes
     # Fully loaded configuration with all features enabled
     # =============================================================================
 
@@ -39,6 +39,64 @@ data:
       prometheus_namespace: "telegen"
       pprof_enabled: false
       pprof_port: 6060
+
+    # -----------------------------------------------------------------------------
+    # Unified Pipeline Configuration
+    # -----------------------------------------------------------------------------
+    # The unified pipeline provides data quality controls, transformation, and
+    # flexible export options for all telemetry signals (metrics, traces, logs).
+    pipeline:
+      # Data quality limits protect backends from excessive data
+      limits:
+        # Cardinality limiter prevents metric explosion
+        cardinality:
+          enabled: true
+          default_max_series: 10000
+          global_max_series: 100000
+          series_ttl: 1h
+          on_limit: drop
+        
+        # Rate limiter controls ingestion rate
+        rate:
+          enabled: true
+          metrics_per_second: 100000
+          traces_per_second: 50000
+          logs_per_second: 200000
+          burst_multiplier: 2.0
+          on_limit: drop
+        
+        # Attribute limiter controls payload sizes
+        attributes:
+          enabled: true
+          max_resource_attributes: 128
+          max_attribute_value_size: 4096
+      
+      # Transformation rules
+      transform:
+        enabled: true
+        pii_redaction:
+          enabled: true
+          scan_log_bodies: true
+          redaction_string: "[REDACTED]"
+      
+      # Export configuration
+      export:
+        batch_size: 1000
+        batch_timeout: 5s
+        retry:
+          enabled: true
+          max_attempts: 3
+          initial_backoff: 1s
+      
+      # Operational features
+      operations:
+        hot_reload:
+          enabled: true
+          check_interval: 30s
+          enable_sighup: true
+        graceful_shutdown:
+          timeout: 30s
+          drain_timeout: 10s
 
     # -----------------------------------------------------------------------------
     # Node Exporter Configuration (Prometheus node_exporter compatible)
