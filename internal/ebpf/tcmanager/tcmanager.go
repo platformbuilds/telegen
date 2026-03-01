@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // line below avoids linter errors on Mac
-package tcmanager // import "github.com/platformbuilds/telegen/internal/ebpf/tcmanager"
+package tcmanager // import "github.com/mirastacklabs-ai/telegen/internal/ebpf/tcmanager"
 
 import (
 	"log/slog"
@@ -12,7 +12,7 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/link"
-	config "github.com/platformbuilds/telegen/internal/obiconfig"
+	config "github.com/mirastacklabs-ai/telegen/internal/obiconfig"
 )
 
 type AttachmentType uint8

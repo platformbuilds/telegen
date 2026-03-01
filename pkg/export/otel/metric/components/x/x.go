@@ -5,7 +5,7 @@
 //
 // This package should only be used for features defined in the specification.
 // It should not be used for experiments or new project ideas.
-package x // import "github.com/platformbuilds/telegen/pkg/export/otel/metric/components/x"
+package x // import "github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric/components/x"
 
 import (
 	"os"

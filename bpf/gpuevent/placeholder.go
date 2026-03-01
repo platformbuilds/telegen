@@ -3,4 +3,4 @@
 
 //go:build obi_bpf
 
-package gpuevent // import "github.com/platformbuilds/telegen/bpf/gpuevent"
+package gpuevent // import "github.com/mirastacklabs-ai/telegen/bpf/gpuevent"

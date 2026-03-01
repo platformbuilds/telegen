@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package maps // import "github.com/platformbuilds/telegen/internal/helpers/maps"
+package maps // import "github.com/mirastacklabs-ai/telegen/internal/helpers/maps"
 
 // Bits wraps an unsigned integer that can be used as a bit map
 type Bits uint

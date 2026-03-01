@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	ebpfcommon "github.com/platformbuilds/telegen/internal/ebpf/common"
+	ebpfcommon "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
 )
 
 type probeDescMap map[string][]*ebpfcommon.ProbeDesc

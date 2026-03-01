@@ -1,12 +1,12 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package instrumenter // import "github.com/platformbuilds/telegen/internal/instrumenter"
+package instrumenter // import "github.com/mirastacklabs-ai/telegen/internal/instrumenter"
 
 import (
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/pkg/pipe/global"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/global"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
 )
 
 // Option that override the instantiation of the instrumenter

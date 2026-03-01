@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
 )
 
 func TestNormalize(t *testing.T) {

@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package xdp // import "github.com/platformbuilds/telegen/internal/rdns/ebpf/xdp"
+package xdp // import "github.com/mirastacklabs-ai/telegen/internal/rdns/ebpf/xdp"
 
 import (
 	"context"
@@ -12,9 +12,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/ebpf/common/dnsparser"
-	"github.com/platformbuilds/telegen/internal/rdns/store"
-	"github.com/platformbuilds/telegen/internal/ringbuf"
+	"github.com/mirastacklabs-ai/telegen/internal/ebpf/common/dnsparser"
+	"github.com/mirastacklabs-ai/telegen/internal/rdns/store"
+	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
 )
 
 func log() *slog.Logger {

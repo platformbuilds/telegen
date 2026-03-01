@@ -19,14 +19,14 @@
 // This implementation is a derivation of the code in
 // https://github.com/netobserv/netobserv-ebpf-agent/tree/release-1.4
 
-package ebpf // import "github.com/platformbuilds/telegen/internal/netollyebpf"
+package ebpf // import "github.com/mirastacklabs-ai/telegen/internal/netollyebpf"
 
 import (
 	"encoding/binary"
 	"io"
 	"net"
 
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
 )
 
 // IPAddr encodes v4 and v6 IPs with a fixed length.

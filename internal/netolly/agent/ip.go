@@ -19,14 +19,14 @@
 // This implementation is a derivation of the code in
 // https://github.com/netobserv/netobserv-ebpf-agent/tree/release-1.4
 
-package agent // import "github.com/platformbuilds/telegen/internal/netolly/agent"
+package agent // import "github.com/mirastacklabs-ai/telegen/internal/netolly/agent"
 
 import (
 	"fmt"
 	"net"
 	"strings"
 
-	"github.com/platformbuilds/telegen/internal/obi"
+	"github.com/mirastacklabs-ai/telegen/internal/obi"
 )
 
 // dependencies that can be injected from testing

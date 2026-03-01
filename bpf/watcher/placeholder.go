@@ -3,4 +3,4 @@
 
 //go:build obi_bpf
 
-package watcher // import "github.com/platformbuilds/telegen/bpf/watcher"
+package watcher // import "github.com/mirastacklabs-ai/telegen/bpf/watcher"

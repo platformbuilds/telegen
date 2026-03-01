@@ -9,11 +9,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/platformbuilds/telegen/internal/appolly/services"
-	"github.com/platformbuilds/telegen/internal/obi"
-	"github.com/platformbuilds/telegen/internal/transform"
-	"github.com/platformbuilds/telegen/pkg/export"
-	"github.com/platformbuilds/telegen/pkg/export/otel/perapp"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/services"
+	"github.com/mirastacklabs-ai/telegen/internal/obi"
+	"github.com/mirastacklabs-ai/telegen/internal/transform"
+	"github.com/mirastacklabs-ai/telegen/pkg/export"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/perapp"
 )
 
 type dummyCriterion struct {

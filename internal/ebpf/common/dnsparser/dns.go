@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package dnsparser // import "github.com/platformbuilds/telegen/internal/ebpf/common/dnsparser"
+package dnsparser // import "github.com/mirastacklabs-ai/telegen/internal/ebpf/common/dnsparser"
 
 import "fmt"
 

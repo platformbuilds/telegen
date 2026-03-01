@@ -57,7 +57,7 @@ mount | grep bpf
 
 :::{tab-item} Helm
 ```bash
-helm install telegen oci://ghcr.io/platformbuilds/charts/telegen \
+helm install telegen oci://ghcr.io/mirastacklabs-ai/charts/telegen \
   --namespace telegen --create-namespace \
   --set otlp.endpoint="otel-collector.observability:4317"
 ```
@@ -65,9 +65,9 @@ helm install telegen oci://ghcr.io/platformbuilds/charts/telegen \
 
 :::{tab-item} kubectl
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/platformbuilds/telegen/main/deployments/kubernetes/rbac.yaml
-kubectl apply -f https://raw.githubusercontent.com/platformbuilds/telegen/main/deployments/kubernetes/configmap.yaml
-kubectl apply -f https://raw.githubusercontent.com/platformbuilds/telegen/main/deployments/kubernetes/daemonset.yaml
+kubectl apply -f https://raw.githubusercontent.com/mirastacklabs-ai/telegen/main/deployments/kubernetes/rbac.yaml
+kubectl apply -f https://raw.githubusercontent.com/mirastacklabs-ai/telegen/main/deployments/kubernetes/configmap.yaml
+kubectl apply -f https://raw.githubusercontent.com/mirastacklabs-ai/telegen/main/deployments/kubernetes/daemonset.yaml
 ```
 :::
 
@@ -77,11 +77,11 @@ kubectl apply -f https://raw.githubusercontent.com/platformbuilds/telegen/main/d
 
 ```bash
 # Download latest release
-VERSION=$(curl -s https://api.github.com/repos/platformbuilds/telegen/releases/latest | grep tag_name | cut -d '"' -f4)
+VERSION=$(curl -s https://api.github.com/repos/mirastacklabs-ai/telegen/releases/latest | grep tag_name | cut -d '"' -f4)
 VERSION=${VERSION#release/mark-v}  # Strip prefix
 
 # Download and install
-curl -LO "https://github.com/platformbuilds/telegen/releases/download/release/mark-v${VERSION}/telegen-linux-amd64.tar.gz"
+curl -LO "https://github.com/mirastacklabs-ai/telegen/releases/download/release/mark-v${VERSION}/telegen-linux-amd64.tar.gz"
 tar xzf telegen-linux-amd64.tar.gz
 sudo mv telegen-linux-amd64 /usr/local/bin/telegen
 sudo chmod +x /usr/local/bin/telegen
@@ -107,7 +107,7 @@ docker run -d --name telegen \
   -v /sys/kernel/debug:/sys/kernel/debug \
   -v /sys/fs/bpf:/sys/fs/bpf \
   -e TELEGEN_ENDPOINT=otel-collector:4317 \
-  ghcr.io/platformbuilds/telegen:latest
+  ghcr.io/mirastacklabs-ai/telegen:latest
 ```
 
 ---

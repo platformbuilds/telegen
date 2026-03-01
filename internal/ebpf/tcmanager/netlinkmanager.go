@@ -3,7 +3,7 @@
 
 //go:build linux
 
-package tcmanager // import "github.com/platformbuilds/telegen/internal/ebpf/tcmanager"
+package tcmanager // import "github.com/mirastacklabs-ai/telegen/internal/ebpf/tcmanager"
 
 import (
 	"errors"
@@ -17,7 +17,7 @@ import (
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 
-	"github.com/platformbuilds/telegen/internal/ifaces"
+	"github.com/mirastacklabs-ai/telegen/internal/ifaces"
 )
 
 var nextTCHandle = atomic.Uint32{}

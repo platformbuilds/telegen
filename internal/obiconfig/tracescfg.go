@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package config // import "github.com/platformbuilds/telegen/internal/obiconfig"
+package config // import "github.com/mirastacklabs-ai/telegen/internal/obiconfig"
 
 // InstanceIDConfig configures how OBI will get the Instance ID of the traces/metrics
 // from the current hostname + the instrumented process PID

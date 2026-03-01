@@ -86,11 +86,11 @@ This is the recommended method for Linux servers, VMs, and bare-metal hosts.
 
 ```bash
 # Latest version
-VERSION=$(curl -s https://api.github.com/repos/platformbuilds/telegen/releases/latest \
+VERSION=$(curl -s https://api.github.com/repos/mirastacklabs-ai/telegen/releases/latest \
   | grep tag_name | cut -d '"' -f4 | sed 's/release\/mark-v//')
 
 # Download (amd64)
-curl -LO "https://github.com/platformbuilds/telegen/releases/download/release/mark-v${VERSION}/telegen-linux-amd64.tar.gz"
+curl -LO "https://github.com/mirastacklabs-ai/telegen/releases/download/release/mark-v${VERSION}/telegen-linux-amd64.tar.gz"
 tar xzf telegen-linux-amd64.tar.gz
 sudo mv telegen-linux-amd64 /usr/local/bin/telegen
 sudo chmod +x /usr/local/bin/telegen
@@ -101,7 +101,7 @@ telegen --version
 
 For ARM64:
 ```bash
-curl -LO "https://github.com/platformbuilds/telegen/releases/download/release/mark-v${VERSION}/telegen-linux-arm64.tar.gz"
+curl -LO "https://github.com/mirastacklabs-ai/telegen/releases/download/release/mark-v${VERSION}/telegen-linux-arm64.tar.gz"
 ```
 
 #### Step 2: Create V3 Configuration
@@ -303,7 +303,7 @@ version: '3.8'
 
 services:
   telegen:
-    image: ghcr.io/platformbuilds/telegen:latest
+    image: ghcr.io/mirastacklabs-ai/telegen:latest
     container_name: telegen
     restart: unless-stopped
     privileged: true
@@ -342,7 +342,7 @@ version: '3.8'
 services:
   # Telegen Agent
   telegen:
-    image: ghcr.io/platformbuilds/telegen:latest
+    image: ghcr.io/mirastacklabs-ai/telegen:latest
     container_name: telegen
     restart: unless-stopped
     privileged: true
@@ -423,7 +423,7 @@ version: '3.8'
 
 services:
   telegen-collector:
-    image: ghcr.io/platformbuilds/telegen:latest
+    image: ghcr.io/mirastacklabs-ai/telegen:latest
     container_name: telegen-collector
     restart: unless-stopped
     
@@ -633,7 +633,7 @@ spec:
       
       containers:
         - name: telegen
-          image: ghcr.io/platformbuilds/telegen:latest
+          image: ghcr.io/mirastacklabs-ai/telegen:latest
           imagePullPolicy: IfNotPresent
           
           args:
@@ -773,7 +773,7 @@ helm install telegen telegen/telegen -n telegen --create-namespace \
 replicaCount: 1  # For DaemonSet, this is ignored
 
 image:
-  repository: ghcr.io/platformbuilds/telegen
+  repository: ghcr.io/mirastacklabs-ai/telegen
   tag: latest
   pullPolicy: IfNotPresent
 
@@ -946,7 +946,7 @@ oc get pods -n telegen
   "containerDefinitions": [
     {
       "name": "telegen",
-      "image": "ghcr.io/platformbuilds/telegen:latest",
+      "image": "ghcr.io/mirastacklabs-ai/telegen:latest",
       "essential": true,
       "privileged": true,
       "environment": [

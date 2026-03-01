@@ -11,11 +11,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/storage/dell"
-	"github.com/platformbuilds/telegen/internal/storage/hpe"
-	"github.com/platformbuilds/telegen/internal/storage/netapp"
-	"github.com/platformbuilds/telegen/internal/storage/pure"
-	"github.com/platformbuilds/telegen/internal/storagedef"
+	"github.com/mirastacklabs-ai/telegen/internal/storage/dell"
+	"github.com/mirastacklabs-ai/telegen/internal/storage/hpe"
+	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp"
+	"github.com/mirastacklabs-ai/telegen/internal/storage/pure"
+	"github.com/mirastacklabs-ai/telegen/internal/storagedef"
 )
 
 // Manager coordinates all storage collectors and exports metrics

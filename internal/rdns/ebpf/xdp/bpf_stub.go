@@ -6,7 +6,7 @@
 // This file provides stub types for the XDP BPF generated code.
 // These stubs allow the code to compile on non-linux platforms (darwin, windows).
 
-package xdp // import "github.com/platformbuilds/telegen/internal/rdns/ebpf/xdp"
+package xdp // import "github.com/mirastacklabs-ai/telegen/internal/rdns/ebpf/xdp"
 
 import (
 	"fmt"

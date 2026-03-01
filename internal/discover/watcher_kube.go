@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package discover // import "github.com/platformbuilds/telegen/internal/discover"
+package discover // import "github.com/mirastacklabs-ai/telegen/internal/discover"
 
 import (
 	"context"
@@ -9,14 +9,14 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/platformbuilds/telegen/internal/appolly/services"
-	"github.com/platformbuilds/telegen/internal/helpers/container"
-	"github.com/platformbuilds/telegen/internal/kube"
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
-	ikube "github.com/platformbuilds/telegen/internal/kubei"
-	"github.com/platformbuilds/telegen/internal/transform"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/services"
+	"github.com/mirastacklabs-ai/telegen/internal/helpers/container"
+	"github.com/mirastacklabs-ai/telegen/internal/kube"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/informer"
+	ikube "github.com/mirastacklabs-ai/telegen/internal/kubei"
+	"github.com/mirastacklabs-ai/telegen/internal/transform"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
 )
 
 // injectable functions for testing

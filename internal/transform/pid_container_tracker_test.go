@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/internal/discover/exec"
-	"github.com/platformbuilds/telegen/internal/helpers/maps"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/internal/discover/exec"
+	"github.com/mirastacklabs-ai/telegen/internal/helpers/maps"
 )
 
 func TestPidContainerTracker_Track(t *testing.T) {

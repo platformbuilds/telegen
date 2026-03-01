@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package otel // import "github.com/platformbuilds/telegen/pkg/export/otel"
+package otel // import "github.com/mirastacklabs-ai/telegen/pkg/export/otel"
 
 import (
 	"context"
@@ -23,18 +23,18 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/pkg/export/attributes"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
-	"github.com/platformbuilds/telegen/pkg/export/instrumentations"
-	"github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
-	"github.com/platformbuilds/telegen/pkg/export/otel/tracesgen"
-	"github.com/platformbuilds/telegen/pkg/pipe/global"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm/swarms"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/instrumentations"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/tracesgen"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/global"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm/swarms"
 )
 
 const reporterName = "go.opentelemetry.io/obi"

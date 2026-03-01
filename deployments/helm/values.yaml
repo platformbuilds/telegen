@@ -57,7 +57,7 @@ signalMetadata:
 # Image Configuration
 # =============================================================================
 image:
-  repository: ghcr.io/platformbuilds/telegen
+  repository: ghcr.io/mirastacklabs-ai/telegen
   tag: "3.0.0"
   pullPolicy: IfNotPresent
 

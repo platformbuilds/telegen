@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package harvest // import "github.com/platformbuilds/telegen/internal/route/harvest"
+package harvest // import "github.com/mirastacklabs-ai/telegen/internal/route/harvest"
 
 import (
 	"context"
@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/internal/appolly/services"
-	"github.com/platformbuilds/telegen/internal/discover/exec"
-	"github.com/platformbuilds/telegen/internal/route"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/services"
+	"github.com/mirastacklabs-ai/telegen/internal/discover/exec"
+	"github.com/mirastacklabs-ai/telegen/internal/route"
 )
 
 type RouteHarvester struct {

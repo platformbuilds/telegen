@@ -1,14 +1,14 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package aggregate // import "github.com/platformbuilds/telegen/pkg/export/otel/metric/components/aggregate"
+package aggregate // import "github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric/components/aggregate"
 
 import (
 	"sync"
 
 	sdkmetricdata "go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"github.com/platformbuilds/telegen/pkg/export/otel/metric/components/exemplar"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric/components/exemplar"
 )
 
 var exemplarPool = sync.Pool{

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/platformbuilds/telegen/internal/selftelemetry"
+	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
 )
 
 // SamplingType defines the type of sampling to use

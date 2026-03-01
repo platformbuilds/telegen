@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/cloud/unified"
+	"github.com/mirastacklabs-ai/telegen/internal/cloud/unified"
 )
 
 const (

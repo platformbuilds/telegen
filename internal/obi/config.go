@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package obi // import "github.com/platformbuilds/telegen/internal/obi"
+package obi // import "github.com/mirastacklabs-ai/telegen/internal/obi"
 
 import (
 	"encoding"
@@ -20,23 +20,23 @@ import (
 
 	"go.opentelemetry.io/collector/confmap"
 
-	"github.com/platformbuilds/telegen/internal/appolly/services"
-	"github.com/platformbuilds/telegen/internal/ebpf/tcmanager"
-	"github.com/platformbuilds/telegen/internal/kube"
-	"github.com/platformbuilds/telegen/internal/kube/kubeflags"
-	config "github.com/platformbuilds/telegen/internal/obiconfig"
-	"github.com/platformbuilds/telegen/internal/transform"
-	"github.com/platformbuilds/telegen/pkg/export"
-	"github.com/platformbuilds/telegen/pkg/export/attributes"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	"github.com/platformbuilds/telegen/pkg/export/debug"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
-	"github.com/platformbuilds/telegen/pkg/export/instrumentations"
-	"github.com/platformbuilds/telegen/pkg/export/otel"
-	"github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
-	"github.com/platformbuilds/telegen/pkg/export/otel/perapp"
-	"github.com/platformbuilds/telegen/pkg/export/prom"
-	"github.com/platformbuilds/telegen/pkg/filter"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/services"
+	"github.com/mirastacklabs-ai/telegen/internal/ebpf/tcmanager"
+	"github.com/mirastacklabs-ai/telegen/internal/kube"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubeflags"
+	config "github.com/mirastacklabs-ai/telegen/internal/obiconfig"
+	"github.com/mirastacklabs-ai/telegen/internal/transform"
+	"github.com/mirastacklabs-ai/telegen/pkg/export"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/debug"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/instrumentations"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/perapp"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/prom"
+	"github.com/mirastacklabs-ai/telegen/pkg/filter"
 )
 
 type LogLevel string

@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package services // import "github.com/platformbuilds/telegen/internal/appolly/services"
+package services // import "github.com/mirastacklabs-ai/telegen/internal/appolly/services"
 
 import (
 	"bytes"
@@ -14,7 +14,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/platformbuilds/telegen/pkg/export/otel/perapp"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/perapp"
 )
 
 const (

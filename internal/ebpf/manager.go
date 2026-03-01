@@ -18,7 +18,7 @@ import (
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/rlimit"
 
-	"github.com/platformbuilds/telegen/internal/selftelemetry"
+	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
 )
 
 // ProgramType represents the type of eBPF program

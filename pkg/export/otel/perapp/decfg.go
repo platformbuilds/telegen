@@ -3,10 +3,10 @@
 
 // Package perapp is a placeholder for the future global and per-service support
 // of different metrics/traces export options.
-package perapp // import "github.com/platformbuilds/telegen/pkg/export/otel/perapp"
+package perapp // import "github.com/mirastacklabs-ai/telegen/pkg/export/otel/perapp"
 
 import (
-	"github.com/platformbuilds/telegen/pkg/export"
+	"github.com/mirastacklabs-ai/telegen/pkg/export"
 )
 
 // MetricsConfig is a placeholder for the progressive support of global and per-service

@@ -3,7 +3,7 @@
 
 // Package split provides an Iterator that allows for zero-copy string
 // splitting.
-package split // import "github.com/platformbuilds/telegen/internal/split"
+package split // import "github.com/mirastacklabs-ai/telegen/internal/split"
 
 import (
 	"strings"

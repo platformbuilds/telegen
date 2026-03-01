@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package imetrics supports recording and submission of internal metrics
-package imetrics // import "github.com/platformbuilds/telegen/pkg/export/imetrics"
+package imetrics // import "github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
 
 import (
 	"context"

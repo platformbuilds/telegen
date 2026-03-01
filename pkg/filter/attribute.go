@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package filter // import "github.com/platformbuilds/telegen/pkg/filter"
+package filter // import "github.com/mirastacklabs-ai/telegen/pkg/filter"
 
 import (
 	"context"
@@ -10,11 +10,11 @@ import (
 
 	"github.com/gobwas/glob"
 
-	"github.com/platformbuilds/telegen/pkg/export/attributes"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm/swarms"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm/swarms"
 )
 
 func aflog() *slog.Logger {

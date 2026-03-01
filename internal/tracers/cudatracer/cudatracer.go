@@ -5,7 +5,7 @@
 
 // Package cudatracer provides eBPF-based CUDA kernel and memory operation tracing.
 // Task: ML-014 - CUDA Kernel eBPF Tracer Userspace Loader
-package cudatracer // import "github.com/platformbuilds/telegen/internal/tracers/cudatracer"
+package cudatracer // import "github.com/mirastacklabs-ai/telegen/internal/tracers/cudatracer"
 
 import (
 	"context"
@@ -16,16 +16,16 @@ import (
 
 	"github.com/cilium/ebpf"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/internal/discover/exec"
-	ebpfcommon "github.com/platformbuilds/telegen/internal/ebpf/common"
-	"github.com/platformbuilds/telegen/internal/goexec"
-	"github.com/platformbuilds/telegen/internal/obi"
-	config "github.com/platformbuilds/telegen/internal/obiconfig"
-	"github.com/platformbuilds/telegen/internal/ringbuf"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/internal/discover/exec"
+	ebpfcommon "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
+	"github.com/mirastacklabs-ai/telegen/internal/goexec"
+	"github.com/mirastacklabs-ai/telegen/internal/obi"
+	config "github.com/mirastacklabs-ai/telegen/internal/obiconfig"
+	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
 )
 
 //go:generate $BPF2GO -cc $BPF_CLANG -cflags $BPF_CFLAGS -type cuda_event_t -type cuda_mem_stats_t -target amd64,arm64 Bpf ../../../bpf/aiml/cuda_tracer.c -- -I../../../bpf

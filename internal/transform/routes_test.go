@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/internal/route/clusterurl"
-	"github.com/platformbuilds/telegen/internal/testutil"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/internal/route/clusterurl"
+	"github.com/mirastacklabs-ai/telegen/internal/testutil"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
 )
 
 const testTimeout = 5 * time.Second

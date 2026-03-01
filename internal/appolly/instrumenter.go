@@ -1,29 +1,29 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package appolly // import "github.com/platformbuilds/telegen/internal/appolly"
+package appolly // import "github.com/mirastacklabs-ai/telegen/internal/appolly"
 
 import (
 	"context"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/internal/discover/exec"
-	msg2 "github.com/platformbuilds/telegen/internal/helpers/msg"
-	"github.com/platformbuilds/telegen/internal/obi"
-	"github.com/platformbuilds/telegen/internal/traces"
-	"github.com/platformbuilds/telegen/internal/transform"
-	"github.com/platformbuilds/telegen/pkg/export/attributes"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	"github.com/platformbuilds/telegen/pkg/export/debug"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
-	"github.com/platformbuilds/telegen/pkg/export/otel"
-	"github.com/platformbuilds/telegen/pkg/export/otel/perapp"
-	"github.com/platformbuilds/telegen/pkg/export/prom"
-	"github.com/platformbuilds/telegen/pkg/filter"
-	"github.com/platformbuilds/telegen/pkg/pipe/global"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/discover/exec"
+	msg2 "github.com/mirastacklabs-ai/telegen/internal/helpers/msg"
+	"github.com/mirastacklabs-ai/telegen/internal/obi"
+	"github.com/mirastacklabs-ai/telegen/internal/traces"
+	"github.com/mirastacklabs-ai/telegen/internal/transform"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/debug"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/perapp"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/prom"
+	"github.com/mirastacklabs-ai/telegen/pkg/filter"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/global"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
 )
 
 // builder with injectable instantiators for unit testing

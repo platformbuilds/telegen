@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package otelcfg // import "github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
+package otelcfg // import "github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
 
 import (
 	"fmt"
@@ -14,8 +14,8 @@ import (
 
 	"go.opentelemetry.io/collector/consumer"
 
-	"github.com/platformbuilds/telegen/pkg/export"
-	"github.com/platformbuilds/telegen/pkg/export/instrumentations"
+	"github.com/mirastacklabs-ai/telegen/pkg/export"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/instrumentations"
 )
 
 func mlog() *slog.Logger {

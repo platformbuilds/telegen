@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/platformbuilds/telegen/internal/appolly/services"
-	"github.com/platformbuilds/telegen/internal/obi"
-	"github.com/platformbuilds/telegen/internal/obiconfig"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/services"
+	"github.com/mirastacklabs-ai/telegen/internal/obi"
+	"github.com/mirastacklabs-ai/telegen/internal/obiconfig"
 )
 
 func TestTracer_Constants_InjectFlags(t *testing.T) {

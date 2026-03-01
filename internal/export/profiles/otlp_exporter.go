@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/profiler"
+	"github.com/mirastacklabs-ai/telegen/internal/profiler"
 )
 
 // OTLPExporter exports profiles in OpenTelemetry format

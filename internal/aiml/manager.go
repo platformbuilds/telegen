@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/aiml/framework"
-	"github.com/platformbuilds/telegen/internal/aiml/llm"
-	"github.com/platformbuilds/telegen/internal/aiml/nvidia"
+	"github.com/mirastacklabs-ai/telegen/internal/aiml/framework"
+	"github.com/mirastacklabs-ai/telegen/internal/aiml/llm"
+	"github.com/mirastacklabs-ai/telegen/internal/aiml/nvidia"
 )
 
 // Manager orchestrates AI/ML metrics collection

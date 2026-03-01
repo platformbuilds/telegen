@@ -1,9 +1,9 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package attributes // import "github.com/platformbuilds/telegen/pkg/export/attributes"
+package attributes // import "github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
 
-import attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
+import attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
 
 // Getter is a function that defines how to get a given metric attribute of the type O
 // (e.g. string or attribute.KeyValue) from a data record

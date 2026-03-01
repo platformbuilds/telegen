@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package prom // import "github.com/platformbuilds/telegen/pkg/export/prom"
+package prom // import "github.com/mirastacklabs-ai/telegen/pkg/export/prom"
 
 import (
 	"log/slog"
@@ -9,7 +9,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/platformbuilds/telegen/pkg/export/expire"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/expire"
 )
 
 func plog() *slog.Logger {

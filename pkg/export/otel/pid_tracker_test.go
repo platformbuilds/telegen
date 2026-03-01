@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
 )
 
 func makeUID(name, ns string) svc.UID {

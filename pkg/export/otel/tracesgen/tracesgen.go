@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package tracesgen // import "github.com/platformbuilds/telegen/pkg/export/otel/tracesgen"
+package tracesgen // import "github.com/mirastacklabs-ai/telegen/pkg/export/otel/tracesgen"
 
 import (
 	"context"
@@ -22,15 +22,15 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 	trace2 "go.opentelemetry.io/otel/trace"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/internal/ebpf/common/dnsparser"
-	"github.com/platformbuilds/telegen/internal/sigdef"
-	"github.com/platformbuilds/telegen/pkg/export/attributes"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	"github.com/platformbuilds/telegen/pkg/export/instrumentations"
-	"github.com/platformbuilds/telegen/pkg/export/otel/idgen"
-	"github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/internal/ebpf/common/dnsparser"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/instrumentations"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/idgen"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
 )
 
 type TraceSpanAndAttributes struct {

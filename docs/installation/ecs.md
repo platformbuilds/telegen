@@ -65,7 +65,7 @@ cat > telegen-task-definition.json <<EOF
   "containerDefinitions": [
     {
       "name": "telegen-agent",
-      "image": "ghcr.io/platformbuilds/telegen:latest",
+      "image": "ghcr.io/mirastacklabs-ai/telegen:latest",
       "essential": true,
       "privileged": true,
       "command": ["--mode=agent", "--config=/etc/telegen/config.yaml"],
@@ -220,7 +220,7 @@ cat > telegen-collector-task.json <<EOF
   "containerDefinitions": [
     {
       "name": "telegen-collector",
-      "image": "ghcr.io/platformbuilds/telegen:latest",
+      "image": "ghcr.io/mirastacklabs-ai/telegen:latest",
       "essential": true,
       "command": ["--mode=collector", "--config=/etc/telegen/config.yaml"],
       "environment": [
@@ -417,7 +417,7 @@ resource "aws_ecs_task_definition" "telegen" {
   container_definitions = jsonencode([
     {
       name       = "telegen-agent"
-      image      = "ghcr.io/platformbuilds/telegen:latest"
+      image      = "ghcr.io/mirastacklabs-ai/telegen:latest"
       essential  = true
       privileged = true
       command    = ["--mode=agent"]

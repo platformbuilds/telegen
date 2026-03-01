@@ -3,4 +3,4 @@
 
 // Package config contains some configuration options that need to be in a public package
 // to let Alloy accessing them
-package config // import "github.com/platformbuilds/telegen/internal/obiconfig"
+package config // import "github.com/mirastacklabs-ai/telegen/internal/obiconfig"

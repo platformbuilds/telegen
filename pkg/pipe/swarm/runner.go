@@ -3,7 +3,7 @@
 
 // Package swarm provides tools for the creation and coordination of the nodes that go inside the different
 // Beyla pipelines
-package swarm // import "github.com/platformbuilds/telegen/pkg/pipe/swarm"
+package swarm // import "github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
 )
 
 // RunFunc is a function that runs a node. The node should be stoppable via the passed context Done function.

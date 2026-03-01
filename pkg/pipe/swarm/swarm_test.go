@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/platformbuilds/telegen/internal/testutil"
+	"github.com/mirastacklabs-ai/telegen/internal/testutil"
 )
 
 func TestSwarm_BuildWithError(t *testing.T) {

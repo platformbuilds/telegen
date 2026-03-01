@@ -12,7 +12,7 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
-    image: ghcr.io/platformbuilds/telegen:3.0.0
+    image: ghcr.io/mirastacklabs-ai/telegen:3.0.0
     container_name: telegen-agent
     command: ["--mode=agent", "--config=/etc/telegen/config.yaml"]
     
@@ -60,7 +60,7 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
-    image: ghcr.io/platformbuilds/telegen:3.0.0
+    image: ghcr.io/mirastacklabs-ai/telegen:3.0.0
     container_name: telegen-collector
     command: ["--mode=collector", "--config=/etc/telegen/collector.yaml"]
     

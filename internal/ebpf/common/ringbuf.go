@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package ebpfcommon // import "github.com/platformbuilds/telegen/internal/ebpf/common"
+package ebpfcommon // import "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
 
 import (
 	"context"
@@ -13,11 +13,11 @@ import (
 
 	"github.com/cilium/ebpf"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/internal/obiconfig"
-	"github.com/platformbuilds/telegen/internal/ringbuf"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/obiconfig"
+	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
 )
 
 // Max interval before reading stale available bytes from the ring buffer

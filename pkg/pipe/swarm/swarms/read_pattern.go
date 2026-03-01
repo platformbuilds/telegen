@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package swarms provides helper functions for operating OBI swarms
-package swarms // import "github.com/platformbuilds/telegen/pkg/pipe/swarm/swarms"
+package swarms // import "github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm/swarms"
 
 import (
 	"context"

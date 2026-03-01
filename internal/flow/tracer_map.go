@@ -19,7 +19,7 @@
 // This implementation is a derivation of the code in
 // https://github.com/netobserv/netobserv-ebpf-agent/tree/release-1.4
 
-package flow // import "github.com/platformbuilds/telegen/internal/flow"
+package flow // import "github.com/mirastacklabs-ai/telegen/internal/flow"
 
 import (
 	"context"
@@ -29,9 +29,9 @@ import (
 
 	"github.com/gavv/monotime"
 
-	"github.com/platformbuilds/telegen/internal/netollyebpf"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
+	"github.com/mirastacklabs-ai/telegen/internal/netollyebpf"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
 )
 
 func mtlog() *slog.Logger {

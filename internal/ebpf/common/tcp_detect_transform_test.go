@@ -18,10 +18,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	config "github.com/platformbuilds/telegen/internal/obiconfig"
-	"github.com/platformbuilds/telegen/internal/ringbuf"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	config "github.com/mirastacklabs-ai/telegen/internal/obiconfig"
+	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
 )
 
 func TestTCPReqSQLParsing(t *testing.T) {

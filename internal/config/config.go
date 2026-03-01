@@ -8,14 +8,14 @@ import (
 	"github.com/caarlos0/env/v9"
 	"gopkg.in/yaml.v3"
 
-	"github.com/platformbuilds/telegen/internal/appolly/services"
-	"github.com/platformbuilds/telegen/internal/nodeexporter"
-	obiconfig "github.com/platformbuilds/telegen/internal/obiconfig"
-	"github.com/platformbuilds/telegen/internal/profiler"
-	"github.com/platformbuilds/telegen/internal/transform"
-	"github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
-	"github.com/platformbuilds/telegen/pkg/export/prom"
-	"github.com/platformbuilds/telegen/pkg/filter"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/services"
+	"github.com/mirastacklabs-ai/telegen/internal/nodeexporter"
+	obiconfig "github.com/mirastacklabs-ai/telegen/internal/obiconfig"
+	"github.com/mirastacklabs-ai/telegen/internal/profiler"
+	"github.com/mirastacklabs-ai/telegen/internal/transform"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/prom"
+	"github.com/mirastacklabs-ai/telegen/pkg/filter"
 )
 
 type TLS struct {

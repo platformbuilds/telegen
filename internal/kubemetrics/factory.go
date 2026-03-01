@@ -11,9 +11,9 @@ import (
 
 	"k8s.io/client-go/rest"
 
-	"github.com/platformbuilds/telegen/internal/cadvisor"
-	"github.com/platformbuilds/telegen/internal/kubestate"
-	"github.com/platformbuilds/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/internal/cadvisor"
+	"github.com/mirastacklabs-ai/telegen/internal/kubestate"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
 // AgentConfig represents the kube_metrics section from telegen config.

@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package exec provides the utilities to analyze the executable code
-package exec // import "github.com/platformbuilds/telegen/internal/discover/exec"
+package exec // import "github.com/mirastacklabs-ai/telegen/internal/discover/exec"
 
 import (
 	"debug/elf"
 	"strings"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
 )
 
 type FileInfo struct {

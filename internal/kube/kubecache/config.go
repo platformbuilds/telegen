@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package kubecache // import "github.com/platformbuilds/telegen/internal/kube/kubecache"
+package kubecache // import "github.com/mirastacklabs-ai/telegen/internal/kube/kubecache"
 
 import (
 	"fmt"
@@ -11,8 +11,8 @@ import (
 	"github.com/caarlos0/env/v9"
 	"gopkg.in/yaml.v3"
 
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/instrument"
-	"github.com/platformbuilds/telegen/internal/obiconfig"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/instrument"
+	"github.com/mirastacklabs-ai/telegen/internal/obiconfig"
 )
 
 // Config options of the Kubernetes Cache service. Check the "DefaultConfig" variable for a view of the default values.

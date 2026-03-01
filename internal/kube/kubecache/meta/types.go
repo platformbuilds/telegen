@@ -1,14 +1,14 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package meta // import "github.com/platformbuilds/telegen/internal/kube/kubecache/meta"
+package meta // import "github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/meta"
 
 import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/informer"
 )
 
 type indexableEntity struct {

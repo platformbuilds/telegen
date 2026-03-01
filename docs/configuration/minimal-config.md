@@ -36,7 +36,7 @@ docker run -d --name telegen \
   -v /sys/kernel/debug:/sys/kernel/debug \
   -v /sys/fs/bpf:/sys/fs/bpf \
   -e TELEGEN_OTLP_ENDPOINT=otel-collector:4317 \
-  ghcr.io/platformbuilds/telegen:latest
+  ghcr.io/mirastacklabs-ai/telegen:latest
 ```
 
 ```bash

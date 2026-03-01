@@ -10,7 +10,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 
-	"github.com/platformbuilds/telegen/internal/pipeline/adapters"
+	"github.com/mirastacklabs-ai/telegen/internal/pipeline/adapters"
 )
 
 func TestUnifiedPipelineCreation(t *testing.T) {

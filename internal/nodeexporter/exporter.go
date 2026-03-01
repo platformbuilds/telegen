@@ -21,7 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
-	"github.com/platformbuilds/telegen/internal/nodeexporter/collector"
+	"github.com/mirastacklabs-ai/telegen/internal/nodeexporter/collector"
 )
 
 // Exporter represents a node_exporter compatible metrics exporter.

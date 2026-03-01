@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/netinfra/types"
+	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"

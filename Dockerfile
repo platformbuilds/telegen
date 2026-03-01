@@ -107,12 +107,12 @@ ARG BUILD_DATE=unknown
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -trimpath \
     -ldflags="-s -w \
-        -X 'github.com/platformbuilds/telegen/pkg/buildinfo.Version=${VERSION}' \
-        -X 'github.com/platformbuilds/telegen/pkg/buildinfo.Revision=${REVISION}' \
-        -X 'github.com/platformbuilds/telegen/pkg/buildinfo.BuildDate=${BUILD_DATE}' \
-        -X 'github.com/platformbuilds/telegen/internal/version.version=${VERSION}' \
-        -X 'github.com/platformbuilds/telegen/internal/version.commit=${REVISION}' \
-        -X 'github.com/platformbuilds/telegen/internal/version.buildDate=${BUILD_DATE}'" \
+        -X 'github.com/mirastacklabs-ai/telegen/pkg/buildinfo.Version=${VERSION}' \
+        -X 'github.com/mirastacklabs-ai/telegen/pkg/buildinfo.Revision=${REVISION}' \
+        -X 'github.com/mirastacklabs-ai/telegen/pkg/buildinfo.BuildDate=${BUILD_DATE}' \
+        -X 'github.com/mirastacklabs-ai/telegen/internal/version.version=${VERSION}' \
+        -X 'github.com/mirastacklabs-ai/telegen/internal/version.commit=${REVISION}' \
+        -X 'github.com/mirastacklabs-ai/telegen/internal/version.buildDate=${BUILD_DATE}'" \
     -o /out/telegen ./cmd/telegen
 
 # =============================================================================
@@ -131,7 +131,7 @@ LABEL org.opencontainers.image.title="Telegen"
 LABEL org.opencontainers.image.description="Zero-config universal observability agent powered by eBPF"
 LABEL org.opencontainers.image.version="${VERSION}"
 LABEL org.opencontainers.image.vendor="Platform Builds"
-LABEL org.opencontainers.image.source="https://github.com/platformbuilds/telegen"
+LABEL org.opencontainers.image.source="https://github.com/mirastacklabs-ai/telegen"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 WORKDIR /

@@ -33,7 +33,7 @@ Before upgrading:
    ```
 
 2. **Check release notes**
-   - Review [CHANGELOG.md](https://github.com/platformbuilds/telegen/blob/main/CHANGELOG.md)
+   - Review [CHANGELOG.md](https://github.com/mirastacklabs-ai/telegen/blob/main/CHANGELOG.md)
    - Note breaking changes
 
 3. **Test in staging**
@@ -61,13 +61,13 @@ helm repo update
 helm search repo telegen --versions
 
 # Upgrade
-helm upgrade telegen oci://ghcr.io/platformbuilds/charts/telegen \
+helm upgrade telegen oci://ghcr.io/mirastacklabs-ai/charts/telegen \
   --namespace monitoring \
   --version 3.0.0 \
   --reuse-values
 
 # Or with new values
-helm upgrade telegen oci://ghcr.io/platformbuilds/charts/telegen \
+helm upgrade telegen oci://ghcr.io/mirastacklabs-ai/charts/telegen \
   --namespace monitoring \
   --version 3.0.0 \
   -f values.yaml
@@ -106,10 +106,10 @@ helm rollback telegen 3 -n monitoring
 
 ```bash
 # Pull latest
-docker pull ghcr.io/platformbuilds/telegen:latest
+docker pull ghcr.io/mirastacklabs-ai/telegen:latest
 
 # Or specific version
-docker pull ghcr.io/platformbuilds/telegen:3.0.0
+docker pull ghcr.io/mirastacklabs-ai/telegen:3.0.0
 ```
 
 ### Replace Container
@@ -127,7 +127,7 @@ docker run -d --name telegen \
   -v /sys/kernel/debug:/sys/kernel/debug \
   -v /sys/fs/bpf:/sys/fs/bpf \
   -v /etc/telegen:/etc/telegen:ro \
-  ghcr.io/platformbuilds/telegen:3.0.0
+  ghcr.io/mirastacklabs-ai/telegen:3.0.0
 ```
 
 ### Docker Compose
@@ -136,7 +136,7 @@ docker run -d --name telegen \
 # docker-compose.yaml
 services:
   telegen:
-    image: ghcr.io/platformbuilds/telegen:3.0.0
+    image: ghcr.io/mirastacklabs-ai/telegen:3.0.0
     # ... rest of config
 ```
 
@@ -153,10 +153,10 @@ docker compose up -d
 
 ```bash
 # Get latest version
-VERSION=$(curl -s https://api.github.com/repos/platformbuilds/telegen/releases/latest | jq -r .tag_name)
+VERSION=$(curl -s https://api.github.com/repos/mirastacklabs-ai/telegen/releases/latest | jq -r .tag_name)
 
 # Download
-curl -LO "https://github.com/platformbuilds/telegen/releases/download/${VERSION}/telegen_linux_amd64.tar.gz"
+curl -LO "https://github.com/mirastacklabs-ai/telegen/releases/download/${VERSION}/telegen_linux_amd64.tar.gz"
 
 # Extract
 tar -xzf telegen_linux_amd64.tar.gz
@@ -246,7 +246,7 @@ spec:
     spec:
       containers:
         - name: telegen
-          image: ghcr.io/platformbuilds/telegen:3.0.0
+          image: ghcr.io/mirastacklabs-ai/telegen:3.0.0
 ```
 
 Steps:

@@ -3,7 +3,7 @@
 
 //go:build linux
 
-package obi // import "github.com/platformbuilds/telegen/internal/obi"
+package obi // import "github.com/mirastacklabs-ai/telegen/internal/obi"
 
 import (
 	"fmt"
@@ -11,8 +11,8 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	ebpfcommon "github.com/platformbuilds/telegen/internal/ebpf/common"
-	"github.com/platformbuilds/telegen/internal/helpers"
+	ebpfcommon "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
+	"github.com/mirastacklabs-ai/telegen/internal/helpers"
 )
 
 // Minimum required Kernel version: 4.18

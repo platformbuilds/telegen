@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package otelcfg // import "github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
+package otelcfg // import "github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
 
 import (
 	"context"

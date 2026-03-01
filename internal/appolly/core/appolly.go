@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package appolly provides public access to eBPF application observability as a library
-package appolly // import "github.com/platformbuilds/telegen/internal/appolly/core"
+package appolly // import "github.com/mirastacklabs-ai/telegen/internal/appolly/core"
 
 import (
 	"context"
@@ -12,20 +12,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/appolly"
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/internal/appolly/traces"
-	"github.com/platformbuilds/telegen/internal/discover"
-	"github.com/platformbuilds/telegen/internal/discover/exec"
-	"github.com/platformbuilds/telegen/internal/ebpf"
-	ebpfcommon "github.com/platformbuilds/telegen/internal/ebpf/common"
-	msg2 "github.com/platformbuilds/telegen/internal/helpers/msg"
-	"github.com/platformbuilds/telegen/internal/obi"
-	"github.com/platformbuilds/telegen/internal/transform"
-	"github.com/platformbuilds/telegen/pkg/pipe/global"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm/swarms"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/traces"
+	"github.com/mirastacklabs-ai/telegen/internal/discover"
+	"github.com/mirastacklabs-ai/telegen/internal/discover/exec"
+	"github.com/mirastacklabs-ai/telegen/internal/ebpf"
+	ebpfcommon "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
+	msg2 "github.com/mirastacklabs-ai/telegen/internal/helpers/msg"
+	"github.com/mirastacklabs-ai/telegen/internal/obi"
+	"github.com/mirastacklabs-ai/telegen/internal/transform"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/global"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm/swarms"
 )
 
 var errShutdownTimeout = errors.New("graceful shutdown has timed out while waiting for eBPF tracers to finish")

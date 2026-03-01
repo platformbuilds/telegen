@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package couchbasekv // import "github.com/platformbuilds/telegen/internal/parsers/couchbasekv"
+package couchbasekv // import "github.com/mirastacklabs-ai/telegen/internal/parsers/couchbasekv"
 
 import (
 	"encoding/binary"

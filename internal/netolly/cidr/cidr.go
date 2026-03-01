@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package cidr // import "github.com/platformbuilds/telegen/internal/netolly/cidr"
+package cidr // import "github.com/mirastacklabs-ai/telegen/internal/netolly/cidr"
 
 import (
 	"context"
@@ -11,11 +11,11 @@ import (
 
 	"github.com/yl2chen/cidranger"
 
-	"github.com/platformbuilds/telegen/internal/netollyebpf"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm/swarms"
+	"github.com/mirastacklabs-ai/telegen/internal/netollyebpf"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm/swarms"
 )
 
 func glog() *slog.Logger {

@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package instrument // import "github.com/platformbuilds/telegen/internal/kube/kubecache/instrument"
+package instrument // import "github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/instrument"
 
 import (
 	"runtime"
@@ -9,9 +9,9 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/platformbuilds/telegen/pkg/buildinfo"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	"github.com/platformbuilds/telegen/pkg/export/connector"
+	"github.com/mirastacklabs-ai/telegen/pkg/buildinfo"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/connector"
 )
 
 // InternalMetrics accounts diverse events of the Beyla Cache service

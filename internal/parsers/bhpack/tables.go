@@ -6,7 +6,7 @@
 // license that can be found in the LICENSE file.
 
 //nolint:unused
-package bhpack // import "github.com/platformbuilds/telegen/internal/parsers/bhpack"
+package bhpack // import "github.com/mirastacklabs-ai/telegen/internal/parsers/bhpack"
 
 import (
 	"fmt"

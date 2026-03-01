@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package goexec provides the utilities to analyze the executable code
-package goexec // import "github.com/platformbuilds/telegen/internal/goexec"
+package goexec // import "github.com/mirastacklabs-ai/telegen/internal/goexec"
 
 import (
 	"bytes"

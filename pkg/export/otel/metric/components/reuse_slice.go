@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package internal // import "github.com/platformbuilds/telegen/pkg/export/otel/metric/components"
+package internal // import "github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric/components"
 
 // ReuseSlice returns a zeroed view of slice if its capacity is greater than or
 // equal to n. Otherwise, it returns a new []T with capacity equal to n.

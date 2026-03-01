@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package kube // import "github.com/platformbuilds/telegen/internal/kube"
+package kube // import "github.com/mirastacklabs-ai/telegen/internal/kube"
 
 import (
 	"context"
@@ -12,8 +12,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/meta"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/informer"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/meta"
 )
 
 // TODO: make configurable

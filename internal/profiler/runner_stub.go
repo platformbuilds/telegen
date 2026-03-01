@@ -9,9 +9,9 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/platformbuilds/telegen/internal/exporters/otlp/logs"
-	"github.com/platformbuilds/telegen/internal/kube"
-	"github.com/platformbuilds/telegen/internal/version"
+	"github.com/mirastacklabs-ai/telegen/internal/exporters/otlp/logs"
+	"github.com/mirastacklabs-ai/telegen/internal/kube"
+	"github.com/mirastacklabs-ai/telegen/internal/version"
 )
 
 // Runner is a stub for non-Linux systems

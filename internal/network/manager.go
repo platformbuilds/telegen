@@ -18,10 +18,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/network/grpc"
-	"github.com/platformbuilds/telegen/internal/network/multicast"
-	"github.com/platformbuilds/telegen/internal/network/servicemesh"
-	"github.com/platformbuilds/telegen/internal/network/topology"
+	"github.com/mirastacklabs-ai/telegen/internal/network/grpc"
+	"github.com/mirastacklabs-ai/telegen/internal/network/multicast"
+	"github.com/mirastacklabs-ai/telegen/internal/network/servicemesh"
+	"github.com/mirastacklabs-ai/telegen/internal/network/topology"
 )
 
 // Config holds configuration for the network observability manager

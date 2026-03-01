@@ -3,7 +3,7 @@
 
 //go:build linux
 
-package helpers // import "github.com/platformbuilds/telegen/internal/helpers"
+package helpers // import "github.com/mirastacklabs-ai/telegen/internal/helpers"
 
 import (
 	"os"

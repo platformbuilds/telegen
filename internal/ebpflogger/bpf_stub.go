@@ -3,7 +3,7 @@
 
 //go:build !linux
 
-package logger // import "github.com/platformbuilds/telegen/internal/ebpflogger"
+package logger // import "github.com/mirastacklabs-ai/telegen/internal/ebpflogger"
 
 import (
 	"fmt"

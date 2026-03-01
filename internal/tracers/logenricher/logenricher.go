@@ -3,7 +3,7 @@
 
 //go:build linux
 
-package logenricher // import "github.com/platformbuilds/telegen/internal/tracers/logenricher"
+package logenricher // import "github.com/mirastacklabs-ai/telegen/internal/tracers/logenricher"
 
 import (
 	"bytes"
@@ -23,19 +23,19 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"golang.org/x/sys/unix"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/internal/correlation"
-	"github.com/platformbuilds/telegen/internal/discover/exec"
-	ebpfcommon "github.com/platformbuilds/telegen/internal/ebpf/common"
-	"github.com/platformbuilds/telegen/internal/goexec"
-	"github.com/platformbuilds/telegen/internal/kube"
-	"github.com/platformbuilds/telegen/internal/obi"
-	config "github.com/platformbuilds/telegen/internal/obiconfig"
-	"github.com/platformbuilds/telegen/internal/procs"
-	"github.com/platformbuilds/telegen/internal/ringbuf"
-	"github.com/platformbuilds/telegen/internal/shardedqueue"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/internal/correlation"
+	"github.com/mirastacklabs-ai/telegen/internal/discover/exec"
+	ebpfcommon "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
+	"github.com/mirastacklabs-ai/telegen/internal/goexec"
+	"github.com/mirastacklabs-ai/telegen/internal/kube"
+	"github.com/mirastacklabs-ai/telegen/internal/obi"
+	config "github.com/mirastacklabs-ai/telegen/internal/obiconfig"
+	"github.com/mirastacklabs-ai/telegen/internal/procs"
+	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
+	"github.com/mirastacklabs-ai/telegen/internal/shardedqueue"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
 )
 
 //go:generate $BPF2GO -cc $BPF_CLANG -cflags $BPF_CFLAGS -type log_event_t -target amd64,arm64 Bpf ../../../bpf/logenricher/logenricher.c -- -I../../../bpf

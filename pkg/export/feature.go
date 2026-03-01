@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package export // import "github.com/platformbuilds/telegen/pkg/export"
+package export // import "github.com/mirastacklabs-ai/telegen/pkg/export"
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/platformbuilds/telegen/internal/helpers/maps"
+	"github.com/mirastacklabs-ai/telegen/internal/helpers/maps"
 )
 
 // Features is a bitmask of enabled metric features.

@@ -3,4 +3,4 @@
 
 //go:build obi_bpf
 
-package netolly // import "github.com/platformbuilds/telegen/bpf/netolly"
+package netolly // import "github.com/mirastacklabs-ai/telegen/bpf/netolly"

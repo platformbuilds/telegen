@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/storagedef"
+	"github.com/mirastacklabs-ai/telegen/internal/storagedef"
 )
 
 // ONTAPCollector collects metrics from NetApp ONTAP via REST API

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/platformbuilds/telegen/internal/netinfra/types"
+	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
 )
 
 // HealthCollector collects fabric health metrics from ACI

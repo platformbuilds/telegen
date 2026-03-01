@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package request // import "github.com/platformbuilds/telegen/internal/appolly/app/request"
+package request // import "github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
 
 type ignoreMode uint8
 

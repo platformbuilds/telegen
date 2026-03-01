@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package otel // import "github.com/platformbuilds/telegen/pkg/export/otel"
+package otel // import "github.com/mirastacklabs-ai/telegen/pkg/export/otel"
 
 import (
 	"context"
@@ -17,11 +17,11 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 
-	"github.com/platformbuilds/telegen/pkg/buildinfo"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
-	"github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
-	"github.com/platformbuilds/telegen/pkg/pipe/global"
+	"github.com/mirastacklabs-ai/telegen/pkg/buildinfo"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/global"
 )
 
 // InternalMetricsReporter is an internal metrics Reporter that exports to OTEL

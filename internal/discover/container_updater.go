@@ -1,18 +1,18 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package discover // import "github.com/platformbuilds/telegen/internal/discover"
+package discover // import "github.com/mirastacklabs-ai/telegen/internal/discover"
 
 import (
 	"context"
 	"fmt"
 	"log/slog"
 
-	"github.com/platformbuilds/telegen/internal/ebpf"
-	"github.com/platformbuilds/telegen/internal/kube"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm/swarms"
+	"github.com/mirastacklabs-ai/telegen/internal/ebpf"
+	"github.com/mirastacklabs-ai/telegen/internal/kube"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm/swarms"
 )
 
 // ContainerDBUpdaterProvider is a stage in the Process Finder pipeline that will be

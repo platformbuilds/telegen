@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package otel // import "github.com/platformbuilds/telegen/pkg/export/otel"
+package otel // import "github.com/mirastacklabs-ai/telegen/pkg/export/otel"
 
 import (
 	"context"
@@ -14,19 +14,19 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/internal/discover/exec"
-	"github.com/platformbuilds/telegen/pkg/export/attributes"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	"github.com/platformbuilds/telegen/pkg/export/instrumentations"
-	"github.com/platformbuilds/telegen/pkg/export/otel/metric"
-	instrument "github.com/platformbuilds/telegen/pkg/export/otel/metric/api/metric"
-	"github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
-	"github.com/platformbuilds/telegen/pkg/export/otel/perapp"
-	"github.com/platformbuilds/telegen/pkg/pipe/global"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/internal/discover/exec"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/instrumentations"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric"
+	instrument "github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric/api/metric"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/perapp"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/global"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
 )
 
 func sglog() *slog.Logger {

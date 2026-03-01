@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 
-	"github.com/platformbuilds/telegen/internal/helpers"
-	"github.com/platformbuilds/telegen/internal/obiconfig"
+	"github.com/mirastacklabs-ai/telegen/internal/helpers"
+	"github.com/mirastacklabs-ai/telegen/internal/obiconfig"
 )
 
 type testCase struct {

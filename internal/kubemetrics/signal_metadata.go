@@ -6,7 +6,7 @@ package kubemetrics
 import (
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/platformbuilds/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
 // SignalMetadataDefinitions defines the signal metadata for different kube metric types
@@ -15,7 +15,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"kube_pod": {
 		Category:      "Kubernetes State",
 		SubCategory:   "Pod Metrics",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/kubestate",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubestate",
 		CollectorType: sigdef.CollectorTypeAPI,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "Pod state and status metrics from Kubernetes API",
@@ -23,7 +23,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"kube_deployment": {
 		Category:      "Kubernetes State",
 		SubCategory:   "Deployment Metrics",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/kubestate",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubestate",
 		CollectorType: sigdef.CollectorTypeAPI,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "Deployment state metrics from Kubernetes API",
@@ -31,7 +31,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"kube_node": {
 		Category:      "Kubernetes State",
 		SubCategory:   "Node Metrics",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/kubestate",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubestate",
 		CollectorType: sigdef.CollectorTypeAPI,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "Node state and status metrics from Kubernetes API",
@@ -39,7 +39,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"kube_statefulset": {
 		Category:      "Kubernetes State",
 		SubCategory:   "StatefulSet Metrics",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/kubestate",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubestate",
 		CollectorType: sigdef.CollectorTypeAPI,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "StatefulSet state metrics from Kubernetes API",
@@ -47,7 +47,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"kube_daemonset": {
 		Category:      "Kubernetes State",
 		SubCategory:   "DaemonSet Metrics",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/kubestate",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubestate",
 		CollectorType: sigdef.CollectorTypeAPI,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "DaemonSet state metrics from Kubernetes API",
@@ -55,7 +55,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"kube_replicaset": {
 		Category:      "Kubernetes State",
 		SubCategory:   "ReplicaSet Metrics",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/kubestate",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubestate",
 		CollectorType: sigdef.CollectorTypeAPI,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "ReplicaSet state metrics from Kubernetes API",
@@ -63,7 +63,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"kube_job": {
 		Category:      "Kubernetes State",
 		SubCategory:   "Job Metrics",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/kubestate",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubestate",
 		CollectorType: sigdef.CollectorTypeAPI,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "Job state and completion metrics from Kubernetes API",
@@ -71,7 +71,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"kube_cronjob": {
 		Category:      "Kubernetes State",
 		SubCategory:   "CronJob Metrics",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/kubestate",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubestate",
 		CollectorType: sigdef.CollectorTypeAPI,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "CronJob schedule and status metrics from Kubernetes API",
@@ -79,7 +79,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"kube_service": {
 		Category:      "Kubernetes State",
 		SubCategory:   "Service Metrics",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/kubestate",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubestate",
 		CollectorType: sigdef.CollectorTypeAPI,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "Service configuration metrics from Kubernetes API",
@@ -87,7 +87,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"kube_namespace": {
 		Category:      "Kubernetes State",
 		SubCategory:   "Namespace Metrics",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/kubestate",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubestate",
 		CollectorType: sigdef.CollectorTypeAPI,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "Namespace status and resource quota metrics from Kubernetes API",
@@ -95,7 +95,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"kube_persistentvolumeclaim": {
 		Category:      "Kubernetes State",
 		SubCategory:   "Storage Metrics",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/kubestate",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubestate",
 		CollectorType: sigdef.CollectorTypeAPI,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "PersistentVolumeClaim state metrics from Kubernetes API",
@@ -103,7 +103,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"kube_persistentvolume": {
 		Category:      "Kubernetes State",
 		SubCategory:   "Storage Metrics",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/kubestate",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubestate",
 		CollectorType: sigdef.CollectorTypeAPI,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "PersistentVolume state metrics from Kubernetes API",
@@ -111,7 +111,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"kube_configmap": {
 		Category:      "Kubernetes State",
 		SubCategory:   "ConfigMap Metrics",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/kubestate",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubestate",
 		CollectorType: sigdef.CollectorTypeAPI,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "ConfigMap metadata metrics from Kubernetes API",
@@ -119,7 +119,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"kube_secret": {
 		Category:      "Kubernetes State",
 		SubCategory:   "Secret Metrics",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/kubestate",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubestate",
 		CollectorType: sigdef.CollectorTypeAPI,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "Secret metadata metrics from Kubernetes API",
@@ -127,7 +127,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"kube_hpa": {
 		Category:      "Kubernetes State",
 		SubCategory:   "HPA Metrics",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/kubestate",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubestate",
 		CollectorType: sigdef.CollectorTypeAPI,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "HorizontalPodAutoscaler state metrics from Kubernetes API",
@@ -135,7 +135,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"kube_ingress": {
 		Category:      "Kubernetes State",
 		SubCategory:   "Ingress Metrics",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/kubestate",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubestate",
 		CollectorType: sigdef.CollectorTypeAPI,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "Ingress configuration metrics from Kubernetes API",
@@ -143,7 +143,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"kube_endpoints": {
 		Category:      "Kubernetes State",
 		SubCategory:   "Endpoints Metrics",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/kubestate",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubestate",
 		CollectorType: sigdef.CollectorTypeAPI,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "Endpoints address metrics from Kubernetes API",
@@ -153,7 +153,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"container_cpu": {
 		Category:      "Container Metrics",
 		SubCategory:   "CPU Utilization",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/cadvisor",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/cadvisor",
 		CollectorType: sigdef.CollectorTypeProcFS,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "Container CPU usage metrics from cgroups",
@@ -161,7 +161,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"container_memory": {
 		Category:      "Container Metrics",
 		SubCategory:   "Memory Utilization",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/cadvisor",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/cadvisor",
 		CollectorType: sigdef.CollectorTypeProcFS,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "Container memory usage metrics from cgroups",
@@ -169,7 +169,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"container_network": {
 		Category:      "Container Metrics",
 		SubCategory:   "Network Utilization",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/cadvisor",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/cadvisor",
 		CollectorType: sigdef.CollectorTypeProcFS,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "Container network I/O metrics from cgroups",
@@ -177,7 +177,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"container_fs": {
 		Category:      "Container Metrics",
 		SubCategory:   "Disk Utilization",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/cadvisor",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/cadvisor",
 		CollectorType: sigdef.CollectorTypeProcFS,
 		SignalType:    sigdef.SignalMetrics,
 		Description:   "Container disk I/O metrics from cgroups",
@@ -187,7 +187,7 @@ var SignalMetadataDefinitions = map[string]*sigdef.SignalMetadata{
 	"kube_event": {
 		Category:      "Kubernetes Events",
 		SubCategory:   "Cluster Events",
-		SourceModule:  "github.com/platformbuilds/telegen/internal/kubemetrics",
+		SourceModule:  "github.com/mirastacklabs-ai/telegen/internal/kubemetrics",
 		CollectorType: sigdef.CollectorTypeAPI,
 		SignalType:    sigdef.SignalLogs,
 		Description:   "Kubernetes cluster events as OTLP logs",

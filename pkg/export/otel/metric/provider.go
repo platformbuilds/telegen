@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package metric // import "github.com/platformbuilds/telegen/pkg/export/otel/metric"
+package metric // import "github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric"
 
 import (
 	"context"
@@ -10,8 +10,8 @@ import (
 	"go.opentelemetry.io/otel/metric/embedded"
 	"go.opentelemetry.io/otel/sdk/instrumentation"
 
-	"github.com/platformbuilds/telegen/pkg/export/otel/metric/api/metric"
-	"github.com/platformbuilds/telegen/pkg/export/otel/metric/global"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric/api/metric"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric/global"
 )
 
 // MeterProvider handles the creation and coordination of Meters. All Meters

@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package store // import "github.com/platformbuilds/telegen/internal/rdns/store"
+package store // import "github.com/mirastacklabs-ai/telegen/internal/rdns/store"
 
 import (
 	"sync"

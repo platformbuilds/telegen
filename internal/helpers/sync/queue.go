@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package sync // import "github.com/platformbuilds/telegen/internal/helpers/sync"
+package sync // import "github.com/mirastacklabs-ai/telegen/internal/helpers/sync"
 
 import (
 	"sync"

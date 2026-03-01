@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package nodejs // import "github.com/platformbuilds/telegen/internal/nodejs"
+package nodejs // import "github.com/mirastacklabs-ai/telegen/internal/nodejs"
 
 import (
 	_ "embed"
@@ -9,9 +9,9 @@ import (
 	"log/slog"
 	"syscall"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/internal/ebpf"
-	"github.com/platformbuilds/telegen/internal/obi"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/internal/ebpf"
+	"github.com/mirastacklabs-ai/telegen/internal/obi"
 )
 
 type NodeInjector struct {

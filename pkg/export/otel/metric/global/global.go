@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package global // import "github.com/platformbuilds/telegen/pkg/export/otel/metric/global"
+package global // import "github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric/global"
 
 import (
 	"log"

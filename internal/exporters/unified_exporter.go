@@ -14,8 +14,8 @@ import (
 
 	"github.com/prometheus/prometheus/prompb"
 
-	"github.com/platformbuilds/telegen/internal/exporters/remotewrite"
-	"github.com/platformbuilds/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/internal/exporters/remotewrite"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
 // UnifiedExporter provides a single interface for exporting all signal types

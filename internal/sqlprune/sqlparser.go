@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package sqlprune // import "github.com/platformbuilds/telegen/internal/sqlprune"
+package sqlprune // import "github.com/mirastacklabs-ai/telegen/internal/sqlprune"
 
 import (
 	"reflect"
@@ -9,7 +9,7 @@ import (
 
 	"github.com/xwb1989/sqlparser"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
 )
 
 var tokenIsDBOperation = map[int]bool{

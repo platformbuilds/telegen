@@ -1,16 +1,16 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package ebpfcommon // import "github.com/platformbuilds/telegen/internal/ebpf/common"
+package ebpfcommon // import "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
 
 import (
 	"errors"
 	"fmt"
 	"log/slog"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/internal/obiconfig"
-	"github.com/platformbuilds/telegen/internal/ringbuf"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/obiconfig"
+	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
 )
 
 var (

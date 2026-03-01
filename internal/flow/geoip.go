@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package flow // import "github.com/platformbuilds/telegen/internal/flow"
+package flow // import "github.com/mirastacklabs-ai/telegen/internal/flow"
 
 import (
 	"context"
@@ -14,10 +14,10 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/oschwald/maxminddb-golang"
 
-	"github.com/platformbuilds/telegen/internal/netollyebpf"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
+	"github.com/mirastacklabs-ai/telegen/internal/netollyebpf"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
 )
 
 // GeoIP is currently experimental. It is kept disabled by default and will be hidden

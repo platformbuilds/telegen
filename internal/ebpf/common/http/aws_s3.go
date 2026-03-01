@@ -1,14 +1,14 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package ebpfcommon // import "github.com/platformbuilds/telegen/internal/ebpf/common/http"
+package ebpfcommon // import "github.com/mirastacklabs-ai/telegen/internal/ebpf/common/http"
 
 import (
 	"errors"
 	"net/http"
 	"strings"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
 )
 
 func AWSS3Span(baseSpan *request.Span, req *http.Request, resp *http.Response) (request.Span, bool) {

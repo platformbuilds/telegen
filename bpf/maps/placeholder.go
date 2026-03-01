@@ -3,4 +3,4 @@
 
 //go:build obi_bpf
 
-package maps // import "github.com/platformbuilds/telegen/bpf/maps"
+package maps // import "github.com/mirastacklabs-ai/telegen/bpf/maps"

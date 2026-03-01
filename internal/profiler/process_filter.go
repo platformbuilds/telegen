@@ -10,8 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/platformbuilds/telegen/internal/helpers/container"
-	"github.com/platformbuilds/telegen/internal/kube"
+	"github.com/mirastacklabs-ai/telegen/internal/helpers/container"
+	"github.com/mirastacklabs-ai/telegen/internal/kube"
 )
 
 // ProcessFilter determines which processes should be profiled based on configuration

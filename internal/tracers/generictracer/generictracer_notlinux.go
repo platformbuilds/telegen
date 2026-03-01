@@ -5,7 +5,7 @@
 
 // this file is emptied on purpose to allow Beyla compiling in non-linux environments
 
-package generictracer // import "github.com/platformbuilds/telegen/internal/tracers/generictracer"
+package generictracer // import "github.com/mirastacklabs-ai/telegen/internal/tracers/generictracer"
 
 import (
 	"context"
@@ -13,14 +13,14 @@ import (
 
 	"github.com/cilium/ebpf"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/internal/discover/exec"
-	ebpfcommon "github.com/platformbuilds/telegen/internal/ebpf/common"
-	"github.com/platformbuilds/telegen/internal/goexec"
-	"github.com/platformbuilds/telegen/internal/obi"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/internal/discover/exec"
+	ebpfcommon "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
+	"github.com/mirastacklabs-ai/telegen/internal/goexec"
+	"github.com/mirastacklabs-ai/telegen/internal/obi"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
 )
 
 type Tracer struct{}

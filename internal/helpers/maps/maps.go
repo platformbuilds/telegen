@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package maps // import "github.com/platformbuilds/telegen/internal/helpers/maps"
+package maps // import "github.com/mirastacklabs-ai/telegen/internal/helpers/maps"
 
 // MultiCounter maps a counter to a given key
 type MultiCounter[K comparable] map[K]*int

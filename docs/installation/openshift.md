@@ -191,7 +191,7 @@ spec:
       
       containers:
         - name: telegen
-          image: ghcr.io/platformbuilds/telegen:latest
+          image: ghcr.io/mirastacklabs-ai/telegen:latest
           args:
             - "--config=/etc/telegen/config.yaml"
             - "--mode=agent"

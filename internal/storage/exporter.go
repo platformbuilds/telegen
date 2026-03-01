@@ -20,7 +20,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/platformbuilds/telegen/internal/storagedef"
+	"github.com/mirastacklabs-ai/telegen/internal/storagedef"
 )
 
 // OTLPExporter exports storage metrics via OTLP

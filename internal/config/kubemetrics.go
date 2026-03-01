@@ -6,9 +6,9 @@ package config
 import (
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/cadvisor"
-	"github.com/platformbuilds/telegen/internal/kubestate"
-	"github.com/platformbuilds/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/internal/cadvisor"
+	"github.com/mirastacklabs-ai/telegen/internal/kubestate"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
 // KubeMetricsConfig holds configuration for Kubernetes metrics collection

@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/netinfra/types"
+	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
 )
 
 // FaultCollector collects fault metrics from ACI

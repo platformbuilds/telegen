@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package transport // import "github.com/platformbuilds/telegen/internal/flow/transport"
+package transport // import "github.com/mirastacklabs-ai/telegen/internal/flow/transport"
 
 import (
 	"fmt"

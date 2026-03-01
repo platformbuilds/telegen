@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/platformbuilds/telegen/internal/netinfra/types"
+	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
 )
 
 // NodeCollector collects fabric node metrics from ACI

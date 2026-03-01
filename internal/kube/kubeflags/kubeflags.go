@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package kubeflags // import "github.com/platformbuilds/telegen/internal/kube/kubeflags"
+package kubeflags // import "github.com/mirastacklabs-ai/telegen/internal/kube/kubeflags"
 
 type EnableFlag string
 

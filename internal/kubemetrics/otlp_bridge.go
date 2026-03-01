@@ -20,7 +20,7 @@ import (
 	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/common/model"
 
-	"github.com/platformbuilds/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
 // OTLPBridge converts Prometheus metrics to OTEL format and exports via OTLP
@@ -93,7 +93,7 @@ func (b *OTLPBridge) convertToResourceMetrics(families map[string]*dto.MetricFam
 		ScopeMetrics: []metricdata.ScopeMetrics{
 			{
 				Scope: instrumentation.Scope{
-					Name:    "github.com/platformbuilds/telegen/kubemetrics",
+					Name:    "github.com/mirastacklabs-ai/telegen/kubemetrics",
 					Version: "1.0.0",
 				},
 				Metrics: metrics,

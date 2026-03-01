@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package discover // import "github.com/platformbuilds/telegen/internal/discover"
+package discover // import "github.com/mirastacklabs-ai/telegen/internal/discover"
 
 import (
 	"debug/elf"
@@ -10,12 +10,12 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/internal/appolly/services"
-	"github.com/platformbuilds/telegen/internal/discover/exec"
-	"github.com/platformbuilds/telegen/internal/procs"
-	"github.com/platformbuilds/telegen/pkg/export/attributes"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/services"
+	"github.com/mirastacklabs-ai/telegen/internal/discover/exec"
+	"github.com/mirastacklabs-ai/telegen/internal/procs"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
 )
 
 const (

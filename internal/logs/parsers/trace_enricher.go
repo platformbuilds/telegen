@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/correlation"
+	"github.com/mirastacklabs-ai/telegen/internal/correlation"
 )
 
 // TraceContextEnricher enriches logs with trace context from the eBPF layer.

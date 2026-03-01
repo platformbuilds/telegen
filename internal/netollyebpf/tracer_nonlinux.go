@@ -3,12 +3,12 @@
 
 //go:build !linux
 
-package ebpf // import "github.com/platformbuilds/telegen/internal/netollyebpf"
+package ebpf // import "github.com/mirastacklabs-ai/telegen/internal/netollyebpf"
 
 import (
-	"github.com/platformbuilds/telegen/internal/ebpf/tcmanager"
-	"github.com/platformbuilds/telegen/internal/obiconfig"
-	"github.com/platformbuilds/telegen/internal/ringbuf"
+	"github.com/mirastacklabs-ai/telegen/internal/ebpf/tcmanager"
+	"github.com/mirastacklabs-ai/telegen/internal/obiconfig"
+	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
 )
 
 type FlowFetcher struct{}

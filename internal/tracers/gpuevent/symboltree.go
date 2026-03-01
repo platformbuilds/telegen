@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package gpuevent // import "github.com/platformbuilds/telegen/internal/tracers/gpuevent"
+package gpuevent // import "github.com/mirastacklabs-ai/telegen/internal/tracers/gpuevent"
 
 // Interval represents an interval with a low and high value
 type Symbol struct {

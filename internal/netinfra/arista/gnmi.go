@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/openconfig/gnmi/proto/gnmi"
-	"github.com/platformbuilds/telegen/internal/netinfra/types"
+	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"

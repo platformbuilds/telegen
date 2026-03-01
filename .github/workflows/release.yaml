@@ -60,9 +60,9 @@ jobs:
           go build \
             -trimpath \
             -ldflags="-s -w \
-              -X 'github.com/platformbuilds/telegen/pkg/buildinfo.Version=${{ steps.version.outputs.VERSION }}' \
-              -X 'github.com/platformbuilds/telegen/pkg/buildinfo.Revision=${{ github.sha }}' \
-              -X 'github.com/platformbuilds/telegen/pkg/buildinfo.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)'" \
+              -X 'github.com/mirastacklabs-ai/telegen/pkg/buildinfo.Version=${{ steps.version.outputs.VERSION }}' \
+              -X 'github.com/mirastacklabs-ai/telegen/pkg/buildinfo.Revision=${{ github.sha }}' \
+              -X 'github.com/mirastacklabs-ai/telegen/pkg/buildinfo.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)'" \
             -o dist/telegen-${{ matrix.goos }}-${{ matrix.goarch }} \
             ./cmd/telegen
 
@@ -212,7 +212,7 @@ jobs:
 
       - name: Push Helm chart to OCI registry
         run: |
-          helm push .helm-packages/telegen-${{ steps.version.outputs.VERSION }}.tgz oci://${{ env.REGISTRY }}/platformbuilds/charts
+          helm push .helm-packages/telegen-${{ steps.version.outputs.VERSION }}.tgz oci://${{ env.REGISTRY }}/mirastacklabs-ai/charts
 
       - name: Upload Helm chart artifact
         uses: actions/upload-artifact@v6
@@ -275,16 +275,16 @@ jobs:
           echo "" >> CHANGELOG.md
           echo '```bash' >> CHANGELOG.md
           echo "# GitHub Container Registry" >> CHANGELOG.md
-          echo "docker pull ghcr.io/platformbuilds/telegen:${{ steps.version.outputs.VERSION }}" >> CHANGELOG.md
+          echo "docker pull ghcr.io/mirastacklabs-ai/telegen:${{ steps.version.outputs.VERSION }}" >> CHANGELOG.md
           echo "" >> CHANGELOG.md
           echo "# Docker Hub" >> CHANGELOG.md
-          echo "docker pull platformbuilds/telegen:${{ steps.version.outputs.VERSION }}" >> CHANGELOG.md
+          echo "docker pull mirastacklabs-ai/telegen:${{ steps.version.outputs.VERSION }}" >> CHANGELOG.md
           echo '```' >> CHANGELOG.md
           echo "" >> CHANGELOG.md
           echo "## Helm Chart" >> CHANGELOG.md
           echo "" >> CHANGELOG.md
           echo '```bash' >> CHANGELOG.md
-          echo "helm install telegen oci://ghcr.io/platformbuilds/charts/telegen --version ${{ steps.version.outputs.VERSION }}" >> CHANGELOG.md
+          echo "helm install telegen oci://ghcr.io/mirastacklabs-ai/charts/telegen --version ${{ steps.version.outputs.VERSION }}" >> CHANGELOG.md
           echo '```' >> CHANGELOG.md
 
       - name: Create Release

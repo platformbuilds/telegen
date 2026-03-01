@@ -1,11 +1,11 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package msg // import "github.com/platformbuilds/telegen/internal/helpers/msg"
+package msg // import "github.com/mirastacklabs-ai/telegen/internal/helpers/msg"
 
 import (
-	"github.com/platformbuilds/telegen/internal/obi"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/internal/obi"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
 )
 
 // QueueFromConfig creates a standard msg.Queue[T] from the given OBI config

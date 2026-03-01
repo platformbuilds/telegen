@@ -19,7 +19,7 @@
 // This implementation is a derivation of the code in
 // https://github.com/netobserv/netobserv-ebpf-agent/tree/release-1.4
 
-package agent // import "github.com/platformbuilds/telegen/internal/netolly/agent"
+package agent // import "github.com/mirastacklabs-ai/telegen/internal/netolly/agent"
 
 import (
 	"context"
@@ -30,13 +30,13 @@ import (
 	"net"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/ebpf/tcmanager"
-	"github.com/platformbuilds/telegen/internal/flow"
-	"github.com/platformbuilds/telegen/internal/netollyebpf"
-	"github.com/platformbuilds/telegen/internal/obi"
-	"github.com/platformbuilds/telegen/internal/ringbuf"
-	"github.com/platformbuilds/telegen/pkg/pipe/global"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
+	"github.com/mirastacklabs-ai/telegen/internal/ebpf/tcmanager"
+	"github.com/mirastacklabs-ai/telegen/internal/flow"
+	"github.com/mirastacklabs-ai/telegen/internal/netollyebpf"
+	"github.com/mirastacklabs-ai/telegen/internal/obi"
+	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/global"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
 )
 
 const (

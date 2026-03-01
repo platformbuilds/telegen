@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/http2"
 
-	"github.com/platformbuilds/telegen/internal/parsers/bhpack"
+	"github.com/mirastacklabs-ai/telegen/internal/parsers/bhpack"
 )
 
 var isHTTP2TestCases = []struct {

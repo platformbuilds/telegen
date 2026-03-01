@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package goexec // import "github.com/platformbuilds/telegen/internal/goexec"
+package goexec // import "github.com/mirastacklabs-ai/telegen/internal/goexec"
 
 import (
 	"debug/elf"
@@ -12,7 +12,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/platformbuilds/telegen/internal/procs"
+	"github.com/mirastacklabs-ai/telegen/internal/procs"
 )
 
 func isSupportedGoBinary(elfF *elf.File) error {

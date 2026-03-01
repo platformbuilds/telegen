@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package ebpfcommon // import "github.com/platformbuilds/telegen/internal/ebpf/common"
+package ebpfcommon // import "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
 
 import (
 	"net"
@@ -12,10 +12,10 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/internal/ebpf/common/dnsparser"
-	"github.com/platformbuilds/telegen/internal/ringbuf"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/ebpf/common/dnsparser"
+	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
 )
 
 func dnsEventExpireHandler(spansChan *msg.Queue[[]request.Span], filter ServiceFilter) func(key dnsparser.DNSId, span *request.Span) {

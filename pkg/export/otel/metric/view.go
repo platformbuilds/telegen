@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package metric // import "github.com/platformbuilds/telegen/pkg/export/otel/metric"
+package metric // import "github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric"
 
 import (
 	"errors"
@@ -10,7 +10,7 @@ import (
 
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
-	"github.com/platformbuilds/telegen/pkg/export/otel/metric/global"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric/global"
 )
 
 var (

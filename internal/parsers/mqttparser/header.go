@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package mqttparser // import "github.com/platformbuilds/telegen/internal/parsers/mqttparser"
+package mqttparser // import "github.com/mirastacklabs-ai/telegen/internal/parsers/mqttparser"
 
 import (
 	"errors"

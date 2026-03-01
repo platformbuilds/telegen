@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/netinfra/types"
+	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
 )
 
 // ACICollector collects metrics from Cisco ACI fabric

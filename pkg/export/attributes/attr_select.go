@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package attributes // import "github.com/platformbuilds/telegen/pkg/export/attributes"
+package attributes // import "github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
 
 import (
 	"maps"
@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
 )
 
 // Selection specifies which attributes are allowed for each metric.

@@ -3,12 +3,12 @@
 
 //go:build !linux
 
-package tcmanager // import "github.com/platformbuilds/telegen/internal/ebpf/tcmanager"
+package tcmanager // import "github.com/mirastacklabs-ai/telegen/internal/ebpf/tcmanager"
 
 import (
 	"github.com/cilium/ebpf"
 
-	"github.com/platformbuilds/telegen/internal/obiconfig"
+	"github.com/mirastacklabs-ai/telegen/internal/obiconfig"
 )
 
 type dummyManager struct{}

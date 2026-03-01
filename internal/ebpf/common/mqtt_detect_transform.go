@@ -1,15 +1,15 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package ebpfcommon // import "github.com/platformbuilds/telegen/internal/ebpf/common"
+package ebpfcommon // import "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
 
 import (
 	"errors"
 	"log/slog"
 	"unsafe"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/internal/parsers/mqttparser"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/parsers/mqttparser"
 )
 
 // MQTTInfo holds parsed information from an MQTT packet.

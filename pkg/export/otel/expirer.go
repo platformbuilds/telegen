@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package otel // import "github.com/platformbuilds/telegen/pkg/export/otel"
+package otel // import "github.com/mirastacklabs-ai/telegen/pkg/export/otel"
 
 import (
 	"context"
@@ -11,9 +11,9 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/platformbuilds/telegen/pkg/export/attributes"
-	"github.com/platformbuilds/telegen/pkg/export/expire"
-	"github.com/platformbuilds/telegen/pkg/export/otel/metric/api/metric"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/expire"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric/api/metric"
 )
 
 var timeNow = time.Now

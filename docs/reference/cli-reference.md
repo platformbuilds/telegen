@@ -378,7 +378,7 @@ docker run -d \
   -v /sys/fs/bpf:/sys/fs/bpf \
   -v /etc/telegen:/etc/telegen:ro \
   -e OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317 \
-  ghcr.io/platformbuilds/telegen:latest
+  ghcr.io/mirastacklabs-ai/telegen:latest
 ```
 
 ---

@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package imetrics // import "github.com/platformbuilds/telegen/pkg/export/imetrics"
+package imetrics // import "github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
 
 import (
 	"context"
@@ -10,9 +10,9 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/platformbuilds/telegen/pkg/buildinfo"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	"github.com/platformbuilds/telegen/pkg/export/connector"
+	"github.com/mirastacklabs-ai/telegen/pkg/buildinfo"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/connector"
 )
 
 // pipelineBufferLengths buckets for histogram metrics about the number of traces submitted from one stage to another

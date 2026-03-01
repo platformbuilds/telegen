@@ -1,24 +1,24 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package agent // import "github.com/platformbuilds/telegen/internal/netolly/agent"
+package agent // import "github.com/mirastacklabs-ai/telegen/internal/netolly/agent"
 
 import (
 	"context"
 
-	"github.com/platformbuilds/telegen/internal/flow"
-	msgh "github.com/platformbuilds/telegen/internal/helpers/msg"
-	"github.com/platformbuilds/telegen/internal/netolly/cidr"
-	"github.com/platformbuilds/telegen/internal/netolly/flowdef"
-	"github.com/platformbuilds/telegen/internal/netollyebpf"
-	"github.com/platformbuilds/telegen/internal/netollyexport"
-	"github.com/platformbuilds/telegen/internal/netollyk8s"
-	"github.com/platformbuilds/telegen/pkg/export/attributes"
-	"github.com/platformbuilds/telegen/pkg/export/otel"
-	"github.com/platformbuilds/telegen/pkg/export/prom"
-	"github.com/platformbuilds/telegen/pkg/filter"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
+	"github.com/mirastacklabs-ai/telegen/internal/flow"
+	msgh "github.com/mirastacklabs-ai/telegen/internal/helpers/msg"
+	"github.com/mirastacklabs-ai/telegen/internal/netolly/cidr"
+	"github.com/mirastacklabs-ai/telegen/internal/netolly/flowdef"
+	"github.com/mirastacklabs-ai/telegen/internal/netollyebpf"
+	"github.com/mirastacklabs-ai/telegen/internal/netollyexport"
+	"github.com/mirastacklabs-ai/telegen/internal/netollyk8s"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/prom"
+	"github.com/mirastacklabs-ai/telegen/pkg/filter"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
 )
 
 // mockable functions for testing

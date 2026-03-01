@@ -1,14 +1,14 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package filter // import "github.com/platformbuilds/telegen/pkg/filter"
+package filter // import "github.com/mirastacklabs-ai/telegen/pkg/filter"
 
 import (
 	"errors"
 
 	"github.com/gobwas/glob"
 
-	"github.com/platformbuilds/telegen/pkg/export/attributes"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
 )
 
 // Matcher condition for a given field of the record type T.

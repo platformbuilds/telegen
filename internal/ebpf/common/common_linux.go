@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package ebpfcommon // import "github.com/platformbuilds/telegen/internal/ebpf/common"
+package ebpfcommon // import "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
 
 import (
 	"errors"
@@ -16,7 +16,7 @@ import (
 	"github.com/cilium/ebpf/link"
 	"golang.org/x/sys/unix"
 
-	"github.com/platformbuilds/telegen/internal/helpers"
+	"github.com/mirastacklabs-ai/telegen/internal/helpers"
 )
 
 func (f *Filter) Close() error {

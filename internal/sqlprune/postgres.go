@@ -1,13 +1,13 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package sqlprune // import "github.com/platformbuilds/telegen/internal/sqlprune"
+package sqlprune // import "github.com/mirastacklabs-ai/telegen/internal/sqlprune"
 
 import (
 	"bytes"
 	"encoding/binary"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
 )
 
 const (

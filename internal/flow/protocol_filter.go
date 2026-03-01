@@ -1,16 +1,16 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package flow // import "github.com/platformbuilds/telegen/internal/flow"
+package flow // import "github.com/mirastacklabs-ai/telegen/internal/flow"
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/platformbuilds/telegen/internal/flow/transport"
-	"github.com/platformbuilds/telegen/internal/netollyebpf"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
+	"github.com/mirastacklabs-ai/telegen/internal/flow/transport"
+	"github.com/mirastacklabs-ai/telegen/internal/netollyebpf"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
 )
 
 // ProtocolFilterProvider allows selecting which protocols are going to be instrumented.

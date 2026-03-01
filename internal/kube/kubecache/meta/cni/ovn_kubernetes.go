@@ -21,7 +21,7 @@
 
 // Package cni provides utilities
 // for working with Container Network Interface (CNI) configurations.
-package cni // import "github.com/platformbuilds/telegen/internal/kube/kubecache/meta/cni"
+package cni // import "github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/meta/cni"
 
 import (
 	"encoding/json"

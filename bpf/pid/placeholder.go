@@ -3,4 +3,4 @@
 
 //go:build obi_bpf
 
-package pid // import "github.com/platformbuilds/telegen/bpf/pid"
+package pid // import "github.com/mirastacklabs-ai/telegen/bpf/pid"

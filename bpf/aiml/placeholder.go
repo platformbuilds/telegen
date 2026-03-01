@@ -3,4 +3,4 @@
 
 //go:build obi_bpf
 
-package aiml // import "github.com/platformbuilds/telegen/bpf/aiml"
+package aiml // import "github.com/mirastacklabs-ai/telegen/bpf/aiml"

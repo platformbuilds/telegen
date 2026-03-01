@@ -3,4 +3,4 @@
 
 //go:build obi_bpf
 
-package rdns // import "github.com/platformbuilds/telegen/bpf/rdns"
+package rdns // import "github.com/mirastacklabs-ai/telegen/bpf/rdns"

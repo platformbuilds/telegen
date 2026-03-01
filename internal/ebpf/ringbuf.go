@@ -16,7 +16,7 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/ringbuf"
 
-	"github.com/platformbuilds/telegen/internal/selftelemetry"
+	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
 )
 
 // RingbufConfig holds ring buffer reader configuration

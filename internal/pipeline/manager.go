@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/agent/memory"
-	"github.com/platformbuilds/telegen/internal/exporters"
-	"github.com/platformbuilds/telegen/internal/selftelemetry"
-	"github.com/platformbuilds/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/internal/agent/memory"
+	"github.com/mirastacklabs-ai/telegen/internal/exporters"
+	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
 // SignalType is an alias to sigdef.SignalType for backwards compatibility

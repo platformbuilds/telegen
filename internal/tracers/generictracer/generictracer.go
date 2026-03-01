@@ -3,7 +3,7 @@
 
 //go:build linux
 
-package generictracer // import "github.com/platformbuilds/telegen/internal/tracers/generictracer"
+package generictracer // import "github.com/mirastacklabs-ai/telegen/internal/tracers/generictracer"
 
 import (
 	"bufio"
@@ -22,15 +22,15 @@ import (
 	"github.com/gavv/monotime"
 	"github.com/vishvananda/netlink"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	"github.com/platformbuilds/telegen/internal/discover/exec"
-	ebpfcommon "github.com/platformbuilds/telegen/internal/ebpf/common"
-	"github.com/platformbuilds/telegen/internal/goexec"
-	"github.com/platformbuilds/telegen/internal/ifaces"
-	"github.com/platformbuilds/telegen/internal/obi"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/internal/discover/exec"
+	ebpfcommon "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
+	"github.com/mirastacklabs-ai/telegen/internal/goexec"
+	"github.com/mirastacklabs-ai/telegen/internal/ifaces"
+	"github.com/mirastacklabs-ai/telegen/internal/obi"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
 )
 
 //go:generate $BPF2GO -cc $BPF_CLANG -cflags $BPF_CFLAGS -target amd64,arm64 Bpf ../../../bpf/generictracer/generictracer.c -- -I../../../bpf

@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/platformbuilds/telegen/internal/testutil"
+	"github.com/mirastacklabs-ai/telegen/internal/testutil"
 )
 
 const timeout = 5 * time.Second

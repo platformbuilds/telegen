@@ -27,8 +27,8 @@ import (
 	"go.opentelemetry.io/otel/log"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 
-	"github.com/platformbuilds/telegen/internal/logs/parsers"
-	"github.com/platformbuilds/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/internal/logs/parsers"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
 // Options configures the file tailer

@@ -3,6 +3,6 @@
 
 //go:build !linux
 
-package prom // import "github.com/platformbuilds/telegen/pkg/export/prom"
+package prom // import "github.com/mirastacklabs-ai/telegen/pkg/export/prom"
 
 func (bc *BPFCollector) enableBPFStatsRuntime() {}

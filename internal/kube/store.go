@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package kube // import "github.com/platformbuilds/telegen/internal/kube"
+package kube // import "github.com/mirastacklabs-ai/telegen/internal/kube"
 
 import (
 	"bytes"
@@ -14,14 +14,14 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/helpers/container"
-	"github.com/platformbuilds/telegen/internal/helpers/maps"
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/meta"
-	"github.com/platformbuilds/telegen/internal/kubei"
-	"github.com/platformbuilds/telegen/pkg/export/attributes"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
+	"github.com/mirastacklabs-ai/telegen/internal/helpers/container"
+	"github.com/mirastacklabs-ai/telegen/internal/helpers/maps"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/informer"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/meta"
+	"github.com/mirastacklabs-ai/telegen/internal/kubei"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
 )
 
 func dblog() *slog.Logger {

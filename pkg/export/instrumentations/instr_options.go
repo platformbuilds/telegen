@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package instrumentations // import "github.com/platformbuilds/telegen/pkg/export/instrumentations"
+package instrumentations // import "github.com/mirastacklabs-ai/telegen/pkg/export/instrumentations"
 
 type Instrumentation string
 

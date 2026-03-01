@@ -1,12 +1,12 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package attributes // import "github.com/platformbuilds/telegen/pkg/export/attributes"
+package attributes // import "github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
 
 import (
 	"strings"
 
-	"github.com/platformbuilds/telegen/internal/split"
+	"github.com/mirastacklabs-ai/telegen/internal/split"
 )
 
 type VarHandler func(k string, v string)

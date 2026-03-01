@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package otelcfg // import "github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
+package otelcfg // import "github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
 
 import (
 	"context"
@@ -28,12 +28,12 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/svc"
-	config "github.com/platformbuilds/telegen/internal/obiconfig"
-	"github.com/platformbuilds/telegen/pkg/buildinfo"
-	"github.com/platformbuilds/telegen/pkg/export/attributes"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	"github.com/platformbuilds/telegen/pkg/export/expire"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	config "github.com/mirastacklabs-ai/telegen/internal/obiconfig"
+	"github.com/mirastacklabs-ai/telegen/pkg/buildinfo"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/expire"
 )
 
 // Protocol values for the OTEL_EXPORTER_OTLP_PROTOCOL, OTEL_EXPORTER_OTLP_TRACES_PROTOCOL and

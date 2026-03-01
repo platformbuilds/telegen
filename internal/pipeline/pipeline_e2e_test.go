@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/config"
-	"github.com/platformbuilds/telegen/internal/selftelemetry"
+	"github.com/mirastacklabs-ai/telegen/internal/config"
+	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
 	"github.com/prometheus/prometheus/prompb"
 )
 

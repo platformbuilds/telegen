@@ -16,9 +16,9 @@ import (
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 
-	"github.com/platformbuilds/telegen/internal/pipeline/adapters"
-	"github.com/platformbuilds/telegen/internal/pipeline/converters"
-	"github.com/platformbuilds/telegen/internal/queue"
+	"github.com/mirastacklabs-ai/telegen/internal/pipeline/adapters"
+	"github.com/mirastacklabs-ai/telegen/internal/pipeline/converters"
+	"github.com/mirastacklabs-ai/telegen/internal/queue"
 )
 
 // UnifiedPipelineConfig configures the unified pipeline.

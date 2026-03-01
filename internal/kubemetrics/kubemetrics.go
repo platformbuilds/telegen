@@ -18,9 +18,9 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/platformbuilds/telegen/internal/cadvisor"
-	"github.com/platformbuilds/telegen/internal/kubestate"
-	"github.com/platformbuilds/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/internal/cadvisor"
+	"github.com/mirastacklabs-ai/telegen/internal/kubestate"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
 // Config holds configuration for the unified Kubernetes metrics provider

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/platformbuilds/telegen/internal/parsers/kafkaparser"
+	"github.com/mirastacklabs-ai/telegen/internal/parsers/kafkaparser"
 )
 
 func TestProcessKafkaRequest(t *testing.T) {

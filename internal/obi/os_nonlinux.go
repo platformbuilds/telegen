@@ -3,7 +3,7 @@
 
 //go:build !linux
 
-package obi // import "github.com/platformbuilds/telegen/internal/obi"
+package obi // import "github.com/mirastacklabs-ai/telegen/internal/obi"
 
 func CheckOSSupport() error {
 	return nil

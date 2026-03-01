@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package debug provides some export nodes that are aimed basically at debugging/testing
-package debug // import "github.com/platformbuilds/telegen/pkg/export/debug"
+package debug // import "github.com/mirastacklabs-ai/telegen/pkg/export/debug"
 
 import (
 	"context"
@@ -10,10 +10,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm/swarms"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm/swarms"
 )
 
 type TracePrinter string

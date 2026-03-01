@@ -3,7 +3,7 @@
 
 //go:build !linux
 
-package discover // import "github.com/platformbuilds/telegen/internal/discover"
+package discover // import "github.com/mirastacklabs-ai/telegen/internal/discover"
 
 // placeholder files to allow local compilation/unit testing in non-linux environments
 

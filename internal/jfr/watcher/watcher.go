@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/exporters/otlp/profiles"
-	"github.com/platformbuilds/telegen/internal/jfr/converter"
+	"github.com/mirastacklabs-ai/telegen/internal/exporters/otlp/profiles"
+	"github.com/mirastacklabs-ai/telegen/internal/jfr/converter"
 	"go.uber.org/zap"
 )
 

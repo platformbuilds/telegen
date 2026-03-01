@@ -19,7 +19,7 @@
 // This implementation is a derivation of the code in
 // https://github.com/netobserv/netobserv-ebpf-agent/tree/release-1.4
 
-package k8s // import "github.com/platformbuilds/telegen/internal/netollyk8s"
+package k8s // import "github.com/mirastacklabs-ai/telegen/internal/netollyk8s"
 
 import (
 	"context"
@@ -28,15 +28,15 @@ import (
 
 	"github.com/hashicorp/golang-lru/v2/simplelru"
 
-	"github.com/platformbuilds/telegen/internal/kube"
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
-	ikube "github.com/platformbuilds/telegen/internal/kubei"
-	"github.com/platformbuilds/telegen/internal/netollyebpf"
-	"github.com/platformbuilds/telegen/internal/transform"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm"
-	"github.com/platformbuilds/telegen/pkg/pipe/swarm/swarms"
+	"github.com/mirastacklabs-ai/telegen/internal/kube"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/informer"
+	ikube "github.com/mirastacklabs-ai/telegen/internal/kubei"
+	"github.com/mirastacklabs-ai/telegen/internal/netollyebpf"
+	"github.com/mirastacklabs-ai/telegen/internal/transform"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm/swarms"
 )
 
 const (

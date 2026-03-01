@@ -23,8 +23,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 
-	"github.com/platformbuilds/telegen/internal/helpers/container"
-	"github.com/platformbuilds/telegen/internal/version"
+	"github.com/mirastacklabs-ai/telegen/internal/helpers/container"
+	"github.com/mirastacklabs-ai/telegen/internal/version"
 )
 
 // MetricsExporterConfig holds configuration for the profile metrics exporter
@@ -330,7 +330,7 @@ func (e *MetricsExporter) convertToResourceMetrics(profile *Profile) *metricdata
 		ScopeMetrics: []metricdata.ScopeMetrics{
 			{
 				Scope: instrumentation.Scope{
-					Name:    "github.com/platformbuilds/telegen/profiler",
+					Name:    "github.com/mirastacklabs-ai/telegen/profiler",
 					Version: version.Version(),
 				},
 				Metrics: metrics,

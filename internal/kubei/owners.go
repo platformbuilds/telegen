@@ -1,11 +1,11 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package kube // import "github.com/platformbuilds/telegen/internal/kubei"
+package kube // import "github.com/mirastacklabs-ai/telegen/internal/kubei"
 
 import (
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
-	attr "github.com/platformbuilds/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/informer"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
 )
 
 // TopOwner assumes that the owners slice as returned by the informers' cache library,

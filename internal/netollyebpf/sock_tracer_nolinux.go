@@ -3,10 +3,10 @@
 
 //go:build !linux
 
-package ebpf // import "github.com/platformbuilds/telegen/internal/netollyebpf"
+package ebpf // import "github.com/mirastacklabs-ai/telegen/internal/netollyebpf"
 
 import (
-	"github.com/platformbuilds/telegen/internal/ringbuf"
+	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
 )
 
 type SockFlowFetcher struct{}

@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package expire // import "github.com/platformbuilds/telegen/pkg/export/expire"
+package expire // import "github.com/mirastacklabs-ai/telegen/pkg/export/expire"
 
 import (
 	"sync"

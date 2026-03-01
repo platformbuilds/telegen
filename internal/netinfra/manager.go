@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/netinfra/arista"
-	"github.com/platformbuilds/telegen/internal/netinfra/cisco"
-	"github.com/platformbuilds/telegen/internal/netinfra/types"
+	"github.com/mirastacklabs-ai/telegen/internal/netinfra/arista"
+	"github.com/mirastacklabs-ai/telegen/internal/netinfra/cisco"
+	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
 )
 
 // Manager coordinates all network infrastructure collectors

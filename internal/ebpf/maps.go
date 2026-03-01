@@ -12,7 +12,7 @@ import (
 
 	"github.com/cilium/ebpf"
 
-	"github.com/platformbuilds/telegen/internal/selftelemetry"
+	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
 )
 
 // MapType represents the type of BPF map

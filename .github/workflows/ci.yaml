@@ -188,7 +188,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: false
           tags: |
-            platformbuilds/telegen:ci-${{ github.sha }}
+            mirastacklabs-ai/telegen:ci-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

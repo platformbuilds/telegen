@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/exporters/otlp/profiles"
+	"github.com/mirastacklabs-ai/telegen/internal/exporters/otlp/profiles"
 )
 
 // ProfileExporter exports profiling data via OTLP.

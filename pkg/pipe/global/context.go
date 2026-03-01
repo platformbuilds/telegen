@@ -1,20 +1,20 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package global // import "github.com/platformbuilds/telegen/pkg/pipe/global"
+package global // import "github.com/mirastacklabs-ai/telegen/pkg/pipe/global"
 
 import (
 	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/platformbuilds/telegen/internal/appolly/app/request"
-	"github.com/platformbuilds/telegen/internal/kube"
-	ebpf "github.com/platformbuilds/telegen/internal/netollyebpf"
-	"github.com/platformbuilds/telegen/pkg/export/attributes"
-	"github.com/platformbuilds/telegen/pkg/export/connector"
-	"github.com/platformbuilds/telegen/pkg/export/imetrics"
-	"github.com/platformbuilds/telegen/pkg/export/otel/otelcfg"
-	"github.com/platformbuilds/telegen/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/kube"
+	ebpf "github.com/mirastacklabs-ai/telegen/internal/netollyebpf"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/connector"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
 )
 
 // ContextInfo stores some context information that must be shared across some nodes of the

@@ -10,7 +10,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/informer"
 )
 
 func TestEnvironmentFiltering(t *testing.T) {

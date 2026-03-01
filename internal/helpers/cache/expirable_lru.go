@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package cache // import "github.com/platformbuilds/telegen/internal/helpers/cache"
+package cache // import "github.com/mirastacklabs-ai/telegen/internal/helpers/cache"
 
 import (
 	"container/list"

@@ -27,7 +27,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/platformbuilds/telegen/internal/netollyebpf"
+	"github.com/mirastacklabs-ai/telegen/internal/netollyebpf"
 )
 
 func TestPacketAggregation(t *testing.T) {

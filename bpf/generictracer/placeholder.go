@@ -3,4 +3,4 @@
 
 //go:build obi_bpf
 
-package generictracer // import "github.com/platformbuilds/telegen/bpf/generictracer"
+package generictracer // import "github.com/mirastacklabs-ai/telegen/bpf/generictracer"

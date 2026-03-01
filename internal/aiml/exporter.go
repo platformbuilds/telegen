@@ -9,8 +9,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/platformbuilds/telegen/internal/aiml/llm"
-	"github.com/platformbuilds/telegen/internal/aiml/nvidia"
+	"github.com/mirastacklabs-ai/telegen/internal/aiml/llm"
+	"github.com/mirastacklabs-ai/telegen/internal/aiml/nvidia"
 )
 
 // Exporter exports AI/ML metrics in OpenTelemetry format

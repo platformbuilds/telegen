@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package meta // import "github.com/platformbuilds/telegen/internal/kube/kubecache/meta"
+package meta // import "github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/meta"
 
 import (
 	"cmp"
@@ -10,7 +10,7 @@ import (
 
 	"k8s.io/client-go/tools/cache"
 
-	"github.com/platformbuilds/telegen/internal/kube/kubecache/informer"
+	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/informer"
 )
 
 type Informers struct {
