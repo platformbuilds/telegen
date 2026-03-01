@@ -1,4 +1,4 @@
-// Package pipeline provides the V3 unified pipeline that routes all signals through
+// Package pipeline provides the unified pipeline that routes all signals through
 // a single processing path to the UnifiedExporter.
 package pipeline
 
@@ -21,8 +21,8 @@ import (
 	"github.com/platformbuilds/telegen/internal/queue"
 )
 
-// V3PipelineConfig configures the unified V3 pipeline.
-type V3PipelineConfig struct {
+// UnifiedPipelineConfig configures the unified pipeline.
+type UnifiedPipelineConfig struct {
 	// Exporter configuration for OTLP export.
 	Exporter ExporterConfig `yaml:"exporter" json:"exporter"`
 
@@ -58,19 +58,19 @@ type QueueConfig struct {
 	MaxItems int `yaml:"max_items" json:"max_items"`
 }
 
-// DefaultV3PipelineConfig returns default configuration.
-func DefaultV3PipelineConfig() V3PipelineConfig {
-	return V3PipelineConfig{
+// DefaultUnifiedPipelineConfig returns default configuration.
+func DefaultUnifiedPipelineConfig() UnifiedPipelineConfig {
+	return UnifiedPipelineConfig{
 		Exporter:     DefaultExporterConfig(),
 		BatchTimeout: 5 * time.Second,
 		WorkerCount:  2,
 	}
 }
 
-// V3Pipeline is the unified pipeline manager for Telegen V3.
+// Pipeline is the unified pipeline manager for Telegen.
 // It integrates adapters, converters, queues, and exporters into a single processing path.
-type V3Pipeline struct {
-	config V3PipelineConfig
+type UnifiedPipeline struct {
+	config UnifiedPipelineConfig
 	logger *slog.Logger
 
 	// Core components.
@@ -106,15 +106,15 @@ type V3Pipeline struct {
 	startTime time.Time
 }
 
-// NewV3Pipeline creates a new unified V3 pipeline.
-func NewV3Pipeline(config V3PipelineConfig) (*V3Pipeline, error) {
+// NewUnifiedPipeline creates a new unified pipeline.
+func NewUnifiedPipeline(config UnifiedPipelineConfig) (*UnifiedPipeline, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 
-	p := &V3Pipeline{
+	p := &UnifiedPipeline{
 		config:           config,
 		logger:           logger,
 		converterPipeline: converters.NewConvertingPipeline(),
@@ -153,7 +153,7 @@ func NewV3Pipeline(config V3PipelineConfig) (*V3Pipeline, error) {
 }
 
 // registerDefaultAdapters registers all available collector adapters.
-func (p *V3Pipeline) registerDefaultAdapters() {
+func (p *UnifiedPipeline) registerDefaultAdapters() {
 	// Agent mode collectors.
 	p.adapterRegistry.Register(adapters.NewEBPFTracesAdapter())
 	p.adapterRegistry.Register(adapters.NewEBPFProfilingAdapter())
@@ -172,7 +172,7 @@ func (p *V3Pipeline) registerDefaultAdapters() {
 }
 
 // Start starts the unified pipeline.
-func (p *V3Pipeline) Start(ctx context.Context) error {
+func (p *UnifiedPipeline) Start(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -180,7 +180,7 @@ func (p *V3Pipeline) Start(ctx context.Context) error {
 		return fmt.Errorf("pipeline already running")
 	}
 
-	p.logger.Info("starting V3 unified pipeline",
+	p.logger.Info("starting unified pipeline",
 		"worker_count", p.config.WorkerCount,
 		"batch_timeout", p.config.BatchTimeout,
 	)
@@ -220,7 +220,7 @@ func (p *V3Pipeline) Start(ctx context.Context) error {
 	p.running = true
 	p.startTime = time.Now()
 
-	p.logger.Info("V3 unified pipeline started",
+	p.logger.Info("unified pipeline started",
 		"adapters", len(p.adapterRegistry.List()),
 	)
 
@@ -228,7 +228,7 @@ func (p *V3Pipeline) Start(ctx context.Context) error {
 }
 
 // Stop gracefully stops the pipeline.
-func (p *V3Pipeline) Stop(ctx context.Context) error {
+func (p *UnifiedPipeline) Stop(ctx context.Context) error {
 	p.mu.Lock()
 	if !p.running {
 		p.mu.Unlock()
@@ -237,7 +237,7 @@ func (p *V3Pipeline) Stop(ctx context.Context) error {
 	p.running = false
 	p.mu.Unlock()
 
-	p.logger.Info("stopping V3 unified pipeline")
+	p.logger.Info("stopping unified pipeline")
 
 	// Stop accepting new signals.
 	p.cancel()
@@ -285,7 +285,7 @@ func (p *V3Pipeline) Stop(ctx context.Context) error {
 		p.logger.Error("error shutting down exporter", "error", err)
 	}
 
-	p.logger.Info("V3 unified pipeline stopped",
+	p.logger.Info("unified pipeline stopped",
 		"uptime", time.Since(p.startTime),
 		"traces_received", p.receivedTraces.Load(),
 		"logs_received", p.receivedLogs.Load(),
@@ -296,7 +296,7 @@ func (p *V3Pipeline) Stop(ctx context.Context) error {
 }
 
 // initQueues initializes persistent queues.
-func (p *V3Pipeline) initQueues() error {
+func (p *UnifiedPipeline) initQueues() error {
 	baseConfig := queue.PersistentQueueConfig{
 		DataDir:      p.config.Queue.Directory,
 		MaxSizeBytes: p.config.Queue.MaxSizeBytes,
@@ -339,7 +339,7 @@ func (p *V3Pipeline) initQueues() error {
 }
 
 // SendTraces implements adapters.SignalSink.
-func (p *V3Pipeline) SendTraces(ctx context.Context, traces ptrace.Traces) error {
+func (p *UnifiedPipeline) SendTraces(ctx context.Context, traces ptrace.Traces) error {
 	p.receivedTraces.Add(int64(traces.SpanCount()))
 
 	select {
@@ -362,7 +362,7 @@ func (p *V3Pipeline) SendTraces(ctx context.Context, traces ptrace.Traces) error
 }
 
 // SendLogs implements adapters.SignalSink.
-func (p *V3Pipeline) SendLogs(ctx context.Context, logs plog.Logs) error {
+func (p *UnifiedPipeline) SendLogs(ctx context.Context, logs plog.Logs) error {
 	p.receivedLogs.Add(int64(logs.LogRecordCount()))
 
 	select {
@@ -383,7 +383,7 @@ func (p *V3Pipeline) SendLogs(ctx context.Context, logs plog.Logs) error {
 }
 
 // SendMetrics implements adapters.SignalSink.
-func (p *V3Pipeline) SendMetrics(ctx context.Context, metrics pmetric.Metrics) error {
+func (p *UnifiedPipeline) SendMetrics(ctx context.Context, metrics pmetric.Metrics) error {
 	p.receivedMetrics.Add(int64(metrics.DataPointCount()))
 
 	select {
@@ -404,7 +404,7 @@ func (p *V3Pipeline) SendMetrics(ctx context.Context, metrics pmetric.Metrics) e
 }
 
 // traceWorker processes traces from the channel.
-func (p *V3Pipeline) traceWorker(id int) {
+func (p *UnifiedPipeline) traceWorker(id int) {
 	defer p.wg.Done()
 
 	for traces := range p.traceCh {
@@ -419,7 +419,7 @@ func (p *V3Pipeline) traceWorker(id int) {
 }
 
 // logWorker processes logs from the channel.
-func (p *V3Pipeline) logWorker(id int) {
+func (p *UnifiedPipeline) logWorker(id int) {
 	defer p.wg.Done()
 
 	for logs := range p.logCh {
@@ -434,7 +434,7 @@ func (p *V3Pipeline) logWorker(id int) {
 }
 
 // metricWorker processes metrics from the channel.
-func (p *V3Pipeline) metricWorker(id int) {
+func (p *UnifiedPipeline) metricWorker(id int) {
 	defer p.wg.Done()
 
 	for metrics := range p.metricCh {
@@ -449,31 +449,31 @@ func (p *V3Pipeline) metricWorker(id int) {
 }
 
 // exportTraces exports traces through the appropriate exporter.
-func (p *V3Pipeline) exportTraces(ctx context.Context, traces ptrace.Traces) error {
+func (p *UnifiedPipeline) exportTraces(ctx context.Context, traces ptrace.Traces) error {
 	if p.multiExporter != nil {
 		return p.multiExporter.ExportTraces(ctx, traces)
 	}
-	return p.exporter.Export(ctx, NewTraceSignal(traces, "v3_pipeline"))
+	return p.exporter.Export(ctx, NewTraceSignal(traces, "pipeline"))
 }
 
 // exportLogs exports logs through the appropriate exporter.
-func (p *V3Pipeline) exportLogs(ctx context.Context, logs plog.Logs) error {
+func (p *UnifiedPipeline) exportLogs(ctx context.Context, logs plog.Logs) error {
 	if p.multiExporter != nil {
 		return p.multiExporter.ExportLogs(ctx, logs)
 	}
-	return p.exporter.Export(ctx, NewLogSignal(logs, "v3_pipeline"))
+	return p.exporter.Export(ctx, NewLogSignal(logs, "pipeline"))
 }
 
 // exportMetrics exports metrics through the appropriate exporter.
-func (p *V3Pipeline) exportMetrics(ctx context.Context, metrics pmetric.Metrics) error {
+func (p *UnifiedPipeline) exportMetrics(ctx context.Context, metrics pmetric.Metrics) error {
 	if p.multiExporter != nil {
 		return p.multiExporter.ExportMetrics(ctx, metrics)
 	}
-	return p.exporter.Export(ctx, NewMetricSignal(metrics, "v3_pipeline"))
+	return p.exporter.Export(ctx, NewMetricSignal(metrics, "pipeline"))
 }
 
 // Stats returns pipeline statistics.
-func (p *V3Pipeline) Stats() V3PipelineStats {
+func (p *UnifiedPipeline) Stats() UnifiedPipelineStats {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -482,7 +482,7 @@ func (p *V3Pipeline) Stats() V3PipelineStats {
 		uptime = time.Since(p.startTime)
 	}
 
-	stats := V3PipelineStats{
+	stats := UnifiedPipelineStats{
 		Running:         p.running,
 		Uptime:          uptime,
 		ReceivedTraces:  p.receivedTraces.Load(),
@@ -520,8 +520,8 @@ func (p *V3Pipeline) Stats() V3PipelineStats {
 	return stats
 }
 
-// V3PipelineStats contains pipeline statistics.
-type V3PipelineStats struct {
+// PipelineStats contains pipeline statistics.
+type UnifiedPipelineStats struct {
 	Running         bool          `json:"running"`
 	Uptime          time.Duration `json:"uptime"`
 	Adapters        int           `json:"adapters"`
@@ -541,17 +541,17 @@ type V3PipelineStats struct {
 }
 
 // Adapter returns a specific adapter by type.
-func (p *V3Pipeline) Adapter(t adapters.CollectorType) (adapters.CollectorAdapter, bool) {
+func (p *UnifiedPipeline) Adapter(t adapters.CollectorType) (adapters.CollectorAdapter, bool) {
 	return p.adapterRegistry.Get(t)
 }
 
 // Converters returns the converter pipeline for format conversion.
-func (p *V3Pipeline) Converters() *converters.ConvertingPipeline {
+func (p *UnifiedPipeline) Converters() *converters.ConvertingPipeline {
 	return p.converterPipeline
 }
 
 // IsRunning returns whether the pipeline is running.
-func (p *V3Pipeline) IsRunning() bool {
+func (p *UnifiedPipeline) IsRunning() bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.running

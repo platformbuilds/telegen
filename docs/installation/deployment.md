@@ -1,4 +1,4 @@
-# V3 Pipeline Deployment Guide
+# Pipeline Deployment Guide
 
 Complete deployment guide for Telegen V3 unified pipeline across all environments.
 
@@ -19,7 +19,7 @@ The V3 pipeline provides a unified data path for metrics, traces, and logs with:
 All V3 features are configured under the `v3_pipeline` section:
 
 ```yaml
-v3_pipeline:
+pipeline:
   enabled: true
   
   limits:
@@ -115,8 +115,8 @@ telegen:
   service_name: telegen
   log_level: info
 
-# V3 Pipeline Configuration
-v3_pipeline:
+# Pipeline Configuration
+pipeline:
   enabled: true
   
   limits:
@@ -447,7 +447,7 @@ telegen:
   mode: collector
   service_name: telegen-collector
 
-v3_pipeline:
+pipeline:
   enabled: true
   limits:
     cardinality:
@@ -530,7 +530,7 @@ data:
       service_name: telegen
       log_level: info
     
-    v3_pipeline:
+    pipeline:
       enabled: true
       
       limits:
@@ -762,8 +762,8 @@ helm install telegen telegen/telegen -n telegen --create-namespace
 # Install with custom values
 helm install telegen telegen/telegen -n telegen --create-namespace \
   --set otlp.endpoint=otel-collector:4317 \
-  --set v3Pipeline.enabled=true \
-  --set v3Pipeline.limits.cardinality.enabled=true
+  --set pipeline.enabled=true \
+  --set pipeline.limits.cardinality.enabled=true
 ```
 
 ### Custom Values
@@ -783,7 +783,7 @@ otlp:
   insecure: true
   headers: {}
 
-# V3 Pipeline configuration
+# Pipeline configuration
 v3Pipeline:
   enabled: true
   

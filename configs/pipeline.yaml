@@ -1,17 +1,17 @@
 # Telegen V3 Configuration Reference
 #
-# This file documents all V3 pipeline configuration options.
+# This file documents all pipeline configuration options.
 # For a quick start, see the minimal examples at the end.
 
 # =============================================================================
-# V3 PIPELINE CONFIGURATION
+# PIPELINE CONFIGURATION
 # =============================================================================
 
-# The V3 pipeline provides a unified data path for all signals (metrics, traces, logs)
+# The pipeline provides a unified data path for all signals (metrics, traces, logs)
 # with data quality controls, transformation, and flexible export options.
 
-v3_pipeline:
-  # Enable V3 pipeline. When enabled, all signals flow through the unified pipeline.
+pipeline:
+  # Enable pipeline. When enabled, all signals flow through the unified pipeline.
   # When disabled, signals use the legacy V2 direct export paths.
   enabled: true
 
@@ -390,7 +390,7 @@ collectors:
 #         address: localhost:8080
 
 # --- V3 Pipeline with full data quality ---
-# v3_pipeline:
+# pipeline:
 #   enabled: true
 #   limits:
 #     cardinality:

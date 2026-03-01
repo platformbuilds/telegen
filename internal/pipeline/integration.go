@@ -15,8 +15,8 @@ import (
 	"github.com/platformbuilds/telegen/internal/pipeline/transform"
 )
 
-// V3IntegrationConfig configures the V3 integration layer.
-type V3IntegrationConfig struct {
+// IntegrationConfig configures the V3 integration layer.
+type IntegrationConfig struct {
 	// Enabled enables V3 pipeline routing. Default: true.
 	Enabled bool `yaml:"enabled"`
 
@@ -37,22 +37,22 @@ type V3LimitsConfig struct {
 	Attributes  *limits.AttributeLimiterConfig `yaml:"attributes,omitempty"`
 }
 
-// DefaultV3IntegrationConfig returns defaults.
-func DefaultV3IntegrationConfig() V3IntegrationConfig {
-	return V3IntegrationConfig{
+// DefaultIntegrationConfig returns defaults.
+func DefaultIntegrationConfig() IntegrationConfig {
+	return IntegrationConfig{
 		Enabled: true,
 	}
 }
 
-// V3Integration bridges V2 collectors to V3 pipeline.
+// Integration bridges V2 collectors to V3 pipeline.
 // This is the key component that enables 100% V2→V3 coverage.
-type V3Integration struct {
-	config V3IntegrationConfig
+type Integration struct {
+	config IntegrationConfig
 	logger *slog.Logger
 	mu     sync.RWMutex
 
 	// V3 pipeline (if standalone mode)
-	v3Pipeline *V3Pipeline
+	unifiedPipeline *UnifiedPipeline
 
 	// Adapters for each collector type
 	adapters map[adapters.CollectorType]adapters.CollectorAdapter
@@ -72,13 +72,13 @@ type V3Integration struct {
 	fallbackMetrics func(context.Context, pmetric.Metrics) error
 }
 
-// NewV3Integration creates a V3 integration layer.
-func NewV3Integration(config V3IntegrationConfig, logger *slog.Logger) (*V3Integration, error) {
+// NewIntegration creates a V3 integration layer.
+func NewIntegration(config IntegrationConfig, logger *slog.Logger) (*Integration, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	v := &V3Integration{
+	v := &Integration{
 		config:   config,
 		logger:   logger,
 		adapters: make(map[adapters.CollectorType]adapters.CollectorAdapter),
@@ -118,15 +118,15 @@ func NewV3Integration(config V3IntegrationConfig, logger *slog.Logger) (*V3Integ
 	return v, nil
 }
 
-// SetV3Pipeline connects to a standalone V3 pipeline.
-func (v *V3Integration) SetV3Pipeline(p *V3Pipeline) {
+// SetUnifiedPipeline connects to a standalone V3 pipeline.
+func (v *Integration) SetUnifiedPipeline(p *UnifiedPipeline) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	v.v3Pipeline = p
+	v.unifiedPipeline = p
 }
 
 // SetFallbackSinks sets V2 fallback sinks for graceful degradation.
-func (v *V3Integration) SetFallbackSinks(
+func (v *Integration) SetFallbackSinks(
 	traces func(context.Context, ptrace.Traces) error,
 	logs func(context.Context, plog.Logs) error,
 	metrics func(context.Context, pmetric.Metrics) error,
@@ -139,7 +139,7 @@ func (v *V3Integration) SetFallbackSinks(
 }
 
 // RegisterAdapter registers a collector adapter.
-func (v *V3Integration) RegisterAdapter(adapter adapters.CollectorAdapter) {
+func (v *Integration) RegisterAdapter(adapter adapters.CollectorAdapter) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	v.adapters[adapter.Type()] = adapter
@@ -151,7 +151,7 @@ func (v *V3Integration) RegisterAdapter(adapter adapters.CollectorAdapter) {
 
 // RouteTraces routes traces from V2 collectors through V3 pipeline.
 // Call this from V2 tracer instead of direct export.
-func (v *V3Integration) RouteTraces(ctx context.Context, traces ptrace.Traces) error {
+func (v *Integration) RouteTraces(ctx context.Context, traces ptrace.Traces) error {
 	if !v.config.Enabled {
 		return v.fallbackTraces(ctx, traces)
 	}
@@ -181,7 +181,7 @@ func (v *V3Integration) RouteTraces(ctx context.Context, traces ptrace.Traces) e
 
 	// Route to V3 pipeline
 	v.mu.RLock()
-	pipeline := v.v3Pipeline
+	pipeline := v.unifiedPipeline
 	v.mu.RUnlock()
 
 	if pipeline != nil {
@@ -197,7 +197,7 @@ func (v *V3Integration) RouteTraces(ctx context.Context, traces ptrace.Traces) e
 }
 
 // RouteLogs routes logs from V2 collectors through V3 pipeline.
-func (v *V3Integration) RouteLogs(ctx context.Context, logs plog.Logs) error {
+func (v *Integration) RouteLogs(ctx context.Context, logs plog.Logs) error {
 	if !v.config.Enabled {
 		return v.fallbackLogs(ctx, logs)
 	}
@@ -227,7 +227,7 @@ func (v *V3Integration) RouteLogs(ctx context.Context, logs plog.Logs) error {
 
 	// Route to V3 pipeline
 	v.mu.RLock()
-	pipeline := v.v3Pipeline
+	pipeline := v.unifiedPipeline
 	v.mu.RUnlock()
 
 	if pipeline != nil {
@@ -243,7 +243,7 @@ func (v *V3Integration) RouteLogs(ctx context.Context, logs plog.Logs) error {
 }
 
 // RouteMetrics routes metrics from V2 collectors through V3 pipeline.
-func (v *V3Integration) RouteMetrics(ctx context.Context, metrics pmetric.Metrics) error {
+func (v *Integration) RouteMetrics(ctx context.Context, metrics pmetric.Metrics) error {
 	if !v.config.Enabled {
 		return v.fallbackMetrics(ctx, metrics)
 	}
@@ -287,7 +287,7 @@ func (v *V3Integration) RouteMetrics(ctx context.Context, metrics pmetric.Metric
 
 	// Route to V3 pipeline
 	v.mu.RLock()
-	pipeline := v.v3Pipeline
+	pipeline := v.unifiedPipeline
 	v.mu.RUnlock()
 
 	if pipeline != nil {
@@ -307,17 +307,17 @@ func (v *V3Integration) RouteMetrics(ctx context.Context, metrics pmetric.Metric
 // ============================================================
 
 // TraceHook returns a function that can be injected into V2 tracer.
-func (v *V3Integration) TraceHook() func(ctx context.Context, traces ptrace.Traces) error {
+func (v *Integration) TraceHook() func(ctx context.Context, traces ptrace.Traces) error {
 	return v.RouteTraces
 }
 
 // LogHook returns a function that can be injected into V2 log collectors.
-func (v *V3Integration) LogHook() func(ctx context.Context, logs plog.Logs) error {
+func (v *Integration) LogHook() func(ctx context.Context, logs plog.Logs) error {
 	return v.RouteLogs
 }
 
 // MetricHook returns a function that can be injected into V2 metric collectors.
-func (v *V3Integration) MetricHook() func(ctx context.Context, metrics pmetric.Metrics) error {
+func (v *Integration) MetricHook() func(ctx context.Context, metrics pmetric.Metrics) error {
 	return v.RouteMetrics
 }
 
@@ -325,8 +325,8 @@ func (v *V3Integration) MetricHook() func(ctx context.Context, metrics pmetric.M
 // Stats
 // ============================================================
 
-// V3IntegrationStats provides integration statistics.
-type V3IntegrationStats struct {
+// IntegrationStats provides integration statistics.
+type IntegrationStats struct {
 	Enabled           bool                   `json:"enabled"`
 	AdapterCount      int                    `json:"adapter_count"`
 	CardinalityStats  interface{}            `json:"cardinality_stats,omitempty"`
@@ -336,11 +336,11 @@ type V3IntegrationStats struct {
 }
 
 // Stats returns current integration statistics.
-func (v *V3Integration) Stats() V3IntegrationStats {
+func (v *Integration) Stats() IntegrationStats {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
-	stats := V3IntegrationStats{
+	stats := IntegrationStats{
 		Enabled:      v.config.Enabled,
 		AdapterCount: len(v.adapters),
 	}
