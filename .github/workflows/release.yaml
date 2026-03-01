@@ -76,7 +76,7 @@ jobs:
           fi
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: telegen-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/telegen-${{ matrix.goos }}-${{ matrix.goarch }}.*
@@ -215,7 +215,7 @@ jobs:
           helm push .helm-packages/telegen-${{ steps.version.outputs.VERSION }}.tgz oci://${{ env.REGISTRY }}/mirastacklabs-ai/charts
 
       - name: Upload Helm chart artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: helm-chart
           path: .helm-packages/telegen-${{ steps.version.outputs.VERSION }}.tgz
