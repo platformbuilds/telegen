@@ -1,4 +1,4 @@
-# V3 Pipeline Configuration
+# Pipeline Configuration
 
 Complete reference for the V3 unified pipeline configuration.
 
@@ -7,7 +7,7 @@ Complete reference for the V3 unified pipeline configuration.
 The V3 pipeline provides enhanced data quality controls, transformation capabilities, and operational features. Enable it by setting:
 
 ```yaml
-v3_pipeline:
+pipeline:
   enabled: true
 ```
 
@@ -20,7 +20,7 @@ v3_pipeline:
 Prevents metric cardinality explosion that can overwhelm backends.
 
 ```yaml
-v3_pipeline:
+pipeline:
   limits:
     cardinality:
       enabled: true
@@ -59,7 +59,7 @@ v3_pipeline:
 Controls data ingestion rate to protect backends.
 
 ```yaml
-v3_pipeline:
+pipeline:
   limits:
     rate:
       enabled: true
@@ -90,7 +90,7 @@ v3_pipeline:
 Controls attribute counts and sizes to reduce payload size.
 
 ```yaml
-v3_pipeline:
+pipeline:
   limits:
     attributes:
       enabled: true
@@ -131,7 +131,7 @@ v3_pipeline:
 Apply rule-based transformations to signals before export.
 
 ```yaml
-v3_pipeline:
+pipeline:
   transform:
     enabled: true
     rules:
@@ -255,7 +255,7 @@ v3_pipeline:
 Automatically detect and mask personally identifiable information.
 
 ```yaml
-v3_pipeline:
+pipeline:
   pii_redaction:
     enabled: true
     
@@ -327,7 +327,7 @@ v3_pipeline:
 ### OTLP Export
 
 ```yaml
-v3_pipeline:
+pipeline:
   export:
     otlp:
       endpoint: otel-collector:4317
@@ -361,7 +361,7 @@ v3_pipeline:
 ### Batching
 
 ```yaml
-v3_pipeline:
+pipeline:
   export:
     batch:
       # Items per batch
@@ -379,7 +379,7 @@ v3_pipeline:
 Support failover, round-robin, or fan-out to multiple endpoints.
 
 ```yaml
-v3_pipeline:
+pipeline:
   export:
     multi_endpoint:
       enabled: true
@@ -406,7 +406,7 @@ v3_pipeline:
 Survive restarts without data loss.
 
 ```yaml
-v3_pipeline:
+pipeline:
   export:
     queue:
       enabled: true
@@ -424,7 +424,7 @@ v3_pipeline:
 Reload configuration without restart.
 
 ```yaml
-v3_pipeline:
+pipeline:
   operations:
     hot_reload:
       enabled: true
@@ -460,7 +460,7 @@ systemctl reload telegen
 Drain in-flight data before stopping.
 
 ```yaml
-v3_pipeline:
+pipeline:
   operations:
     shutdown:
       # Total shutdown timeout
@@ -480,7 +480,7 @@ v3_pipeline:
 All configuration values support environment variable substitution:
 
 ```yaml
-v3_pipeline:
+pipeline:
   export:
     otlp:
       endpoint: ${OTLP_ENDPOINT:-otel-collector:4317}
@@ -513,7 +513,7 @@ telegen:
   service_name: telegen
   log_level: info
 
-v3_pipeline:
+pipeline:
   enabled: true
   
   limits:

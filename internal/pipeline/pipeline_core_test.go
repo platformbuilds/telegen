@@ -13,14 +13,14 @@ import (
 	"github.com/platformbuilds/telegen/internal/pipeline/adapters"
 )
 
-func TestV3PipelineCreation(t *testing.T) {
-	config := DefaultV3PipelineConfig()
+func TestUnifiedPipelineCreation(t *testing.T) {
+	config := DefaultUnifiedPipelineConfig()
 	config.Exporter.Endpoint = "localhost:4317"
 	config.Exporter.Insecure = true
 
-	pipeline, err := NewV3Pipeline(config)
+	pipeline, err := NewUnifiedPipeline(config)
 	if err != nil {
-		t.Fatalf("NewV3Pipeline failed: %v", err)
+		t.Fatalf("NewUnifiedPipeline failed: %v", err)
 	}
 	defer pipeline.cancel()
 
@@ -65,8 +65,8 @@ func TestV3PipelineCreation(t *testing.T) {
 	}
 }
 
-func TestV3PipelineWithMultiEndpoint(t *testing.T) {
-	config := DefaultV3PipelineConfig()
+func TestUnifiedPipelineWithMultiEndpoint(t *testing.T) {
+	config := DefaultUnifiedPipelineConfig()
 	config.Exporter.Endpoint = "localhost:4317"
 	config.Exporter.Insecure = true
 	config.MultiEndpoint = &MultiEndpointConfig{
@@ -85,9 +85,9 @@ func TestV3PipelineWithMultiEndpoint(t *testing.T) {
 		},
 	}
 
-	pipeline, err := NewV3Pipeline(config)
+	pipeline, err := NewUnifiedPipeline(config)
 	if err != nil {
-		t.Fatalf("NewV3Pipeline failed: %v", err)
+		t.Fatalf("NewUnifiedPipeline failed: %v", err)
 	}
 	defer pipeline.cancel()
 
@@ -96,14 +96,14 @@ func TestV3PipelineWithMultiEndpoint(t *testing.T) {
 	}
 }
 
-func TestV3PipelineSendSignals(t *testing.T) {
-	config := DefaultV3PipelineConfig()
+func TestUnifiedPipelineSendSignals(t *testing.T) {
+	config := DefaultUnifiedPipelineConfig()
 	config.Exporter.Endpoint = "localhost:4317"
 	config.Exporter.Insecure = true
 
-	pipeline, err := NewV3Pipeline(config)
+	pipeline, err := NewUnifiedPipeline(config)
 	if err != nil {
-		t.Fatalf("NewV3Pipeline failed: %v", err)
+		t.Fatalf("NewUnifiedPipeline failed: %v", err)
 	}
 	defer pipeline.cancel()
 
@@ -171,14 +171,14 @@ func TestV3PipelineSendSignals(t *testing.T) {
 	})
 }
 
-func TestV3PipelineStats(t *testing.T) {
-	config := DefaultV3PipelineConfig()
+func TestUnifiedPipelineStats(t *testing.T) {
+	config := DefaultUnifiedPipelineConfig()
 	config.Exporter.Endpoint = "localhost:4317"
 	config.Exporter.Insecure = true
 
-	pipeline, err := NewV3Pipeline(config)
+	pipeline, err := NewUnifiedPipeline(config)
 	if err != nil {
-		t.Fatalf("NewV3Pipeline failed: %v", err)
+		t.Fatalf("NewUnifiedPipeline failed: %v", err)
 	}
 	defer pipeline.cancel()
 
@@ -213,20 +213,20 @@ func TestV3PipelineStats(t *testing.T) {
 	}
 }
 
-func TestV3PipelineConverters(t *testing.T) {
-	config := DefaultV3PipelineConfig()
+func TestUnifiedPipelineConverters(t *testing.T) {
+	config := DefaultUnifiedPipelineConfig()
 	config.Exporter.Endpoint = "localhost:4317"
 	config.Exporter.Insecure = true
 
-	pipeline, err := NewV3Pipeline(config)
+	pipeline, err := NewUnifiedPipeline(config)
 	if err != nil {
-		t.Fatalf("NewV3Pipeline failed: %v", err)
+		t.Fatalf("NewUnifiedPipeline failed: %v", err)
 	}
 	defer pipeline.cancel()
 
 	// Test that converters are accessible.
-	convPipeline := pipeline.Converters()
-	if convPipeline == nil {
+	convUnifiedPipeline := pipeline.Converters()
+	if convUnifiedPipeline == nil {
 		t.Fatal("converter pipeline should not be nil")
 	}
 
@@ -235,7 +235,7 @@ func TestV3PipelineConverters(t *testing.T) {
 # TYPE test_counter counter
 test_counter{label="value"} 42
 `
-	result, err := convPipeline.ConvertPrometheusText(context.Background(), promText)
+	result, err := convUnifiedPipeline.ConvertPrometheusText(context.Background(), promText)
 	if err != nil {
 		t.Fatalf("ConvertPrometheusText failed: %v", err)
 	}
@@ -244,14 +244,14 @@ test_counter{label="value"} 42
 	}
 }
 
-func TestV3PipelineIsRunning(t *testing.T) {
-	config := DefaultV3PipelineConfig()
+func TestUnifiedPipelineIsRunning(t *testing.T) {
+	config := DefaultUnifiedPipelineConfig()
 	config.Exporter.Endpoint = "localhost:4317"
 	config.Exporter.Insecure = true
 
-	pipeline, err := NewV3Pipeline(config)
+	pipeline, err := NewUnifiedPipeline(config)
 	if err != nil {
-		t.Fatalf("NewV3Pipeline failed: %v", err)
+		t.Fatalf("NewUnifiedPipeline failed: %v", err)
 	}
 	defer pipeline.cancel()
 
@@ -260,14 +260,14 @@ func TestV3PipelineIsRunning(t *testing.T) {
 	}
 }
 
-func TestV3PipelineAdapterAccess(t *testing.T) {
-	config := DefaultV3PipelineConfig()
+func TestUnifiedPipelineAdapterAccess(t *testing.T) {
+	config := DefaultUnifiedPipelineConfig()
 	config.Exporter.Endpoint = "localhost:4317"
 	config.Exporter.Insecure = true
 
-	pipeline, err := NewV3Pipeline(config)
+	pipeline, err := NewUnifiedPipeline(config)
 	if err != nil {
-		t.Fatalf("NewV3Pipeline failed: %v", err)
+		t.Fatalf("NewUnifiedPipeline failed: %v", err)
 	}
 	defer pipeline.cancel()
 
