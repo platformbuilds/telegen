@@ -7,7 +7,7 @@
 # Uses BUILDPLATFORM to run natively on the build host
 # =============================================================================
 ARG BUILDPLATFORM
-FROM --platform=$BUILDPLATFORM ghcr.io/open-telemetry/obi-generator:0.2.6 AS bpf-gen
+FROM --platform=$BUILDPLATFORM ghcr.io/open-telemetry/obi-generator:0.2.10 AS bpf-gen
 
 WORKDIR /src
 
