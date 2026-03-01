@@ -74,7 +74,7 @@ RUN git clone --depth 1 https://github.com/jvm-profiling-tools/perf-map-agent.gi
 # Uses BUILDPLATFORM to run natively, cross-compiles for TARGETPLATFORM
 # =============================================================================
 ARG BUILDPLATFORM
-FROM --platform=$BUILDPLATFORM golang:1.25-bookworm AS build
+FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS build
 
 # These args are automatically set by Docker buildx
 ARG TARGETPLATFORM
