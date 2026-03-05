@@ -398,7 +398,7 @@ Internal metrics about Telegen's own operation.
 
 ---
 
-## Sentinel Value Reference
+## Sentiment Value Reference
 
 Understanding metric sentiments:
 
