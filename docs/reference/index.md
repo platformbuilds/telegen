@@ -12,6 +12,7 @@ This section contains detailed technical reference material.
 :maxdepth: 2
 
 metrics-reference
+signals-reference
 semantic-conventions
 cli-reference
 api-reference
@@ -22,6 +23,7 @@ api-reference
 | Topic | Description |
 |-------|-------------|
 | {doc}`metrics-reference` | Complete metrics catalog |
+| {doc}`signals-reference` | Comprehensive signals reference catalog |
 | {doc}`semantic-conventions` | OpenTelemetry semantic conventions |
 | {doc}`cli-reference` | Command-line interface |
 | {doc}`api-reference` | REST API endpoints |
