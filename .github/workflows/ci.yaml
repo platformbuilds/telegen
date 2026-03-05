@@ -60,7 +60,7 @@ jobs:
         run: find internal -name '*_bpfel*' -type f | head -20
 
       - name: Upload generated eBPF artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: generated-ebpf
           path: internal/
@@ -161,7 +161,7 @@ jobs:
           make build GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: telegen-${{ matrix.goos }}-${{ matrix.goarch }}
           path: bin/telegen
