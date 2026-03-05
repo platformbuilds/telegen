@@ -148,14 +148,14 @@ Metrics for visualizing service-to-service dependencies in trace formats compati
 
 ## Span Metrics
 
-RED metrics derived from distributed traces, compatible with Grafana Tempo span metrics.
+RED metrics derived from distributed traces, compatible with Grafana Tempo span metrics and the OTel spanmetricsconnector.
 
 | Metric Name | Type | Definition | Labels | Impact | Sentiment | Source Module |
 |-------------|------|------------|--------|--------|-----------|---------------|
-| `traces.span.metrics.duration` | Histogram | Duration of service calls (client and server). Unit configurable (ms or s). Compatible with OTel spanmetricsconnector | `service.name`, `span.name`, `span.kind`, `status.code` | Span latency distribution | ⬆️ Negative | `pkg/export/prom` |
-| `traces.span.metrics.calls` | Counter | Number of service calls, including errors (filtered by `status.code`). Compatible with OTel spanmetricsconnector | `service.name`, `span.name`, `span.kind`, `status.code` | Span call volume / error rate | Neutral | `pkg/export/prom` |
-| `traces.span.metrics.size` | Counter | Size of service calls in bytes (Telegen extension) | `service.name`, `span.name`, `span.kind` | Request payload size | Neutral | `pkg/export/prom` |
-| `traces.span.metrics.response_size` | Counter | Size of service responses in bytes (Telegen extension) | `service.name`, `span.name`, `span.kind` | Response payload size | Neutral | `pkg/export/prom` |
+| `traces_spanmetrics_latency` | Histogram | Duration of service calls (client and server). Legacy Tempo-style name; when using the OTel spanmetricsconnector this is exported as `traces_span_metrics_duration_seconds`. Unit configurable (ms or s). | `service.name`, `span.name`, `span.kind`, `status.code` | Span latency distribution | ⬆️ Negative | `pkg/export/prom` |
+| `traces_spanmetrics_calls_total` | Counter | Number of service calls, including errors (filtered by `status.code`). Compatible with OTel spanmetricsconnector | `service.name`, `span.name`, `span.kind`, `status.code` | Span call volume / error rate | Neutral | `pkg/export/prom` |
+| `traces_spanmetrics_size_total` | Counter | Size of service calls in bytes (Telegen extension) | `service.name`, `span.name`, `span.kind` | Request payload size | Neutral | `pkg/export/prom` |
+| `traces_spanmetrics_response_size_total` | Counter | Size of service responses in bytes (Telegen extension) | `service.name`, `span.name`, `span.kind` | Response payload size | Neutral | `pkg/export/prom` |
 | `traces_target_info` | Gauge | Target service information in trace span metric format | `service.name`, `service.namespace`, `k8s.*` labels | Service metadata | Neutral (informational) | `pkg/export/prom` |
 | `traces_host_info` | Gauge | Host information with constant value 1 labeled by host id | `host.id`, `host.name` | Host metadata | Neutral (informational) | `pkg/export/prom` |
 
