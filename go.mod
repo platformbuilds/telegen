@@ -89,7 +89,7 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/snappy v1.0.0
 	github.com/gosnmp/gosnmp v1.43.2
-	github.com/grafana/jfr-parser v0.12.0
+	github.com/grafana/jfr-parser v0.14.0
 	github.com/jsimonetti/rtnetlink/v2 v2.2.0
 	github.com/openconfig/gnmi v0.14.1
 	github.com/twmb/franz-go v1.20.6
