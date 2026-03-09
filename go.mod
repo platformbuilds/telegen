@@ -92,7 +92,7 @@ require (
 	github.com/grafana/jfr-parser v0.14.0
 	github.com/jsimonetti/rtnetlink/v2 v2.2.0
 	github.com/openconfig/gnmi v0.14.1
-	github.com/twmb/franz-go v1.20.6
+	github.com/twmb/franz-go v1.20.7
 	github.com/twmb/franz-go/pkg/kmsg v1.12.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.40.0
 	golang.org/x/time v0.14.0
@@ -149,7 +149,7 @@ require (
 	github.com/grafana/regexp v0.0.0-20250905093917-f7b3be9d1853 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.7 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.18.3 // indirect
+	github.com/klauspost/compress v1.18.4 // indirect
 	github.com/knadh/koanf/maps v0.1.2 // indirect
 	github.com/knadh/koanf/providers/confmap v1.0.0 // indirect
 	github.com/knadh/koanf/v2 v2.3.2 // indirect
