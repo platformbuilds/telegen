@@ -826,11 +826,14 @@ exports:
       timeout: "10s"
 
 # -----------------------------------------------------------------------------
-# OpenTelemetry Metrics Export Configuration
+# OpenTelemetry Metrics Export Configuration (eBPF auto-instrumented services)
+# Note: These settings are merged under ebpf.otel_metrics_export at runtime.
+# In most deployments, the OTLP endpoint is auto-detected from exports.otlp.grpc
+# below, so this section only needs to be changed for advanced overrides.
 # -----------------------------------------------------------------------------
 otel_metrics_export:
-  protocol: unset
-  metrics_protocol: unset
+  protocol: grpc
+  metrics_protocol: grpc
   otel_interval_ms: 60000
   buckets:
     duration_histogram_buckets:
@@ -859,11 +862,14 @@ otel_metrics_export:
   ttl: 5m
 
 # -----------------------------------------------------------------------------
-# OpenTelemetry Traces Export Configuration
+# OpenTelemetry Traces Export Configuration (eBPF auto-instrumented services)
+# Note: These settings are merged under ebpf.otel_traces_export at runtime.
+# In most deployments, the OTLP endpoint is auto-detected from exports.otlp.grpc
+# below, so this section only needs to be changed for advanced overrides.
 # -----------------------------------------------------------------------------
 otel_traces_export:
-  protocol: unset
-  traces_protocol: unset
+  protocol: grpc
+  traces_protocol: grpc
   max_queue_size: 4096
   batch_timeout: 15s
   reporters_cache_len: 256
