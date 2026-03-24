@@ -139,7 +139,7 @@ jobs:
             org.opencontainers.image.version=${{ steps.version.outputs.VERSION }}
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -154,7 +154,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push debug image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           target: debug
