@@ -39,6 +39,11 @@ func ReadTCPRequestIntoSpan(parseCtx *EBPFParseContext, cfg *config.EBPFTracer, 
 		return request.Span{}, true, nil
 	}
 
+	// Gate: suppress connections whose parse failure rate is too high.
+	if recordParseOutcome(parseCtx, event.ConnInfo, ParseIgnored) {
+		return request.Span{}, true, nil
+	}
+
 	requestBuffer, responseBuffer := getBuffers(parseCtx, event)
 
 	if cfg.ProtocolDebug {
@@ -46,6 +51,22 @@ func ReadTCPRequestIntoSpan(parseCtx *EBPFParseContext, cfg *config.EBPFTracer, 
 		fmt.Printf("[<] %v\n", responseBuffer)
 	}
 
+	span, ignore, parseErr := readTCPRequestIntoSpanInner(parseCtx, cfg, event, requestBuffer, responseBuffer)
+
+	// Map parse result back to outcome for failure rate tracking.
+	if parseErr != nil {
+		recordParseOutcome(parseCtx, event.ConnInfo, ParseInvalid)
+	} else if ignore {
+		recordParseOutcome(parseCtx, event.ConnInfo, ParseIgnored)
+	} else {
+		recordParseOutcome(parseCtx, event.ConnInfo, ParseSuccess)
+	}
+
+	return span, ignore, parseErr
+}
+
+//nolint:cyclop
+func readTCPRequestIntoSpanInner(parseCtx *EBPFParseContext, cfg *config.EBPFTracer, event *TCPRequestInfo, requestBuffer, responseBuffer []byte) (request.Span, bool, error) {
 	// We might know already the protocol for this event
 	switch event.ProtocolType {
 	case ProtocolTypeKafka:
@@ -78,7 +99,6 @@ func ReadTCPRequestIntoSpan(parseCtx *EBPFParseContext, cfg *config.EBPFTracer, 
 		if err != nil {
 			return request.Span{}, true, fmt.Errorf("failed to handle MySQL event: %w", err)
 		}
-
 		return span, false, nil
 	case ProtocolTypePostgres:
 		span, err := handlePostgres(parseCtx, event, requestBuffer, responseBuffer)
@@ -92,8 +112,34 @@ func ReadTCPRequestIntoSpan(parseCtx *EBPFParseContext, cfg *config.EBPFTracer, 
 		if err != nil {
 			return request.Span{}, true, fmt.Errorf("failed to handle Postgres event: %w", err)
 		}
-
 		return span, false, nil
+	case ProtocolTypeAMQP:
+		span, outcome, err := ProcessPossibleAMQPEvent(event, requestBuffer, responseBuffer)
+		if outcome == ParseIgnored && err == nil {
+			return request.Span{}, true, nil
+		}
+		if err == nil {
+			return span, false, nil
+		}
+		return request.Span{}, true, fmt.Errorf("failed to handle AMQP event: %w", err)
+	case ProtocolTypeCQL:
+		span, outcome, err := ProcessPossibleCQLEvent(event, requestBuffer, responseBuffer)
+		if outcome == ParseIgnored && err == nil {
+			return request.Span{}, true, nil
+		}
+		if err == nil {
+			return span, false, nil
+		}
+		return request.Span{}, true, fmt.Errorf("failed to handle CQL event: %w", err)
+	case ProtocolTypeNATS:
+		span, outcome, err := ProcessPossibleNATSEvent(event, requestBuffer, responseBuffer)
+		if outcome == ParseIgnored && err == nil {
+			return request.Span{}, true, nil
+		}
+		if err == nil {
+			return span, false, nil
+		}
+		return request.Span{}, true, fmt.Errorf("failed to handle NATS event: %w", err)
 	case ProtocolTypeUnknown:
 	default:
 	}
@@ -131,6 +177,42 @@ func ReadTCPRequestIntoSpan(parseCtx *EBPFParseContext, cfg *config.EBPFTracer, 
 		if cbInfo != nil {
 			return TCPToCouchbaseToSpan(event, cbInfo), false, nil
 		}
+	}
+
+	// AMQP heuristic detection (fallback for unknown protocol type)
+	if isAMQP(requestBuffer) || isAMQP(responseBuffer) {
+		span, outcome, err := ProcessPossibleAMQPEvent(event, requestBuffer, responseBuffer)
+		if outcome == ParseIgnored && err == nil {
+			return request.Span{}, true, nil
+		}
+		if err == nil {
+			return span, false, nil
+		}
+		slog.Debug("AMQP heuristic detection failed, ignoring", "error", err)
+	}
+
+	// CQL heuristic detection
+	if isCQL(requestBuffer) || isCQL(responseBuffer) {
+		span, outcome, err := ProcessPossibleCQLEvent(event, requestBuffer, responseBuffer)
+		if outcome == ParseIgnored && err == nil {
+			return request.Span{}, true, nil
+		}
+		if err == nil {
+			return span, false, nil
+		}
+		slog.Debug("CQL heuristic detection failed, ignoring", "error", err)
+	}
+
+	// NATS heuristic detection
+	if isNATS(requestBuffer) || isNATS(responseBuffer) {
+		span, outcome, err := ProcessPossibleNATSEvent(event, requestBuffer, responseBuffer)
+		if outcome == ParseIgnored && err == nil {
+			return request.Span{}, true, nil
+		}
+		if err == nil {
+			return span, false, nil
+		}
+		slog.Debug("NATS heuristic detection failed, ignoring", "error", err)
 	}
 
 	switch {

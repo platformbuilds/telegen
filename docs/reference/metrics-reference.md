@@ -215,6 +215,39 @@ NVIDIA GPU metrics when AI/ML observability is enabled.
 
 ---
 
+## Connection Statistics Metrics
+
+Emitted when a TCP connection closes, providing per-connection byte throughput data.
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `telegen.connection.bytes_sent` | Counter | src_ip, dst_ip, dst_port, protocol | Bytes sent over the connection lifetime |
+| `telegen.connection.bytes_received` | Counter | src_ip, dst_ip, dst_port, protocol | Bytes received over the connection lifetime |
+
+These metrics complement per-request traces, giving aggregate throughput even for protocols that are not fully parsed.
+
+---
+
+## Kafka Consumer Group Metrics
+
+Kafka spans with consumer group context include the following additional span attribute:
+
+| Attribute | Description |
+|-----------|-------------|
+| `messaging.kafka.consumer.group.id` | Consumer group identifier, extracted from JoinGroup and SyncGroup Kafka protocol events |
+
+This attribute appears on spans emitted for Fetch requests and group management operations (JoinGroup, SyncGroup). Use it to filter group-specific traces and correlate consumer lag:
+
+```promql
+# Count Fetch spans by consumer group
+count(telegen_spans_collected_total{
+  messaging_system="kafka",
+  messaging_kafka_consumer_group_id=~".+"
+}) by (messaging_kafka_consumer_group_id)
+```
+
+---
+
 ## SNMP Metrics
 
 SNMP metrics use the MIB object names with `snmp_` prefix.

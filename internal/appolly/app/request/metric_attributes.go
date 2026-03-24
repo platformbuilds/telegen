@@ -120,6 +120,10 @@ func MessagingKafkaOffset(val int64) attribute.KeyValue {
 	return attribute.Key(attr.MessagingKafkaOffset).Int64(val)
 }
 
+func MessagingKafkaConsumerGroupID(val string) attribute.KeyValue {
+	return attribute.Key(attr.MessagingKafkaConsumerGroupID).String(val)
+}
+
 func DBCollectionName(val string) attribute.KeyValue {
 	return attribute.Key(attr.DBCollectionName).String(val)
 }

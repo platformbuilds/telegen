@@ -73,6 +73,9 @@ const (
 	ProtocolTypeHTTP // not used, written for consistency
 	ProtocolTypeKafka
 	ProtocolTypeMQTT // placeholder for future kernel-space detection
+	ProtocolTypeAMQP // AMQP 0-9-1 (RabbitMQ)
+	ProtocolTypeCQL  // Cassandra Query Language (Cassandra/ScyllaDB)
+	ProtocolTypeNATS // NATS messaging
 )
 
 var IntegrityModeOverride = false
@@ -150,6 +153,11 @@ type EBPFParseContext struct {
 	kafkaTopicUUIDToName       *simplelru.LRU[kafkaparser.UUID, string]
 	payloadExtraction          config.PayloadExtraction
 	dnsEvents                  *expirable.LRU[dnsparser.DNSId, *request.Span]
+
+	// parseStats tracks per-connection parse failure rates. When a connection's
+	// failure rate exceeds parseFailureThreshold, events are suppressed.
+	parseStats   map[connStatsKey]*connParseStats
+	parseStatsMu sync.Mutex
 }
 
 type EBPFEventContext struct {
@@ -240,6 +248,7 @@ func NewEBPFParseContext(cfg *config.EBPFTracer, spansChan *msg.Queue[[]request.
 		kafkaTopicUUIDToName:       kafkaTopicUUIDToName,
 		payloadExtraction:          payloadExtraction,
 		dnsEvents:                  dnsEvents,
+		parseStats:                 make(map[connStatsKey]*connParseStats),
 	}
 }
 

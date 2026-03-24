@@ -28,9 +28,12 @@ const (
 type KafkaAPIKey int8
 
 const (
-	APIKeyProduce  KafkaAPIKey = 0
-	APIKeyFetch    KafkaAPIKey = 1
-	APIKeyMetadata KafkaAPIKey = 3
+	APIKeyProduce      KafkaAPIKey = 0
+	APIKeyFetch        KafkaAPIKey = 1
+	APIKeyMetadata     KafkaAPIKey = 3
+	APIKeyOffsetCommit KafkaAPIKey = 8
+	APIKeyJoinGroup    KafkaAPIKey = 11
+	APIKeySyncGroup    KafkaAPIKey = 14
 )
 
 type (

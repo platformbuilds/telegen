@@ -48,6 +48,9 @@ const (
 	EventTypeFailedConnect
 	EventTypeDNS
 	EventTypeCouchbaseClient
+	EventTypeAMQPClient
+	EventTypeCQLClient
+	EventTypeNATSClient
 )
 
 const (
@@ -174,8 +177,11 @@ type SQLError struct {
 }
 
 type MessagingInfo struct {
-	Offset    int64 `json:"offset"`
-	Partition int   `json:"partition"`
+	Offset          int64  `json:"offset"`
+	Partition       int    `json:"partition"`
+	// ConsumerGroupID is the Kafka consumer group identifier (from JoinGroup/SyncGroup events).
+	// Corresponds to OpenTelemetry semantic convention messaging.kafka.consumer.group.id.
+	ConsumerGroupID string `json:"consumerGroupId,omitempty"`
 }
 
 type GraphQL struct {

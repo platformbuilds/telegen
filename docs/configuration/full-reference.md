@@ -181,6 +181,29 @@ agent:
       enabled: true
       lifecycle: true
       file_ops: true
+    
+    # Parse failure rate suppression
+    # Connections where the ratio of failed parse attempts exceeds the threshold
+    # within a rolling window are silently dropped to reduce noise.
+    parse_failure_rate_threshold: 0.4   # 0–1.0; default 0.4 (40%)
+    parse_failure_rate_window: 20        # Rolling window size (number of events)
+    
+    # Connection byte-count statistics
+    # Emits telegen.connection.bytes_sent / bytes_received counters on TCP close.
+    conn_stats:
+      enabled: true
+    
+    # Go crypto/tls uprobe
+    # Captures plaintext payload before encryption / after decryption for
+    # Go applications using the standard crypto/tls package.
+    go_tls_uprobe:
+      enabled: true
+    
+    # gRPC-C uprobe
+    # Captures spans from native C gRPC applications (libgrpc.so) without
+    # requiring any SDK instrumentation.
+    grpc_c_uprobe:
+      enabled: true
   
   # Auto-discovery (process selection)
   discovery:
@@ -350,6 +373,27 @@ agent:
       enabled: false
       sample_rate: 1000  # 1 in N packets
       interfaces: []  # Empty = all interfaces
+    
+    # Layer 7 protocol parsing
+    # Each protocol can be toggled independently.
+    # Newly supported protocols: amqp, cql, nats
+    protocols:
+      http: { enabled: true, parse_headers: true, max_body_size: 65536 }
+      grpc: { enabled: true }
+      mysql: { enabled: true, capture_query: true }
+      postgres: { enabled: true, capture_query: true }
+      redis: { enabled: true, capture_command: true }
+      mongodb: { enabled: true, capture_query: true }
+      kafka: { enabled: true }
+      rabbitmq: { enabled: true }
+      mqtt: { enabled: true }
+      # AMQP 0-9-1 wire protocol (RabbitMQ clients)
+      amqp: { enabled: true, capture_routing_key: true }
+      # Cassandra Query Language (CQL v3–v5)
+      cql: { enabled: true, capture_query: true }
+      # NATS lightweight pub/sub messaging
+      nats: { enabled: true, capture_subject: true }
+      dns: { enabled: true }
   
   # Log collection
   logs:

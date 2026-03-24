@@ -68,8 +68,6 @@ struct tcp_metrics_event {
     __u64 bytes_sent;
     __u64 bytes_received;
     __u64 bytes_acked;
-    
-    // Segments
     __u32 segs_in;           // Segments received
     __u32 segs_out;          // Segments sent
     __u32 data_segs_in;      // Data segments received
@@ -162,6 +160,28 @@ struct {
     __uint(value_size, sizeof(__u32));
     __uint(max_entries, 4);
 } tcp_config SEC(".maps");
+
+// Connection close event emitted to userspace when a TCP connection reaches TCP_CLOSE.
+// The Go-side consumer (internal/ebpf/common/conn_stats.go) reads these events to
+// emit per-connection byte-count OTel counters.
+struct conn_close_event {
+    __u64 timestamp;
+    __u32 saddr;
+    __u32 daddr;
+    __u16 sport;
+    __u16 dport;
+    __u8  ip_version;   // 4 or 6
+    __u8  _pad[3];
+    __u64 bytes_sent;
+    __u64 bytes_received;
+    __u32 pid;
+    __u32 _pad2;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_RINGBUF);
+    __uint(max_entries, 4 * 1024 * 1024); // 4MB
+} conn_close_events SEC(".maps");
 
 #define TCP_CONFIG_ENABLED          0
 #define TCP_CONFIG_SAMPLE_RATE      1
@@ -440,7 +460,7 @@ int trace_inet_sock_set_state(struct trace_event_raw_inet_sock_set_state *ctx) {
         bpf_map_update_elem(&tcp_connections, &key, &stats, BPF_ANY);
     }
     
-    // Track closed connections
+    // Track closed connections — emit conn_close_event with byte counts.
     if (newstate == TCP_CLOSE) {
         struct tcp_conn_key key = {};
         
@@ -450,8 +470,32 @@ int trace_inet_sock_set_state(struct trace_event_raw_inet_sock_set_state *ctx) {
         }
         key.sport = ctx->sport;
         key.dport = __bpf_ntohs(ctx->dport);
-        
-        // Could emit final metrics here before cleanup
+
+        // Emit a conn_close_event so the Go consumer can record byte-count metrics.
+        struct conn_close_event *ev = bpf_ringbuf_reserve(&conn_close_events, sizeof(*ev), 0);
+        if (ev) {
+            __builtin_memset(ev, 0, sizeof(*ev));
+            ev->timestamp  = bpf_ktime_get_ns();
+            ev->ip_version = (ctx->family == 2) ? 4 : 6;
+            ev->sport      = key.sport;
+            ev->dport      = key.dport;
+            ev->pid        = bpf_get_current_pid_tgid() >> 32;
+
+            if (ctx->family == 2) {
+                __builtin_memcpy(&ev->saddr, ctx->saddr, 4);
+                __builtin_memcpy(&ev->daddr, ctx->daddr, 4);
+            }
+
+            // Pull accumulated byte counts from the connection stats map if present.
+            struct tcp_conn_stats *stats = bpf_map_lookup_elem(&tcp_connections, &key);
+            if (stats) {
+                ev->bytes_sent     = stats->bytes_sent;
+                ev->bytes_received = stats->bytes_received;
+            }
+
+            bpf_ringbuf_submit(ev, 0);
+        }
+
         bpf_map_delete_elem(&tcp_connections, &key);
     }
     

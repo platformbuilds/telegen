@@ -476,6 +476,133 @@ agent:
 
 ---
 
+## Messaging Protocols
+
+Telegen captures tracing data for AMQP 0-9-1, CQL (Cassandra), and NATS at the eBPF level — no SDK instrumentation or configuration changes required.
+
+---
+
+### AMQP 0-9-1 Tracing
+
+AMQP 0-9-1 is the wire protocol used by RabbitMQ and other brokers. Telegen captures publish and consume operations at the channel level.
+
+#### What's Captured
+
+| Field | Description |
+|-------|-------------|
+| `messaging.system` | `rabbitmq` |
+| `messaging.operation` | `publish` or `process` |
+| `messaging.destination.name` | Exchange name |
+| `messaging.rabbitmq.destination.routing_key` | Routing key |
+| `messaging.client_id` | AMQP channel ID |
+| `net.peer.ip` / `net.peer.port` | Broker address |
+
+#### Sample Span
+
+```json
+{
+  "name": "orders.created publish",
+  "kind": "PRODUCER",
+  "duration_ms": 0.8,
+  "attributes": {
+    "messaging.system": "rabbitmq",
+    "messaging.operation": "publish",
+    "messaging.destination.name": "events",
+    "messaging.rabbitmq.destination.routing_key": "orders.created",
+    "net.peer.ip": "10.0.2.50",
+    "net.peer.port": 5672
+  }
+}
+```
+
+#### Configuration
+
+```yaml
+agent:
+  network:
+    protocols:
+      amqp:
+        enabled: true
+        capture_routing_key: true
+```
+
+---
+
+### CQL (Cassandra) Tracing
+
+Telegen parses the Cassandra Query Language binary protocol (CQL v3–v5) to capture query statements, keyspaces, batch operations, and prepared statement execution.
+
+See {doc}`database-tracing` for the full Cassandra tracing reference.
+
+---
+
+### NATS Tracing
+
+NATS is a lightweight, text-based publish/subscribe messaging system. Telegen captures PUB, MSG, and subscription operations from the NATS wire protocol.
+
+#### What's Captured
+
+| Field | Description |
+|-------|-------------|
+| `messaging.system` | `nats` |
+| `messaging.operation` | `publish` or `process` |
+| `messaging.destination.name` | Subject name |
+| `net.peer.ip` / `net.peer.port` | NATS server address |
+
+#### Sample Span
+
+```json
+{
+  "name": "sensor.readings publish",
+  "kind": "PRODUCER",
+  "duration_ms": 0.2,
+  "attributes": {
+    "messaging.system": "nats",
+    "messaging.operation": "publish",
+    "messaging.destination.name": "sensor.readings",
+    "net.peer.ip": "10.0.3.10",
+    "net.peer.port": 4222
+  }
+}
+```
+
+#### Configuration
+
+```yaml
+agent:
+  network:
+    protocols:
+      nats:
+        enabled: true
+        capture_subject: true
+```
+
+---
+
+## Connection Statistics
+
+Telegen tracks byte-level connection statistics via TCP close events, providing a low-overhead measure of throughput per connection without full payload capture.
+
+### Metrics Emitted
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `telegen.connection.bytes_sent` | Counter | src, dst, port | Bytes sent per connection lifetime |
+| `telegen.connection.bytes_received` | Counter | src, dst, port | Bytes received per connection lifetime |
+
+These metrics are emitted when a TCP connection closes and complement the per-request span data produced by the protocol parsers.
+
+### Configuration
+
+```yaml
+agent:
+  ebpf:
+    conn_stats:
+      enabled: true
+```
+
+---
+
 ## Next Steps
 
 - {doc}`database-tracing` - Deep database network tracing

@@ -38,6 +38,10 @@ type KafkaInfo struct {
 	Topics        []TopicInfo // All topics in the request
 	ClientID      string
 	PartitionInfo *PartitionInfo // Partition info for primary topic
+	// GroupID is the Kafka consumer group identifier, set when a JoinGroup or SyncGroup
+	// request is observed. Empty for producer-side events.
+	GroupID  string
+	MemberID string
 }
 
 func (k Operation) String() string {
@@ -78,6 +82,8 @@ func ProcessKafkaEvent(pkt []byte, rpkt []byte, kafkaTopicUUIDToName *simplelru.
 		return processFetchRequest(pkt, hdr, offset, kafkaTopicUUIDToName)
 	case kafkaparser.APIKeyMetadata:
 		return processMetadataResponse(rpkt, hdr, kafkaTopicUUIDToName)
+	case kafkaparser.APIKeyJoinGroup, kafkaparser.APIKeySyncGroup:
+		return processJoinGroupRequest(pkt, hdr, offset)
 	default:
 		return nil, true, errors.New("unsupported Kafka API key")
 	}
@@ -162,6 +168,21 @@ func processFetchRequest(pkt []byte, hdr *kafkaparser.KafkaRequestHeader, offset
 	}, false, nil
 }
 
+func processJoinGroupRequest(pkt []byte, hdr *kafkaparser.KafkaRequestHeader, offset kafkaparser.Offset) (*KafkaInfo, bool, error) {
+	joinReq, err := kafkaparser.ParseJoinGroupRequest(pkt, hdr, offset)
+	if err != nil {
+		return nil, true, err
+	}
+	return &KafkaInfo{
+		ClientID: hdr.ClientID,
+		// JoinGroup/SyncGroup are control-plane events; we skip topic tracking
+		// and surface them as Process events so they appear in consumer timelines.
+		Operation: Fetch,
+		GroupID:   joinReq.GroupID,
+		MemberID:  joinReq.MemberID,
+	}, false, nil
+}
+
 func processMetadataResponse(rpkt []byte, hdr *kafkaparser.KafkaRequestHeader, kafkaTopicUUIDToName *simplelru.LRU[kafkaparser.UUID, string]) (*KafkaInfo, bool, error) {
 	// only interested in response
 	_, offset, err := kafkaparser.ParseKafkaResponseHeader(rpkt, hdr)
@@ -210,10 +231,14 @@ func TCPToKafkaToSpan(trace *TCPRequestInfo, data *KafkaInfo) request.Span {
 
 	var messagingInfo *request.MessagingInfo
 
-	if data.PartitionInfo != nil {
-		messagingInfo = &request.MessagingInfo{
-			Partition: data.PartitionInfo.Partition,
-			Offset:    data.PartitionInfo.Offset,
+	if data.PartitionInfo != nil || data.GroupID != "" {
+		messagingInfo = &request.MessagingInfo{}
+		if data.PartitionInfo != nil {
+			messagingInfo.Partition = data.PartitionInfo.Partition
+			messagingInfo.Offset = data.PartitionInfo.Offset
+		}
+		if data.GroupID != "" {
+			messagingInfo.ConsumerGroupID = data.GroupID
 		}
 	}
 

@@ -305,6 +305,9 @@ ebpf:
     mysql: 0
     postgres: 0
     kafka: 0
+    amqp: 0      # AMQP 0-9-1 (RabbitMQ)
+    cql: 0       # Cassandra Query Language
+    nats: 0      # NATS messaging
   
   # Ring buffer size in bytes (must be power of 2)
   ringbuf_size: 262144
@@ -321,9 +324,11 @@ ebpf:
   # Cache sizes for various protocol parsers
   mysql_prepared_statements_cache_size: 1024
   postgres_prepared_statements_cache_size: 1024
+  cql_prepared_statements_cache_size: 1024
   mongo_requests_cache_size: 1024
   kafka_topic_uuid_cache_size: 1024
   couchbase_db_cache_size: 1024
+  nats_subject_cache_size: 1024
   
   # Redis DB cache for RESP protocol parsing
   redis_db_cache:
@@ -343,6 +348,23 @@ ebpf:
       aws:
         enabled: false
   
+  # Parse failure rate suppression (suppress noisy connections where parsing fails often)
+  # Based on a rolling window of recent events; connections exceeding the threshold are ignored.
+  parse_failure_rate_threshold: 0.4   # suppress if >40% of events fail to parse
+  parse_failure_rate_window: 20        # rolling window size for failure rate calculation
+
+  # Connection byte-count statistics (per-connection bytes sent/received via tcp_close events)
+  conn_stats:
+    enabled: true
+
+  # Go crypto/tls uprobe — captures plaintext from TLS connections in Go applications
+  go_tls_uprobe:
+    enabled: true
+
+  # gRPC-C uprobe — captures spans from applications using the native libgrpc.so C library
+  grpc_c_uprobe:
+    enabled: true
+
   # Log enricher configuration (correlate logs with traces)
   log_enricher:
     cache_ttl: 30m
@@ -429,6 +451,18 @@ network:
       enabled: true
     mqtt:
       enabled: true
+    # AMQP 0-9-1 — used by RabbitMQ clients that speak the wire protocol directly
+    amqp:
+      enabled: true
+      capture_routing_key: true
+    # CQL (Cassandra Query Language) — Apache Cassandra / DataStax DSE
+    cql:
+      enabled: true
+      capture_query: true
+    # NATS — NATS.io lightweight messaging
+    nats:
+      enabled: true
+      capture_subject: true
     dns:
       enabled: true
 

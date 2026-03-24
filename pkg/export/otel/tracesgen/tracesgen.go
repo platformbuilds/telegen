@@ -466,6 +466,9 @@ func TraceAttributesSelector(span *request.Span, optionalAttrs map[attr.Name]str
 			if span.Method == request.MessagingProcess {
 				attrs = append(attrs, request.MessagingKafkaOffset(span.MessagingInfo.Offset))
 			}
+			if span.MessagingInfo.ConsumerGroupID != "" {
+				attrs = append(attrs, request.MessagingKafkaConsumerGroupID(span.MessagingInfo.ConsumerGroupID))
+			}
 		}
 	case request.EventTypeMQTTServer, request.EventTypeMQTTClient:
 		operation := request.MessagingOperationType(span.Method)

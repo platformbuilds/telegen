@@ -63,6 +63,13 @@ node-exporter-fusion
 | **Security Monitoring** | ✅ | ❌ | eBPF |
 | **Network Observability** | ✅ | ❌ | eBPF |
 | **Database Tracing** | ✅ | ❌ | eBPF |
+| **Cassandra/CQL Tracing** | ✅ | ❌ | eBPF |
+| **AMQP Tracing** | ✅ | ❌ | eBPF |
+| **NATS Tracing** | ✅ | ❌ | eBPF |
+| **Kafka Consumer Groups** | ✅ | ❌ | eBPF |
+| **Connection Statistics** | ✅ | ❌ | eBPF |
+| **Go TLS Plaintext Capture** | ✅ | ❌ | eBPF uprobes |
+| **gRPC-C Tracing** | ✅ | ❌ | eBPF uprobes |
 | **SNMP Collection** | ❌ | ✅ | Network access |
 | **Storage Monitoring** | ❌ | ✅ | API credentials |
 | **AI/ML Observability** | ✅ | ❌ | eBPF + GPU |

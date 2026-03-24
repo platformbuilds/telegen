@@ -26,6 +26,7 @@ No database configuration or driver changes required.
 | **MariaDB** | MySQL Protocol | Queries, Galera cluster metrics |
 | **MongoDB** | Wire Protocol | Operations, aggregations, indexes |
 | **Redis** | RESP Protocol | Commands, pub/sub, cluster |
+| **Cassandra / DSE** | CQL v3–v5 | Queries, prepared statements, batch, consistency level |
 | **Oracle** | TNS/Net8 | SQL, PL/SQL, wait events |
 | **SQL Server** | TDS Protocol | T-SQL, stored procedures |
 
@@ -503,6 +504,84 @@ db_client_connections{state="waiting"} > 10
      ebpf:
        perf_buffer_size: 16384
    ```
+
+---
+
+## Cassandra / CQL Tracing
+
+Telegen parses the Cassandra Query Language binary protocol (CQL v3–v5) used by Apache Cassandra and DataStax DSE.
+
+### Captured Information
+
+| Field | Description |
+|-------|-------------|
+| `db.system` | `cassandra` |
+| `db.statement` | CQL query text |
+| `db.cassandra.keyspace` | Target keyspace |
+| `db.cassandra.consistency_level` | Consistency level (ONE, QUORUM, ALL, …) |
+| `db.operation` | QUERY, EXECUTE, BATCH |
+| `db.cassandra.table` | Target table (when identifiable) |
+
+### Sample Span
+
+```yaml
+span:
+  name: "SELECT users"
+  kind: CLIENT
+  duration_ms: 4.1
+  attributes:
+    db.system: cassandra
+    db.cassandra.keyspace: my_app
+    db.statement: "SELECT id, email FROM users WHERE id = ?"
+    db.operation: EXECUTE
+    db.cassandra.consistency_level: QUORUM
+    net.peer.ip: "10.0.3.20"
+    net.peer.port: 9042
+```
+
+### Prepared Statements
+
+Telegen correlates `PREPARE` requests with subsequent `EXECUTE` calls using the statement ID, substituting the original query text into execute spans automatically.
+
+```yaml
+span:
+  name: "INSERT orders EXECUTE"
+  kind: CLIENT
+  attributes:
+    db.system: cassandra
+    db.statement: "INSERT INTO orders (id, user_id, total) VALUES (?, ?, ?)"
+    db.operation: EXECUTE
+    db.cassandra.keyspace: ecommerce
+```
+
+### Batch Operations
+
+```yaml
+span:
+  name: "BATCH"
+  kind: CLIENT
+  duration_ms: 11.2
+  attributes:
+    db.system: cassandra
+    db.operation: BATCH
+    db.cassandra.keyspace: ecommerce
+```
+
+### Configuration
+
+```yaml
+agent:
+  network:
+    protocols:
+      cql:
+        enabled: true
+        capture_query: true
+
+  ebpf:
+    buffer_sizes:
+      cql: 0  # 0 = auto-size
+    cql_prepared_statements_cache_size: 1024
+```
 
 ---
 
