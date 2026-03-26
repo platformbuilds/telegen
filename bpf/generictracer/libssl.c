@@ -19,6 +19,73 @@
 
 #include <pid/pid.h>
 
+// ---------------------------------------------------------------------------
+// OpenSSL struct offset navigation — ported from Pixie's openssl_symaddrs_map
+// (src/stirling/source_connectors/socket_tracer/bcc_bpf/openssl_trace.c).
+//
+// Problem: the `SSL*` object is opaque; to extract the underlying file descriptor
+// we must dereference:  SSL* → SSL.rbio (BIO*)  → BIO.num (int fd)
+// The field offsets differ across OpenSSL 1.0.x / 1.1.x / 3.x and BoringSSL.
+//
+// Solution (identical to Pixie):
+//   1. Go-side (internal/ebpf/openssl_offsets.go) inspects the libssl ELF
+//      binary in each traced process via DWARF debug info, computes the exact
+//      field byte offsets, and writes them into `openssl_symaddrs_map` keyed
+//      by TGID before any SSL uprobes fire.
+//   2. This BPF helper reads that map and uses the offsets to safely dereference
+//      the SSL struct at trace time, giving us the real socket FD for every
+//      intercepted SSL_read / SSL_write call on non-Go, non-Node.js services
+//      (Python gRPC, Ruby, C++, etc.).
+// ---------------------------------------------------------------------------
+
+// Per-TGID OpenSSL struct offsets populated by the Go-side instrumenter.
+struct openssl_symaddrs_t {
+    u64 ssl_rbio_offset;  // byte offset of SSL.rbio  (type: BIO*)
+    u64 rbio_num_offset;  // byte offset of BIO.num   (type: int, the fd)
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(key_size,   sizeof(u32));      // key: tgid
+    __uint(value_size, sizeof(struct openssl_symaddrs_t));
+    __uint(max_entries, 1024);
+} openssl_symaddrs_map SEC(".maps");
+
+// get_fd_from_ssl_struct attempts to extract the file descriptor from an opaque
+// SSL* handle using the per-TGID struct offsets supplied by the go-side.
+// Returns -1 if the offsets are not yet available or the pointers are invalid.
+static __always_inline int get_fd_from_ssl_struct(u32 tgid, void *ssl) {
+    struct openssl_symaddrs_t *symaddrs = bpf_map_lookup_elem(&openssl_symaddrs_map, &tgid);
+    if (!symaddrs || symaddrs->ssl_rbio_offset == 0 || symaddrs->rbio_num_offset == 0) {
+        return -1;
+    }
+
+    // Dereference:  ssl  →  ssl + ssl_rbio_offset  →  rbio (BIO* pointer)
+    void *rbio = NULL;
+    if (bpf_probe_read_user(&rbio, sizeof(rbio),
+                             (void *)((u64)ssl + symaddrs->ssl_rbio_offset)) != 0) {
+        return -1;
+    }
+    if (!rbio) {
+        return -1;
+    }
+
+    // Dereference:  rbio  →  rbio + rbio_num_offset  →  num (fd, int32)
+    int fd = -1;
+    if (bpf_probe_read_user(&fd, sizeof(fd),
+                             (void *)((u64)rbio + symaddrs->rbio_num_offset)) != 0) {
+        return -1;
+    }
+
+    // Sanity-check: valid fd is > 2 (skip stdin/stdout/stderr).
+    if (fd <= 2) {
+        return -1;
+    }
+
+    return fd;
+}
+
+// ---------------------------------------------------------------------------
 // SSL read and read_ex are more less the same, but some frameworks use one or the other.
 // SSL_read_ex sets an argument pointer with the number of bytes read, while SSL_read returns
 // the number of bytes read.

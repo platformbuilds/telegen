@@ -187,6 +187,13 @@ struct {
 #define TCP_CONFIG_SAMPLE_RATE      1
 #define TCP_CONFIG_MIN_RTT_CHANGE   2  // Minimum RTT change to report (us)
 
+// Minimum combined bytes (sent + received) for a connection before a
+// conn_close_event is emitted.  Connections below this threshold are
+// silently discarded, reducing cardinality for very-short-lived
+// connections (health checks, keep-alives, small RPCs).
+// Ported from Pixie's kConnStatsDataThreshold = 65536 in socket_trace.c.
+#define CONN_STATS_BYTES_THRESHOLD  65536U  // 64 KB
+
 // Helper to read TCP socket metrics
 static __always_inline int read_tcp_sock_metrics(struct sock *sk,
                                                    struct tcp_metrics_event *event) {
@@ -491,6 +498,15 @@ int trace_inet_sock_set_state(struct trace_event_raw_inet_sock_set_state *ctx) {
             if (stats) {
                 ev->bytes_sent     = stats->bytes_sent;
                 ev->bytes_received = stats->bytes_received;
+            }
+
+            // Skip connections that transferred less than the threshold — reduces
+            // event cardinality for health-check pings and tiny RPCs.
+            // Ported from Pixie's kConnStatsDataThreshold pattern.
+            if (ev->bytes_sent + ev->bytes_received < CONN_STATS_BYTES_THRESHOLD) {
+                bpf_ringbuf_discard(ev, 0);
+                bpf_map_delete_elem(&tcp_connections, &key);
+                return 0;
             }
 
             bpf_ringbuf_submit(ev, 0);
