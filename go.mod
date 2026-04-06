@@ -93,7 +93,7 @@ require (
 	github.com/jsimonetti/rtnetlink/v2 v2.2.0
 	github.com/openconfig/gnmi v0.14.1
 	github.com/twmb/franz-go v1.20.7
-	github.com/twmb/franz-go/pkg/kmsg v1.12.0
+	github.com/twmb/franz-go/pkg/kmsg v1.13.1
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.42.0
 	golang.org/x/time v0.15.0
 )
