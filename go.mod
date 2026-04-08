@@ -55,7 +55,7 @@ require (
 	go.opentelemetry.io/contrib/detectors/aws/eks v1.42.0
 	go.opentelemetry.io/contrib/detectors/azure/azurevm v0.14.0
 	go.opentelemetry.io/contrib/detectors/gcp v1.42.0
-	go.opentelemetry.io/otel v1.42.0
+	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.18.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.18.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.42.0
@@ -63,11 +63,11 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.42.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.42.0
 	go.opentelemetry.io/otel/log v0.18.0
-	go.opentelemetry.io/otel/metric v1.42.0
-	go.opentelemetry.io/otel/sdk v1.42.0
+	go.opentelemetry.io/otel/metric v1.43.0
+	go.opentelemetry.io/otel/sdk v1.43.0
 	go.opentelemetry.io/otel/sdk/log v0.18.0
-	go.opentelemetry.io/otel/sdk/metric v1.42.0
-	go.opentelemetry.io/otel/trace v1.42.0
+	go.opentelemetry.io/otel/sdk/metric v1.43.0
+	go.opentelemetry.io/otel/trace v1.43.0
 	go.uber.org/zap v1.27.1
 	golang.org/x/arch v0.25.0
 	golang.org/x/mod v0.32.0
