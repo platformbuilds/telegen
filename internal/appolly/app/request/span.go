@@ -51,6 +51,11 @@ const (
 	EventTypeAMQPClient
 	EventTypeCQLClient
 	EventTypeNATSClient
+	EventTypeMemcachedClient
+	EventTypeClickHouseClient
+	EventTypeZooKeeperClient
+	EventTypeDubbo2Client
+	EventTypeFDBClient
 )
 
 const (
@@ -133,6 +138,22 @@ func (t EventType) String() string {
 		return "DNS"
 	case EventTypeCouchbaseClient:
 		return "CouchbaseClient"
+	case EventTypeAMQPClient:
+		return "AMQPClient"
+	case EventTypeCQLClient:
+		return "CQLClient"
+	case EventTypeNATSClient:
+		return "NATSClient"
+	case EventTypeMemcachedClient:
+		return "MemcachedClient"
+	case EventTypeClickHouseClient:
+		return "ClickHouseClient"
+	case EventTypeZooKeeperClient:
+		return "ZooKeeperClient"
+	case EventTypeDubbo2Client:
+		return "Dubbo2Client"
+	case EventTypeFDBClient:
+		return "FoundationDBClient"
 	default:
 		return fmt.Sprintf("UNKNOWN (%d)", t)
 	}

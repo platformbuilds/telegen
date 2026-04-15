@@ -12,6 +12,7 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/nodeexporter"
 	obiconfig "github.com/mirastacklabs-ai/telegen/internal/obiconfig"
 	"github.com/mirastacklabs-ai/telegen/internal/profiler"
+	"github.com/mirastacklabs-ai/telegen/internal/storagedef"
 	"github.com/mirastacklabs-ai/telegen/internal/transform"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/prom"
@@ -80,6 +81,10 @@ type Config struct {
 
 	// Kubernetes configures Kubernetes metadata decoration
 	Kubernetes KubernetesConfig `yaml:"kubernetes"`
+
+	// Storage configures storage array metric collection (Pure, Dell, HPE, NetApp).
+	// Activated when storage.enabled: true in the config file or --mode collector is used.
+	Storage storagedef.Config `yaml:"storage"`
 }
 
 // FilelogConfig configures the file-based log collection pipeline.

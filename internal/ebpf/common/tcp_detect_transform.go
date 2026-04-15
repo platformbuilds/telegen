@@ -140,6 +140,51 @@ func readTCPRequestIntoSpanInner(parseCtx *EBPFParseContext, cfg *config.EBPFTra
 			return span, false, nil
 		}
 		return request.Span{}, true, fmt.Errorf("failed to handle NATS event: %w", err)
+	case ProtocolTypeMemcached:
+		span, outcome, err := ProcessPossibleMemcachedEvent(event, requestBuffer, responseBuffer)
+		if outcome == ParseIgnored && err == nil {
+			return request.Span{}, true, nil
+		}
+		if err == nil {
+			return span, false, nil
+		}
+		return request.Span{}, true, fmt.Errorf("failed to handle Memcached event: %w", err)
+	case ProtocolTypeClickHouse:
+		span, outcome, err := ProcessPossibleClickHouseEvent(event, requestBuffer, responseBuffer)
+		if outcome == ParseIgnored && err == nil {
+			return request.Span{}, true, nil
+		}
+		if err == nil {
+			return span, false, nil
+		}
+		return request.Span{}, true, fmt.Errorf("failed to handle ClickHouse event: %w", err)
+	case ProtocolTypeZooKeeper:
+		span, outcome, err := ProcessPossibleZooKeeperEvent(event, requestBuffer, responseBuffer)
+		if outcome == ParseIgnored && err == nil {
+			return request.Span{}, true, nil
+		}
+		if err == nil {
+			return span, false, nil
+		}
+		return request.Span{}, true, fmt.Errorf("failed to handle ZooKeeper event: %w", err)
+	case ProtocolTypeDubbo2:
+		span, outcome, err := ProcessPossibleDubbo2Event(event, requestBuffer, responseBuffer)
+		if outcome == ParseIgnored && err == nil {
+			return request.Span{}, true, nil
+		}
+		if err == nil {
+			return span, false, nil
+		}
+		return request.Span{}, true, fmt.Errorf("failed to handle Dubbo2 event: %w", err)
+	case ProtocolTypeFDB:
+		span, outcome, err := ProcessPossibleFDBEvent(event, requestBuffer, responseBuffer)
+		if outcome == ParseIgnored && err == nil {
+			return request.Span{}, true, nil
+		}
+		if err == nil {
+			return span, false, nil
+		}
+		return request.Span{}, true, fmt.Errorf("failed to handle FoundationDB event: %w", err)
 	case ProtocolTypeUnknown:
 	default:
 	}
@@ -213,6 +258,66 @@ func readTCPRequestIntoSpanInner(parseCtx *EBPFParseContext, cfg *config.EBPFTra
 			return span, false, nil
 		}
 		slog.Debug("NATS heuristic detection failed, ignoring", "error", err)
+	}
+
+	// Memcached heuristic detection
+	if isMemcached(requestBuffer) || isMemcached(responseBuffer) {
+		span, outcome, err := ProcessPossibleMemcachedEvent(event, requestBuffer, responseBuffer)
+		if outcome == ParseIgnored && err == nil {
+			return request.Span{}, true, nil
+		}
+		if err == nil {
+			return span, false, nil
+		}
+		slog.Debug("Memcached heuristic detection failed, ignoring", "error", err)
+	}
+
+	// ClickHouse heuristic detection
+	if isClickHouse(requestBuffer) || isClickHouse(responseBuffer) {
+		span, outcome, err := ProcessPossibleClickHouseEvent(event, requestBuffer, responseBuffer)
+		if outcome == ParseIgnored && err == nil {
+			return request.Span{}, true, nil
+		}
+		if err == nil {
+			return span, false, nil
+		}
+		slog.Debug("ClickHouse heuristic detection failed, ignoring", "error", err)
+	}
+
+	// ZooKeeper heuristic detection
+	if isZooKeeper(requestBuffer) || isZooKeeper(responseBuffer) {
+		span, outcome, err := ProcessPossibleZooKeeperEvent(event, requestBuffer, responseBuffer)
+		if outcome == ParseIgnored && err == nil {
+			return request.Span{}, true, nil
+		}
+		if err == nil {
+			return span, false, nil
+		}
+		slog.Debug("ZooKeeper heuristic detection failed, ignoring", "error", err)
+	}
+
+	// Dubbo2 heuristic detection
+	if isDubbo2(requestBuffer) || isDubbo2(responseBuffer) {
+		span, outcome, err := ProcessPossibleDubbo2Event(event, requestBuffer, responseBuffer)
+		if outcome == ParseIgnored && err == nil {
+			return request.Span{}, true, nil
+		}
+		if err == nil {
+			return span, false, nil
+		}
+		slog.Debug("Dubbo2 heuristic detection failed, ignoring", "error", err)
+	}
+
+	// FoundationDB heuristic detection
+	if isFDB(requestBuffer) || isFDB(responseBuffer) {
+		span, outcome, err := ProcessPossibleFDBEvent(event, requestBuffer, responseBuffer)
+		if outcome == ParseIgnored && err == nil {
+			return request.Span{}, true, nil
+		}
+		if err == nil {
+			return span, false, nil
+		}
+		slog.Debug("FoundationDB heuristic detection failed, ignoring", "error", err)
 	}
 
 	switch {

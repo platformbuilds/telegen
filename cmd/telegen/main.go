@@ -21,6 +21,7 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/pipeline"
 	"github.com/mirastacklabs-ai/telegen/internal/profiler"
 	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
+	storage "github.com/mirastacklabs-ai/telegen/internal/storage"
 	"github.com/mirastacklabs-ai/telegen/internal/version"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.uber.org/zap"
@@ -40,6 +41,7 @@ func init() {
 func main() {
 	cfgPath := flag.String("config", "/etc/telegen/config.yaml", "path to config yaml")
 	showVersion := flag.Bool("version", false, "print version and exit")
+	modeFlag := flag.String("mode", "", "operation mode: agent, collector, unified (overrides config)")
 	flag.Parse()
 
 	if *showVersion {
@@ -57,12 +59,18 @@ func main() {
 	// Log startup info
 	logger.Info("telegen starting",
 		"version", version.Version(),
-		"mode", "one agent, many signals",
+		"mode", func() string {
+			if *modeFlag != "" {
+				return *modeFlag
+			}
+			return "agent"
+		}(),
 		"ebpf_enabled", cfg.EBPF.Enabled,
 		"profiling_enabled", cfg.Profiling.Enabled,
 		"jfr_enabled", cfg.Pipelines.JFR.Enabled,
 		"logs_enabled", cfg.Pipelines.Logs.Enabled,
 		"kafka_enabled", cfg.Pipelines.Kafka.Enabled,
+		"storage_enabled", cfg.Storage.Enabled,
 	)
 
 	// Create zap logger for internal use (some components may require it)
@@ -98,6 +106,40 @@ func main() {
 
 	// Get the shared metrics exporter from the pipeline for kube_metrics and node_exporter
 	sharedMetricsExporter := pl.GetMetricsExporter()
+
+	// Start storage manager if storage collection is enabled (collector / unified mode, or explicit config).
+	// --mode collector also forces storage on even if storage.enabled is not set in config.
+	var storageMgr *storage.Manager
+	storageEnabled := cfg.Storage.Enabled || *modeFlag == "collector" || *modeFlag == "unified"
+	if storageEnabled && (len(cfg.Storage.PureFlashArray) > 0 ||
+		len(cfg.Storage.DellPowerStore) > 0 ||
+		len(cfg.Storage.HPEPrimera) > 0 ||
+		len(cfg.Storage.NetAppONTAP) > 0) {
+		cfg.Storage.Enabled = true // ensure manager sees it as enabled
+		var err error
+		storageMgr, err = storage.NewManager(cfg.Storage, logger)
+		if err != nil {
+			logger.Warn("storage manager failed to initialize, continuing without storage metrics",
+				"error", err,
+				"status", "degraded")
+			storageMgr = nil
+		} else {
+			if err := storageMgr.Start(ctx); err != nil {
+				logger.Warn("storage manager failed to start, continuing without storage metrics",
+					"error", err,
+					"status", "degraded")
+				storageMgr = nil
+			} else {
+				signalsStarted++
+				logger.Info("storage metrics collection started",
+					"pure_arrays", len(cfg.Storage.PureFlashArray),
+					"dell_arrays", len(cfg.Storage.DellPowerStore),
+					"hpe_arrays", len(cfg.Storage.HPEPrimera),
+					"netapp_arrays", len(cfg.Storage.NetAppONTAP),
+				)
+			}
+		}
+	}
 
 	// Start node_exporter if enabled
 	var nodeExp *nodeexporter.Exporter
@@ -350,6 +392,9 @@ func main() {
 	logger.Info("telegen shutting down")
 	cancel()
 	pl.Close()
+	if storageMgr != nil {
+		_ = storageMgr.Stop(context.Background())
+	}
 	if kafkaAutoDiscovery != nil {
 		kafkaAutoDiscovery.Stop()
 	}
