@@ -11,6 +11,9 @@ import (
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+
+	"github.com/mirastacklabs-ai/telegen/internal/storage/pure"
+	"github.com/mirastacklabs-ai/telegen/internal/storagedef"
 )
 
 // StorageConfig holds storage adapter configuration.
@@ -230,46 +233,54 @@ func (a *StorageAdapter) Start(ctx context.Context) error {
 
 // initializeCollectors creates collectors from configuration.
 func (a *StorageAdapter) initializeCollectors() {
-	// This would normally create V2 collectors
-	// For now, we create mock collectors based on config
+	// Pure FlashArray — wire real V2 collectors.
+	for _, cfg := range a.config.PureFlashArray {
+		pureCfg := storagedef.PureConfig{
+			BaseCollectorConfig: storagedef.BaseCollectorConfig{
+				Name:            cfg.Name,
+				Address:         cfg.Endpoint,
+				CollectInterval: cfg.CollectInterval,
+				Labels:          cfg.Labels,
+			},
+			APIToken: cfg.Auth.APIKey,
+		}
+		if cfg.TLS != nil {
+			pureCfg.VerifySSL = !cfg.TLS.InsecureSkipVerify
+		}
+		if len(cfg.MetricGroups) > 0 {
+			pureCfg.Collect = cfg.MetricGroups
+		}
+
+		c, err := pure.NewFlashArrayCollector(pureCfg, a.log)
+		if err != nil {
+			a.log.Warn("failed to create Pure FlashArray collector, skipping",
+				"name", cfg.Name, "error", err)
+			continue
+		}
+		a.collectors = append(a.collectors, &v2Wrapper{collector: c, arrayType: "pure_flasharray"})
+		a.log.Debug("created Pure FlashArray collector", "name", cfg.Name)
+	}
+
+	// Dell PowerStore, HPE Primera, NetApp ONTAP — use mock until V2 collectors are implemented.
 	for _, cfg := range a.config.DellPowerStore {
 		a.collectors = append(a.collectors, &mockStorageCollector{
-			name:       cfg.Name,
-			arrayType:  "dell_powerstore",
-			endpoint:   cfg.Endpoint,
-			labels:     cfg.Labels,
+			name: cfg.Name, arrayType: "dell_powerstore", endpoint: cfg.Endpoint, labels: cfg.Labels,
 		})
-		a.log.Debug("created Dell PowerStore collector", "name", cfg.Name)
+		a.log.Debug("created Dell PowerStore collector (mock)", "name", cfg.Name)
 	}
 
 	for _, cfg := range a.config.HPEPrimera {
 		a.collectors = append(a.collectors, &mockStorageCollector{
-			name:       cfg.Name,
-			arrayType:  "hpe_primera",
-			endpoint:   cfg.Endpoint,
-			labels:     cfg.Labels,
+			name: cfg.Name, arrayType: "hpe_primera", endpoint: cfg.Endpoint, labels: cfg.Labels,
 		})
-		a.log.Debug("created HPE Primera collector", "name", cfg.Name)
-	}
-
-	for _, cfg := range a.config.PureFlashArray {
-		a.collectors = append(a.collectors, &mockStorageCollector{
-			name:       cfg.Name,
-			arrayType:  "pure_flasharray",
-			endpoint:   cfg.Endpoint,
-			labels:     cfg.Labels,
-		})
-		a.log.Debug("created Pure FlashArray collector", "name", cfg.Name)
+		a.log.Debug("created HPE Primera collector (mock)", "name", cfg.Name)
 	}
 
 	for _, cfg := range a.config.NetAppONTAP {
 		a.collectors = append(a.collectors, &mockStorageCollector{
-			name:       cfg.Name,
-			arrayType:  "netapp_ontap",
-			endpoint:   cfg.Endpoint,
-			labels:     cfg.Labels,
+			name: cfg.Name, arrayType: "netapp_ontap", endpoint: cfg.Endpoint, labels: cfg.Labels,
 		})
-		a.log.Debug("created NetApp ONTAP collector", "name", cfg.Name)
+		a.log.Debug("created NetApp ONTAP collector (mock)", "name", cfg.Name)
 	}
 }
 
@@ -282,6 +293,8 @@ func (a *StorageAdapter) Stop(ctx context.Context) error {
 	}
 	a.cancel()
 	a.running = false
+	collectors := make([]StorageCollector, len(a.collectors))
+	copy(collectors, a.collectors)
 	a.mu.Unlock()
 
 	done := make(chan struct{})
@@ -295,6 +308,15 @@ func (a *StorageAdapter) Stop(ctx context.Context) error {
 		a.log.Info("stopped storage adapter")
 	case <-ctx.Done():
 		a.log.Warn("storage adapter stop timeout")
+	}
+
+	// Stop any underlying V2 collectors that implement Stopper.
+	for _, c := range collectors {
+		if s, ok := c.(Stopper); ok {
+			if err := s.Stop(ctx); err != nil {
+				a.log.Warn("failed to stop collector", "name", c.Name(), "error", err)
+			}
+		}
 	}
 
 	return nil
@@ -469,6 +491,86 @@ func (a *StorageAdapter) convertToOTLP(collector StorageCollector, metrics []Sto
 	}
 
 	return md
+}
+
+// Stopper is an optional interface that StorageCollector implementations may satisfy
+// to receive a Stop signal when the adapter shuts down.
+type Stopper interface {
+	Stop(ctx context.Context) error
+}
+
+// v2Wrapper adapts a V2 storagedef.StorageCollector to the V3 StorageCollector interface.
+// It lazily calls Start on the first Collect call to avoid blocking adapter startup with
+// network round-trips.
+type v2Wrapper struct {
+	collector storagedef.StorageCollector
+	arrayType string
+
+	mu      sync.Mutex
+	started bool
+}
+
+func (w *v2Wrapper) Name() string { return w.collector.Name() }
+func (w *v2Wrapper) Type() string { return w.arrayType }
+
+func (w *v2Wrapper) Collect(ctx context.Context) ([]StorageMetric, error) {
+	w.mu.Lock()
+	if !w.started {
+		if err := w.collector.Start(ctx); err != nil {
+			w.mu.Unlock()
+			return nil, fmt.Errorf("failed to start collector: %w", err)
+		}
+		w.started = true
+	}
+	w.mu.Unlock()
+
+	v2Metrics, err := w.collector.CollectMetrics(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	metrics := make([]StorageMetric, 0, len(v2Metrics))
+	for _, m := range v2Metrics {
+		metrics = append(metrics, StorageMetric{
+			Name:        m.Name,
+			Description: m.Help,
+			Value:       m.Value,
+			Labels:      m.Labels,
+			Timestamp:   m.Timestamp,
+			Type:        string(m.Type),
+		})
+	}
+	return metrics, nil
+}
+
+func (w *v2Wrapper) Health() StorageCollectorHealth {
+	health, err := w.collector.Health(context.Background())
+	if err != nil || health == nil {
+		return StorageCollectorHealth{Name: w.collector.Name(), Type: w.arrayType, Status: "unknown"}
+	}
+
+	lastErr := ""
+	if health.LastError != nil {
+		lastErr = health.LastError.Error()
+	}
+
+	return StorageCollectorHealth{
+		Name:        w.collector.Name(),
+		Type:        w.arrayType,
+		Status:      string(health.Status),
+		LastCollect: health.LastSuccess,
+		ErrorCount:  int64(health.ErrorCount),
+		LastError:   lastErr,
+	}
+}
+
+func (w *v2Wrapper) Stop(ctx context.Context) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.started {
+		return nil
+	}
+	return w.collector.Stop(ctx)
 }
 
 // mockStorageCollector is a mock collector for testing.

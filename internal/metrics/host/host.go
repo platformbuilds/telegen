@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/prometheus/prometheus/model/labels"
@@ -37,6 +38,9 @@ func (c *Collector) Run(stop <-chan struct{}) {
 			c.appendCPU(wr)
 			c.appendMem(wr)
 			c.appendNet(wr)
+			c.appendPSI(wr)
+			c.appendFilesystem(wr)
+			c.appendGPU(wr)
 			if len(wr.Timeseries) > 0 {
 				c.cb(wr)
 			}
@@ -152,3 +156,123 @@ func (c *Collector) appendNet(wr *prompb.WriteRequest) {
 	}
 }
 func atof(s string) float64 { var v float64; _, _ = fmt.Sscanf(s, "%f", &v); return v }
+
+// appendPSI collects cgroup v2 PSI (Pressure Stall Information) metrics for CPU, memory, and I/O.
+// PSI files follow the format:  some avg10=X.XX avg60=X.XX avg300=X.XX total=N
+//
+// Metrics emitted:
+//
+//	system_cpu_pressure_some_avg10, system_cpu_pressure_full_avg10
+//	system_memory_pressure_some_avg10, system_memory_pressure_full_avg10
+//	system_io_pressure_some_avg10, system_io_pressure_full_avg10
+func (c *Collector) appendPSI(wr *prompb.WriteRequest) {
+	type psiResource struct {
+		name string
+		path string
+	}
+	resources := []psiResource{
+		{"cpu", "/proc/pressure/cpu"},
+		{"memory", "/proc/pressure/memory"},
+		{"io", "/proc/pressure/io"},
+	}
+	for _, res := range resources {
+		f, err := os.Open(res.path)
+		if err != nil {
+			continue // kernel < 4.20 or not mounted
+		}
+		sc := bufio.NewScanner(f)
+		for sc.Scan() {
+			line := sc.Text()
+			// parse "some" or "full" qualifier
+			var qualifier string
+			if strings.HasPrefix(line, "some") {
+				qualifier = "some"
+			} else if strings.HasPrefix(line, "full") {
+				qualifier = "full"
+			} else {
+				continue
+			}
+			// Extract avg10 value: "some avg10=0.00 ..."
+			var avg10 float64
+			for _, field := range strings.Fields(line) {
+				if strings.HasPrefix(field, "avg10=") {
+					avg10 = atof(strings.TrimPrefix(field, "avg10="))
+					break
+				}
+			}
+			metricName := fmt.Sprintf("system_%s_pressure_%s_avg10", res.name, qualifier)
+			c.appendPoint(wr, metricName, c.baseLabels(), avg10/100.0) // convert percentage to ratio
+		}
+		_ = f.Close()
+	}
+}
+
+// appendFilesystem collects per-mount-point filesystem usage statistics using syscall.Statfs.
+// It reads /proc/mounts to discover mounted filesystems and skips virtual/pseudo filesystems.
+//
+// Metrics emitted:
+//
+//	system_filesystem_size_bytes{device,mountpoint,fstype}
+//	system_filesystem_free_bytes{device,mountpoint,fstype}
+//	system_filesystem_avail_bytes{device,mountpoint,fstype}
+//	system_filesystem_used_bytes{device,mountpoint,fstype}
+func (c *Collector) appendFilesystem(wr *prompb.WriteRequest) {
+	// Filesystem types to skip (virtual/pseudo filesystems that don't represent real storage)
+	skipFSTypes := map[string]bool{
+		"proc": true, "sysfs": true, "devtmpfs": true, "devpts": true, "tmpfs": true,
+		"securityfs": true, "cgroup": true, "cgroup2": true, "pstore": true,
+		"bpf": true, "autofs": true, "mqueue": true, "hugetlbfs": true,
+		"debugfs": true, "tracefs": true, "fusectl": true, "configfs": true,
+		"efivarfs": true, "nsfs": true, "overlay": true, "squashfs": true,
+	}
+
+	f, err := os.Open("/proc/mounts")
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+
+	seen := map[string]bool{}
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := sc.Text()
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+		device := fields[0]
+		mountpoint := fields[1]
+		fstype := fields[2]
+
+		if skipFSTypes[fstype] {
+			continue
+		}
+		if seen[mountpoint] {
+			continue // Only collect first occurrence of each mountpoint
+		}
+		seen[mountpoint] = true
+
+		var stat syscall.Statfs_t
+		if err := syscall.Statfs(mountpoint, &stat); err != nil {
+			continue
+		}
+		bsize := float64(stat.Bsize)
+		total := float64(stat.Blocks) * bsize
+		free := float64(stat.Bfree) * bsize
+		avail := float64(stat.Bavail) * bsize
+		used := total - free
+
+		lbls := c.baseLabels(
+			labels.Label{Name: "device", Value: device},
+			labels.Label{Name: "mountpoint", Value: mountpoint},
+			labels.Label{Name: "fstype", Value: fstype},
+		)
+		c.appendPoint(wr, "system_filesystem_size_bytes", lbls, total)
+		c.appendPoint(wr, "system_filesystem_free_bytes", lbls, free)
+		c.appendPoint(wr, "system_filesystem_avail_bytes", lbls, avail)
+		c.appendPoint(wr, "system_filesystem_used_bytes", lbls, used)
+	}
+}

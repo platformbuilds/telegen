@@ -67,7 +67,7 @@ const (
 
 // Kernel-side classification
 const (
-	ProtocolTypeUnknown uint8 = iota
+	ProtocolTypeUnknown    uint8 = iota
 	ProtocolTypeMySQL
 	ProtocolTypePostgres
 	ProtocolTypeHTTP // not used, written for consistency
@@ -76,6 +76,11 @@ const (
 	ProtocolTypeAMQP // AMQP 0-9-1 (RabbitMQ)
 	ProtocolTypeCQL  // Cassandra Query Language (Cassandra/ScyllaDB)
 	ProtocolTypeNATS // NATS messaging
+	ProtocolTypeMemcached  // Memcached ASCII text protocol
+	ProtocolTypeClickHouse // ClickHouse native TCP protocol
+	ProtocolTypeZooKeeper  // Apache ZooKeeper Jute binary protocol
+	ProtocolTypeDubbo2     // Apache Dubbo2 RPC protocol
+	ProtocolTypeFDB        // FoundationDB client protocol
 )
 
 var IntegrityModeOverride = false

@@ -58,10 +58,10 @@ type ArraySpace struct {
 
 // ArrayPerformance represents FlashArray performance metrics
 type ArrayPerformance struct {
-	ReadBytesPerSec       int64   `json:"reads_per_sec"`
-	WriteBytesPerSec      int64   `json:"writes_per_sec"`
-	ReadOpsPerSec         int64   `json:"read_bytes_per_sec"`
-	WriteOpsPerSec        int64   `json:"write_bytes_per_sec"`
+	ReadOpsPerSec         int64   `json:"reads_per_sec"`
+	WriteOpsPerSec        int64   `json:"writes_per_sec"`
+	ReadBytesPerSec       int64   `json:"read_bytes_per_sec"`
+	WriteBytesPerSec      int64   `json:"write_bytes_per_sec"`
 	UsecPerReadOp         float64 `json:"usec_per_read_op"`
 	UsecPerWriteOp        float64 `json:"usec_per_write_op"`
 	InputPerSec           int64   `json:"input_per_sec"`
@@ -214,8 +214,8 @@ func (c *FlashArrayCollector) Start(ctx context.Context) error {
 		"address", c.config.Address,
 	)
 
-	// Authenticate with API
-	if err := c.authenticate(ctx); err != nil {
+	// Authenticate with API (lock-free call; we already hold the write lock)
+	if err := c.authenticateLocked(ctx); err != nil {
 		return fmt.Errorf("authentication failed: %w", err)
 	}
 
@@ -246,13 +246,9 @@ func (c *FlashArrayCollector) Health(ctx context.Context) (*storagedef.Collector
 	return c.health, nil
 }
 
-// authenticate gets an OAuth token from the API
-func (c *FlashArrayCollector) authenticate(ctx context.Context) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Pure uses API token authentication
-	// First, we need to create an access token using the API token
+// authenticateLocked performs token authentication without acquiring the mutex.
+// Callers MUST hold c.mu write lock before calling this method.
+func (c *FlashArrayCollector) authenticateLocked(ctx context.Context) error {
 	body := map[string]string{
 		"api_token": c.config.APIToken,
 	}
@@ -268,10 +264,20 @@ func (c *FlashArrayCollector) authenticate(ctx context.Context) error {
 	return nil
 }
 
-// refreshTokenIfNeeded checks and refreshes token if expired
+// authenticate acquires the write lock and refreshes the access token.
+func (c *FlashArrayCollector) authenticate(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.authenticateLocked(ctx)
+}
+
+// refreshTokenIfNeeded checks token expiry under a read lock and refreshes if needed.
 func (c *FlashArrayCollector) refreshTokenIfNeeded(ctx context.Context) error {
-	// Check if token is about to expire (within 5 minutes)
-	if time.Until(c.tokenExpiry) < 5*time.Minute {
+	c.mu.RLock()
+	expiry := c.tokenExpiry
+	c.mu.RUnlock()
+
+	if time.Until(expiry) < 5*time.Minute {
 		return c.authenticate(ctx)
 	}
 	return nil
