@@ -119,7 +119,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
 # Stage 3: Final runtime image (Alpine-based for Java profiling support)
 # Includes perf-map-agent for Java symbol resolution
 # =============================================================================
-FROM alpine:3.23 AS runtime
+FROM alpine:3.24 AS runtime
 
 # Install minimal runtime dependencies
 RUN apk add --no-cache \
@@ -177,7 +177,7 @@ CMD ["--config", "/etc/telegen/config.yaml"]
 # =============================================================================
 # Stage 4: Debug image with shell (Alpine-based)
 # =============================================================================
-FROM alpine:3.23 AS debug
+FROM alpine:3.24 AS debug
 
 RUN apk add --no-cache \
     ca-certificates \
