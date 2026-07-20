@@ -134,6 +134,28 @@ logs:
     poll_interval_duration: "5s"
     ship_historical_events: false
 
+# VMware vSphere (optional collector/unified signal source)
+vmware:
+  enabled: false
+  collect_interval: 60s
+  granularity: 20
+  interval: 20
+  insecure_tls: true
+  targets: []
+  collectors:
+    datacenter: true
+    cluster: true
+    datastore: true
+    host: true
+    vm: true
+    esxcli_host_nic: false
+    esxcli_storage: false
+  events:
+    enabled: true
+    state_changes: true
+    max_per_poll: 100
+  extra_labels: {}
+
 # Example with environment variables (for Kubernetes DaemonSet deployment):
 #
 # kind: ConfigMap

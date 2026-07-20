@@ -23,6 +23,7 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
 	storage "github.com/mirastacklabs-ai/telegen/internal/storage"
 	"github.com/mirastacklabs-ai/telegen/internal/version"
+	"github.com/mirastacklabs-ai/telegen/internal/vmware"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.uber.org/zap"
 )
@@ -138,6 +139,30 @@ func main() {
 					"netapp_arrays", len(cfg.Storage.NetAppONTAP),
 				)
 			}
+		}
+	}
+
+	// Start VMware vSphere collection (collector / unified mode, or explicit config).
+	// Metrics flow via the shared metrics exporter; logs via the shared logger provider.
+	var vmwareMgr *vmware.Manager
+	vmwareEnabled := cfg.VMware.Enabled || *modeFlag == "collector" || *modeFlag == "unified"
+	if vmwareEnabled && len(cfg.VMware.Targets) > 0 {
+		cfg.VMware.Enabled = true // ensure manager sees it as enabled
+		var err error
+		vmwareMgr, err = vmware.NewManager(cfg.VMware, pl.GetMetricsExporter(), pl.GetLogsLoggerProvider(), logger)
+		if err != nil {
+			logger.Warn("vmware manager failed to initialize, continuing without vmware",
+				"error", err,
+				"status", "degraded")
+			vmwareMgr = nil
+		} else if err := vmwareMgr.Start(ctx); err != nil {
+			logger.Warn("vmware manager failed to start, continuing without vmware",
+				"error", err,
+				"status", "degraded")
+			vmwareMgr = nil
+		} else {
+			signalsStarted++
+			logger.Info("vmware vsphere collection started", "targets", len(cfg.VMware.Targets))
 		}
 	}
 
@@ -394,6 +419,9 @@ func main() {
 	pl.Close()
 	if storageMgr != nil {
 		_ = storageMgr.Stop(context.Background())
+	}
+	if vmwareMgr != nil {
+		_ = vmwareMgr.Stop(context.Background())
 	}
 	if kafkaAutoDiscovery != nil {
 		kafkaAutoDiscovery.Stop()

@@ -14,6 +14,7 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/profiler"
 	"github.com/mirastacklabs-ai/telegen/internal/storagedef"
 	"github.com/mirastacklabs-ai/telegen/internal/transform"
+	"github.com/mirastacklabs-ai/telegen/internal/vmwaredef"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/prom"
 	"github.com/mirastacklabs-ai/telegen/pkg/filter"
@@ -85,6 +86,10 @@ type Config struct {
 	// Storage configures storage array metric collection (Pure, Dell, HPE, NetApp).
 	// Activated when storage.enabled: true in the config file or --mode collector is used.
 	Storage storagedef.Config `yaml:"storage"`
+
+	// VMware configures VMware vSphere (vCenter) metric + event collection.
+	// Activated when vmware.enabled: true or --mode collector/unified is used.
+	VMware vmwaredef.Config `yaml:"vmware"`
 }
 
 // FilelogConfig configures the file-based log collection pipeline.

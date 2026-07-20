@@ -304,3 +304,31 @@ profiling:
     include_process_attributes: true
     # Include stack attributes (top function, class)
     include_stack_attributes: true
+
+# VMware vSphere (vCenter) collection.
+# Streams vCenter metrics and events/state-change logs through the shared OTLP
+# pipelines. Activated when vmware.enabled: true or --mode collector/unified.
+vmware:
+  enabled: true
+  collect_interval: 60s      # how often to poll vCenter
+  granularity: 20            # vCenter perf sample interval seconds
+  interval: 20               # perf query IntervalId seconds
+  insecure_tls: true         # trust self-signed vCenter certs
+  targets:
+    - name: vcenter-prod
+      address: vcenter.example.com   # host or host:port, no scheme
+      username: ${VMWARE_USERNAME}
+      password: ${VMWARE_PASSWORD}
+  collectors:
+    datacenter: true
+    cluster: true
+    datastore: true
+    host: true
+    vm: true
+    esxcli_host_nic: false
+    esxcli_storage: false
+  events:
+    enabled: true            # emit vCenter EventManager events as logs
+    state_changes: true      # emit synthesized inventory-diff logs
+    max_per_poll: 100        # cap on events read per poll
+  extra_labels: {}

@@ -788,6 +788,30 @@ data:
         imds_timeout: 2s
 
     # -----------------------------------------------------------------------------
+    # VMware vSphere Configuration (optional for collector/unified mode)
+    # -----------------------------------------------------------------------------
+    vmware:
+      enabled: false
+      collect_interval: 60s
+      granularity: 20
+      interval: 20
+      insecure_tls: true
+      targets: []
+      collectors:
+        datacenter: true
+        cluster: true
+        datastore: true
+        host: true
+        vm: true
+        esxcli_host_nic: false
+        esxcli_storage: false
+      events:
+        enabled: true
+        state_changes: true
+        max_per_poll: 100
+      extra_labels: {}
+
+    # -----------------------------------------------------------------------------
     # Name Resolver Configuration
     # -----------------------------------------------------------------------------
     name_resolver:
