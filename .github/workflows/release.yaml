@@ -150,6 +150,7 @@ jobs:
             VERSION=${{ steps.version.outputs.VERSION }}
             REVISION=${{ github.sha }}
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            SKIP_BPF_GENERATE=1
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -165,6 +166,7 @@ jobs:
           build-args: |
             VERSION=${{ steps.version.outputs.VERSION }}
             REVISION=${{ github.sha }}
+            SKIP_BPF_GENERATE=1
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
