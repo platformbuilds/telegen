@@ -25,15 +25,23 @@ COPY internal/ ./internal/
 COPY pkg/ ./pkg/
 COPY go.mod go.sum ./
 
+# Optional escape hatch for local multi-arch builds where cross-kernel BPF
+# generation can fail in builder images. Default keeps current behavior.
+ARG SKIP_BPF_GENERATE=0
+
 # Generate eBPF bytecode (CO-RE) - runs go:generate in all packages
 # The directives are in internal/tracers/*, internal/ebpf/*, etc.
-RUN go generate ./internal/ebpf/common/... && \
-    go generate ./internal/tracers/... && \
-    go generate ./internal/netollyebpf/... && \
-    go generate ./internal/ebpflogger/... && \
-    go generate ./internal/ebpfwatcher/... && \
-    go generate ./internal/rdns/... && \
-    go generate ./internal/profiler/...
+RUN if [ "$SKIP_BPF_GENERATE" = "1" ]; then \
+      echo "Skipping eBPF regeneration; using checked-in generated artifacts"; \
+    else \
+      go generate ./internal/ebpf/common/... && \
+      go generate ./internal/tracers/... && \
+      go generate ./internal/netollyebpf/... && \
+      go generate ./internal/ebpflogger/... && \
+      go generate ./internal/ebpfwatcher/... && \
+      go generate ./internal/rdns/... && \
+      go generate ./internal/profiler/...; \
+    fi
 
 # =============================================================================
 # Stage 2: Build Java Agent
@@ -66,7 +74,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /src
 RUN git clone --depth 1 https://github.com/jvm-profiling-tools/perf-map-agent.git && \
     cd perf-map-agent && \
-    cmake . && \
+    cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 . && \
     make
 
 # =============================================================================

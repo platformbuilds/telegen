@@ -70,9 +70,9 @@ require (
 	go.opentelemetry.io/otel/trace v1.42.0
 	go.uber.org/zap v1.27.1
 	golang.org/x/arch v0.25.0
-	golang.org/x/mod v0.32.0
+	golang.org/x/mod v0.36.0
 	golang.org/x/net v0.51.0
-	golang.org/x/sync v0.19.0
+	golang.org/x/sync v0.21.0
 	golang.org/x/sys v0.42.0
 	google.golang.org/grpc v1.79.2
 	google.golang.org/protobuf v1.36.11
@@ -84,6 +84,7 @@ require (
 )
 
 require (
+	github.com/NVIDIA/go-nvml v0.12.4-1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gogo/protobuf v1.3.2
@@ -94,6 +95,7 @@ require (
 	github.com/openconfig/gnmi v0.14.1
 	github.com/twmb/franz-go v1.20.7
 	github.com/twmb/franz-go/pkg/kmsg v1.12.0
+	github.com/vmware/govmomi v0.55.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.42.0
 	golang.org/x/time v0.15.0
 )
@@ -101,7 +103,6 @@ require (
 require (
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.31.0 // indirect
-	github.com/NVIDIA/go-nvml v0.12.4-1 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.41.3 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.32.11 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.11 // indirect
@@ -205,7 +206,7 @@ require (
 	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/term v0.40.0 // indirect
-	golang.org/x/text v0.34.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260209200024-4cfbd4190f57 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260209200024-4cfbd4190f57 // indirect

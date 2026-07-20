@@ -1104,6 +1104,40 @@ storage:
     endpoint: {{ .Values.collector.storage.otlp.endpoint | default (include "telegen.otlpEndpoint" .) | quote }}
 
 # -----------------------------------------------------------------------------
+# VMware vSphere Configuration
+# -----------------------------------------------------------------------------
+vmware:
+  enabled: {{ .Values.collector.vmware.enabled | default false }}
+  collect_interval: {{ .Values.collector.vmware.collectInterval | default "60s" }}
+  granularity: {{ .Values.collector.vmware.granularity | default 20 }}
+  interval: {{ .Values.collector.vmware.interval | default 20 }}
+  insecure_tls: {{ .Values.collector.vmware.insecureTLS | default true }}
+  {{- if .Values.collector.vmware.targets }}
+  targets:
+    {{- toYaml .Values.collector.vmware.targets | nindent 4 }}
+  {{- else }}
+  targets: []
+  {{- end }}
+  collectors:
+    datacenter: {{ .Values.collector.vmware.collectors.datacenter | default true }}
+    cluster: {{ .Values.collector.vmware.collectors.cluster | default true }}
+    datastore: {{ .Values.collector.vmware.collectors.datastore | default true }}
+    host: {{ .Values.collector.vmware.collectors.host | default true }}
+    vm: {{ .Values.collector.vmware.collectors.vm | default true }}
+    esxcli_host_nic: {{ .Values.collector.vmware.collectors.esxcliHostNic | default false }}
+    esxcli_storage: {{ .Values.collector.vmware.collectors.esxcliStorage | default false }}
+  events:
+    enabled: {{ .Values.collector.vmware.events.enabled | default true }}
+    state_changes: {{ .Values.collector.vmware.events.stateChanges | default true }}
+    max_per_poll: {{ .Values.collector.vmware.events.maxPerPoll | default 100 }}
+  {{- if .Values.collector.vmware.extraLabels }}
+  extra_labels:
+    {{- toYaml .Values.collector.vmware.extraLabels | nindent 4 }}
+  {{- else }}
+  extra_labels: {}
+  {{- end }}
+
+# -----------------------------------------------------------------------------
 # Cloud Provider Configuration
 # -----------------------------------------------------------------------------
 cloud:

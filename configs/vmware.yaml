@@ -1,0 +1,52 @@
+# Telegen VMware vSphere Configuration
+# Collects vCenter metrics and events/state-change logs via govmomi (SOAP) and
+# streams them through Telegen's shared OTLP pipelines to an OTel Collector.
+#
+# Run in collector or unified mode:
+#   telegen --mode collector --config configs/vmware.yaml
+#
+# Credentials are read from environment variables via ${VAR} expansion.
+
+vmware:
+  # Enable/disable VMware collection. Also implicitly enabled in
+  # collector/unified mode when at least one target is configured.
+  enabled: true
+
+  # How often to poll vCenter.
+  collect_interval: 60s
+
+  # vCenter performance sampling configuration.
+  # granularity = perf sample interval seconds (real-time counters are 20s).
+  # interval    = perf query IntervalId seconds.
+  # Number of samples fetched per poll = interval / granularity.
+  granularity: 20
+  interval: 20
+
+  # Trust self-signed / insecure vCenter TLS certificates.
+  insecure_tls: true
+
+  # One or more vCenter endpoints to poll.
+  targets:
+    - name: vcenter-prod
+      address: vcenter.example.com   # host or host:port (no scheme; https assumed)
+      username: ${VMWARE_USERNAME}
+      password: ${VMWARE_PASSWORD}
+
+  # Per-subsystem collector toggles. All default to true except esxcli.
+  collectors:
+    datacenter: true
+    cluster: true
+    datastore: true
+    host: true
+    vm: true
+    esxcli_host_nic: false
+    esxcli_storage: false
+
+  # Logs signal: vCenter events and synthesized inventory state-change records.
+  events:
+    enabled: true
+    state_changes: true
+    max_per_poll: 100
+
+  # Labels added to every emitted metric and log record.
+  extra_labels: {}

@@ -162,6 +162,32 @@ collector:
       enabled: true
       endpoint: ""
 
+  # VMware vSphere monitoring
+  vmware:
+    enabled: false
+    collectInterval: 60s
+    granularity: 20
+    interval: 20
+    insecureTLS: true
+    targets: []
+    # - name: vcenter-prod
+    #   address: vcenter.example.com
+    #   username: ${VMWARE_USERNAME}
+    #   password: ${VMWARE_PASSWORD}
+    collectors:
+      datacenter: true
+      cluster: true
+      datastore: true
+      host: true
+      vm: true
+      esxcliHostNic: false
+      esxcliStorage: false
+    events:
+      enabled: true
+      stateChanges: true
+      maxPerPoll: 100
+    extraLabels: {}
+
 # =============================================================================
 # Self-Telemetry Configuration
 # =============================================================================
