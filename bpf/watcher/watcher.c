@@ -107,10 +107,12 @@ int obi_tp_sched_process_exit(struct trace_event_raw_sched_process_template *ctx
     ev->pid        = pid;
     ev->tid        = tid;
 
-    // ctx->exit_code encodes the full wait-status:
-    //   bits [6:0]  = termination signal (0 → clean exit)
+    // task_struct->exit_code encodes the full wait-status (the tracepoint
+    // context does not carry it):
+    //   bits [6:0]  = termination signal (0 -> clean exit)
     //   bits [15:8] = exit code (if signal == 0)
-    u32 raw = (u32)BPF_CORE_READ(ctx, exit_code);
+    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+    u32 raw = (u32)BPF_CORE_READ(task, exit_code);
     ev->signal_num = raw & 0x7F;
     ev->exit_code  = (raw >> 8) & 0xFF;
 
