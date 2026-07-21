@@ -21,8 +21,8 @@ type Collectors struct {
 	Datastore     *bool `yaml:"datastore"`
 	Host          *bool `yaml:"host"`
 	VM            *bool `yaml:"vm"`
-	EsxcliHostNIC bool  `yaml:"esxcli_host_nic"` // default false
-	EsxcliStorage bool  `yaml:"esxcli_storage"`  // default false
+	EsxcliHostNIC bool  `yaml:"esxcli_host_nic"` // NOT IMPLEMENTED in this build; reserved
+	EsxcliStorage bool  `yaml:"esxcli_storage"`  // NOT IMPLEMENTED in this build; reserved
 }
 
 // EventsConfig configures the VMware logs signal.
@@ -35,15 +35,16 @@ type EventsConfig struct {
 // Config is the top-level VMware vSphere feature configuration.
 // Mirror of storagedef.Config (internal/storagedef/types.go).
 type Config struct {
-	Enabled         bool              `yaml:"enabled"`
-	Targets         []Target          `yaml:"targets"`
-	CollectInterval time.Duration     `yaml:"collect_interval"` // how often to poll (default 60s)
-	Granularity     int               `yaml:"granularity"`      // vCenter perf sample interval seconds (default 20)
-	Interval        int               `yaml:"interval"`         // perf query IntervalId seconds (default 20)
-	InsecureTLS     bool              `yaml:"insecure_tls"`     // maps to soap Insecure
-	Collectors      Collectors        `yaml:"collectors"`
-	Events          EventsConfig      `yaml:"events"`
-	ExtraLabels     map[string]string `yaml:"extra_labels"` // added to every metric/log
+	Enabled          bool              `yaml:"enabled"`
+	Targets          []Target          `yaml:"targets"`
+	CollectInterval  time.Duration     `yaml:"collect_interval"`  // how often to poll (default 60s)
+	Granularity      int               `yaml:"granularity"`       // vCenter perf sample interval seconds (default 20)
+	Interval         int               `yaml:"interval"`          // perf query IntervalId seconds (default 20)
+	OperationTimeout time.Duration     `yaml:"operation_timeout"` // per-cycle vCenter op budget; default derived from collect_interval
+	InsecureTLS      bool              `yaml:"insecure_tls"`      // maps to soap Insecure
+	Collectors       Collectors        `yaml:"collectors"`
+	Events           EventsConfig      `yaml:"events"`
+	ExtraLabels      map[string]string `yaml:"extra_labels"` // added to every metric/log
 }
 
 // EffectiveInterval returns the polling interval, defaulting to 60s.
@@ -52,6 +53,23 @@ func (c Config) EffectiveInterval() time.Duration {
 		return 60 * time.Second
 	}
 	return c.CollectInterval
+}
+
+// EffectiveTimeout returns the per-collection-cycle vCenter operation timeout.
+// When operation_timeout is unset it derives from the poll interval
+// (collect_interval - 2s), capped at 55s with a 5s floor.
+func (c Config) EffectiveTimeout() time.Duration {
+	if c.OperationTimeout > 0 {
+		return c.OperationTimeout
+	}
+	t := c.EffectiveInterval() - 2*time.Second
+	if t > 55*time.Second {
+		t = 55 * time.Second
+	}
+	if t < 5*time.Second {
+		t = 5 * time.Second
+	}
+	return t
 }
 
 // EffectivePerfInterval returns the perf query IntervalId in seconds, defaulting to 20.

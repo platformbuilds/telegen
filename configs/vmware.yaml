@@ -21,6 +21,9 @@ vmware:
   # Number of samples fetched per poll = interval / granularity.
   granularity: 20
   interval: 20
+  # Per-collection-cycle timeout for all vCenter operations. Defaults to
+  # min(collect_interval-2s, 55s). Set explicitly for very large inventories.
+  # operation_timeout: 55s
 
   # Trust self-signed / insecure vCenter TLS certificates.
   insecure_tls: true
@@ -39,8 +42,8 @@ vmware:
     datastore: true
     host: true
     vm: true
-    esxcli_host_nic: false
-    esxcli_storage: false
+    esxcli_host_nic: false   # reserved; not implemented in this build
+    esxcli_storage: false    # reserved; not implemented in this build
 
   # Logs signal: vCenter events and synthesized inventory state-change records.
   events:
