@@ -157,7 +157,10 @@ func collectDatastore(s *vcSession, sink *metricSink, log *slog.Logger) error {
 	if err := fetchProperties(s.ctx, s.view, s.client, []string{"Datastore"}, []string{"summary", "host", "vm", "parent"}, &datastores, log); err != nil {
 		return err
 	}
+	return collectDatastoreFromData(s, sink, log, datastores)
+}
 
+func collectDatastoreFromData(s *vcSession, sink *metricSink, log *slog.Logger, datastores []mo.Datastore) error {
 	re := regexp.MustCompile(`(vmfs)?(volumes)?(ds)?(:)?(/+)`)
 
 	var (
@@ -204,14 +207,18 @@ func collectDatastore(s *vcSession, sink *metricSink, log *slog.Logger) error {
 
 // collectHost ports vmware-exporter/vmware/collectors/host.go:51-178.
 func collectHost(s *vcSession, sink *metricSink, log *slog.Logger) error {
-	var (
-		hosts     []mo.HostSystem
-		hostRefs  []types.ManagedObjectReference
-		hostNames = make(map[string]string)
-	)
+	var hosts []mo.HostSystem
 	if err := fetchProperties(s.ctx, s.view, s.client, []string{"HostSystem"}, []string{"parent", "summary", "runtime"}, &hosts, log); err != nil {
 		return err
 	}
+	return collectHostFromData(s, sink, log, hosts)
+}
+
+func collectHostFromData(s *vcSession, sink *metricSink, log *slog.Logger, hosts []mo.HostSystem) error {
+	var (
+		hostRefs  []types.ManagedObjectReference
+		hostNames = make(map[string]string)
+	)
 
 	for _, host := range hosts {
 		if host.Runtime.PowerState != "poweredOn" || host.Runtime.ConnectionState != "connected" || host.Runtime.InMaintenanceMode {
@@ -238,12 +245,12 @@ func collectHost(s *vcSession, sink *metricSink, log *slog.Logger) error {
 			"vcenter":  s.target,
 		})
 		sink.addGauge("host", "software_info", "Software Information", 1.0, map[string]string{
-			"hostmo":  host.Self.Value,
-			"host":    host.Summary.Config.Name,
+			"hostmo":   host.Self.Value,
+			"host":     host.Summary.Config.Name,
 			"software": host.Summary.Config.Product.Name,
-			"version": host.Summary.Config.Product.Version,
-			"build":   host.Summary.Config.Product.Build,
-			"vcenter": s.target,
+			"version":  host.Summary.Config.Product.Version,
+			"build":    host.Summary.Config.Product.Build,
+			"vcenter":  s.target,
 		})
 
 		hostLabels := map[string]string{"hostmo": host.Self.Value, "host": host.Summary.Config.Name, "vcenter": s.target}
@@ -276,17 +283,21 @@ func collectHost(s *vcSession, sink *metricSink, log *slog.Logger) error {
 
 // collectVM ports vmware-exporter/vmware/collectors/vm.go:49-169.
 func collectVM(s *vcSession, sink *metricSink, log *slog.Logger) error {
-	var (
-		vms     []mo.VirtualMachine
-		vmRefs  []types.ManagedObjectReference
-		vmNames = make(map[string]string)
-	)
+	var vms []mo.VirtualMachine
 	if err := fetchProperties(s.ctx, s.view, s.client,
 		[]string{"VirtualMachine"},
 		[]string{"summary", "runtime", "storage", "snapshot", "snapshot.rootSnapshotList", "snapshot.currentSnapshot"},
 		&vms, log); err != nil {
 		return err
 	}
+	return collectVMFromData(s, sink, log, vms)
+}
+
+func collectVMFromData(s *vcSession, sink *metricSink, log *slog.Logger, vms []mo.VirtualMachine) error {
+	var (
+		vmRefs  []types.ManagedObjectReference
+		vmNames = make(map[string]string)
+	)
 
 	for _, vm := range vms {
 		if vm.Runtime.PowerState != "poweredOn" {

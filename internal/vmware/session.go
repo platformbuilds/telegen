@@ -14,10 +14,12 @@ package vmware
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"time"
 
 	"github.com/vmware/govmomi/performance"
+	"github.com/vmware/govmomi/session"
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/view"
 	"github.com/vmware/govmomi/vim25"
@@ -59,13 +61,7 @@ func login(parent context.Context, t vmwaredef.Target, cfg vmwaredef.Config) (*v
 	}
 	urlx.User = url.UserPassword(t.Username, t.Password)
 
-	// Derive a per-cycle timeout. The source uses (interval-2)s; we base it on
-	// the effective poll interval and guard a sane minimum.
-	timeout := cfg.EffectiveInterval() - 2*time.Second
-	if timeout < 5*time.Second {
-		timeout = 5 * time.Second
-	}
-	ctx, cancel := context.WithTimeout(parent, timeout)
+	ctx, cancel := context.WithTimeout(parent, cfg.EffectiveTimeout())
 
 	session := &cache.Session{URL: urlx, Insecure: cfg.InsecureTLS, Passthrough: true}
 	client := new(vim25.Client)
@@ -94,8 +90,23 @@ func login(parent context.Context, t vmwaredef.Target, cfg vmwaredef.Config) (*v
 	}, nil
 }
 
-// close releases the session context.
-func (s *vcSession) close() {
+// close logs out the vCenter session and releases the session context.
+//
+// With cache.Session{Passthrough:true}, every login creates a NEW server-side
+// session (the file cache is bypassed). govmomi's session/cache docs are
+// explicit that such sessions must be logged out explicitly, otherwise they
+// leak until vCenter's idle-session timeout. Cancelling the context alone does
+// NOT release the server-side session.
+func (s *vcSession) close(log *slog.Logger) {
+	if s.client != nil {
+		// Independent short timeout: s.ctx may already be at/near its deadline.
+		logoutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := session.NewManager(s.client).Logout(logoutCtx); err != nil && log != nil {
+			log.Debug("vmware session logout failed (session will be reaped on vCenter idle timeout)",
+				"vcenter", s.target, "error", err)
+		}
+		cancel()
+	}
 	if s.cancel != nil {
 		s.cancel()
 	}

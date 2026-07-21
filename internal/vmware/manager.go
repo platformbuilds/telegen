@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/vmware/govmomi/vim25/mo"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
@@ -63,6 +64,11 @@ func (m *Manager) Start(ctx context.Context) error {
 	}
 	if len(m.cfg.Targets) == 0 {
 		return fmt.Errorf("no vmware targets configured")
+	}
+	if m.cfg.Collectors.EsxcliHostNIC || m.cfg.Collectors.EsxcliStorage {
+		m.log.Warn("vmware esxcli collectors are configured but not implemented in this build; ignoring",
+			"esxcli_host_nic", m.cfg.Collectors.EsxcliHostNIC,
+			"esxcli_storage", m.cfg.Collectors.EsxcliStorage)
 	}
 
 	if m.metrics == nil {
@@ -160,11 +166,51 @@ func (m *Manager) collectTarget(ctx context.Context, t vmwaredef.Target) {
 		log.Warn("vmware login failed, skipping target this cycle", "error", err, "status", "degraded")
 		return
 	}
-	defer s.close()
+	defer s.close(log)
 
 	// Metrics collection.
 	sink := &metricSink{}
-	m.runCollectors(s, sink, log)
+	st := m.stateFor(name)
+	useSharedInventory := m.cfg.Events.StateChanges &&
+		(m.cfg.Collectors.Enabled("host") ||
+			m.cfg.Collectors.Enabled("vm") ||
+			m.cfg.Collectors.Enabled("datastore"))
+
+	var (
+		vms        []mo.VirtualMachine
+		hosts      []mo.HostSystem
+		datastores []mo.Datastore
+		vmErr      error
+		hostErr    error
+		dsErr      error
+	)
+
+	if useSharedInventory {
+		vmErr = fetchProperties(s.ctx, s.view, s.client,
+			[]string{"VirtualMachine"},
+			[]string{"summary", "runtime", "storage", "snapshot", "snapshot.rootSnapshotList", "snapshot.currentSnapshot"},
+			&vms, log)
+		if vmErr != nil {
+			log.Debug("vmware state-change vm fetch failed", "vcenter", s.target, "error", vmErr)
+		}
+		hostErr = fetchProperties(s.ctx, s.view, s.client,
+			[]string{"HostSystem"},
+			[]string{"parent", "summary", "runtime"},
+			&hosts, log)
+		if hostErr != nil {
+			log.Debug("vmware state-change host fetch failed", "vcenter", s.target, "error", hostErr)
+		}
+		dsErr = fetchProperties(s.ctx, s.view, s.client,
+			[]string{"Datastore"},
+			[]string{"summary", "host", "vm", "parent"},
+			&datastores, log)
+		if dsErr != nil {
+			log.Debug("vmware state-change datastore fetch failed", "vcenter", s.target, "error", dsErr)
+		}
+		m.runCollectorsWithSharedInventory(s, sink, log, vms, vmErr, hosts, hostErr, datastores, dsErr)
+	} else {
+		m.runCollectors(s, sink, log)
+	}
 
 	if metrics := sink.metrics(); len(metrics) > 0 {
 		if m.metrics != nil {
@@ -178,12 +224,15 @@ func (m *Manager) collectTarget(ctx context.Context, t vmwaredef.Target) {
 
 	// Logs collection (events + synthesized state changes).
 	var records []vmwaredef.LogRecord
-	st := m.stateFor(name)
 	if m.cfg.Events.Enabled {
 		records = append(records, collectEvents(s, m.cfg.Events.MaxPerPoll, st, log)...)
 	}
 	if m.cfg.Events.StateChanges {
-		records = append(records, collectStateChanges(s, st, log)...)
+		if useSharedInventory {
+			records = append(records, collectStateChangesFromData(s, st, log, vms, hosts, datastores)...)
+		} else {
+			records = append(records, collectStateChanges(s, st, log)...)
+		}
 	}
 	if len(records) > 0 && m.logs != nil {
 		emitLogs(s.ctx, m.logs, m.cfg.ExtraLabels, records)
@@ -215,6 +264,57 @@ func (m *Manager) runCollectors(s *vcSession, sink *metricSink, log *slog.Logger
 		go func(c namedCollector) {
 			defer wg.Done()
 			if err := c.fn(s, sink, log); err != nil {
+				log.Warn("vmware collector failed", "collector", c.name, "error", err, "status", "degraded")
+			}
+		}(c)
+	}
+	wg.Wait()
+}
+
+func (m *Manager) runCollectorsWithSharedInventory(
+	s *vcSession,
+	sink *metricSink,
+	log *slog.Logger,
+	vms []mo.VirtualMachine, vmErr error,
+	hosts []mo.HostSystem, hostErr error,
+	datastores []mo.Datastore, dsErr error,
+) {
+	type namedCollector struct {
+		name string
+		fn   func() error
+	}
+	collectors := []namedCollector{
+		{"datacenter", func() error { return collectDatacenter(s, sink, log) }},
+		{"cluster", func() error { return collectCluster(s, sink, log) }},
+		{"datastore", func() error {
+			if dsErr != nil {
+				return dsErr
+			}
+			return collectDatastoreFromData(s, sink, log, datastores)
+		}},
+		{"host", func() error {
+			if hostErr != nil {
+				return hostErr
+			}
+			return collectHostFromData(s, sink, log, hosts)
+		}},
+		{"vm", func() error {
+			if vmErr != nil {
+				return vmErr
+			}
+			return collectVMFromData(s, sink, log, vms)
+		}},
+	}
+
+	var wg sync.WaitGroup
+	for _, c := range collectors {
+		if !m.cfg.Collectors.Enabled(c.name) {
+			continue
+		}
+		wg.Add(1)
+		go func(c namedCollector) {
+			defer wg.Done()
+			if err := c.fn(); err != nil {
 				log.Warn("vmware collector failed", "collector", c.name, "error", err, "status", "degraded")
 			}
 		}(c)

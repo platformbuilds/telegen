@@ -105,10 +105,16 @@ func TestEventsAndStateChangesAgainstSimulator(t *testing.T) {
 		log := discardLogger()
 		st := newTargetState()
 
-		// Event polling must not error and should set the last-key baseline.
-		_ = collectEvents(s, 50, st, log)
+		// First poll establishes the watermark baseline and emits nothing.
+		if recs := collectEvents(s, 50, st, log); len(recs) != 0 {
+			t.Errorf("expected no events on baseline poll, got %d", len(recs))
+		}
 		if !st.haveEventKey {
-			t.Log("simulator produced no events on first poll (acceptable)")
+			t.Fatal("event watermark baseline not established")
+		}
+		// Second poll with no new events should also emit nothing.
+		if recs := collectEvents(s, 50, st, log); len(recs) != 0 {
+			t.Errorf("expected no events on unchanged poll, got %d", len(recs))
 		}
 
 		// First state-change pass establishes the baseline and emits nothing.
