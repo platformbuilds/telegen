@@ -13,6 +13,16 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type BpfProcExitEventT struct {
+	_         structs.HostLayout
+	Timestamp uint64
+	Pid       uint32
+	Tid       uint32
+	ExitCode  uint32
+	SignalNum uint32
+	Comm      [16]int8
+}
+
 type BpfWatchInfoT struct {
 	_       structs.HostLayout
 	Flags   uint64
@@ -61,16 +71,18 @@ type BpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfProgramSpecs struct {
-	ObiKprobeSysBind *ebpf.ProgramSpec `ebpf:"obi_kprobe_sys_bind"`
+	ObiKprobeSysBind      *ebpf.ProgramSpec `ebpf:"obi_kprobe_sys_bind"`
+	ObiTpSchedProcessExit *ebpf.ProgramSpec `ebpf:"obi_tp_sched_process_exit"`
 }
 
 // BpfMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfMapSpecs struct {
-	DebugEvents  *ebpf.MapSpec `ebpf:"debug_events"`
-	MsgBufferMem *ebpf.MapSpec `ebpf:"msg_buffer_mem"`
-	WatchEvents  *ebpf.MapSpec `ebpf:"watch_events"`
+	DebugEvents    *ebpf.MapSpec `ebpf:"debug_events"`
+	MsgBufferMem   *ebpf.MapSpec `ebpf:"msg_buffer_mem"`
+	ProcExitEvents *ebpf.MapSpec `ebpf:"proc_exit_events"`
+	WatchEvents    *ebpf.MapSpec `ebpf:"watch_events"`
 }
 
 // BpfVariableSpecs contains global variables before they are loaded into the kernel.
@@ -84,6 +96,7 @@ type BpfVariableSpecs struct {
 	Unused                  *ebpf.VariableSpec `ebpf:"unused"`
 	Unused2                 *ebpf.VariableSpec `ebpf:"unused_2"`
 	UnusedHttp2             *ebpf.VariableSpec `ebpf:"unused_http2"`
+	UnusedProcExit          *ebpf.VariableSpec `ebpf:"unused_proc_exit"`
 }
 
 // BpfObjects contains all objects after they have been loaded into the kernel.
@@ -106,15 +119,17 @@ func (o *BpfObjects) Close() error {
 //
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfMaps struct {
-	DebugEvents  *ebpf.Map `ebpf:"debug_events"`
-	MsgBufferMem *ebpf.Map `ebpf:"msg_buffer_mem"`
-	WatchEvents  *ebpf.Map `ebpf:"watch_events"`
+	DebugEvents    *ebpf.Map `ebpf:"debug_events"`
+	MsgBufferMem   *ebpf.Map `ebpf:"msg_buffer_mem"`
+	ProcExitEvents *ebpf.Map `ebpf:"proc_exit_events"`
+	WatchEvents    *ebpf.Map `ebpf:"watch_events"`
 }
 
 func (m *BpfMaps) Close() error {
 	return _BpfClose(
 		m.DebugEvents,
 		m.MsgBufferMem,
+		m.ProcExitEvents,
 		m.WatchEvents,
 	)
 }
@@ -130,18 +145,21 @@ type BpfVariables struct {
 	Unused                  *ebpf.Variable `ebpf:"unused"`
 	Unused2                 *ebpf.Variable `ebpf:"unused_2"`
 	UnusedHttp2             *ebpf.Variable `ebpf:"unused_http2"`
+	UnusedProcExit          *ebpf.Variable `ebpf:"unused_proc_exit"`
 }
 
 // BpfPrograms contains all programs after they have been loaded into the kernel.
 //
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfPrograms struct {
-	ObiKprobeSysBind *ebpf.Program `ebpf:"obi_kprobe_sys_bind"`
+	ObiKprobeSysBind      *ebpf.Program `ebpf:"obi_kprobe_sys_bind"`
+	ObiTpSchedProcessExit *ebpf.Program `ebpf:"obi_tp_sched_process_exit"`
 }
 
 func (p *BpfPrograms) Close() error {
 	return _BpfClose(
 		p.ObiKprobeSysBind,
+		p.ObiTpSchedProcessExit,
 	)
 }
 
