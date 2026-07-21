@@ -173,8 +173,9 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Ensure GHCR package is public
+        continue-on-error: true
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
           ORG: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
@@ -197,8 +198,8 @@ jobs:
             cat /tmp/pkg_visibility.json
           done
 
-          echo "Unable to set GHCR package visibility to public"
-          exit 1
+          echo "WARNING: could not set GHCR visibility automatically; set it once in the org package settings (best-effort step)."
+          exit 0
 
   release-helm:
     name: Release Helm Chart
