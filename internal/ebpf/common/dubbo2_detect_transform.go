@@ -32,8 +32,9 @@ func ProcessPossibleDubbo2Event(event *TCPRequestInfo, reqBuf, respBuf []byte) (
 
 	records := dubbov2parser.StitchFrames(allFrames)
 
-	// Pick the first matched record with a known service/method or at least a request frame.
-	for _, rec := range records {
+	// Pick the first matched record.
+	if len(records) > 0 {
+		rec := records[0]
 		req := rec.Request
 		resp := rec.Response
 
@@ -63,7 +64,8 @@ func ProcessPossibleDubbo2Event(event *TCPRequestInfo, reqBuf, respBuf []byte) (
 	}
 
 	// Request-only frames (e.g., heartbeat events)
-	for _, f := range reqFrames {
+	if len(reqFrames) > 0 {
+		f := reqFrames[0]
 		if f.IsEvent {
 			return request.Span{}, ParseIgnored, nil // heartbeat — skip
 		}
