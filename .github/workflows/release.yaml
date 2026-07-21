@@ -170,6 +170,34 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Ensure GHCR package is public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ORG: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+
+          # Package name can appear either as "telegen" or "org/telegen".
+          for pkg in "telegen" "${ORG}%2Ftelegen"; do
+            code="$(curl -sS -o /tmp/pkg_visibility.json -w "%{http_code}" \
+              -X PATCH \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/orgs/${ORG}/packages/container/${pkg}/visibility" \
+              -d '{"visibility":"public"}')"
+
+            if [ "${code}" = "200" ] || [ "${code}" = "204" ]; then
+              echo "Set GHCR package visibility to public for ${pkg}"
+              exit 0
+            fi
+
+            echo "Failed visibility update for ${pkg} (HTTP ${code})"
+            cat /tmp/pkg_visibility.json
+          done
+
+          echo "Unable to set GHCR package visibility to public"
+          exit 1
+
   release-helm:
     name: Release Helm Chart
     runs-on: ubuntu-latest
