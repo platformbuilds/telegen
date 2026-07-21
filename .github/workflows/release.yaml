@@ -115,17 +115,15 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v4
-        with:
-          username: mirastacklabs
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login --username "mirastack" --password-stdin
 
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v6
         with:
           images: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+            ghcr.io/mirastacklabs-ai/telegen
             mirastack/telegen
           tags: |
             type=raw,value=v${{ steps.version.outputs.VERSION }}
@@ -162,7 +160,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-debug
+            ghcr.io/mirastacklabs-ai/telegen:${{ steps.version.outputs.VERSION }}-debug
             mirastack/telegen:${{ steps.version.outputs.VERSION }}-debug
           build-args: |
             VERSION=${{ steps.version.outputs.VERSION }}
