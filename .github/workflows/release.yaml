@@ -48,6 +48,7 @@ jobs:
           # Extract version from tag: release/mark-v1.0.0 -> 1.0.0
           VERSION="${GITHUB_REF_NAME#release/mark-v}"
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
           echo "Releasing version: ${VERSION}"
 
       - name: Build binary
@@ -148,7 +149,7 @@ jobs:
           build-args: |
             VERSION=${{ steps.version.outputs.VERSION }}
             REVISION=${{ github.sha }}
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            BUILD_DATE=${{ steps.version.outputs.BUILD_DATE }}
             SKIP_BPF_GENERATE=1
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -166,6 +167,7 @@ jobs:
           build-args: |
             VERSION=${{ steps.version.outputs.VERSION }}
             REVISION=${{ github.sha }}
+            BUILD_DATE=${{ steps.version.outputs.BUILD_DATE }}
             SKIP_BPF_GENERATE=1
           cache-from: type=gha
           cache-to: type=gha,mode=max
