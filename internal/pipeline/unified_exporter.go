@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -168,6 +169,9 @@ func (e *UnifiedExporter) Connect(ctx context.Context) error {
 	rawCfg := otlp.DefaultConfig()
 	rawCfg.Endpoint = e.config.Endpoint
 	rawCfg.Protocol = otlp.ProtocolGRPC
+	if strings.HasPrefix(e.config.Endpoint, "http://") || strings.HasPrefix(e.config.Endpoint, "https://") {
+		rawCfg.Protocol = otlp.ProtocolHTTPProtobuf
+	}
 	rawCfg.Timeout = e.config.Timeout
 	rawCfg.Headers = e.config.Headers
 	rawCfg.Compression = otlp.CompressionGzip
