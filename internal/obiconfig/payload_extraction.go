@@ -210,8 +210,8 @@ type HTTPParsingPolicy struct {
 
 // HTTPParsingDefaultAction specifies the default action per rule type.
 type HTTPParsingDefaultAction struct {
-	Headers HTTPParsingAction `yaml:"headers" validate:"required"`
-	Body    HTTPParsingAction `yaml:"body" validate:"required"`
+	Headers HTTPParsingAction `yaml:"headers"`
+	Body    HTTPParsingAction `yaml:"body"`
 }
 
 // HTTPParsingRule defines a single include/exclude/obfuscate rule for HTTP header and payload extraction.
