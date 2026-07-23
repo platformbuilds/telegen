@@ -11,16 +11,13 @@ volatile const u32 postgres_buffer_size = 0;
 volatile const u32 kafka_buffer_size = 0;
 
 enum {
-    // This value represents a pessimistic guard for the maximum size
-    // a large buffer event can take into the ring buffer.
-    // The actual size is "event size + payload". Since the payload
-    // is guaranteed to be a power of 2, we take the next power of 2
-    // of the maximum payload size as a guard.
-    k_large_buf_max_size = 1 << 14, // 16K
+    // Pessimistic guard for "event header + payload".
+    // Keep this larger than k_large_buf_payload_max_size to accommodate struct overhead.
+    k_large_buf_max_size = 1 << 19, // 512K
     k_large_buf_max_size_mask = k_large_buf_max_size - 1,
 
     // Maximum size for a large buffer payload.
-    k_large_buf_payload_max_size = 1 << 13, // 8K
+    k_large_buf_payload_max_size = 1 << 18, // 256K
     k_large_buf_payload_max_size_mask = k_large_buf_payload_max_size - 1,
 };
 

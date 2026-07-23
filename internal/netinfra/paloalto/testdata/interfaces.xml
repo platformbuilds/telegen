@@ -1,0 +1,12 @@
+<response status="success">
+  <result>
+    <ifnet>
+      <entry name="ethernet1/1">
+        <state>up</state>
+      </entry>
+      <entry name="ethernet1/2">
+        <state>down</state>
+      </entry>
+    </ifnet>
+  </result>
+</response>

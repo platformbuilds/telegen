@@ -99,6 +99,16 @@ integrations/index
 
 ```{toctree}
 :maxdepth: 2
+:caption: Guides
+
+guides/obi-lineage
+guides/obi-attribute-parity
+guides/v3-migration-phase0-baseline
+guides/v3-migration-phase1-depmap
+```
+
+```{toctree}
+:maxdepth: 2
 :caption: Operations
 
 operations/index

@@ -137,6 +137,74 @@ func httpRequestResponseToSpan(parseCtx *EBPFParseContext, event *BPFHTTPInfo, r
 		}
 	}
 
+	// Host/path anchored detectors first, then header-based provider detectors.
+	if isClientEvent(event.Type) && parseCtx != nil && parseCtx.payloadExtraction.HTTP.GenAI.Embedding.Enabled {
+		span, ok := ebpfhttp.EmbeddingSpan(&httpSpan, req, resp)
+		if ok {
+			return span
+		}
+	}
+
+	if isClientEvent(event.Type) && parseCtx != nil && parseCtx.payloadExtraction.HTTP.GenAI.Retrieval.Enabled {
+		span, ok := ebpfhttp.RetrievalSpan(&httpSpan, req, resp)
+		if ok {
+			return span
+		}
+	}
+
+	if isClientEvent(event.Type) && parseCtx != nil && parseCtx.payloadExtraction.HTTP.GenAI.OpenAI.Enabled {
+		span, ok := ebpfhttp.OpenAISpan(&httpSpan, req, resp)
+		if ok {
+			return span
+		}
+	}
+
+	if isClientEvent(event.Type) && parseCtx != nil && parseCtx.payloadExtraction.HTTP.GenAI.Anthropic.Enabled {
+		span, ok := ebpfhttp.AnthropicSpan(&httpSpan, req, resp)
+		if ok {
+			return span
+		}
+	}
+
+	if isClientEvent(event.Type) && parseCtx != nil && parseCtx.payloadExtraction.HTTP.GenAI.Gemini.Enabled {
+		span, ok := ebpfhttp.GeminiSpan(&httpSpan, req, resp)
+		if ok {
+			return span
+		}
+	}
+
+	if isClientEvent(event.Type) && parseCtx != nil && parseCtx.payloadExtraction.HTTP.GenAI.Rerank.Enabled {
+		span, ok := ebpfhttp.RerankSpan(&httpSpan, req, resp)
+		if ok {
+			return span
+		}
+	}
+
+	if isClientEvent(event.Type) && parseCtx != nil && parseCtx.payloadExtraction.HTTP.GenAI.Qwen.Enabled {
+		span, ok := ebpfhttp.QwenSpan(&httpSpan, req, resp)
+		if ok {
+			return span
+		}
+	}
+
+	if isClientEvent(event.Type) && parseCtx != nil && parseCtx.payloadExtraction.HTTP.GenAI.Bedrock.Enabled {
+		span, ok := ebpfhttp.BedrockSpan(&httpSpan, req, resp)
+		if ok {
+			return span
+		}
+	}
+
+	if isClientEvent(event.Type) && parseCtx != nil && parseCtx.payloadExtraction.HTTP.GenAI.MCP.Enabled {
+		span, ok := ebpfhttp.MCPSpan(&httpSpan, req, resp)
+		if ok {
+			return span
+		}
+	}
+
+	if parseCtx != nil && parseCtx.httpEnricher != nil {
+		parseCtx.httpEnricher.Enrich(&httpSpan, req, resp)
+	}
+
 	return httpSpan
 }
 

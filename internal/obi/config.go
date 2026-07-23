@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -57,6 +59,31 @@ const (
 
 const ReporterLRUSize = 256
 
+func defaultGenAIObfuscationJSONPaths() []config.JSONPathExpr {
+	paths := []string{
+		"$.prompt",
+		"$.input",
+		"$.instructions",
+		"$.messages[*].content",
+		"$.messages[*].content[*].text",
+		"$.content[*].text",
+		"$.choices[*].message.content",
+		"$.output[*].content[*].text",
+		"$.query",
+		"$.documents[*].text",
+	}
+
+	out := make([]config.JSONPathExpr, 0, len(paths))
+	for _, p := range paths {
+		expr, err := config.NewJSONPathExpr(p)
+		if err != nil {
+			panic(fmt.Sprintf("invalid default GenAI obfuscation path %q: %v", p, err))
+		}
+		out = append(out, expr)
+	}
+	return out
+}
+
 // Features that can be enabled in OBI (can be at the same time): App O11y and/or Net O11y
 type Feature uint
 
@@ -92,12 +119,13 @@ var DefaultConfig = Config{
 	ShutdownTimeout:         10 * time.Second,
 	EnforceSysCaps:          false,
 	EBPF: config.EBPFTracer{
-		BatchLength:        100,
-		BatchTimeout:       time.Second,
-		HTTPRequestTimeout: 0,
-		TCBackend:          config.TCBackendAuto,
-		DNSRequestTimeout:  5 * time.Second,
-		ContextPropagation: config.ContextPropagationDisabled,
+		BatchLength:          100,
+		BatchTimeout:         time.Second,
+		HTTPRequestTimeout:   0,
+		StatsWakeupDataBytes: 4096,
+		TCBackend:            config.TCBackendAuto,
+		DNSRequestTimeout:    5 * time.Second,
+		ContextPropagation:   config.ContextPropagationDisabled,
 		RedisDBCache: config.RedisDBCacheConfig{
 			Enabled: false,
 			MaxSize: 1000,
@@ -107,9 +135,12 @@ var DefaultConfig = Config{
 			MySQL:    0,
 			Postgres: 0,
 			Kafka:    0,
+			MSSQL:    0,
+			TCP:      0,
 		},
 		MySQLPreparedStatementsCacheSize:    1024,
 		PostgresPreparedStatementsCacheSize: 1024,
+		MSSQLPreparedStatementsCacheSize:    1024,
 		MongoRequestsCacheSize:              1024,
 		KafkaTopicUUIDCacheSize:             1024,
 		CouchbaseDBCacheSize:                1024,
@@ -125,6 +156,61 @@ var DefaultConfig = Config{
 				AWS: config.AWSConfig{
 					Enabled: false,
 				},
+				SQLPP: config.SQLPPConfig{
+					Enabled: false,
+					EndpointPatterns: []string{
+						"/query/service",
+					},
+				},
+				GenAI: config.GenAIConfig{
+					OpenAI: config.OpenAIConfig{
+						Enabled: true,
+					},
+					Anthropic: config.AnthropicConfig{
+						Enabled: true,
+					},
+					Gemini: config.GeminiConfig{
+						Enabled: true,
+					},
+					Qwen: config.QwenConfig{
+						Enabled: true,
+					},
+					Bedrock: config.BedrockConfig{
+						Enabled: true,
+					},
+					MCP: config.MCPConfig{
+						Enabled: true,
+					},
+					Embedding: config.EmbeddingProviderConfig{
+						Enabled: true,
+					},
+					Rerank: config.RerankConfig{
+						Enabled: true,
+					},
+					Retrieval: config.RetrievalConfig{
+						Enabled: true,
+					},
+				},
+				Enrichment: config.EnrichmentConfig{
+					Enabled: true,
+					Policy: config.HTTPParsingPolicy{
+						DefaultAction: config.HTTPParsingDefaultAction{
+							Headers: config.HTTPParsingActionExclude,
+							Body:    config.HTTPParsingActionExclude,
+						},
+						ObfuscationString: "***",
+					},
+					Rules: []config.HTTPParsingRule{
+						{
+							Action: config.HTTPParsingActionObfuscate,
+							Type:   config.HTTPParsingRuleTypeBody,
+							Scope:  config.HTTPParsingScopeAll,
+							Match: config.HTTPParsingMatch{
+								ObfuscationJSONPaths: defaultGenAIObfuscationJSONPaths(),
+							},
+						},
+					},
+				},
 			},
 		},
 		MaxTransactionTime: 5 * time.Minute,
@@ -134,6 +220,8 @@ var DefaultConfig = Config{
 			AsyncWriterWorkers:    8,
 			AsyncWriterChannelLen: 500,
 		},
+		BPFFSPath:      "/sys/fs/bpf/",
+		InstrumentCuda: config.CudaModeAuto,
 	},
 	NameResolver: &transform.NameResolverConfig{
 		Sources:  []transform.Source{transform.SourceK8s},
@@ -169,7 +257,11 @@ var DefaultConfig = Config{
 			instrumentations.InstrumentationRedis,
 			instrumentations.InstrumentationKafka,
 			instrumentations.InstrumentationMQTT,
+			instrumentations.InstrumentationNATS,
+			instrumentations.InstrumentationAMQP,
 			instrumentations.InstrumentationMongo,
+			instrumentations.InstrumentationMemcached,
+			instrumentations.InstrumentationSunRPC,
 			// no traces for DNS and GPU by default
 		},
 	},
@@ -390,7 +482,7 @@ func (c *Config) Log() {
 func stringSliceToTextUnmarshalerHookFunc() mapstructure.DecodeHookFunc {
 	return func(_ reflect.Type, to reflect.Type, data any) (any, error) {
 		// Check if target implements TextUnmarshaler
-		if to.Kind() == reflect.Ptr {
+		if to.Kind() == reflect.Pointer {
 			to = to.Elem()
 		}
 		toPtr := reflect.New(to)
@@ -592,6 +684,10 @@ func (c *Config) Validate() error {
 		return ConfigError("you can't enable OTEL internal metrics without enabling OTEL metrics")
 	}
 
+	if err := c.EBPF.PayloadExtraction.HTTP.Enrichment.Validate(); err != nil {
+		return ConfigError("invalid HTTP enrichment config: " + err.Error())
+	}
+
 	return nil
 }
 
@@ -660,10 +756,34 @@ func LoadConfig(file io.Reader) (*Config, error) {
 	if err := env.Parse(&cfg); err != nil {
 		return nil, fmt.Errorf("reading env vars: %w", err)
 	}
+	applyDeprecatedEBPFAliases(&cfg)
 
 	cfg.normalize()
 
 	return &cfg, nil
+}
+
+func applyDeprecatedEBPFAliases(cfg *Config) {
+	// Backward-compatible env alias: OTEL_EBPF_INSTRUMENT_GPU -> instrument_cuda
+	// The new env OTEL_EBPF_INSTRUMENT_CUDA always takes precedence when set.
+	if _, hasCudaMode := os.LookupEnv("OTEL_EBPF_INSTRUMENT_CUDA"); !hasCudaMode {
+		if raw, hasLegacyGPU := os.LookupEnv("OTEL_EBPF_INSTRUMENT_GPU"); hasLegacyGPU {
+			enabled, err := strconv.ParseBool(strings.TrimSpace(raw))
+			if err == nil {
+				if enabled {
+					cfg.EBPF.InstrumentCuda = config.CudaModeOn
+				} else {
+					cfg.EBPF.InstrumentCuda = config.CudaModeOff
+				}
+			}
+		}
+	}
+
+	// Deprecated YAML alias fallback (instrument_gpu: true). Skip when env alias is explicitly set.
+	if _, hasLegacyGPUEnv := os.LookupEnv("OTEL_EBPF_INSTRUMENT_GPU"); !hasLegacyGPUEnv &&
+		cfg.EBPF.InstrumentGPU && cfg.EBPF.InstrumentCuda == config.CudaModeAuto {
+		cfg.EBPF.InstrumentCuda = config.CudaModeOn
+	}
 }
 
 func registerCustomValidations(validate *validator.Validate, customValidations CustomValidations) error {

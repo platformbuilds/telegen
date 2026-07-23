@@ -310,44 +310,57 @@ collector:
 
 ## Network Infrastructure APIs
 
-### Arista CloudVision
+Telegen uses a top-level `netinfra` section for network API collectors.
+
+### Arista CloudVision + Cisco ACI
 
 ```yaml
-collector:
-  network_infra:
-    arista:
-      enabled: true
-      poll_interval: 60s
-      
-      address: "https://cloudvision.example.com"
+netinfra:
+  enabled: true
+  collect_interval: 30s
+
+  cloudvision:
+    - name: "cvp-prod"
+      cvp_url: "https://cloudvision.example.com"
       token: "${ARISTA_CVP_TOKEN}"
-      
-      metrics:
-        devices: true
-        interfaces: true
-        bgp: true
-        events: true
+      verify_ssl: true
+      timeout: 30s
+      collect_interval: 30s
+      collect: ["inventory", "interfaces", "bgp", "system"]
+
+  aci:
+    - name: "fabric-a"
+      apic_url: "https://apic.example.com"
+      username: "monitor"
+      password: "${ACI_PASSWORD}"
+      verify_ssl: true
+      timeout: 30s
+      collect_interval: 30s
+      collect: ["fabric_health", "node_health", "tenant_health", "interface_stats"]
 ```
 
-### Cisco ACI
+### Palo Alto + FortiGate firewalls
 
 ```yaml
-collector:
-  network_infra:
-    cisco_aci:
-      enabled: true
-      poll_interval: 60s
-      
-      apic:
-        address: "https://apic.example.com"
-        username: "monitor"
-        password: "${ACI_PASSWORD}"
-      
-      metrics:
-        fabric: true
-        tenants: true
-        endpoints: true
-        faults: true
+netinfra:
+  enabled: true
+  collect_interval: 30s
+
+  paloalto:
+    - name: "pan-edge"
+      base_url: "https://10.0.50.10"
+      api_key: "${PALOALTO_API_KEY}"
+      verify_ssl: true
+      timeout: 30s
+      collect: ["system", "interfaces"]
+
+  fortigate:
+    - name: "fg-core"
+      base_url: "https://10.0.60.20"
+      token: "${FORTIGATE_TOKEN}"
+      verify_ssl: true
+      timeout: 30s
+      collect: ["system", "interfaces"]
 ```
 
 ---
@@ -487,4 +500,5 @@ collector:
 ## Next Steps
 
 - {doc}`agent-mode` - eBPF-based collection
+- {doc}`netinfra-firewalls` - Network infrastructure + firewall APIs
 - {doc}`environment-variables` - Environment variable reference

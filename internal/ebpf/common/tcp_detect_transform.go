@@ -113,6 +113,19 @@ func readTCPRequestIntoSpanInner(parseCtx *EBPFParseContext, cfg *config.EBPFTra
 			return request.Span{}, true, fmt.Errorf("failed to handle Postgres event: %w", err)
 		}
 		return span, false, nil
+	case ProtocolTypeMSSQL:
+		span, err := handleMSSQL(parseCtx, event, requestBuffer, responseBuffer)
+		if errors.Is(err, errFallback) {
+			slog.Debug("MSSQL: falling back to generic handler")
+			break
+		}
+		if errors.Is(err, errIgnore) {
+			return request.Span{}, true, nil
+		}
+		if err != nil {
+			return request.Span{}, true, fmt.Errorf("failed to handle MSSQL event: %w", err)
+		}
+		return span, false, nil
 	case ProtocolTypeAMQP:
 		span, outcome, err := ProcessPossibleAMQPEvent(event, requestBuffer, responseBuffer)
 		if outcome == ParseIgnored && err == nil {
@@ -185,6 +198,14 @@ func readTCPRequestIntoSpanInner(parseCtx *EBPFParseContext, cfg *config.EBPFTra
 			return span, false, nil
 		}
 		return request.Span{}, true, fmt.Errorf("failed to handle FoundationDB event: %w", err)
+	case ProtocolTypeSunRPC:
+		span, ignore, matched, err := matchSunRPC(parseCtx, event, requestBuffer, responseBuffer)
+		if err != nil {
+			return request.Span{}, true, fmt.Errorf("failed to handle SunRPC event: %w", err)
+		}
+		if matched {
+			return span, ignore, nil
+		}
 	case ProtocolTypeUnknown:
 	default:
 	}
@@ -318,6 +339,13 @@ func readTCPRequestIntoSpanInner(parseCtx *EBPFParseContext, cfg *config.EBPFTra
 			return span, false, nil
 		}
 		slog.Debug("FoundationDB heuristic detection failed, ignoring", "error", err)
+	}
+
+	// SunRPC heuristic detection.
+	if span, ignore, matched, err := matchSunRPC(parseCtx, event, requestBuffer, responseBuffer); err != nil {
+		slog.Debug("SunRPC heuristic detection failed, ignoring", "error", err)
+	} else if matched {
+		return span, ignore, nil
 	}
 
 	switch {

@@ -26,7 +26,7 @@ permissions:
 env:
   GO_VERSION: '1.25'
   GOLANGCI_LINT_VERSION: 'v2.8.0'
-  GEN_IMG: 'ghcr.io/open-telemetry/obi-generator:0.2.6'
+  GEN_IMG: 'ghcr.io/open-telemetry/obi-generator:0.2.15'
 
 jobs:
   # Generate eBPF bytecode (shared across lint/test/build via artifact)
@@ -37,7 +37,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Generate eBPF code via Docker
+      - name: Generate telegen-native eBPF code via Docker
         run: |
           docker run --rm \
             -v ${{ github.workspace }}:/src \
@@ -48,13 +48,7 @@ jobs:
             -e "PATH=/usr/lib/llvm20/bin:/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
             --entrypoint /bin/sh \
             ${{ env.GEN_IMG }} \
-            -c "go generate ./internal/ebpf/common/... && \
-                go generate ./internal/tracers/... && \
-                go generate ./internal/netollyebpf/... && \
-                go generate ./internal/ebpflogger/... && \
-                go generate ./internal/ebpfwatcher/... && \
-                go generate ./internal/rdns/... && \
-                go generate ./internal/profiler/..."
+            -c "go generate ./internal/profiler/..."
 
       - name: List generated files
         run: find internal -name '*_bpfel*' -type f | head -20
@@ -85,7 +79,6 @@ jobs:
         run: |
           echo "Checking for generated eBPF files..."
           ls -la internal/profiler/*_bpfel*.go || echo "WARNING: No profiler generated files found"
-          ls -la internal/tracers/*_bpfel*.go || echo "WARNING: No tracer generated files found"
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -128,6 +121,30 @@ jobs:
         with:
           files: coverage.out
           fail_ci_if_error: false
+
+  obi-smoke:
+    name: OBI Linux Smoke
+    runs-on: ubuntu-latest
+    needs: [generate]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download generated eBPF code
+        uses: actions/download-artifact@v8
+        with:
+          name: generated-ebpf
+          path: internal/
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run OBI->OTLP smoke test
+        run: |
+          go test -v ./internal/pipeline -run TestLinuxOBISmoke_ForwardToOTLP -count=1
 
   build:
     name: Build

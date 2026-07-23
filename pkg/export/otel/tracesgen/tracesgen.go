@@ -162,6 +162,7 @@ func GenerateTracesWithAttributes(
 		if span.ParentSpanID.IsValid() {
 			s.SetParentSpanID(pcommon.SpanID(span.ParentSpanID))
 		}
+		appendSpanLinks(s, span.Links)
 
 		// Set span attributes
 		m := AttrsToMap(attrs)
@@ -208,6 +209,19 @@ func createSubSpans(span *request.Span, parentSpanID pcommon.SpanID, traceID pco
 		spP.SetSpanID(pcommon.SpanID(idgen.RandomSpanID()))
 	}
 	spP.SetParentSpanID(parentSpanID)
+	appendSpanLinks(spP, span.Links)
+}
+
+func appendSpanLinks(dst ptrace.Span, links []request.SpanLink) {
+	for _, spanLink := range links {
+		if !spanLink.TraceID.IsValid() || !spanLink.SpanID.IsValid() {
+			continue
+		}
+		link := dst.Links().AppendEmpty()
+		link.SetTraceID(pcommon.TraceID(spanLink.TraceID))
+		link.SetSpanID(pcommon.SpanID(spanLink.SpanID))
+		link.SetFlags(uint32(spanLink.TraceFlags))
+	}
 }
 
 var emptyUID = svc.UID{}
@@ -270,7 +284,7 @@ func acceptSpan(is instrumentations.InstrumentationSelection, span *request.Span
 		return is.HTTPEnabled()
 	case request.EventTypeGRPC, request.EventTypeGRPCClient:
 		return is.GRPCEnabled()
-	case request.EventTypeSQLClient:
+	case request.EventTypeSQLClient, request.EventTypeSQLServer:
 		return is.SQLEnabled()
 	case request.EventTypeRedisClient, request.EventTypeRedisServer:
 		return is.RedisEnabled()
@@ -278,6 +292,12 @@ func acceptSpan(is instrumentations.InstrumentationSelection, span *request.Span
 		return is.KafkaEnabled()
 	case request.EventTypeMQTTClient, request.EventTypeMQTTServer:
 		return is.MQTTEnabled()
+	case request.EventTypeNATSClient:
+		return is.NATSEnabled()
+	case request.EventTypeAMQPClient:
+		return is.AMQPEnabled()
+	case request.EventTypeSunRPCClient, request.EventTypeSunRPCServer:
+		return is.SunRPCEnabled()
 	case request.EventTypeMongoClient:
 		return is.MongoEnabled()
 	case request.EventTypeManualSpan:
@@ -288,6 +308,8 @@ func acceptSpan(is instrumentations.InstrumentationSelection, span *request.Span
 		return is.DNSEnabled()
 	case request.EventTypeCouchbaseClient:
 		return is.CouchbaseEnabled()
+	case request.EventTypeMemcachedClient:
+		return is.MemcachedEnabled()
 	}
 
 	return false
@@ -560,11 +582,11 @@ func TraceAttributesSelector(span *request.Span, optionalAttrs map[attr.Name]str
 
 func spanKind(span *request.Span) trace2.SpanKind {
 	switch span.Type {
-	case request.EventTypeHTTP, request.EventTypeGRPC, request.EventTypeRedisServer, request.EventTypeKafkaServer, request.EventTypeMQTTServer:
+	case request.EventTypeHTTP, request.EventTypeGRPC, request.EventTypeRedisServer, request.EventTypeKafkaServer, request.EventTypeMQTTServer, request.EventTypeSunRPCServer, request.EventTypeSQLServer:
 		return trace2.SpanKindServer
-	case request.EventTypeHTTPClient, request.EventTypeGRPCClient, request.EventTypeSQLClient, request.EventTypeRedisClient, request.EventTypeMongoClient, request.EventTypeCouchbaseClient, request.EventTypeFailedConnect:
+	case request.EventTypeHTTPClient, request.EventTypeGRPCClient, request.EventTypeSQLClient, request.EventTypeRedisClient, request.EventTypeMongoClient, request.EventTypeCouchbaseClient, request.EventTypeMemcachedClient, request.EventTypeSunRPCClient, request.EventTypeFailedConnect:
 		return trace2.SpanKindClient
-	case request.EventTypeKafkaClient, request.EventTypeMQTTClient:
+	case request.EventTypeKafkaClient, request.EventTypeMQTTClient, request.EventTypeNATSClient, request.EventTypeAMQPClient:
 		switch span.Method {
 		case request.MessagingPublish:
 			return trace2.SpanKindProducer

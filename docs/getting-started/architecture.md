@@ -94,6 +94,9 @@ graph LR
 
 ## Pipeline Architecture
 
+Telegen now runs a single production pipeline implementation: the V3 `UnifiedPipeline`.
+Legacy and dead routing stacks are retired from the runtime path.
+
 ### Signal Processing Pipeline
 
 ```{mermaid}

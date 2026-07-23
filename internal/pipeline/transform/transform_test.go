@@ -2,6 +2,9 @@ package transform
 
 import (
 	"context"
+	"crypto/md5"
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -361,6 +364,24 @@ func TestTransformEngineDisabled(t *testing.T) {
 	res := result.ResourceMetrics().At(0).Resource()
 	if _, ok := res.Attributes().Get("should_not_exist"); ok {
 		t.Error("attribute should not exist when engine is disabled")
+	}
+}
+
+func TestHashAttributeUsesCryptoDigests(t *testing.T) {
+	in := "user@example.com"
+
+	sha := hashValue(in, "sha256")
+	shaSum := sha256.Sum256([]byte(in))
+	wantSHA := "sha256:" + hex.EncodeToString(shaSum[:])
+	if sha != wantSHA {
+		t.Fatalf("sha256 mismatch: got %q want %q", sha, wantSHA)
+	}
+
+	md5v := hashValue(in, "md5")
+	md5Sum := md5.Sum([]byte(in))
+	wantMD5 := "md5:" + hex.EncodeToString(md5Sum[:])
+	if md5v != wantMD5 {
+		t.Fatalf("md5 mismatch: got %q want %q", md5v, wantMD5)
 	}
 }
 

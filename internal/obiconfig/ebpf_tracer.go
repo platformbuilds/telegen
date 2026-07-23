@@ -5,6 +5,8 @@ package config // import "github.com/mirastacklabs-ai/telegen/internal/obiconfig
 
 import (
 	"fmt"
+	"log/slog"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -16,14 +18,28 @@ type RedisDBCacheConfig struct {
 	MaxSize int  `yaml:"max_size" env:"OTEL_EBPF_BPF_REDIS_DB_CACHE_MAX_SIZE" validate:"gt=0"`
 }
 
+type MapsConfig struct {
+	// GlobalScaleFactor scales map sizes in powers of two:
+	//   > 0: grows size (2x per step)
+	//   < 0: shrinks size (1/2 per step)
+	//   = 0: no change
+	GlobalScaleFactor int `yaml:"global_scale_factor" validate:"gte=-3,lte=3"`
+}
+
 const (
-	ContextPropagationDisabled  ContextPropagationMode = 0
-	ContextPropagationHeaders   ContextPropagationMode = 1 << 0 // HTTP headers
-	ContextPropagationTCP       ContextPropagationMode = 1 << 1 // TCP options
-	ContextPropagationIPOptions ContextPropagationMode = 1 << 2 // IP options (dangerous)
+	ContextPropagationDisabled ContextPropagationMode = 0
+	ContextPropagationHeaders  ContextPropagationMode = 1 << 0 // HTTP headers
+	ContextPropagationTCP      ContextPropagationMode = 1 << 1 // TCP options
+	// Deprecated: IP options propagation has been removed and is now a no-op.
+	ContextPropagationIPOptions ContextPropagationMode = 1 << 2
 
 	// Convenience aliases
 	ContextPropagationAll = ContextPropagationHeaders | ContextPropagationTCP
+
+	StrContextPropagationDisabled = "disabled"
+	StrContextPropagationAll      = "all"
+	StrContextPropagationHeaders  = "headers"
+	StrContextPropagationTCP      = "tcp"
 )
 
 // EBPFTracer configuration for eBPF programs
@@ -38,6 +54,9 @@ type EBPFTracer struct {
 	// Must be at least 0
 	// TODO: see if there is a way to force eBPF to wakeup userspace on timeout
 	WakeupLen int `yaml:"wakeup_len" env:"OTEL_EBPF_BPF_WAKEUP_LEN" validate:"gte=0"`
+
+	// StatsWakeupDataBytes specifies minimum bytes in stats ring buffer before wakeup.
+	StatsWakeupDataBytes int `yaml:"stats_wakeup_data_bytes" env:"OTEL_EBPF_STATS_WAKEUP_DATA_BYTES" validate:"gte=0"`
 
 	// BatchLength allows specifying how many traces will be batched at the initial
 	// stage before being forwarded to the next stage
@@ -77,7 +96,10 @@ type EBPFTracer struct {
 	// talking to databases other than the ones we recognize in OBI, like Postgres and MySQL
 	HeuristicSQLDetect bool `yaml:"heuristic_sql_detect" env:"OTEL_EBPF_HEURISTIC_SQL_DETECT" validate:"boolean"`
 
-	// Enables GPU instrumentation for CUDA kernel launches and allocations
+	// Enables CUDA instrumentation mode for GPU kernel launches and allocations.
+	InstrumentCuda CudaMode `yaml:"instrument_cuda" env:"OTEL_EBPF_INSTRUMENT_CUDA" validate:"oneof=1 2 3"`
+
+	// Deprecated: use instrument_cuda / OTEL_EBPF_INSTRUMENT_CUDA.
 	InstrumentGPU bool `yaml:"instrument_gpu" env:"OTEL_EBPF_INSTRUMENT_GPU" validate:"boolean"`
 
 	// Enables debug printing of the protocol data
@@ -93,6 +115,9 @@ type EBPFTracer struct {
 
 	// Postgres prepared statements cache size.
 	PostgresPreparedStatementsCacheSize int `yaml:"postgres_prepared_statements_cache_size" env:"OTEL_EBPF_BPF_POSTGRES_PREPARED_STATEMENTS_CACHE_SIZE" validate:"gt=0"`
+
+	// MSSQL prepared statements cache size.
+	MSSQLPreparedStatementsCacheSize int `yaml:"mssql_prepared_statements_cache_size" env:"OTEL_EBPF_BPF_MSSQL_PREPARED_STATEMENTS_CACHE_SIZE" validate:"gt=0"`
 
 	// Kafka Topic UUID to Name cache size.
 	KafkaTopicUUIDCacheSize int `yaml:"kafka_topic_uuid_cache_size" env:"OTEL_KAFKA_TOPIC_UUID_CACHE_SIZE" validate:"gt=0"`
@@ -115,16 +140,45 @@ type EBPFTracer struct {
 	LogEnricher LogEnricherConfig `yaml:"log_enricher"`
 
 	CouchbaseDBCacheSize int `yaml:"couchbase_db_cache_size" env:"OTEL_EBPF_COUCHBASE_DB_CACHE_SIZE" validate:"gt=0"`
+
+	// BPF path used to pin eBPF maps.
+	BPFFSPath string `yaml:"bpf_fs_path" env:"OTEL_EBPF_BPF_FS_PATH"`
+
+	// ForceBPFMapReader forces the network-flows map reader strategy.
+	ForceBPFMapReader EBPFMapReader `yaml:"force_bpf_map_reader" env:"OTEL_EBPF_FORCE_BPF_MAP_READER" validate:"oneof=0 1 2"`
+
+	// eBPF map configuration.
+	MapsConfig MapsConfig `yaml:"maps_config"`
 }
 
-// Per-protocol data buffer size in bytes.
-// Max: 8192 bytes.
+var nvidiaSMIExistsFunc = nvidiaSMIExists
+
+func nvidiaSMIExists() bool {
+	if _, err := exec.LookPath("nvidia-smi"); err == nil {
+		return true
+	}
+	return false
+}
+
+func (e *EBPFTracer) CudaInstrumentationEnabled() bool {
+	switch e.InstrumentCuda {
+	case CudaModeOn:
+		return true
+	case CudaModeAuto:
+		return nvidiaSMIExistsFunc()
+	}
+	return false
+}
+
+// Per-protocol maximum bytes to capture per request per direction.
 // Default: 0 (disabled).
 type EBPFBufferSizes struct {
-	HTTP     uint32 `yaml:"http" env:"OTEL_EBPF_BPF_BUFFER_SIZE_HTTP" validate:"lte=8192"`
-	MySQL    uint32 `yaml:"mysql" env:"OTEL_EBPF_BPF_BUFFER_SIZE_MYSQL" validate:"lte=8192"`
-	Kafka    uint32 `yaml:"kafka" env:"OTEL_EBPF_BPF_BUFFER_SIZE_KAFKA" validate:"lte=8192"`
-	Postgres uint32 `yaml:"postgres" env:"OTEL_EBPF_BPF_BUFFER_SIZE_POSTGRES" validate:"lte=8192"`
+	HTTP     uint32 `yaml:"http" env:"OTEL_EBPF_BPF_BUFFER_SIZE_HTTP" validate:"lte=262144"`
+	MySQL    uint32 `yaml:"mysql" env:"OTEL_EBPF_BPF_BUFFER_SIZE_MYSQL" validate:"lte=65536"`
+	Kafka    uint32 `yaml:"kafka" env:"OTEL_EBPF_BPF_BUFFER_SIZE_KAFKA" validate:"lte=65536"`
+	Postgres uint32 `yaml:"postgres" env:"OTEL_EBPF_BPF_BUFFER_SIZE_POSTGRES" validate:"lte=65536"`
+	MSSQL    uint32 `yaml:"mssql" env:"OTEL_EBPF_BPF_BUFFER_SIZE_MSSQL" validate:"lte=65536"`
+	TCP      uint32 `yaml:"tcp" env:"OTEL_EBPF_BPF_BUFFER_SIZE_TCP" validate:"lte=65536"`
 }
 
 // HasHeaders returns true if HTTP headers context propagation is enabled
@@ -152,10 +206,10 @@ func (m *ContextPropagationMode) UnmarshalText(text []byte) error {
 
 	// Handle simple cases first
 	switch str {
-	case "all":
+	case StrContextPropagationAll:
 		*m = ContextPropagationAll
 		return nil
-	case "disabled", "":
+	case StrContextPropagationDisabled, "":
 		*m = ContextPropagationDisabled
 		return nil
 	}
@@ -167,14 +221,14 @@ func (m *ContextPropagationMode) UnmarshalText(text []byte) error {
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		switch part {
-		case "headers", "http":
+		case StrContextPropagationHeaders, "http":
 			result |= ContextPropagationHeaders
-		case "tcp":
+		case StrContextPropagationTCP:
 			result |= ContextPropagationTCP
 		case "ip":
-			result |= ContextPropagationIPOptions
+			slog.Warn("context_propagation value 'ip' is deprecated and has no effect; IP options injection has been removed")
 		default:
-			return fmt.Errorf("invalid value for context_propagation: '%s' (valid: all, disabled, headers, tcp, ip)", part)
+			return fmt.Errorf("invalid value for context_propagation: '%s' (valid: all, disabled, headers, tcp)", part)
 		}
 	}
 

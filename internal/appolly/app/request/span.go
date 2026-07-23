@@ -56,6 +56,10 @@ const (
 	EventTypeZooKeeperClient
 	EventTypeDubbo2Client
 	EventTypeFDBClient
+	// Appended to preserve existing numeric values used by existing probes.
+	EventTypeSQLServer
+	EventTypeSunRPCClient
+	EventTypeSunRPCServer
 )
 
 const (
@@ -85,15 +89,39 @@ const (
 	DBGeneric SQLKind = iota + 1
 	DBPostgres
 	DBMySQL
+	DBMSSQL
 )
 
 const (
-	HTTPSubtypeNone          = 0 // http
-	HTTPSubtypeGraphQL       = 1 // http + graphql
-	HTTPSubtypeElasticsearch = 2 // http + elasticsearch
-	HTTPSubtypeAWSS3         = 3 // http + aws s3
-	HTTPSubtypeAWSSQS        = 4 // http + aws sqs
+	HTTPSubtypeNone          = 0  // http
+	HTTPSubtypeGraphQL       = 1  // http + graphql
+	HTTPSubtypeElasticsearch = 2  // http + elasticsearch
+	HTTPSubtypeAWSS3         = 3  // http + aws s3
+	HTTPSubtypeAWSSQS        = 4  // http + aws sqs
+	HTTPSubtypeSQLPP         = 5  // http + sql++ (couchbase, etc.)
+	HTTPSubtypeOpenAI        = 6  // http + OpenAI
+	HTTPSubtypeAnthropic     = 7  // http + Anthropic
+	HTTPSubtypeGemini        = 8  // http + Google AI Studio (Gemini)
+	HTTPSubtypeJSONRPC       = 9  // http + JSON-RPC
+	HTTPSubtypeAWSBedrock    = 10 // http + AWS Bedrock
+	HTTPSubtypeQwen          = 11 // http + Qwen (DashScope)
+	HTTPSubtypeMCP           = 12 // http + Model Context Protocol
+	HTTPSubtypeEmbedding     = 13 // http + generic embedding provider
+	HTTPSubtypeRerank        = 14 // http + Rerank
+	HTTPSubtypeRetrieval     = 15 // http + vector retrieval
 )
+
+func IsGenAISubtype(subtype int) bool {
+	return subtype == HTTPSubtypeOpenAI ||
+		subtype == HTTPSubtypeAnthropic ||
+		subtype == HTTPSubtypeGemini ||
+		subtype == HTTPSubtypeQwen ||
+		subtype == HTTPSubtypeAWSBedrock ||
+		subtype == HTTPSubtypeMCP ||
+		subtype == HTTPSubtypeEmbedding ||
+		subtype == HTTPSubtypeRerank ||
+		subtype == HTTPSubtypeRetrieval
+}
 
 //nolint:cyclop
 func (t EventType) String() string {
@@ -154,6 +182,12 @@ func (t EventType) String() string {
 		return "Dubbo2Client"
 	case EventTypeFDBClient:
 		return "FoundationDBClient"
+	case EventTypeSQLServer:
+		return "SQLServer"
+	case EventTypeSunRPCClient:
+		return "SunRPCClient"
+	case EventTypeSunRPCServer:
+		return "SunRPCServer"
 	default:
 		return fmt.Sprintf("UNKNOWN (%d)", t)
 	}
@@ -198,8 +232,8 @@ type SQLError struct {
 }
 
 type MessagingInfo struct {
-	Offset          int64  `json:"offset"`
-	Partition       int    `json:"partition"`
+	Offset    int64 `json:"offset"`
+	Partition int   `json:"partition"`
 	// ConsumerGroupID is the Kafka consumer group identifier (from JoinGroup/SyncGroup events).
 	// Corresponds to OpenTelemetry semantic convention messaging.kafka.consumer.group.id.
 	ConsumerGroupID string `json:"consumerGroupId,omitempty"`
@@ -248,46 +282,58 @@ type AWSSQS struct {
 	MessageID     string  `json:"messageId"`
 }
 
+type SpanLink struct {
+	TraceID    trace.TraceID `json:"traceID"`
+	SpanID     trace.SpanID  `json:"spanID"`
+	TraceFlags uint8         `json:"traceFlags,string"`
+}
+
 // Span contains the information being submitted by the following nodes in the graph.
 // It enables comfortable handling of data from Go.
 // REMINDER: any attribute here must be also added to the functions SpanOTELGetters,
 // SpanPromGetters and getDefinitions in pkg/export/attributes/attr_defs.go
 type Span struct {
-	Type              EventType      `json:"type"`
-	Flags             uint8          `json:"-"`
-	Method            string         `json:"-"`
-	Path              string         `json:"-"`
-	Route             string         `json:"-"`
-	Peer              string         `json:"peer"`
-	PeerPort          int            `json:"peerPort,string"`
-	Host              string         `json:"host"`
-	HostPort          int            `json:"hostPort,string"`
-	Status            int            `json:"-"`
-	ResponseLength    int64          `json:"-"`
-	ContentLength     int64          `json:"-"`
-	RequestStart      int64          `json:"-"`
-	Start             int64          `json:"-"`
-	End               int64          `json:"-"`
-	Service           svc.Attrs      `json:"-"`
-	TraceID           trace.TraceID  `json:"traceID"`
-	SpanID            trace.SpanID   `json:"spanID"`
-	ParentSpanID      trace.SpanID   `json:"parentSpanID"`
-	TraceFlags        uint8          `json:"traceFlags,string"`
-	Pid               PidInfo        `json:"-"`
-	PeerName          string         `json:"peerName"`
-	HostName          string         `json:"hostName"`
-	OtherNamespace    string         `json:"-"`
-	OtherK8SNamespace string         `json:"-"`
-	Statement         string         `json:"-"`
-	SubType           int            `json:"-"`
-	DBError           DBError        `json:"-"`
-	DBNamespace       string         `json:"-"`
-	SQLCommand        string         `json:"-"`
-	SQLError          *SQLError      `json:"-"`
-	MessagingInfo     *MessagingInfo `json:"-"`
-	GraphQL           *GraphQL       `json:"-"`
-	Elasticsearch     *Elasticsearch `json:"-"`
-	AWS               *AWS           `json:"-"`
+	Type                EventType           `json:"type"`
+	Flags               uint8               `json:"-"`
+	Method              string              `json:"-"`
+	Path                string              `json:"-"`
+	Route               string              `json:"-"`
+	Peer                string              `json:"peer"`
+	PeerPort            int                 `json:"peerPort,string"`
+	Host                string              `json:"host"`
+	HostPort            int                 `json:"hostPort,string"`
+	Status              int                 `json:"-"`
+	ResponseLength      int64               `json:"-"`
+	ContentLength       int64               `json:"-"`
+	RequestStart        int64               `json:"-"`
+	Start               int64               `json:"-"`
+	End                 int64               `json:"-"`
+	Service             svc.Attrs           `json:"-"`
+	TraceID             trace.TraceID       `json:"traceID"`
+	SpanID              trace.SpanID        `json:"spanID"`
+	ParentSpanID        trace.SpanID        `json:"parentSpanID"`
+	TraceFlags          uint8               `json:"traceFlags,string"`
+	Links               []SpanLink          `json:"links,omitempty"`
+	Pid                 PidInfo             `json:"-"`
+	PeerName            string              `json:"peerName"`
+	HostName            string              `json:"hostName"`
+	OtherNamespace      string              `json:"-"`
+	OtherK8SNamespace   string              `json:"-"`
+	Statement           string              `json:"-"`
+	SubType             int                 `json:"-"`
+	DBError             DBError             `json:"-"`
+	DBNamespace         string              `json:"-"`
+	SQLCommand          string              `json:"-"`
+	SQLError            *SQLError           `json:"-"`
+	MessagingInfo       *MessagingInfo      `json:"-"`
+	GraphQL             *GraphQL            `json:"-"`
+	Elasticsearch       *Elasticsearch      `json:"-"`
+	AWS                 *AWS                `json:"-"`
+	GenAI               *GenAI              `json:"-"`
+	RequestHeaders      map[string][]string `json:"-"`
+	ResponseHeaders     map[string][]string `json:"-"`
+	RequestBodyContent  string              `json:"-"`
+	ResponseBodyContent string              `json:"-"`
 
 	// OverrideTraceName is set under some conditions, like spanmetrics reaching the maximum
 	// cardinality for trace names.
@@ -546,7 +592,7 @@ func (s *Span) IsValid() bool {
 
 func (s *Span) IsClientSpan() bool {
 	switch s.Type {
-	case EventTypeGRPCClient, EventTypeHTTPClient, EventTypeRedisClient, EventTypeKafkaClient, EventTypeMQTTClient, EventTypeSQLClient, EventTypeMongoClient, EventTypeFailedConnect, EventTypeCouchbaseClient:
+	case EventTypeGRPCClient, EventTypeHTTPClient, EventTypeRedisClient, EventTypeKafkaClient, EventTypeMQTTClient, EventTypeSQLClient, EventTypeSunRPCClient, EventTypeMongoClient, EventTypeFailedConnect, EventTypeCouchbaseClient:
 		return true
 	}
 
@@ -569,7 +615,7 @@ func SpanStatusCode(span *Span) string {
 		return HTTPSpanStatusCode(span)
 	case EventTypeGRPC, EventTypeGRPCClient:
 		return GrpcSpanStatusCode(span)
-	case EventTypeSQLClient, EventTypeRedisClient, EventTypeRedisServer, EventTypeMongoClient, EventTypeDNS, EventTypeCouchbaseClient:
+	case EventTypeSQLClient, EventTypeSQLServer, EventTypeSunRPCClient, EventTypeSunRPCServer, EventTypeRedisClient, EventTypeRedisServer, EventTypeMongoClient, EventTypeDNS, EventTypeCouchbaseClient:
 		if span.Status != 0 {
 			return StatusCodeError
 		}
@@ -594,7 +640,7 @@ func SpanStatusMessage(span *Span) string {
 		if span.Status != 0 && span.DBError.Description != "" {
 			return span.DBError.Description
 		}
-	case EventTypeSQLClient:
+	case EventTypeSQLClient, EventTypeSQLServer:
 		if span.Status != 0 && span.SQLError != nil {
 			return span.SQLErrorDescription()
 		}
@@ -668,9 +714,9 @@ func (s *Span) ResponseBodyLength() int64 {
 // ServiceGraphKind returns the Kind string representation that is compliant with service graph metrics specification
 func (s *Span) ServiceGraphKind() string {
 	switch s.Type {
-	case EventTypeHTTP, EventTypeGRPC, EventTypeKafkaServer, EventTypeMQTTServer, EventTypeRedisServer:
+	case EventTypeHTTP, EventTypeGRPC, EventTypeKafkaServer, EventTypeMQTTServer, EventTypeRedisServer, EventTypeSunRPCServer, EventTypeSQLServer:
 		return "SPAN_KIND_SERVER"
-	case EventTypeHTTPClient, EventTypeGRPCClient, EventTypeSQLClient, EventTypeRedisClient, EventTypeMongoClient, EventTypeFailedConnect, EventTypeCouchbaseClient:
+	case EventTypeHTTPClient, EventTypeGRPCClient, EventTypeSQLClient, EventTypeSunRPCClient, EventTypeRedisClient, EventTypeMongoClient, EventTypeFailedConnect, EventTypeCouchbaseClient:
 		return "SPAN_KIND_CLIENT"
 	case EventTypeKafkaClient, EventTypeMQTTClient:
 		switch s.Method {
@@ -687,7 +733,7 @@ func (s *Span) ServiceGraphKind() string {
 // See: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/connector/servicegraphconnector
 func (s *Span) ServiceGraphConnectionType() string {
 	switch s.Type {
-	case EventTypeSQLClient, EventTypeRedisClient, EventTypeMongoClient, EventTypeCouchbaseClient:
+	case EventTypeSQLClient, EventTypeSQLServer, EventTypeRedisClient, EventTypeMongoClient, EventTypeCouchbaseClient:
 		return "database"
 	case EventTypeKafkaClient, EventTypeMQTTClient:
 		return "messaging_system"
@@ -756,7 +802,7 @@ func (s *Span) TraceName() string {
 		return name
 	case EventTypeGRPC, EventTypeGRPCClient:
 		return s.Path
-	case EventTypeSQLClient:
+	case EventTypeSQLClient, EventTypeSQLServer:
 		operation := s.Method
 		if operation == "" {
 			return "SQL"
@@ -771,11 +817,21 @@ func (s *Span) TraceName() string {
 			return "REDIS"
 		}
 		return s.Method
-	case EventTypeKafkaClient, EventTypeKafkaServer, EventTypeMQTTClient, EventTypeMQTTServer:
+	case EventTypeMemcachedClient:
+		if s.Method == "" {
+			return "MEMCACHED"
+		}
+		return s.Method
+	case EventTypeKafkaClient, EventTypeKafkaServer, EventTypeMQTTClient, EventTypeMQTTServer, EventTypeNATSClient, EventTypeAMQPClient:
 		if s.Path == "" {
 			return s.Method
 		}
 		return s.Method + " " + s.Path
+	case EventTypeSunRPCClient, EventTypeSunRPCServer:
+		if s.Path == "" {
+			return "sunrpc/" + s.Method
+		}
+		return s.Path + "/" + s.Method
 	case EventTypeMongoClient:
 		if s.Path != "" && s.Method != "" {
 			// TODO for database operations like listCollections, we need to use s.DbNamespace instead of s.Path
@@ -935,12 +991,14 @@ func (s *Span) IsSelfReferenceSpan() bool {
 }
 
 func (s *Span) DBSystemName() attribute.KeyValue {
-	if s.Type == EventTypeSQLClient {
+	if s.Type == EventTypeSQLClient || s.Type == EventTypeSQLServer {
 		switch s.SubType {
 		case int(DBPostgres):
 			return semconv.DBSystemNamePostgreSQL
 		case int(DBMySQL):
 			return semconv.DBSystemNameMySQL
+		case int(DBMSSQL):
+			return attribute.String("db.system.name", "mssql")
 		}
 	}
 

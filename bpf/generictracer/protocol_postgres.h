@@ -72,13 +72,17 @@ static __always_inline int postgres_send_large_buffer(tcp_req_t *req,
         large_buf->len = postgres_buffer_size;
         bpf_dbg_printk("WARN: postgres_send_large_buffer: buffer is full, truncating data");
     }
-    bpf_probe_read(large_buf->buf, large_buf->len & k_large_buf_payload_max_size_mask, u_buf);
+    if (large_buf->len > k_large_buf_payload_max_size) {
+        large_buf->len = k_large_buf_payload_max_size;
+        bpf_dbg_printk("WARN: postgres_send_large_buffer: payload exceeds max chunk size");
+    }
+    bpf_probe_read(large_buf->buf, large_buf->len, u_buf);
 
     u32 total_size = sizeof(tcp_large_buffer_t);
     total_size += large_buf->len > sizeof(void *) ? large_buf->len : sizeof(void *);
 
     req->has_large_buffers = true;
-    bpf_ringbuf_output(&events, large_buf, total_size & k_large_buf_max_size_mask, get_flags());
+    bpf_ringbuf_output(&events, large_buf, total_size, get_flags());
     return 0;
 }
 
