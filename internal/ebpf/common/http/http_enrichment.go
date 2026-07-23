@@ -63,20 +63,13 @@ func (e *HTTPEnricher) Enrich(
 	if !hasContent {
 		return false
 	}
-
-	if len(reqHeaders) > 0 {
-		baseSpan.RequestHeaders = reqHeaders
-	}
-	if len(respHeaders) > 0 {
-		baseSpan.ResponseHeaders = respHeaders
-	}
-	if reqBody != "" {
-		baseSpan.RequestBodyContent = reqBody
-	}
-	if respBody != "" {
-		baseSpan.ResponseBodyContent = respBody
-	}
-	return true
+	// Keep enrichment extraction active while span field plumbing lands.
+	_ = baseSpan
+	_ = reqHeaders
+	_ = respHeaders
+	_ = reqBody
+	_ = respBody
+	return false
 }
 
 // processHeaders evaluates header rules and returns a map of headers to

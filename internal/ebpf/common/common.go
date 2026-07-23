@@ -261,9 +261,6 @@ func NewEBPFParseContext(cfg *config.EBPFTracer, spansChan *msg.Queue[[]request.
 		mongoRequestCache = expirable.NewLRU[MongoRequestKey, *MongoRequestValue](cfg.MongoRequestsCacheSize, nil, 0)
 
 		payloadExtraction = cfg.PayloadExtraction
-		if payloadExtraction.HTTP.Enrichment.Enabled {
-			httpEnricher = ebpfhttp.NewHTTPEnricher(payloadExtraction.HTTP.Enrichment)
-		}
 
 		dnsEvents = expirable.NewLRU(1024, dnsEventExpireHandler(spansChan, filter), cfg.DNSRequestTimeout)
 	}
