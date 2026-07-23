@@ -203,10 +203,6 @@ func (p *Tracer) RegisterOffsets(fileInfo *exec.FileInfo, offsets *goexec.Offset
 		goexec.PgxConfigHostPos,
 		goexec.MuxTemplatePos,
 		goexec.GinFullpathPos,
-		goexec.HchanQcountPos,
-		goexec.HchanDataqsizPos,
-		goexec.HchanSendxPos,
-		goexec.HchanRecvxPos,
 	} {
 		if val, ok := offsets.Field[field].(uint64); ok {
 			offTable.Table[field] = val
