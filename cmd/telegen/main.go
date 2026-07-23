@@ -17,6 +17,7 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/kube"
 	"github.com/mirastacklabs-ai/telegen/internal/kubemetrics"
 	"github.com/mirastacklabs-ai/telegen/internal/logs/parsers"
+	"github.com/mirastacklabs-ai/telegen/internal/netinfra"
 	"github.com/mirastacklabs-ai/telegen/internal/nodeexporter"
 	"github.com/mirastacklabs-ai/telegen/internal/pipeline"
 	"github.com/mirastacklabs-ai/telegen/internal/profiler"
@@ -24,6 +25,7 @@ import (
 	storage "github.com/mirastacklabs-ai/telegen/internal/storage"
 	"github.com/mirastacklabs-ai/telegen/internal/version"
 	"github.com/mirastacklabs-ai/telegen/internal/vmware"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.uber.org/zap"
 )
@@ -72,6 +74,7 @@ func main() {
 		"logs_enabled", cfg.Pipelines.Logs.Enabled,
 		"kafka_enabled", cfg.Pipelines.Kafka.Enabled,
 		"storage_enabled", cfg.Storage.Enabled,
+		"netinfra_enabled", cfg.NetInfra.Enabled,
 	)
 
 	// Create zap logger for internal use (some components may require it)
@@ -79,7 +82,7 @@ func main() {
 	defer func() { _ = zapLogger.Sync() }()
 
 	mux := http.NewServeMux()
-	st := selftelemetry.InstallHandlers(mux, cfg.SelfTelemetry.Listen)
+	_ = selftelemetry.InstallHandlers(mux, cfg.SelfTelemetry.Listen)
 	srv := &http.Server{Addr: cfg.SelfTelemetry.Listen, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		logger.Info("HTTP server started", "address", cfg.SelfTelemetry.Listen)
@@ -94,19 +97,29 @@ func main() {
 	// Track which signals are successfully started for graceful degradation
 	var signalsStarted int
 
-	// Start the pipeline FIRST to get the shared OTLP exporters
-	// The pipeline creates OTLP trace, log, and metrics exporters from exports.otlp config
-	pl := pipeline.New(cfg, st)
-	if err := pl.Start(ctx); err != nil {
-		logger.Warn("pipeline failed to start, continuing with other signals",
+	// Start the V3 unified pipeline FIRST to get shared OTLP exporters.
+	// This is the sole pipeline path for runtime signal wiring.
+	plCfg := buildUnifiedPipelineConfig(cfg)
+	pl, err := pipeline.NewUnifiedPipeline(plCfg)
+	if err != nil {
+		logger.Warn("unified pipeline failed to initialize, continuing with other signals",
 			"error", err,
 			"status", "degraded")
 	} else {
-		signalsStarted++
+		if err := pl.Start(ctx); err != nil {
+			logger.Warn("unified pipeline failed to start, continuing with other signals",
+				"error", err,
+				"status", "degraded")
+		} else {
+			signalsStarted++
+		}
 	}
 
 	// Get the shared metrics exporter from the pipeline for kube_metrics and node_exporter
-	sharedMetricsExporter := pl.GetMetricsExporter()
+	var sharedMetricsExporter sdkmetric.Exporter
+	if pl != nil {
+		sharedMetricsExporter = pl.GetMetricsExporter()
+	}
 
 	// Start storage manager if storage collection is enabled (collector / unified mode, or explicit config).
 	// --mode collector also forces storage on even if storage.enabled is not set in config.
@@ -149,7 +162,13 @@ func main() {
 	if vmwareEnabled && len(cfg.VMware.Targets) > 0 {
 		cfg.VMware.Enabled = true // ensure manager sees it as enabled
 		var err error
-		vmwareMgr, err = vmware.NewManager(cfg.VMware, pl.GetMetricsExporter(), pl.GetLogsLoggerProvider(), logger)
+		var vMetrics sdkmetric.Exporter
+		var vLogsProvider *sdklog.LoggerProvider
+		if pl != nil {
+			vMetrics = pl.GetMetricsExporter()
+			vLogsProvider = pl.GetLogsLoggerProvider()
+		}
+		vmwareMgr, err = vmware.NewManager(cfg.VMware, vMetrics, vLogsProvider, logger)
 		if err != nil {
 			logger.Warn("vmware manager failed to initialize, continuing without vmware",
 				"error", err,
@@ -163,6 +182,38 @@ func main() {
 		} else {
 			signalsStarted++
 			logger.Info("vmware vsphere collection started", "targets", len(cfg.VMware.Targets))
+		}
+	}
+
+	// Start network infrastructure collection (collector / unified mode, or explicit config).
+	// Metrics are exported via the shared metrics exporter from the pipeline.
+	var netinfraMgr *netinfra.Manager
+	netinfraEnabled := cfg.NetInfra.Enabled || *modeFlag == "collector" || *modeFlag == "unified"
+	if netinfraEnabled && (len(cfg.NetInfra.CloudVision) > 0 ||
+		len(cfg.NetInfra.ACI) > 0 ||
+		len(cfg.NetInfra.PaloAlto) > 0 ||
+		len(cfg.NetInfra.FortiGate) > 0) {
+		cfg.NetInfra.Enabled = true
+		var err error
+		netinfraMgr, err = netinfra.NewManager(cfg.NetInfra, sharedMetricsExporter, logger)
+		if err != nil {
+			logger.Warn("network infrastructure manager failed to initialize, continuing without netinfra",
+				"error", err,
+				"status", "degraded")
+			netinfraMgr = nil
+		} else if err := netinfraMgr.Start(ctx); err != nil {
+			logger.Warn("network infrastructure manager failed to start, continuing without netinfra",
+				"error", err,
+				"status", "degraded")
+			netinfraMgr = nil
+		} else {
+			signalsStarted++
+			logger.Info("network infrastructure collection started",
+				"cloudvision_targets", len(cfg.NetInfra.CloudVision),
+				"aci_targets", len(cfg.NetInfra.ACI),
+				"paloalto_targets", len(cfg.NetInfra.PaloAlto),
+				"fortigate_targets", len(cfg.NetInfra.FortiGate),
+			)
 		}
 	}
 
@@ -203,7 +254,11 @@ func main() {
 	var kubeStore *kube.Store
 	if cfg.EBPF.Enabled {
 		var err error
-		kubeStore, err = pl.GetKubeStore(ctx)
+		if pl == nil {
+			err = fmt.Errorf("unified pipeline not initialized")
+		} else {
+			kubeStore, err = pl.GetKubeStore(ctx)
+		}
 		if err != nil {
 			logger.Warn("failed to get kube.Store from pipeline for profiler",
 				"error", err)
@@ -259,7 +314,10 @@ func main() {
 	var kafkaAutoDiscovery *kafka.AutoDiscovery
 	if cfg.Pipelines.Kafka.Enabled {
 		// Get the logger provider from the OTLP exporter - shared across all signals
-		loggerProvider := pl.GetLogsLoggerProvider()
+		var loggerProvider *sdklog.LoggerProvider
+		if pl != nil {
+			loggerProvider = pl.GetLogsLoggerProvider()
+		}
 		if loggerProvider == nil {
 			logger.Warn("kafka logs receiver enabled but OTLP logs exporter not configured, skipping")
 		} else {
@@ -416,12 +474,17 @@ func main() {
 	<-sig
 	logger.Info("telegen shutting down")
 	cancel()
-	pl.Close()
+	if pl != nil {
+		_ = pl.Stop(context.Background())
+	}
 	if storageMgr != nil {
 		_ = storageMgr.Stop(context.Background())
 	}
 	if vmwareMgr != nil {
 		_ = vmwareMgr.Stop(context.Background())
+	}
+	if netinfraMgr != nil {
+		_ = netinfraMgr.Stop()
 	}
 	if kafkaAutoDiscovery != nil {
 		kafkaAutoDiscovery.Stop()
@@ -440,6 +503,37 @@ func main() {
 	}
 	_ = srv.Shutdown(context.Background())
 	logger.Info("telegen shutdown complete")
+}
+
+func buildUnifiedPipelineConfig(cfg *config.Config) pipeline.UnifiedPipelineConfig {
+	pc := pipeline.DefaultUnifiedPipelineConfig()
+	pc.RuntimeConfig = cfg
+
+	// Preserve legacy remote-write transport parity.
+	rw := cfg.Exports.RemoteWrite
+	pc.RemoteWrite = &rw
+
+	// Prefer gRPC OTLP settings when configured.
+	if cfg.Exports.OTLP.GRPC.Enabled {
+		pc.Exporter.Endpoint = cfg.Exports.OTLP.GRPC.Endpoint
+		pc.Exporter.Insecure = cfg.Exports.OTLP.GRPC.Insecure
+		pc.Exporter.Headers = cfg.Exports.OTLP.GRPC.Headers
+		if d, err := time.ParseDuration(cfg.Exports.OTLP.GRPC.Timeout); err == nil && d > 0 {
+			pc.Exporter.Timeout = d
+		}
+		return pc
+	}
+
+	// Fallback to HTTP OTLP settings.
+	if cfg.Exports.OTLP.HTTP.Enabled {
+		pc.Exporter.Endpoint = cfg.Exports.OTLP.HTTP.Endpoint
+		pc.Exporter.Insecure = cfg.Exports.OTLP.HTTP.Insecure
+		pc.Exporter.Headers = cfg.Exports.OTLP.HTTP.Headers
+		if d, err := time.ParseDuration(cfg.Exports.OTLP.HTTP.Timeout); err == nil && d > 0 {
+			pc.Exporter.Timeout = d
+		}
+	}
+	return pc
 }
 
 // startKubeMetrics initializes and starts the kubemetrics provider if enabled or auto-detected.
@@ -549,41 +643,41 @@ func convertKafkaConfig(cfg config.KafkaLogsConfig) kafka.Config {
 	}
 
 	kafkaCfg := kafka.Config{
-		Brokers:                 cfg.Brokers,
-		GroupID:                 cfg.GroupID,
-		ClientID:                cfg.ClientID,
-		Topics:                  cfg.Topics,
-		ExcludeTopics:           cfg.ExcludeTopics,
-		InitialOffset:           cfg.InitialOffset,
-		SessionTimeout:          parseDuration(cfg.SessionTimeout, 10*time.Second),
-		HeartbeatInterval:       parseDuration(cfg.HeartbeatInterval, 3*time.Second),
-		RebalanceTimeout:        parseDuration(cfg.RebalanceTimeout, 30*time.Second),
-		GroupRebalanceStrategy:  rebalanceStrategy,
+		Brokers:                cfg.Brokers,
+		GroupID:                cfg.GroupID,
+		ClientID:               cfg.ClientID,
+		Topics:                 cfg.Topics,
+		ExcludeTopics:          cfg.ExcludeTopics,
+		InitialOffset:          cfg.InitialOffset,
+		SessionTimeout:         parseDuration(cfg.SessionTimeout, 10*time.Second),
+		HeartbeatInterval:      parseDuration(cfg.HeartbeatInterval, 3*time.Second),
+		RebalanceTimeout:       parseDuration(cfg.RebalanceTimeout, 30*time.Second),
+		GroupRebalanceStrategy: rebalanceStrategy,
 		MessageMarking: kafka.MessageMarking{
-			After:               cfg.MessageMarking.After,
-			OnError:             cfg.MessageMarking.OnError,
-			OnPermanentError:    cfg.MessageMarking.OnPermanentError,
+			After:            cfg.MessageMarking.After,
+			OnError:          cfg.MessageMarking.OnError,
+			OnPermanentError: cfg.MessageMarking.OnPermanentError,
 		},
 		Batch: kafka.BatchConfig{
-			Size:                cfg.Batch.Size,
-			Timeout:             parseDuration(cfg.Batch.Timeout, 500*time.Millisecond),
-			MaxPartitionBytes:   cfg.Batch.MaxPartitionBytes,
+			Size:              cfg.Batch.Size,
+			Timeout:           parseDuration(cfg.Batch.Timeout, 500*time.Millisecond),
+			MaxPartitionBytes: cfg.Batch.MaxPartitionBytes,
 		},
 		Parser: parsers.PipelineConfig{
-			EnableRuntimeParsing:                cfg.Parser.EnableRuntimeParsing,
-			EnableApplicationParsing:            cfg.Parser.EnableApplicationParsing,
-			DefaultSeverity:                     cfg.Parser.DefaultSeverity,
-			EnableTraceContextEnrichment:        cfg.Parser.EnableTraceContextEnrichment,
-			EnableK8sEnrichment:                 cfg.Parser.EnableK8sEnrichment,
+			EnableRuntimeParsing:         cfg.Parser.EnableRuntimeParsing,
+			EnableApplicationParsing:     cfg.Parser.EnableApplicationParsing,
+			DefaultSeverity:              cfg.Parser.DefaultSeverity,
+			EnableTraceContextEnrichment: cfg.Parser.EnableTraceContextEnrichment,
+			EnableK8sEnrichment:          cfg.Parser.EnableK8sEnrichment,
 		},
 		Telemetry: kafka.TelemetryConfig{
-			KafkaReceiverRecords:       cfg.Telemetry.KafkaReceiverRecords,
-			KafkaReceiverOffsetLag:     cfg.Telemetry.KafkaReceiverOffsetLag,
-			KafkaReceiverRecordsDelay:  cfg.Telemetry.KafkaReceiverRecordsDelay,
-			KafkaBrokerConnects:        cfg.Telemetry.KafkaBrokerConnects,
-			KafkaBrokerDisconnects:     cfg.Telemetry.KafkaBrokerDisconnects,
-			KafkaBrokerReadLatency:     cfg.Telemetry.KafkaBrokerReadLatency,
-			KafkaFetchBatchMetrics:     cfg.Telemetry.KafkaFetchBatchMetrics,
+			KafkaReceiverRecords:      cfg.Telemetry.KafkaReceiverRecords,
+			KafkaReceiverOffsetLag:    cfg.Telemetry.KafkaReceiverOffsetLag,
+			KafkaReceiverRecordsDelay: cfg.Telemetry.KafkaReceiverRecordsDelay,
+			KafkaBrokerConnects:       cfg.Telemetry.KafkaBrokerConnects,
+			KafkaBrokerDisconnects:    cfg.Telemetry.KafkaBrokerDisconnects,
+			KafkaBrokerReadLatency:    cfg.Telemetry.KafkaBrokerReadLatency,
+			KafkaFetchBatchMetrics:    cfg.Telemetry.KafkaFetchBatchMetrics,
 		},
 		Auth: kafka.AuthConfig{
 			Enabled:   cfg.Auth.Enabled,
@@ -592,28 +686,28 @@ func convertKafkaConfig(cfg config.KafkaLogsConfig) kafka.Config {
 			Password:  cfg.Auth.Password,
 		},
 	}
-	
+
 	// TLS: manually assign fields due to struct tag differences
 	kafkaCfg.TLS.Enable = cfg.TLS.Enable
 	kafkaCfg.TLS.CAFile = cfg.TLS.CAFile
 	kafkaCfg.TLS.CertFile = cfg.TLS.CertFile
 	kafkaCfg.TLS.KeyFile = cfg.TLS.KeyFile
 	kafkaCfg.TLS.InsecureSkipVerify = cfg.TLS.InsecureSkipVerify
-	
+
 	// ErrorBackoff: manually assign fields
 	kafkaCfg.ErrorBackoff.Enabled = cfg.ErrorBackoff.Enabled
 	kafkaCfg.ErrorBackoff.InitialInterval = parseDuration(cfg.ErrorBackoff.InitialInterval, 1*time.Second)
 	kafkaCfg.ErrorBackoff.MaxInterval = parseDuration(cfg.ErrorBackoff.MaxInterval, 30*time.Second)
 	kafkaCfg.ErrorBackoff.Multiplier = cfg.ErrorBackoff.Multiplier
 	kafkaCfg.ErrorBackoff.Jitter = cfg.ErrorBackoff.Jitter
-	
+
 	// UseLeaderEpoch: default to true (Kafka 2.1.0+) if not explicitly set
 	kafkaCfg.UseLeaderEpoch = cfg.UseLeaderEpoch
-	
+
 	// HeaderExtraction: extract Kafka headers as resource attributes
 	kafkaCfg.HeaderExtraction.ExtractHeaders = cfg.HeaderExtraction.ExtractHeaders
 	kafkaCfg.HeaderExtraction.Headers = cfg.HeaderExtraction.Headers
-	
+
 	return kafkaCfg
 }
 
@@ -632,7 +726,7 @@ func parseDuration(durationStr string, defaultDuration time.Duration) time.Durat
 // convertMultiKafkaConfig converts config.KafkaLogsConfig with multi-cluster to []kafka.ClusterConfig
 func convertMultiKafkaConfig(cfg config.KafkaLogsConfig) []kafka.ClusterConfig {
 	clusterConfigs := make([]kafka.ClusterConfig, 0, len(cfg.Clusters))
-	
+
 	for _, cluster := range cfg.Clusters {
 		rebalanceStrategy := "cooperative-sticky"
 		if cluster.GroupRebalanceStrategy != "" {
@@ -640,41 +734,41 @@ func convertMultiKafkaConfig(cfg config.KafkaLogsConfig) []kafka.ClusterConfig {
 		}
 
 		kafkaCfg := kafka.Config{
-			Brokers:                 cluster.Brokers,
-			GroupID:                 cluster.GroupID,
-			ClientID:                cluster.ClientID,
-			Topics:                  cluster.Topics,
-			ExcludeTopics:           cluster.ExcludeTopics,
-			InitialOffset:           cluster.InitialOffset,
-			SessionTimeout:          parseDuration(cluster.SessionTimeout, 10*time.Second),
-			HeartbeatInterval:       parseDuration(cluster.HeartbeatInterval, 3*time.Second),
-			RebalanceTimeout:        parseDuration(cluster.RebalanceTimeout, 30*time.Second),
-			GroupRebalanceStrategy:  rebalanceStrategy,
+			Brokers:                cluster.Brokers,
+			GroupID:                cluster.GroupID,
+			ClientID:               cluster.ClientID,
+			Topics:                 cluster.Topics,
+			ExcludeTopics:          cluster.ExcludeTopics,
+			InitialOffset:          cluster.InitialOffset,
+			SessionTimeout:         parseDuration(cluster.SessionTimeout, 10*time.Second),
+			HeartbeatInterval:      parseDuration(cluster.HeartbeatInterval, 3*time.Second),
+			RebalanceTimeout:       parseDuration(cluster.RebalanceTimeout, 30*time.Second),
+			GroupRebalanceStrategy: rebalanceStrategy,
 			MessageMarking: kafka.MessageMarking{
-				After:               cluster.MessageMarking.After,
-				OnError:             cluster.MessageMarking.OnError,
-				OnPermanentError:    cluster.MessageMarking.OnPermanentError,
+				After:            cluster.MessageMarking.After,
+				OnError:          cluster.MessageMarking.OnError,
+				OnPermanentError: cluster.MessageMarking.OnPermanentError,
 			},
 			Batch: kafka.BatchConfig{
-				Size:                cluster.Batch.Size,
-				Timeout:             parseDuration(cluster.Batch.Timeout, 500*time.Millisecond),
-				MaxPartitionBytes:   cluster.Batch.MaxPartitionBytes,
+				Size:              cluster.Batch.Size,
+				Timeout:           parseDuration(cluster.Batch.Timeout, 500*time.Millisecond),
+				MaxPartitionBytes: cluster.Batch.MaxPartitionBytes,
 			},
 			Parser: parsers.PipelineConfig{
-				EnableRuntimeParsing:                cluster.Parser.EnableRuntimeParsing,
-				EnableApplicationParsing:            cluster.Parser.EnableApplicationParsing,
-				DefaultSeverity:                     cluster.Parser.DefaultSeverity,
-				EnableTraceContextEnrichment:        cluster.Parser.EnableTraceContextEnrichment,
-				EnableK8sEnrichment:                 cluster.Parser.EnableK8sEnrichment,
+				EnableRuntimeParsing:         cluster.Parser.EnableRuntimeParsing,
+				EnableApplicationParsing:     cluster.Parser.EnableApplicationParsing,
+				DefaultSeverity:              cluster.Parser.DefaultSeverity,
+				EnableTraceContextEnrichment: cluster.Parser.EnableTraceContextEnrichment,
+				EnableK8sEnrichment:          cluster.Parser.EnableK8sEnrichment,
 			},
 			Telemetry: kafka.TelemetryConfig{
-				KafkaReceiverRecords:       cluster.Telemetry.KafkaReceiverRecords,
-				KafkaReceiverOffsetLag:     cluster.Telemetry.KafkaReceiverOffsetLag,
-				KafkaReceiverRecordsDelay:  cluster.Telemetry.KafkaReceiverRecordsDelay,
-				KafkaBrokerConnects:        cluster.Telemetry.KafkaBrokerConnects,
-				KafkaBrokerDisconnects:     cluster.Telemetry.KafkaBrokerDisconnects,
-				KafkaBrokerReadLatency:     cluster.Telemetry.KafkaBrokerReadLatency,
-				KafkaFetchBatchMetrics:     cluster.Telemetry.KafkaFetchBatchMetrics,
+				KafkaReceiverRecords:      cluster.Telemetry.KafkaReceiverRecords,
+				KafkaReceiverOffsetLag:    cluster.Telemetry.KafkaReceiverOffsetLag,
+				KafkaReceiverRecordsDelay: cluster.Telemetry.KafkaReceiverRecordsDelay,
+				KafkaBrokerConnects:       cluster.Telemetry.KafkaBrokerConnects,
+				KafkaBrokerDisconnects:    cluster.Telemetry.KafkaBrokerDisconnects,
+				KafkaBrokerReadLatency:    cluster.Telemetry.KafkaBrokerReadLatency,
+				KafkaFetchBatchMetrics:    cluster.Telemetry.KafkaFetchBatchMetrics,
 			},
 			Auth: kafka.AuthConfig{
 				Enabled:   cluster.Auth.Enabled,
@@ -684,30 +778,30 @@ func convertMultiKafkaConfig(cfg config.KafkaLogsConfig) []kafka.ClusterConfig {
 			},
 			UseLeaderEpoch: cluster.UseLeaderEpoch,
 		}
-		
+
 		// TLS: manually assign fields
 		kafkaCfg.TLS.Enable = cluster.TLS.Enable
 		kafkaCfg.TLS.CAFile = cluster.TLS.CAFile
 		kafkaCfg.TLS.CertFile = cluster.TLS.CertFile
 		kafkaCfg.TLS.KeyFile = cluster.TLS.KeyFile
 		kafkaCfg.TLS.InsecureSkipVerify = cluster.TLS.InsecureSkipVerify
-		
+
 		// ErrorBackoff: manually assign fields
 		kafkaCfg.ErrorBackoff.Enabled = cluster.ErrorBackoff.Enabled
 		kafkaCfg.ErrorBackoff.InitialInterval = parseDuration(cluster.ErrorBackoff.InitialInterval, 1*time.Second)
 		kafkaCfg.ErrorBackoff.MaxInterval = parseDuration(cluster.ErrorBackoff.MaxInterval, 30*time.Second)
 		kafkaCfg.ErrorBackoff.Multiplier = cluster.ErrorBackoff.Multiplier
 		kafkaCfg.ErrorBackoff.Jitter = cluster.ErrorBackoff.Jitter
-		
+
 		// HeaderExtraction
 		kafkaCfg.HeaderExtraction.ExtractHeaders = cluster.HeaderExtraction.ExtractHeaders
 		kafkaCfg.HeaderExtraction.Headers = cluster.HeaderExtraction.Headers
-		
+
 		clusterConfigs = append(clusterConfigs, kafka.ClusterConfig{
 			Name:   cluster.Name,
 			Config: kafkaCfg,
 		})
 	}
-	
+
 	return clusterConfigs
 }

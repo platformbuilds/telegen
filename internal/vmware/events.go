@@ -193,7 +193,7 @@ func eventTypeName(be types.BaseEvent) string {
 	if t == nil {
 		return "Event"
 	}
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	return t.Name()

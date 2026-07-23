@@ -370,11 +370,12 @@ func (pq *PersistentQueue) Pop(ctx context.Context) (*QueuedItem, error) {
 				if pq.readSegment < pq.writeSegment {
 					// Can delete fully read segment.
 					pq.deleteSegment(pq.readSegment)
-				} else {
-					pq.readSegment++
+					pq.readOffset = 0
+					continue
 				}
-				pq.readOffset = 0
-				continue
+				// Reached current write segment tail: queue is currently empty.
+				// Keep readSegment/readOffset so subsequent pushes are visible.
+				return nil, nil
 			}
 			return nil, err
 		}

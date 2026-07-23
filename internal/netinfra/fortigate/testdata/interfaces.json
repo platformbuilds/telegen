@@ -1,0 +1,13 @@
+{
+  "results": [
+    {
+      "name": "port1",
+      "status": "up"
+    },
+    {
+      "name": "port2",
+      "status": "down"
+    }
+  ],
+  "status": "success"
+}

@@ -4,6 +4,10 @@
 package config
 
 import (
+	"bytes"
+	"log/slog"
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -42,7 +46,7 @@ func TestContextPropagationMode_UnmarshalText(t *testing.T) {
 		{
 			name:  "ip only",
 			input: "ip",
-			want:  ContextPropagationIPOptions,
+			want:  ContextPropagationDisabled,
 		},
 		{
 			name:  "headers and tcp",
@@ -52,12 +56,12 @@ func TestContextPropagationMode_UnmarshalText(t *testing.T) {
 		{
 			name:  "tcp and ip",
 			input: "tcp,ip",
-			want:  ContextPropagationTCP | ContextPropagationIPOptions,
+			want:  ContextPropagationTCP,
 		},
 		{
 			name:  "headers and ip",
 			input: "headers,ip",
-			want:  ContextPropagationHeaders | ContextPropagationIPOptions,
+			want:  ContextPropagationHeaders,
 		},
 		{
 			name:  "all two",
@@ -67,7 +71,7 @@ func TestContextPropagationMode_UnmarshalText(t *testing.T) {
 		{
 			name:  "with spaces",
 			input: " headers , tcp , ip ",
-			want:  ContextPropagationHeaders | ContextPropagationTCP | ContextPropagationIPOptions,
+			want:  ContextPropagationHeaders | ContextPropagationTCP,
 		},
 		{
 			name:    "invalid value",
@@ -95,6 +99,28 @@ func TestContextPropagationMode_UnmarshalText(t *testing.T) {
 				t.Errorf("UnmarshalText() got = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestContextPropagationMode_UnmarshalText_IPWarnsAndNoops(t *testing.T) {
+	var got ContextPropagationMode
+	var logBuf bytes.Buffer
+
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
+	t.Cleanup(func() {
+		slog.SetDefault(prev)
+	})
+
+	err := got.UnmarshalText([]byte("ip"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != ContextPropagationDisabled {
+		t.Fatalf("expected disabled mode for deprecated ip, got %v", got)
+	}
+	if !strings.Contains(logBuf.String(), "deprecated") {
+		t.Fatalf("expected deprecation warning, got logs: %s", logBuf.String())
 	}
 }
 
@@ -313,5 +339,80 @@ func TestContextPropagationMode_TracerLoading(t *testing.T) {
 				t.Errorf("tctracer loading = %v, want %v", shouldLoadTCTracer, tt.wantTCTracer)
 			}
 		})
+	}
+}
+
+func TestEBPFTracer_CudaInstrumentationEnabled(t *testing.T) {
+	tests := []struct {
+		name           string
+		instrumentCuda CudaMode
+		wantEnabled    bool
+		nvsmi          func() bool
+	}{
+		{
+			name:           "cuda mode on",
+			instrumentCuda: CudaModeOn,
+			wantEnabled:    true,
+		},
+		{
+			name:           "cuda mode off",
+			instrumentCuda: CudaModeOff,
+			wantEnabled:    false,
+		},
+		{
+			name:           "cuda mode auto with nvidia-smi",
+			instrumentCuda: CudaModeAuto,
+			wantEnabled:    true,
+			nvsmi: func() bool {
+				return true
+			},
+		},
+		{
+			name:           "cuda mode auto without nvidia-smi",
+			instrumentCuda: CudaModeAuto,
+			wantEnabled:    false,
+			nvsmi: func() bool {
+				return false
+			},
+		},
+		{
+			name:           "invalid cuda mode (zero value)",
+			instrumentCuda: CudaMode(0),
+			wantEnabled:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tracer := &EBPFTracer{InstrumentCuda: tt.instrumentCuda}
+			if tt.nvsmi != nil {
+				nvidiaSMIExistsFunc = tt.nvsmi
+			} else {
+				nvidiaSMIExistsFunc = nvidiaSMIExists
+			}
+
+			got := tracer.CudaInstrumentationEnabled()
+			if got != tt.wantEnabled {
+				t.Errorf("CudaInstrumentationEnabled() = %v, want %v", got, tt.wantEnabled)
+			}
+		})
+	}
+}
+
+func TestEBPFBufferSizesValidateTagsMatchMaxCapturedPayloadBytes(t *testing.T) {
+	typ := reflect.TypeOf(EBPFBufferSizes{})
+
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		got := field.Tag.Get("validate")
+		var expected string
+		if field.Name == "HTTP" {
+			expected = "lte=262144"
+		} else {
+			expected = "lte=65536"
+		}
+		if got != expected {
+			t.Fatalf("EBPFBufferSizes.%s validate tag drifted: got %q, want %q", field.Name, got, expected)
+		}
 	}
 }

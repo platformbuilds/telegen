@@ -3,17 +3,20 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/mirastacklabs-ai/telegen/internal/exporters/otlp"
 	"go.opentelemetry.io/collector/pdata/plog"
+	"go.opentelemetry.io/collector/pdata/plog/plogotlp"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	"go.opentelemetry.io/collector/pdata/pmetric/pmetricotlp"
 	"go.opentelemetry.io/collector/pdata/ptrace"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
+	"go.opentelemetry.io/collector/pdata/ptrace/ptraceotlp"
 )
 
 // ExporterConfig holds configuration for the unified OTLP exporter.
@@ -80,7 +83,7 @@ func DefaultExporterConfig() ExporterConfig {
 type UnifiedExporter struct {
 	config ExporterConfig
 
-	conn *grpc.ClientConn
+	rawExporter *otlp.Exporter
 
 	// OTLP service clients.
 	traceClient  OTLPTraceClient
@@ -143,6 +146,7 @@ func NewUnifiedExporter(config ExporterConfig) (*UnifiedExporter, error) {
 	if config.Retry.Multiplier == 0 {
 		config.Retry.Multiplier = 2.0
 	}
+	config.Retry.Enabled = true
 
 	e := &UnifiedExporter{
 		config: config,
@@ -157,29 +161,35 @@ func (e *UnifiedExporter) Connect(ctx context.Context) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	if e.conn != nil {
+	if e.rawExporter != nil {
 		return nil // Already connected.
 	}
 
-	var opts []grpc.DialOption
+	rawCfg := otlp.DefaultConfig()
+	rawCfg.Endpoint = e.config.Endpoint
+	rawCfg.Protocol = otlp.ProtocolGRPC
+	rawCfg.Timeout = e.config.Timeout
+	rawCfg.Headers = e.config.Headers
+	rawCfg.Compression = otlp.CompressionGzip
+	rawCfg.TLS.Enabled = !e.config.Insecure
+	rawCfg.TLS.InsecureSkipVerify = e.config.Insecure
+	rawCfg.Batch.Enabled = false
+	rawCfg.Retry.Enabled = false
 
-	if e.config.Insecure {
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	} else {
-		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(nil)))
-	}
-
-	conn, err := grpc.DialContext(ctx, e.config.Endpoint, opts...)
+	rawExporter, err := otlp.NewExporter(rawCfg, slog.Default())
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", e.config.Endpoint, err)
+		return fmt.Errorf("failed to create OTLP exporter: %w", err)
+	}
+	if err := rawExporter.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start OTLP exporter: %w", err)
 	}
 
-	e.conn = conn
+	e.rawExporter = rawExporter
 
 	// Create OTLP clients.
-	e.traceClient = &grpcTraceClient{conn: conn, timeout: e.config.Timeout}
-	e.logClient = &grpcLogClient{conn: conn, timeout: e.config.Timeout}
-	e.metricClient = &grpcMetricClient{conn: conn, timeout: e.config.Timeout}
+	e.traceClient = &grpcTraceClient{exporter: rawExporter}
+	e.logClient = &grpcLogClient{exporter: rawExporter}
+	e.metricClient = &grpcMetricClient{exporter: rawExporter}
 
 	return nil
 }
@@ -192,6 +202,11 @@ func (e *UnifiedExporter) Export(ctx context.Context, signal PipelineSignal) err
 		return fmt.Errorf("exporter is shut down")
 	}
 	e.mu.RUnlock()
+
+	if err := e.ensureConnected(ctx); err != nil {
+		e.failedExports.Add(1)
+		return err
+	}
 
 	// Acquire semaphore.
 	select {
@@ -367,11 +382,11 @@ func (e *UnifiedExporter) Shutdown(ctx context.Context) error {
 
 	e.shutdown = true
 
-	if e.conn != nil {
-		if err := e.conn.Close(); err != nil {
+	if e.rawExporter != nil {
+		if err := e.rawExporter.Stop(ctx); err != nil {
 			return err
 		}
-		e.conn = nil
+		e.rawExporter = nil
 	}
 
 	return nil
@@ -397,8 +412,12 @@ type ExporterStats struct {
 
 // isRetryable determines if an error is retryable.
 func isRetryable(err error) bool {
-	// TODO: Add proper gRPC status code checking.
-	// For now, retry all errors.
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
 	return true
 }
 
@@ -441,30 +460,56 @@ func mergeMetrics(metrics []pmetric.Metrics) pmetric.Metrics {
 // gRPC client implementations.
 
 type grpcTraceClient struct {
-	conn    *grpc.ClientConn
-	timeout time.Duration
+	exporter signalByteExporter
 }
 
 func (c *grpcTraceClient) Export(ctx context.Context, traces ptrace.Traces) error {
-	// In a real implementation, this would use the OTLP proto client.
-	// For now, this is a placeholder.
-	return nil
+	req := ptraceotlp.NewExportRequestFromTraces(traces)
+	data, err := req.MarshalProto()
+	if err != nil {
+		return fmt.Errorf("marshal traces export request: %w", err)
+	}
+	return c.exporter.ExportTraces(ctx, data)
 }
 
 type grpcLogClient struct {
-	conn    *grpc.ClientConn
-	timeout time.Duration
+	exporter signalByteExporter
 }
 
 func (c *grpcLogClient) Export(ctx context.Context, logs plog.Logs) error {
-	return nil
+	req := plogotlp.NewExportRequestFromLogs(logs)
+	data, err := req.MarshalProto()
+	if err != nil {
+		return fmt.Errorf("marshal logs export request: %w", err)
+	}
+	return c.exporter.ExportLogs(ctx, data)
 }
 
 type grpcMetricClient struct {
-	conn    *grpc.ClientConn
-	timeout time.Duration
+	exporter signalByteExporter
 }
 
 func (c *grpcMetricClient) Export(ctx context.Context, metrics pmetric.Metrics) error {
-	return nil
+	req := pmetricotlp.NewExportRequestFromMetrics(metrics)
+	data, err := req.MarshalProto()
+	if err != nil {
+		return fmt.Errorf("marshal metrics export request: %w", err)
+	}
+	return c.exporter.ExportMetrics(ctx, data)
+}
+
+func (e *UnifiedExporter) ensureConnected(ctx context.Context) error {
+	e.mu.RLock()
+	connected := e.traceClient != nil && e.logClient != nil && e.metricClient != nil
+	e.mu.RUnlock()
+	if connected {
+		return nil
+	}
+	return e.Connect(ctx)
+}
+
+type signalByteExporter interface {
+	ExportTraces(ctx context.Context, data []byte) error
+	ExportLogs(ctx context.Context, data []byte) error
+	ExportMetrics(ctx context.Context, data []byte) error
 }

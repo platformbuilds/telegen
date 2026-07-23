@@ -38,7 +38,8 @@ See {doc}`full-reference` for the complete architecture diagram.
 :maxdepth: 2
 
 minimal-config
-v3-pipeline
+pipeline
+netinfra-firewalls
 full-reference
 agent-mode
 collector-mode

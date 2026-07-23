@@ -1,0 +1,86 @@
+# Network infrastructure + firewall collector example.
+# Use with --mode collector or --mode unified.
+
+agent:
+  service_name: telegen-netinfra
+
+selfTelemetry:
+  listen: ":19090"
+
+exports:
+  remoteWrite:
+    mode: "active"
+    endpoints:
+      - url: "http://otel-collector:19291/api/v1/push"
+        timeout: "30s"
+        compression: "snappy"
+  otlp:
+    send_mode: "failover"
+    grpc:
+      enabled: true
+      endpoint: "otel-collector:4317"
+      insecure: true
+      timeout: "30s"
+    http:
+      enabled: false
+
+pipelines:
+  traces:
+    enabled: true
+  logs:
+    enabled: true
+  metrics:
+    also_expose_prometheus: false
+
+netinfra:
+  enabled: true
+  collect_interval: 30s
+
+  cloudvision:
+    - name: cvp-prod
+      cvp_url: "https://cloudvision.example.com"
+      token: "${ARISTA_CVP_TOKEN}"
+      verify_ssl: true
+      timeout: 30s
+      collect_interval: 30s
+      collect: ["inventory", "interfaces", "bgp", "system"]
+      labels:
+        site: dc1
+        team: netops
+
+  aci:
+    - name: aci-fabric-a
+      apic_url: "https://apic.example.com"
+      username: "${ACI_USERNAME}"
+      password: "${ACI_PASSWORD}"
+      verify_ssl: true
+      timeout: 30s
+      collect_interval: 30s
+      collect: ["fabric_health", "node_health", "tenant_health", "interface_stats"]
+      labels:
+        site: dc1
+        team: netops
+
+  paloalto:
+    - name: pan-edge-1
+      base_url: "https://10.50.0.10"
+      api_key: "${PALOALTO_API_KEY}"
+      verify_ssl: true
+      timeout: 30s
+      collect_interval: 30s
+      collect: ["system", "interfaces"]
+      labels:
+        site: edge
+        team: secops
+
+  fortigate:
+    - name: fg-core-1
+      base_url: "https://10.60.0.20"
+      token: "${FORTIGATE_TOKEN}"
+      verify_ssl: true
+      timeout: 30s
+      collect_interval: 30s
+      collect: ["system", "interfaces"]
+      labels:
+        site: core
+        team: secops

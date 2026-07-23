@@ -332,3 +332,50 @@ vmware:
     state_changes: true      # emit synthesized inventory-diff logs
     max_per_poll: 100        # cap on events read per poll
   extra_labels: {}
+
+# Network infrastructure collection (Arista/Cisco/Palo Alto/FortiGate).
+# Metrics are exported through the shared V3 pipeline exporters.
+netinfra:
+  enabled: false
+  collect_interval: 30s
+
+  cloudvision:
+    - name: cvp-prod
+      cvp_url: "https://cloudvision.example.com"
+      token: "${ARISTA_CVP_TOKEN}"
+      verify_ssl: true
+      timeout: 30s
+      collect_interval: 30s
+      collect: ["inventory", "interfaces", "bgp", "system"]
+      labels: {}
+
+  aci:
+    - name: aci-fabric-a
+      apic_url: "https://apic.example.com"
+      username: "${ACI_USERNAME}"
+      password: "${ACI_PASSWORD}"
+      verify_ssl: true
+      timeout: 30s
+      collect_interval: 30s
+      collect: ["fabric_health", "node_health", "tenant_health", "interface_stats"]
+      labels: {}
+
+  paloalto:
+    - name: pan-edge-1
+      base_url: "https://10.50.0.10"
+      api_key: "${PALOALTO_API_KEY}"
+      verify_ssl: true
+      timeout: 30s
+      collect_interval: 30s
+      collect: ["system", "interfaces"]
+      labels: {}
+
+  fortigate:
+    - name: fg-core-1
+      base_url: "https://10.60.0.20"
+      token: "${FORTIGATE_TOKEN}"
+      verify_ssl: true
+      timeout: 30s
+      collect_interval: 30s
+      collect: ["system", "interfaces"]
+      labels: {}

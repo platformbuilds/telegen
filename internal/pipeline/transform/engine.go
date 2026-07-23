@@ -4,6 +4,9 @@ package transform
 
 import (
 	"context"
+	"crypto/md5"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -702,18 +705,11 @@ func (e *TransformEngine) applyActions(attrs pcommon.Map, actions []RuleAction) 
 func hashValue(value, algorithm string) string {
 	switch strings.ToLower(algorithm) {
 	case "sha256":
-		// Simple hash for demonstration - in production use crypto/sha256
-		h := uint64(0)
-		for _, c := range value {
-			h = h*31 + uint64(c)
-		}
-		return fmt.Sprintf("sha256:%016x", h)
+		sum := sha256.Sum256([]byte(value))
+		return "sha256:" + hex.EncodeToString(sum[:])
 	case "md5":
-		h := uint64(0)
-		for _, c := range value {
-			h = h*17 + uint64(c)
-		}
-		return fmt.Sprintf("md5:%016x", h)
+		sum := md5.Sum([]byte(value))
+		return "md5:" + hex.EncodeToString(sum[:])
 	default:
 		return "[REDACTED]"
 	}

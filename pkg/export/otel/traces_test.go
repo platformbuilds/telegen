@@ -827,7 +827,7 @@ func TestTracesInstrumentations(t *testing.T) {
 		{
 			name:     "all instrumentations",
 			instr:    []instrumentations.Instrumentation{instrumentations.InstrumentationALL},
-			expected: []string{"GET /foo", "PUT /bar", "/grpcFoo", "/grpcGoo", "SELECT credentials", "SET", "GET", "publish important-topic", "process important-topic", "publish sensors/temperature", "process sensors/#", "insert mycollection", "GET couchbase-collection"},
+			expected: []string{"GET /foo", "PUT /bar", "/grpcFoo", "/grpcGoo", "SELECT credentials", "UPDATE accounts", "SET", "GET", "publish important-topic", "process important-topic", "publish sensors/temperature", "process sensors/#", "publish nats.subject", "process amqp.queue", "INCR", "nfs/read", "insert mycollection", "GET couchbase-collection"},
 		},
 		{
 			name:     "http only",
@@ -847,7 +847,7 @@ func TestTracesInstrumentations(t *testing.T) {
 		{
 			name:     "sql only",
 			instr:    []instrumentations.Instrumentation{instrumentations.InstrumentationSQL},
-			expected: []string{"SELECT credentials"},
+			expected: []string{"SELECT credentials", "UPDATE accounts"},
 		},
 		{
 			name:     "kafka only",
@@ -865,9 +865,29 @@ func TestTracesInstrumentations(t *testing.T) {
 			expected: []string{},
 		},
 		{
+			name:     "nats only",
+			instr:    []instrumentations.Instrumentation{instrumentations.InstrumentationNATS},
+			expected: []string{"publish nats.subject"},
+		},
+		{
+			name:     "amqp only",
+			instr:    []instrumentations.Instrumentation{instrumentations.InstrumentationAMQP},
+			expected: []string{"process amqp.queue"},
+		},
+		{
+			name:     "memcached only",
+			instr:    []instrumentations.Instrumentation{instrumentations.InstrumentationMemcached},
+			expected: []string{"INCR"},
+		},
+		{
+			name:     "sunrpc only",
+			instr:    []instrumentations.Instrumentation{instrumentations.InstrumentationSunRPC},
+			expected: []string{"nfs/read"},
+		},
+		{
 			name:     "sql and redis",
 			instr:    []instrumentations.Instrumentation{instrumentations.InstrumentationSQL, instrumentations.InstrumentationRedis},
-			expected: []string{"SELECT credentials", "SET", "GET"},
+			expected: []string{"SELECT credentials", "UPDATE accounts", "SET", "GET"},
 		},
 		{
 			name:     "kafka and grpc",
@@ -892,12 +912,17 @@ func TestTracesInstrumentations(t *testing.T) {
 		{Service: svc.Attrs{UID: svc.UID{Instance: "foo"}}, Type: request.EventTypeGRPC, Path: "/grpcFoo", RequestStart: 100, End: 200},
 		{Service: svc.Attrs{UID: svc.UID{Instance: "foo"}}, Type: request.EventTypeGRPCClient, Path: "/grpcGoo", RequestStart: 150, End: 175},
 		makeSQLRequestSpan("SELECT password FROM credentials WHERE username=\"bill\""),
+		{Service: svc.Attrs{UID: svc.UID{Instance: "foo"}}, Type: request.EventTypeSQLServer, Method: "UPDATE", Path: "accounts", RequestStart: 150, End: 175},
 		{Service: svc.Attrs{UID: svc.UID{Instance: "foo"}}, Type: request.EventTypeRedisClient, Method: "SET", Path: "redis_db", RequestStart: 150, End: 175},
 		{Service: svc.Attrs{UID: svc.UID{Instance: "foo"}}, Type: request.EventTypeRedisServer, Method: "GET", Path: "redis_db", RequestStart: 150, End: 175},
 		{Type: request.EventTypeKafkaClient, Method: "process", Path: "important-topic", Statement: "test"},
 		{Type: request.EventTypeKafkaServer, Method: "publish", Path: "important-topic", Statement: "test"},
 		{Type: request.EventTypeMQTTClient, Method: "publish", Path: "sensors/temperature", Statement: "mqtt-client"},
 		{Type: request.EventTypeMQTTServer, Method: "process", Path: "sensors/#", Statement: "mqtt-server"},
+		{Type: request.EventTypeNATSClient, Method: "publish", Path: "nats.subject", Statement: "nats-client"},
+		{Type: request.EventTypeAMQPClient, Method: "process", Path: "amqp.queue", Statement: "amqp-client"},
+		{Type: request.EventTypeMemcachedClient, Method: "INCR", Path: "cache_key"},
+		{Type: request.EventTypeSunRPCClient, Method: "read", Path: "nfs"},
 		{Type: request.EventTypeMongoClient, Method: "insert", Path: "mycollection", DBNamespace: "mydatabase"},
 		{Type: request.EventTypeCouchbaseClient, Method: "GET", Path: "couchbase-collection", DBNamespace: "mybucket.myscope"},
 	}

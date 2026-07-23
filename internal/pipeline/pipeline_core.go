@@ -8,17 +8,45 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	expirable2 "github.com/hashicorp/golang-lru/v2/expirable"
+	localrequest "github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/prometheus/prometheus/prompb"
+	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/pdata/plog"
+	"go.opentelemetry.io/collector/pdata/plog/plogotlp"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	"go.opentelemetry.io/collector/pdata/pmetric/pmetricotlp"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	"go.opentelemetry.io/collector/pdata/ptrace/ptraceotlp"
+	obrequest "go.opentelemetry.io/obi/pkg/appolly/app/request"
+	obsvc "go.opentelemetry.io/obi/pkg/appolly/app/svc"
+	"go.opentelemetry.io/otel/attribute"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
+	localsvc "github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	"github.com/mirastacklabs-ai/telegen/internal/config"
+	exportotlp "github.com/mirastacklabs-ai/telegen/internal/exporters/otlp"
+	"github.com/mirastacklabs-ai/telegen/internal/exporters/remotewrite"
+	"github.com/mirastacklabs-ai/telegen/internal/kube"
+	"github.com/mirastacklabs-ai/telegen/internal/logs/filetailer"
+	awsm "github.com/mirastacklabs-ai/telegen/internal/metadata/aws"
+	"github.com/mirastacklabs-ai/telegen/internal/metrics/host"
 	"github.com/mirastacklabs-ai/telegen/internal/pipeline/adapters"
 	"github.com/mirastacklabs-ai/telegen/internal/pipeline/converters"
 	"github.com/mirastacklabs-ai/telegen/internal/queue"
+	localattr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/instrumentations"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/tracesgen"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/global"
 )
 
 // UnifiedPipelineConfig configures the unified pipeline.
@@ -41,6 +69,17 @@ type UnifiedPipelineConfig struct {
 
 	// WorkerCount is the number of export workers. Default: 2.
 	WorkerCount int `yaml:"worker_count" json:"worker_count"`
+
+	// RemoteWrite preserves legacy Prometheus Remote Write transport for
+	// prompb-based metric producers that have not yet been ported to pmetric.
+	RemoteWrite *config.RemoteWrite `yaml:"remote_write,omitempty" json:"remote_write,omitempty"`
+
+	// Integration controls limits/transform/PII routing before export.
+	Integration *IntegrationConfig `yaml:"integration,omitempty" json:"integration,omitempty"`
+
+	// RuntimeConfig provides source wiring parity with the legacy pipeline Start path.
+	// It is not loaded from YAML directly and should be set by the caller.
+	RuntimeConfig *config.Config `yaml:"-" json:"-"`
 }
 
 // QueueConfig configures the persistent queue.
@@ -74,10 +113,18 @@ type UnifiedPipeline struct {
 	logger *slog.Logger
 
 	// Core components.
-	exporter         *UnifiedExporter
-	multiExporter    *MultiEndpointExporter
-	adapterRegistry  *adapters.AdapterRegistry
+	exporter          *UnifiedExporter
+	multiExporter     *MultiEndpointExporter
+	adapterRegistry   *adapters.AdapterRegistry
 	converterPipeline *converters.ConvertingPipeline
+	integration       *Integration
+	rw                *remotewrite.Client
+	qMetrics          *queue.Ring[*prompb.WriteRequest]
+	awsLabels         map[string]string
+	sharedOTLP        *exportotlp.Clients
+	ebpfCtxInfo       *global.ContextInfo
+	stopCh            chan struct{}
+	traceAttrCache    *expirable2.LRU[localsvc.UID, []attribute.KeyValue]
 
 	// Persistent queue (optional).
 	traceQueue  *queue.PersistentQueue
@@ -115,15 +162,35 @@ func NewUnifiedPipeline(config UnifiedPipelineConfig) (*UnifiedPipeline, error) 
 	}))
 
 	p := &UnifiedPipeline{
-		config:           config,
-		logger:           logger,
+		config:            config,
+		logger:            logger,
 		converterPipeline: converters.NewConvertingPipeline(),
-		traceCh:          make(chan ptrace.Traces, 1000),
-		logCh:            make(chan plog.Logs, 1000),
-		metricCh:         make(chan pmetric.Metrics, 1000),
-		ctx:              ctx,
-		cancel:           cancel,
+		traceCh:           make(chan ptrace.Traces, 1000),
+		logCh:             make(chan plog.Logs, 1000),
+		metricCh:          make(chan pmetric.Metrics, 1000),
+		ctx:               ctx,
+		cancel:            cancel,
+		stopCh:            make(chan struct{}),
+		qMetrics:          queue.NewRing[*prompb.WriteRequest](8192, func(_ uint64, _ queue.DropReason) {}),
+		traceAttrCache: expirable2.NewLRU[localsvc.UID, []attribute.KeyValue](
+			1024,
+			nil,
+			5*time.Minute,
+		),
 	}
+
+	// Initialize integration layer (limits/transform/PII). Default is enabled
+	// and acts as pass-through until explicit rules/limits are configured.
+	intCfg := DefaultIntegrationConfig()
+	if config.Integration != nil {
+		intCfg = *config.Integration
+	}
+	integration, err := NewIntegration(intCfg, logger)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("creating integration layer: %w", err)
+	}
+	p.integration = integration
 
 	// Create unified exporter.
 	exporter, err := NewUnifiedExporter(config.Exporter)
@@ -197,6 +264,25 @@ func (p *UnifiedPipeline) Start(ctx context.Context) error {
 		"endpoint", p.config.Exporter.Endpoint,
 	)
 
+	// Initialize shared OTLP accessors used by downstream subsystems in main.go.
+	if err := p.initSharedOTLPClients(ctx); err != nil {
+		p.logger.Warn("shared OTLP clients unavailable; some downstream integrations may degrade", "error", err)
+	}
+
+	// Initialize legacy remote-write transport if configured.
+	if p.config.RemoteWrite != nil {
+		p.rw = remotewrite.New()
+		_ = p.rw.WithTLS(remotewrite.TLSConfig{
+			Enable:             p.config.RemoteWrite.TLS.Enable,
+			CAFile:             p.config.RemoteWrite.TLS.CAFile,
+			CertFile:           p.config.RemoteWrite.TLS.CertFile,
+			KeyFile:            p.config.RemoteWrite.TLS.KeyFile,
+			InsecureSkipVerify: p.config.RemoteWrite.TLS.InsecureSkipVerify,
+		})
+		p.wg.Add(1)
+		go p.remoteWriteWorker()
+	}
+
 	// Multi-endpoint exporter is ready after creation.
 	if p.multiExporter != nil {
 		p.logger.Info("multi-endpoint exporter ready",
@@ -212,9 +298,29 @@ func (p *UnifiedPipeline) Start(ctx context.Context) error {
 		go p.metricWorker(i)
 	}
 
+	// Start persistent queue drain workers when WAL is enabled.
+	if p.traceQueue != nil {
+		p.wg.Add(1)
+		go p.traceQueueWorker()
+	}
+	if p.logQueue != nil {
+		p.wg.Add(1)
+		go p.logQueueWorker()
+	}
+	if p.metricQueue != nil {
+		p.wg.Add(1)
+		go p.metricQueueWorker()
+	}
+
 	// Start all collector adapters.
 	if err := p.adapterRegistry.StartAll(ctx); err != nil {
 		return fmt.Errorf("starting adapters: %w", err)
+	}
+
+	// Start legacy-parity sources (host metrics, file logs, JFR, eBPF queue bridge)
+	// when the runtime config is provided by the binary.
+	if err := p.startRuntimeSources(ctx); err != nil {
+		p.logger.Warn("runtime sources started with degradation", "error", err)
 	}
 
 	p.running = true
@@ -240,6 +346,7 @@ func (p *UnifiedPipeline) Stop(ctx context.Context) error {
 	p.logger.Info("stopping unified pipeline")
 
 	// Stop accepting new signals.
+	close(p.stopCh)
 	p.cancel()
 
 	// Stop all adapters first.
@@ -340,6 +447,16 @@ func (p *UnifiedPipeline) initQueues() error {
 
 // SendTraces implements adapters.SignalSink.
 func (p *UnifiedPipeline) SendTraces(ctx context.Context, traces ptrace.Traces) error {
+	if p.integration != nil {
+		var err error
+		traces, err = p.integration.ProcessTraces(ctx, traces)
+		if err != nil {
+			return err
+		}
+		if traces.SpanCount() == 0 {
+			return nil
+		}
+	}
 	p.receivedTraces.Add(int64(traces.SpanCount()))
 
 	select {
@@ -350,8 +467,7 @@ func (p *UnifiedPipeline) SendTraces(ctx context.Context, traces ptrace.Traces) 
 	default:
 		// Channel full, try queue if available.
 		if p.traceQueue != nil {
-			// Queue for later processing.
-			return nil
+			return p.enqueuePersistentTraces(traces)
 		}
 		p.droppedTraces.Add(int64(traces.SpanCount()))
 		p.logger.Warn("trace channel full, dropping spans",
@@ -363,6 +479,16 @@ func (p *UnifiedPipeline) SendTraces(ctx context.Context, traces ptrace.Traces) 
 
 // SendLogs implements adapters.SignalSink.
 func (p *UnifiedPipeline) SendLogs(ctx context.Context, logs plog.Logs) error {
+	if p.integration != nil {
+		var err error
+		logs, err = p.integration.ProcessLogs(ctx, logs)
+		if err != nil {
+			return err
+		}
+		if logs.LogRecordCount() == 0 {
+			return nil
+		}
+	}
 	p.receivedLogs.Add(int64(logs.LogRecordCount()))
 
 	select {
@@ -372,7 +498,7 @@ func (p *UnifiedPipeline) SendLogs(ctx context.Context, logs plog.Logs) error {
 		return ctx.Err()
 	default:
 		if p.logQueue != nil {
-			return nil
+			return p.enqueuePersistentLogs(logs)
 		}
 		p.droppedLogs.Add(int64(logs.LogRecordCount()))
 		p.logger.Warn("log channel full, dropping logs",
@@ -384,6 +510,16 @@ func (p *UnifiedPipeline) SendLogs(ctx context.Context, logs plog.Logs) error {
 
 // SendMetrics implements adapters.SignalSink.
 func (p *UnifiedPipeline) SendMetrics(ctx context.Context, metrics pmetric.Metrics) error {
+	if p.integration != nil {
+		var err error
+		metrics, err = p.integration.ProcessMetrics(ctx, metrics)
+		if err != nil {
+			return err
+		}
+		if metrics.DataPointCount() == 0 {
+			return nil
+		}
+	}
 	p.receivedMetrics.Add(int64(metrics.DataPointCount()))
 
 	select {
@@ -393,7 +529,7 @@ func (p *UnifiedPipeline) SendMetrics(ctx context.Context, metrics pmetric.Metri
 		return ctx.Err()
 	default:
 		if p.metricQueue != nil {
-			return nil
+			return p.enqueuePersistentMetrics(metrics)
 		}
 		p.droppedMetrics.Add(int64(metrics.DataPointCount()))
 		p.logger.Warn("metric channel full, dropping metrics",
@@ -401,6 +537,42 @@ func (p *UnifiedPipeline) SendMetrics(ctx context.Context, metrics pmetric.Metri
 		)
 		return fmt.Errorf("metric channel full")
 	}
+}
+
+func (p *UnifiedPipeline) enqueuePersistentTraces(traces ptrace.Traces) error {
+	if p.traceQueue == nil {
+		return nil
+	}
+	req := ptraceotlp.NewExportRequestFromTraces(traces)
+	b, err := req.MarshalProto()
+	if err != nil {
+		return fmt.Errorf("marshal traces for persistent queue: %w", err)
+	}
+	return p.traceQueue.Push("traces", b)
+}
+
+func (p *UnifiedPipeline) enqueuePersistentLogs(logs plog.Logs) error {
+	if p.logQueue == nil {
+		return nil
+	}
+	req := plogotlp.NewExportRequestFromLogs(logs)
+	b, err := req.MarshalProto()
+	if err != nil {
+		return fmt.Errorf("marshal logs for persistent queue: %w", err)
+	}
+	return p.logQueue.Push("logs", b)
+}
+
+func (p *UnifiedPipeline) enqueuePersistentMetrics(metrics pmetric.Metrics) error {
+	if p.metricQueue == nil {
+		return nil
+	}
+	req := pmetricotlp.NewExportRequestFromMetrics(metrics)
+	b, err := req.MarshalProto()
+	if err != nil {
+		return fmt.Errorf("marshal metrics for persistent queue: %w", err)
+	}
+	return p.metricQueue.Push("metrics", b)
 }
 
 // traceWorker processes traces from the channel.
@@ -448,6 +620,143 @@ func (p *UnifiedPipeline) metricWorker(id int) {
 	}
 }
 
+func (p *UnifiedPipeline) traceQueueWorker() {
+	defer p.wg.Done()
+	for p.ctx.Err() == nil {
+		item, err := p.traceQueue.Pop(p.ctx)
+		if err != nil {
+			p.logger.Warn("trace WAL pop failed", "error", err)
+			time.Sleep(200 * time.Millisecond)
+			continue
+		}
+		if item == nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		req := ptraceotlp.NewExportRequest()
+		if err := req.UnmarshalProto(item.Data); err != nil {
+			p.logger.Warn("trace WAL decode failed", "error", err)
+			continue
+		}
+		if err := p.exportTraces(p.ctx, req.Traces()); err != nil {
+			p.logger.Warn("trace WAL export failed", "error", err)
+			_ = p.traceQueue.Push("traces", item.Data)
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+}
+
+func (p *UnifiedPipeline) logQueueWorker() {
+	defer p.wg.Done()
+	for p.ctx.Err() == nil {
+		item, err := p.logQueue.Pop(p.ctx)
+		if err != nil {
+			p.logger.Warn("log WAL pop failed", "error", err)
+			time.Sleep(200 * time.Millisecond)
+			continue
+		}
+		if item == nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		req := plogotlp.NewExportRequest()
+		if err := req.UnmarshalProto(item.Data); err != nil {
+			p.logger.Warn("log WAL decode failed", "error", err)
+			continue
+		}
+		if err := p.exportLogs(p.ctx, req.Logs()); err != nil {
+			p.logger.Warn("log WAL export failed", "error", err)
+			_ = p.logQueue.Push("logs", item.Data)
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+}
+
+func (p *UnifiedPipeline) metricQueueWorker() {
+	defer p.wg.Done()
+	for p.ctx.Err() == nil {
+		item, err := p.metricQueue.Pop(p.ctx)
+		if err != nil {
+			p.logger.Warn("metric WAL pop failed", "error", err)
+			time.Sleep(200 * time.Millisecond)
+			continue
+		}
+		if item == nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		req := pmetricotlp.NewExportRequest()
+		if err := req.UnmarshalProto(item.Data); err != nil {
+			p.logger.Warn("metric WAL decode failed", "error", err)
+			continue
+		}
+		if err := p.exportMetrics(p.ctx, req.Metrics()); err != nil {
+			p.logger.Warn("metric WAL export failed", "error", err)
+			_ = p.metricQueue.Push("metrics", item.Data)
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+}
+
+func (p *UnifiedPipeline) remoteWriteWorker() {
+	defer p.wg.Done()
+	for p.ctx.Err() == nil {
+		p.qMetrics.DropExpired(5 * time.Minute)
+		batch := p.qMetrics.PopBatch(500, 1*time.Second)
+		if len(batch) == 0 {
+			continue
+		}
+
+		var wr prompb.WriteRequest
+		for _, it := range batch {
+			if it.V == nil {
+				continue
+			}
+			wr.Timeseries = append(wr.Timeseries, it.V.Timeseries...)
+			wr.Metadata = append(wr.Metadata, it.V.Metadata...)
+		}
+		if p.config.RemoteWrite == nil || len(p.config.RemoteWrite.Endpoints) == 0 {
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		ep := p.config.RemoteWrite.Endpoints[0]
+		if err := p.rw.Send(p.ctx, &wr, remotewrite.Endpoint{
+			URL:         ep.URL,
+			Timeout:     mustDur(ep.Timeout),
+			Headers:     ep.Headers,
+			Tenant:      ep.Tenant,
+			Compression: ep.Compression,
+		}); err != nil {
+			p.logger.Warn("remote write send failed", "error", err, "timeseries", len(wr.Timeseries))
+			p.qMetrics.Push(&wr)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+	}
+}
+
+// EnqueueMetrics allows legacy prompb producers to use V3's preserved remote-write transport.
+func (p *UnifiedPipeline) EnqueueMetrics(wr *prompb.WriteRequest) {
+	if wr == nil || p.qMetrics == nil {
+		return
+	}
+	if len(p.awsLabels) > 0 {
+		for i := range wr.Timeseries {
+			have := map[string]struct{}{}
+			for _, l := range wr.Timeseries[i].Labels {
+				have[l.Name] = struct{}{}
+			}
+			for k, v := range p.awsLabels {
+				if _, ok := have[k]; ok {
+					continue
+				}
+				wr.Timeseries[i].Labels = append(wr.Timeseries[i].Labels, prompb.Label{Name: k, Value: v})
+			}
+		}
+	}
+	p.qMetrics.Push(wr)
+}
+
 // exportTraces exports traces through the appropriate exporter.
 func (p *UnifiedPipeline) exportTraces(ctx context.Context, traces ptrace.Traces) error {
 	if p.multiExporter != nil {
@@ -470,6 +779,319 @@ func (p *UnifiedPipeline) exportMetrics(ctx context.Context, metrics pmetric.Met
 		return p.multiExporter.ExportMetrics(ctx, metrics)
 	}
 	return p.exporter.Export(ctx, NewMetricSignal(metrics, "pipeline"))
+}
+
+func (p *UnifiedPipeline) initSharedOTLPClients(ctx context.Context) error {
+	if p.sharedOTLP != nil {
+		return nil
+	}
+	opts := exportotlp.TraceOpts{}
+	opts.Mode = "failover"
+	opts.TLS.Enable = !p.config.Exporter.Insecure
+	opts.TLS.InsecureSkipVerify = p.config.Exporter.Insecure
+	opts.GRPC.Enabled = true
+	opts.GRPC.Endpoint = p.config.Exporter.Endpoint
+	opts.GRPC.Headers = p.config.Exporter.Headers
+	opts.GRPC.Insecure = p.config.Exporter.Insecure
+	opts.GRPC.Gzip = true
+	opts.GRPC.Timeout = p.config.Exporter.Timeout
+
+	// Best-effort HTTP fallback when endpoint is URL-formatted.
+	if strings.HasPrefix(p.config.Exporter.Endpoint, "http://") || strings.HasPrefix(p.config.Exporter.Endpoint, "https://") {
+		opts.GRPC.Enabled = false
+		opts.HTTP.Enabled = true
+		opts.HTTP.Endpoint = strings.TrimPrefix(strings.TrimPrefix(p.config.Exporter.Endpoint, "http://"), "https://")
+		opts.HTTP.Insecure = p.config.Exporter.Insecure
+		opts.HTTP.TracesURL = "/v1/traces"
+		opts.HTTP.LogsURL = "/v1/logs"
+		opts.HTTP.Headers = p.config.Exporter.Headers
+		opts.HTTP.Gzip = true
+		opts.HTTP.Timeout = p.config.Exporter.Timeout
+	}
+
+	clients, err := exportotlp.New(ctx, opts, nil)
+	if err != nil {
+		return err
+	}
+	p.sharedOTLP = clients
+	return nil
+}
+
+func (p *UnifiedPipeline) startRuntimeSources(ctx context.Context) error {
+	if p.config.RuntimeConfig == nil {
+		return nil
+	}
+	var errs []error
+	rcfg := p.config.RuntimeConfig
+
+	// Optional cloud metadata enrichment parity from the legacy pipeline.
+	if rcfg.Cloud.AWS.Enabled {
+		aopts := awsm.Options{}
+		if d, err := time.ParseDuration(rcfg.Cloud.AWS.Timeout); err == nil {
+			aopts.Timeout = d
+		}
+		if d, err := time.ParseDuration(rcfg.Cloud.AWS.RefreshInterval); err == nil {
+			aopts.RefreshInterval = d
+		}
+		aopts.CollectTags = rcfg.Cloud.AWS.CollectTags
+		aopts.TagAllowlist = rcfg.Cloud.AWS.TagAllowlist
+		aopts.BaseURL = rcfg.Cloud.AWS.IMDSBaseURL
+		aopts.DisableProbe = rcfg.Cloud.AWS.DisableProbe
+		prov := awsm.New(aopts)
+		if meta, err := prov.Fetch(ctx); err == nil {
+			p.awsLabels = meta.Labels()
+		} else {
+			p.logger.Warn("aws metadata fetch failed", "error", err)
+		}
+	}
+
+	// Host metrics parity: preserve legacy prompb -> remote-write path.
+	if hostname, _ := os.Hostname(); true {
+		col := host.New("telegen", hostname, 15*time.Second, p.EnqueueMetrics)
+		if len(p.awsLabels) > 0 {
+			col.SetExtraLabels(p.awsLabels)
+		}
+		go col.Run(p.stopCh)
+	}
+
+	// File logs parity: keep using shared SDK LoggerProvider.
+	if rcfg.Pipelines.Logs.Enabled {
+		lp := p.GetLogsLoggerProvider()
+		if lp == nil {
+			errs = append(errs, fmt.Errorf("file logs enabled but shared logs provider is nil"))
+		} else {
+			fCfg := rcfg.Pipelines.Logs.Filelog
+			opts := filetailer.Options{
+				Globs:                fCfg.Include,
+				Excludes:             fCfg.Exclude,
+				PositionFile:         fCfg.PositionFile,
+				LoggerProvider:       lp,
+				ShipHistoricalEvents: fCfg.ShipHistoricalEvents,
+				StartTime:            time.Now(),
+				PollInterval:         fCfg.PollIntervalDuration(),
+				ParserConfig:         filetailer.DefaultParserConfig(),
+			}
+			ft := filetailer.NewWithOptions(opts)
+			go func() { _ = ft.Run(p.stopCh) }()
+		}
+	}
+
+	if rcfg.Pipelines.JFR.Enabled {
+		if err := p.startJFRSource(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("start jfr source: %w", err))
+		}
+	}
+	if rcfg.EBPF.Enabled && runtime.GOOS == "linux" {
+		if err := p.startEBPFSource(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("start ebpf source: %w", err))
+		}
+	}
+	if len(errs) > 0 {
+		return errs[0]
+	}
+	return nil
+}
+
+func (p *UnifiedPipeline) forwardOBISpanBatch(ctx context.Context, batch []obrequest.Span) error {
+	if len(batch) == 0 {
+		return nil
+	}
+	localBatch := make([]localrequest.Span, 0, len(batch))
+	for _, span := range batch {
+		localBatch = append(localBatch, convertUpstreamSpan(span))
+	}
+
+	// Convert OBI request spans into OTLP traces and route through V3.
+	grouped := tracesgen.GroupSpans(
+		ctx,
+		localBatch,
+		nil,
+		sdktrace.AlwaysSample(),
+		instrumentations.NewInstrumentationSelection([]instrumentations.Instrumentation{instrumentations.InstrumentationALL}),
+	)
+	for _, spans := range grouped {
+		if len(spans) == 0 || spans[0].Span == nil {
+			continue
+		}
+		hostID := ""
+		if p.ebpfCtxInfo != nil {
+			hostID = p.ebpfCtxInfo.HostID
+		}
+		envAttrs := otelcfg.ResourceAttrsFromEnv(&spans[0].Span.Service)
+		td := tracesgen.GenerateTracesWithAttributes(
+			p.traceAttrCache,
+			&spans[0].Span.Service,
+			envAttrs,
+			hostID,
+			spans,
+			"go.opentelemetry.io/obi",
+		)
+		if err := p.SendTraces(ctx, td); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func convertUpstreamSpan(span obrequest.Span) localrequest.Span {
+	out := localrequest.Span{
+		Type:              localrequest.EventType(span.Type),
+		Flags:             span.Flags,
+		Method:            span.Method,
+		Path:              span.Path,
+		Route:             span.Route,
+		Peer:              span.Peer,
+		PeerPort:          span.PeerPort,
+		Host:              span.Host,
+		HostPort:          span.HostPort,
+		Status:            span.Status,
+		ResponseLength:    span.ResponseLength,
+		ContentLength:     span.ContentLength,
+		RequestStart:      span.RequestStart,
+		Start:             span.Start,
+		End:               span.End,
+		Service:           convertUpstreamService(span.Service),
+		TraceID:           span.TraceID,
+		SpanID:            span.SpanID,
+		ParentSpanID:      span.ParentSpanID,
+		TraceFlags:        span.TraceFlags,
+		PeerName:          span.PeerName,
+		HostName:          span.HostName,
+		OtherNamespace:    span.OtherNamespace,
+		OtherK8SNamespace: span.OtherK8SNamespace,
+		Statement:         span.Statement,
+		SubType:           span.SubType,
+		DBError: localrequest.DBError{
+			ErrorCode:   span.DBError.ErrorCode,
+			Description: span.DBError.Description,
+		},
+		DBNamespace:       span.DBNamespace,
+		SQLCommand:        span.SQLCommand,
+		OverrideTraceName: span.OverrideTraceName,
+	}
+
+	out.Pid = localrequest.PidInfo{
+		HostPID:   uint32(span.Pid.HostPID),
+		UserPID:   uint32(span.Pid.UserPID),
+		Namespace: span.Pid.Namespace,
+	}
+
+	if span.SQLError != nil {
+		out.SQLError = &localrequest.SQLError{
+			Code:     span.SQLError.Code,
+			SQLState: span.SQLError.SQLState,
+			Message:  span.SQLError.Message,
+		}
+	}
+	if span.MessagingInfo != nil {
+		out.MessagingInfo = &localrequest.MessagingInfo{
+			Offset:    span.MessagingInfo.Offset,
+			Partition: span.MessagingInfo.Partition,
+		}
+	}
+	if span.GraphQL != nil {
+		out.GraphQL = &localrequest.GraphQL{
+			Document:      span.GraphQL.Document,
+			OperationName: span.GraphQL.OperationName,
+			OperationType: span.GraphQL.OperationType,
+		}
+	}
+	if span.Elasticsearch != nil {
+		out.Elasticsearch = &localrequest.Elasticsearch{
+			DBCollectionName: span.Elasticsearch.DBCollectionName,
+			NodeName:         span.Elasticsearch.NodeName,
+			DBOperationName:  span.Elasticsearch.DBOperationName,
+			DBQueryText:      span.Elasticsearch.DBQueryText,
+			DBSystemName:     span.Elasticsearch.DBSystemName,
+		}
+	}
+	if span.AWS != nil {
+		out.AWS = &localrequest.AWS{
+			S3: localrequest.AWSS3{
+				Meta: localrequest.AWSMeta{
+					RequestID:         span.AWS.S3.Meta.RequestID,
+					ExtendedRequestID: span.AWS.S3.Meta.ExtendedRequestID,
+					Region:            span.AWS.S3.Meta.Region,
+				},
+				Method: span.AWS.S3.Method,
+				Bucket: span.AWS.S3.Bucket,
+				Key:    span.AWS.S3.Key,
+			},
+			SQS: localrequest.AWSSQS{
+				Meta: localrequest.AWSMeta{
+					RequestID:         span.AWS.SQS.Meta.RequestID,
+					ExtendedRequestID: span.AWS.SQS.Meta.ExtendedRequestID,
+					Region:            span.AWS.SQS.Meta.Region,
+				},
+				OperationName: span.AWS.SQS.OperationName,
+				OperationType: span.AWS.SQS.OperationType,
+				Destination:   span.AWS.SQS.Destination,
+				QueueURL:      span.AWS.SQS.QueueURL,
+				MessageID:     span.AWS.SQS.MessageID,
+			},
+		}
+	}
+	return out
+}
+
+func convertUpstreamService(svc obsvc.Attrs) localsvc.Attrs {
+	out := localsvc.Attrs{
+		UID: localsvc.UID{
+			Name:      svc.UID.Name,
+			Namespace: svc.UID.Namespace,
+			Instance:  svc.UID.Instance,
+		},
+		SDKLanguage:        localsvc.InstrumentableType(svc.SDKLanguage),
+		ProcPID:            int32(svc.ProcPID),
+		HostName:           svc.HostName,
+		Sampler:            svc.Sampler,
+		LogEnricherEnabled: svc.LogEnricherEnabled,
+	}
+	if len(svc.Metadata) > 0 {
+		out.Metadata = make(map[localattr.Name]string, len(svc.Metadata))
+		for k, v := range svc.Metadata {
+			out.Metadata[localattr.Name(string(k))] = v
+		}
+	}
+	if len(svc.EnvVars) > 0 {
+		out.EnvVars = make(map[string]string, len(svc.EnvVars))
+		for k, v := range svc.EnvVars {
+			out.EnvVars[k] = v
+		}
+	}
+	return out
+}
+
+// GetMetricsExporter returns the shared SDK metrics exporter for downstream components.
+func (p *UnifiedPipeline) GetMetricsExporter() sdkmetric.Exporter {
+	if p.sharedOTLP == nil {
+		return nil
+	}
+	return p.sharedOTLP.Metrics
+}
+
+// GetLogsLoggerProvider returns the shared SDK logs provider for downstream components.
+func (p *UnifiedPipeline) GetLogsLoggerProvider() *sdklog.LoggerProvider {
+	if p.sharedOTLP == nil {
+		return nil
+	}
+	return p.sharedOTLP.Log
+}
+
+// GetTracesExporter returns the collector traces exporter shared across subsystems.
+func (p *UnifiedPipeline) GetTracesExporter() exporter.Traces {
+	if p.sharedOTLP == nil {
+		return nil
+	}
+	return p.sharedOTLP.CollectorTraces
+}
+
+// GetKubeStore returns kube metadata store from OBI context for profiler reuse.
+func (p *UnifiedPipeline) GetKubeStore(ctx context.Context) (*kube.Store, error) {
+	if p.ebpfCtxInfo == nil || p.ebpfCtxInfo.K8sInformer == nil {
+		return nil, nil
+	}
+	return p.ebpfCtxInfo.K8sInformer.Get(ctx)
 }
 
 // Stats returns pipeline statistics.
@@ -555,4 +1177,9 @@ func (p *UnifiedPipeline) IsRunning() bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.running
+}
+
+// Close provides compatibility with the legacy pipeline lifecycle.
+func (p *UnifiedPipeline) Close() {
+	_ = p.Stop(context.Background())
 }

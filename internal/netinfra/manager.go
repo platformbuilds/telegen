@@ -12,7 +12,10 @@ import (
 
 	"github.com/mirastacklabs-ai/telegen/internal/netinfra/arista"
 	"github.com/mirastacklabs-ai/telegen/internal/netinfra/cisco"
+	"github.com/mirastacklabs-ai/telegen/internal/netinfra/fortigate"
+	"github.com/mirastacklabs-ai/telegen/internal/netinfra/paloalto"
 	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 )
 
 // Manager coordinates all network infrastructure collectors
@@ -21,6 +24,7 @@ type Manager struct {
 	log        *slog.Logger
 	collectors []types.Collector
 	exporter   *Exporter
+	shared     sdkmetric.Exporter
 
 	metrics chan []*types.NetworkMetric
 	ctx     context.Context
@@ -40,6 +44,10 @@ type Config struct {
 	CloudVision []arista.Config `mapstructure:"cloudvision" yaml:"cloudvision"`
 	// ACI holds Cisco ACI configurations
 	ACI []cisco.Config `mapstructure:"aci" yaml:"aci"`
+	// PaloAlto holds Palo Alto PAN-OS collector configurations
+	PaloAlto []paloalto.Config `mapstructure:"paloalto" yaml:"paloalto"`
+	// FortiGate holds FortiGate FortiOS collector configurations
+	FortiGate []fortigate.Config `mapstructure:"fortigate" yaml:"fortigate"`
 	// Exporter configuration
 	Exporter ExporterConfig `mapstructure:"exporter" yaml:"exporter"`
 }
@@ -54,7 +62,7 @@ func DefaultConfig() Config {
 }
 
 // NewManager creates a new network infrastructure manager
-func NewManager(cfg Config, log *slog.Logger) (*Manager, error) {
+func NewManager(cfg Config, sharedMetricsExporter sdkmetric.Exporter, log *slog.Logger) (*Manager, error) {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -65,6 +73,7 @@ func NewManager(cfg Config, log *slog.Logger) (*Manager, error) {
 		log:        log,
 		collectors: make([]types.Collector, 0),
 		metrics:    make(chan []*types.NetworkMetric, 1000),
+		shared:     sharedMetricsExporter,
 	}
 
 	// Create CloudVision collectors
@@ -89,11 +98,35 @@ func NewManager(cfg Config, log *slog.Logger) (*Manager, error) {
 		log.Info("created ACI collector", "name", aciCfg.Name)
 	}
 
-	// Create exporter
-	var err error
-	m.exporter, err = NewExporter(cfg.Exporter, log)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create exporter: %w", err)
+	// Create Palo Alto collectors
+	for _, paCfg := range cfg.PaloAlto {
+		collector, err := paloalto.NewCollector(paCfg, log)
+		if err != nil {
+			log.Warn("failed to create Palo Alto collector", "name", paCfg.Name, "error", err)
+			continue
+		}
+		m.collectors = append(m.collectors, collector)
+		log.Info("created Palo Alto collector", "name", paCfg.Name)
+	}
+
+	// Create FortiGate collectors
+	for _, fgCfg := range cfg.FortiGate {
+		collector, err := fortigate.NewCollector(fgCfg, log)
+		if err != nil {
+			log.Warn("failed to create FortiGate collector", "name", fgCfg.Name, "error", err)
+			continue
+		}
+		m.collectors = append(m.collectors, collector)
+		log.Info("created FortiGate collector", "name", fgCfg.Name)
+	}
+
+	// Create standalone exporter only when shared exporter is not provided.
+	if sharedMetricsExporter == nil {
+		var err error
+		m.exporter, err = NewExporter(cfg.Exporter, log)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create exporter: %w", err)
+		}
 	}
 
 	return m, nil
@@ -117,9 +150,13 @@ func (m *Manager) Start(ctx context.Context) error {
 
 	m.log.Info("starting network infrastructure manager", "collectors", len(m.collectors))
 
-	// Start exporter
-	if err := m.exporter.Start(m.ctx); err != nil {
-		return fmt.Errorf("failed to start exporter: %w", err)
+	// Start standalone exporter only when shared exporter is not injected.
+	if m.shared == nil {
+		if err := m.exporter.Start(m.ctx); err != nil {
+			return fmt.Errorf("failed to start exporter: %w", err)
+		}
+	} else {
+		m.log.Info("using shared metrics exporter for netinfra")
 	}
 
 	// Start all collectors
@@ -167,9 +204,11 @@ func (m *Manager) Stop() error {
 		}
 	}
 
-	// Stop exporter
-	if err := m.exporter.Stop(context.Background()); err != nil {
-		m.log.Warn("failed to stop exporter", "error", err)
+	// Stop standalone exporter only when used.
+	if m.shared == nil && m.exporter != nil {
+		if err := m.exporter.Stop(context.Background()); err != nil {
+			m.log.Warn("failed to stop exporter", "error", err)
+		}
 	}
 
 	close(m.metrics)
@@ -248,7 +287,13 @@ func (m *Manager) distributeMetrics() {
 			if !ok {
 				return
 			}
-			if err := m.exporter.Export(m.ctx, metrics); err != nil {
+			var err error
+			if m.shared != nil {
+				err = exportWithSharedMetricsExporter(m.ctx, m.shared, metrics)
+			} else {
+				err = m.exporter.Export(m.ctx, metrics)
+			}
+			if err != nil {
 				m.log.Warn("failed to export metrics", "error", err, "count", len(metrics))
 			}
 		}
