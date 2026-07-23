@@ -25,7 +25,7 @@ CFLAGS := -std=gnu17 -O2 -g -Wunaligned-access -Wpacked -Wpadded -Wall -Werror $
 OCI_BIN ?= docker
 
 # Generator image for reproducible eBPF compilation
-GEN_IMG ?= ghcr.io/open-telemetry/obi-generator:0.2.6
+GEN_IMG ?= ghcr.io/open-telemetry/obi-generator:0.2.15
 
 # Tools directory
 TOOLS = $(CURDIR)/.tools
@@ -56,18 +56,12 @@ generate: export BPF_CLANG := $(CLANG)
 generate: export BPF_CFLAGS := $(CFLAGS)
 generate: export BPF2GO := $(BPF2GO)
 generate: $(BPF2GO)
-	@echo "### Generating eBPF code locally..."
-	go generate ./internal/ebpf/common/...
-	go generate ./internal/tracers/...
-	go generate ./internal/netollyebpf/...
-	go generate ./internal/ebpflogger/...
-	go generate ./internal/ebpfwatcher/...
-	go generate ./internal/rdns/...
+	@echo "### Generating telegen-native eBPF code locally..."
 	go generate ./internal/profiler/...
 
 .PHONY: docker-generate
 docker-generate:
-	@echo "### Generating eBPF code (docker)..."
+	@echo "### Generating telegen-native eBPF code (docker)..."
 	$(OCI_BIN) run --rm \
 		-v $(PWD):/src \
 		-w /src \
@@ -77,13 +71,7 @@ docker-generate:
 		-e "PATH=/usr/lib/llvm20/bin:/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
 		--entrypoint /bin/sh \
 		$(GEN_IMG) \
-		-c "go generate ./internal/ebpf/common/... && \
-		    go generate ./internal/tracers/... && \
-		    go generate ./internal/netollyebpf/... && \
-		    go generate ./internal/ebpflogger/... && \
-		    go generate ./internal/ebpfwatcher/... && \
-		    go generate ./internal/rdns/... && \
-		    go generate ./internal/profiler/..."
+		-c 'export BPF2GO_STRIP="$$(ls /usr/lib/llvm*/bin/llvm-strip 2>/dev/null | head -n1)"; go generate ./internal/profiler/...'
 
 ### Build Targets ###########################################################
 

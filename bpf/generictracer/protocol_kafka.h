@@ -328,8 +328,12 @@ static __always_inline int kafka_read_fixup_response_buffer(const connection_inf
         *buf_len = kafka_buffer_size;
         bpf_dbg_printk("WARN: buffer is full, truncating data");
     }
+    if (*buf_len > k_large_buf_payload_max_size) {
+        *buf_len = k_large_buf_payload_max_size;
+        bpf_dbg_printk("WARN: kafka payload exceeds max chunk size");
+    }
 
-    bpf_probe_read(buf + offset, *buf_len & k_large_buf_payload_max_size_mask, (const void *)data);
+    bpf_probe_read(buf + offset, *buf_len, (const void *)data);
 
     return *buf_len;
 }
@@ -405,7 +409,7 @@ static __always_inline int kafka_send_large_buffer(tcp_req_t *req,
     total_size += written > sizeof(void *) ? written : sizeof(void *);
 
     req->has_large_buffers = true;
-    bpf_ringbuf_output(&events, large_buf, total_size & k_large_buf_max_size_mask, get_flags());
+    bpf_ringbuf_output(&events, large_buf, total_size, get_flags());
     return 0;
 }
 

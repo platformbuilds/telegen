@@ -1,6 +1,7 @@
 # Telegen Unified Pipeline Architecture
 
 This document describes the unified observability pipeline architecture for Telegen.
+The V3 `UnifiedPipeline` is the sole production pipeline path.
 
 ## Overview
 
@@ -51,18 +52,17 @@ Features:
 - Queue-based buffering
 - Health monitoring
 
-### 3. Collector Adapters (`internal/pipeline/collector/`)
+### 3. Runtime Source Wiring (`internal/pipeline/pipeline_core.go`, `internal/pipeline/runtime_sources.go`)
 
-Flexible adapters for different data sources:
+Runtime sources feed the unified signal path directly:
 
-| Adapter | Purpose | Location |
-|---------|---------|----------|
-| `SNMPAdapter` | SNMP polling | `snmp_adapter.go` |
-| `StorageAdapter` | Storage metrics | `storage_adapter.go` |
-| `NetInfraAdapter` | Network infrastructure | `netinfra_adapter.go` |
-| `RESTAPIAdapter` | HTTP API scraping | `restapi_adapter.go` |
-| `PrometheusAdapter` | Prometheus scraping | `prometheus_adapter.go` |
-| `ServiceDiscovery` | Dynamic target discovery | `discovery.go` |
+| Source | Purpose | Entry point |
+|--------|---------|-------------|
+| Host metrics | `prompb` host metrics -> remote write parity path | `startRuntimeSources` |
+| File logs | file tailing -> OTLP logs provider | `startRuntimeSources` |
+| JFR | JFR watcher/converter -> logs/profiles export | `startJFRSource` |
+| eBPF / OBI | OBI span queue -> OTLP traces conversion | `startEBPFSource`, `forwardOBISpanBatch` |
+| Kube store | profiler namespace resolution parity | `GetKubeStore` |
 
 ### 4. Data Quality & Limits (`internal/pipeline/limits/`)
 

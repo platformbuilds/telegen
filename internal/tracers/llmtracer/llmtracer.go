@@ -26,6 +26,7 @@ import (
 	config "github.com/mirastacklabs-ai/telegen/internal/obiconfig"
 	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/instrumentations"
 	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
 )
 
@@ -301,6 +302,12 @@ func (p *Tracer) processLLMEvent(_ *ebpfcommon.EBPFParseContext, _ *config.EBPFT
 		return request.Span{}, true, err
 	}
 
+	// De-conflict with HTTP GenAI parsing: when GenAI HTTP instrumentation is enabled,
+	// do not emit llmtracer provider spans for the same requests.
+	if p.shouldSuppressLLMProviderSpan() {
+		return request.Span{}, true, nil
+	}
+
 	requestID := string(event.RequestId[:nullTerminated(event.RequestId[:])])
 	model := string(event.Model[:nullTerminated(event.Model[:])])
 	provider := ProviderName(event.Provider)
@@ -401,6 +408,17 @@ func (p *Tracer) processLLMEvent(_ *ebpfcommon.EBPFParseContext, _ *config.EBPFT
 	}
 
 	return span, false, nil
+}
+
+func (p *Tracer) shouldSuppressLLMProviderSpan() bool {
+	if p == nil || p.cfg == nil {
+		return false
+	}
+	is := instrumentations.NewInstrumentationSelection(p.cfg.Traces.Instrumentations)
+	if !is.GenAIEnabled() {
+		return false
+	}
+	return p.cfg.EBPF.PayloadExtraction.HTTP.GenAI.Enabled()
 }
 
 // nullTerminated finds the index of the first null byte

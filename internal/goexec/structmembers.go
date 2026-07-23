@@ -121,6 +121,11 @@ const (
 	// route harvesting offsets
 	MuxTemplatePos
 	GinFullpathPos
+	// go runtime channels (experimental channel link support)
+	HchanQcountPos
+	HchanDataqsizPos
+	HchanSendxPos
+	HchanRecvxPos
 )
 
 //go:embed offsets.json
@@ -395,6 +400,15 @@ var structMembers = map[string]structInfo{
 		lib: "go.opentelemetry.io/otel",
 		fields: map[string]GoOffset{
 			"delegate": GoTracerDelegatePos,
+		},
+	},
+	"runtime.hchan": {
+		lib: "go",
+		fields: map[string]GoOffset{
+			"qcount":   HchanQcountPos,
+			"dataqsiz": HchanDataqsizPos,
+			"sendx":    HchanSendxPos,
+			"recvx":    HchanRecvxPos,
 		},
 	},
 	"go.mongodb.org/mongo-driver/mongo.Collection": {

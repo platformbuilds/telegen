@@ -1,0 +1,11 @@
+{
+  "http_method": "GET",
+  "results": {
+    "hostname": "fg-01",
+    "version": "v7.4.2",
+    "serial": "FGVM000000000001",
+    "model": "FortiGate-VM64",
+    "uptime": 86400
+  },
+  "status": "success"
+}

@@ -138,6 +138,10 @@ static __always_inline u8 valid_trace(const unsigned char *trace_id) {
     return *((u64 *)trace_id) != 0 || *((u64 *)(trace_id + 8)) != 0;
 }
 
+static __always_inline u8 valid_span(const unsigned char *span_id) {
+    return *((u64 *)span_id) != 0;
+}
+
 static __always_inline void go_addr_key_from_id(go_addr_key_t *current, void *addr) {
     u64 pid_tid = bpf_get_current_pid_tgid();
     u32 pid = pid_from_pid_tgid(pid_tid);

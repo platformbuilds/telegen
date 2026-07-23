@@ -7,7 +7,7 @@
 # Uses BUILDPLATFORM to run natively on the build host
 # =============================================================================
 ARG BUILDPLATFORM
-FROM --platform=$BUILDPLATFORM ghcr.io/open-telemetry/obi-generator:0.2.10 AS bpf-gen
+FROM --platform=$BUILDPLATFORM ghcr.io/open-telemetry/obi-generator:0.2.15 AS bpf-gen
 
 WORKDIR /src
 
@@ -34,6 +34,7 @@ ARG SKIP_BPF_GENERATE=0
 RUN if [ "$SKIP_BPF_GENERATE" = "1" ]; then \
       echo "Skipping eBPF regeneration; using checked-in generated artifacts"; \
     else \
+      export BPF2GO_STRIP="$(ls /usr/lib/llvm*/bin/llvm-strip 2>/dev/null | head -n1)"; \
       go generate ./internal/ebpf/common/... && \
       go generate ./internal/tracers/... && \
       go generate ./internal/netollyebpf/... && \

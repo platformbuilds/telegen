@@ -8,6 +8,7 @@ import (
 	"unsafe"
 
 	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/largebuf"
 	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
 )
 
@@ -18,7 +19,7 @@ type (
 		connInfo              BpfConnectionInfoT
 	}
 	largeBuffer struct {
-		buf []byte
+		buf *largebuf.LargeBuffer
 	}
 )
 
@@ -42,14 +43,21 @@ func appendTCPLargeBuffer(parseCtx *EBPFParseContext, record *ringbuf.Record) (r
 		connInfo:   event.ConnInfo,
 	}
 
+	chunkStart := int(hdrSize)
+	chunkEnd := chunkStart + int(event.Len)
+	if chunkStart < 0 || chunkEnd < chunkStart || chunkEnd > len(record.RawSample) {
+		return request.Span{}, true, fmt.Errorf("invalid large buffer chunk bounds: start=%d end=%d sample_len=%d", chunkStart, chunkEnd, len(record.RawSample))
+	}
+	chunk := record.RawSample[chunkStart:chunkEnd]
+
 	if parseCtx.protocolDebug {
-		fmt.Printf(">>> LargeBufferAppend: (packet=%d direction=%d action=%d)\n%s\n", event.PacketType, event.Direction, event.Action, string(record.RawSample[hdrSize:hdrSize+event.Len]))
+		fmt.Printf(">>> LargeBufferAppend: (packet=%d direction=%d action=%d)\n%s\n", event.PacketType, event.Direction, event.Action, string(chunk))
 	}
 
 	switch event.Action {
 	case largeBufferActionInit:
-		newBuffer := make([]byte, event.Len)
-		copy(newBuffer, record.RawSample[hdrSize:])
+		newBuffer := largebuf.NewLargeBuffer()
+		newBuffer.AppendChunk(chunk)
 		parseCtx.largeBuffers.Add(key, &largeBuffer{
 			buf: newBuffer,
 		})
@@ -58,7 +66,7 @@ func appendTCPLargeBuffer(parseCtx *EBPFParseContext, record *ringbuf.Record) (r
 		if !ok {
 			return request.Span{}, true, nil
 		}
-		lb.buf = append(lb.buf, record.RawSample[hdrSize:hdrSize+event.Len]...)
+		lb.buf.AppendChunk(chunk)
 	default:
 		return request.Span{}, true, fmt.Errorf("invalid large buffer action: %d", event.Action)
 	}
@@ -76,11 +84,12 @@ func extractTCPLargeBuffer(parseCtx *EBPFParseContext, traceID [16]uint8, packet
 
 	//nolint:gocritic
 	if lb, ok := parseCtx.largeBuffers.Get(key); ok {
+		out := lb.buf.CloneBytes()
 		if parseCtx.protocolDebug {
-			fmt.Printf("<<< LargeBufferExtract: (packet=%d direction=%d)\n%s\n", key.packetType, key.direction, string(lb.buf))
+			fmt.Printf("<<< LargeBufferExtract: (packet=%d direction=%d)\n%s\n", key.packetType, key.direction, string(out))
 		}
 		parseCtx.largeBuffers.Remove(key)
-		return lb.buf, true
+		return out, true
 	} else {
 		if parseCtx.protocolDebug {
 			fmt.Printf("<<< LargeBufferExtract: not found!(packet=%d direction=%d)\n", key.packetType, key.direction)

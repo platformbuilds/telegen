@@ -322,3 +322,53 @@ type ueMockMetricClient struct{}
 func (c *ueMockMetricClient) Export(ctx context.Context, metrics pmetric.Metrics) error {
 	return nil
 }
+
+type ueByteCaptureExporter struct {
+	traceBytes  int
+	logBytes    int
+	metricBytes int
+}
+
+func (m *ueByteCaptureExporter) ExportTraces(_ context.Context, data []byte) error {
+	m.traceBytes = len(data)
+	return nil
+}
+
+func (m *ueByteCaptureExporter) ExportLogs(_ context.Context, data []byte) error {
+	m.logBytes = len(data)
+	return nil
+}
+
+func (m *ueByteCaptureExporter) ExportMetrics(_ context.Context, data []byte) error {
+	m.metricBytes = len(data)
+	return nil
+}
+
+func TestGRPCClientsMarshalOTLPBytes(t *testing.T) {
+	capture := &ueByteCaptureExporter{}
+
+	traceClient := &grpcTraceClient{exporter: capture}
+	logClient := &grpcLogClient{exporter: capture}
+	metricClient := &grpcMetricClient{exporter: capture}
+
+	if err := traceClient.Export(context.Background(), ueCreateTestTraces()); err != nil {
+		t.Fatalf("trace export failed: %v", err)
+	}
+	if capture.traceBytes == 0 {
+		t.Fatal("expected non-empty marshaled trace payload")
+	}
+
+	if err := logClient.Export(context.Background(), ueCreateTestLogs()); err != nil {
+		t.Fatalf("log export failed: %v", err)
+	}
+	if capture.logBytes == 0 {
+		t.Fatal("expected non-empty marshaled log payload")
+	}
+
+	if err := metricClient.Export(context.Background(), ueCreateTestMetrics()); err != nil {
+		t.Fatalf("metric export failed: %v", err)
+	}
+	if capture.metricBytes == 0 {
+		t.Fatal("expected non-empty marshaled metric payload")
+	}
+}

@@ -1,0 +1,11 @@
+<response status="success">
+  <result>
+    <system>
+      <hostname>pa-fw-01</hostname>
+      <model>PA-VM</model>
+      <serial>0011223344</serial>
+      <sw-version>11.1.0</sw-version>
+      <uptime>5 days, 10:11:12</uptime>
+    </system>
+  </result>
+</response>

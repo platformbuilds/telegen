@@ -105,6 +105,43 @@ func TestTCPLargeBuffers(t *testing.T) {
 	verifyLargeBuffer(firstEvent.Tp.TraceId, firstEvent.PacketType, firstEvent.Direction, firstEvent.ConnInfo, firstBuf+"foobar")
 }
 
+func TestTCPLargeBuffersStreamReassemblyLargePayload(t *testing.T) {
+	pctx := NewEBPFParseContext(nil, nil, nil)
+	traceID := [16]uint8{'L', 'B'}
+	conn := BpfConnectionInfoT{D_port: 4321}
+
+	initChunk := strings.Repeat("a", 4096)
+	appendChunk1 := strings.Repeat("b", 4096)
+	appendChunk2 := strings.Repeat("c", 2048)
+	expected := initChunk + appendChunk1 + appendChunk2
+
+	initEvent := TCPLargeBufferHeader{
+		Type:       12,
+		PacketType: 1,
+		Direction:  0,
+		Len:        uint32(len(initChunk)),
+	}
+	initEvent.Tp.TraceId = traceID
+	initEvent.ConnInfo = conn
+
+	_, _, err := appendTCPLargeBuffer(pctx, toRingbufRecord(t, initEvent, initChunk))
+	require.NoError(t, err)
+
+	appendEvent := initEvent
+	appendEvent.Action = largeBufferActionAppend
+	appendEvent.Len = uint32(len(appendChunk1))
+	_, _, err = appendTCPLargeBuffer(pctx, toRingbufRecord(t, appendEvent, appendChunk1))
+	require.NoError(t, err)
+
+	appendEvent.Len = uint32(len(appendChunk2))
+	_, _, err = appendTCPLargeBuffer(pctx, toRingbufRecord(t, appendEvent, appendChunk2))
+	require.NoError(t, err)
+
+	got, ok := extractTCPLargeBuffer(pctx, traceID, initEvent.PacketType, initEvent.Direction, conn)
+	require.True(t, ok)
+	require.Equal(t, expected, string(got))
+}
+
 func toRingbufRecord(t *testing.T, event TCPLargeBufferHeader, buf string) *ringbuf.Record {
 	var fixedPart bytes.Buffer
 	if err := binary.Write(&fixedPart, binary.LittleEndian, event); err != nil {
