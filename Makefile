@@ -71,7 +71,7 @@ docker-generate:
 		-e "PATH=/usr/lib/llvm20/bin:/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
 		--entrypoint /bin/sh \
 		$(GEN_IMG) \
-		-c "go generate ./internal/profiler/..."
+		-c 'export BPF2GO_STRIP="$$(ls /usr/lib/llvm*/bin/llvm-strip 2>/dev/null | head -n1)"; go generate ./internal/profiler/...'
 
 ### Build Targets ###########################################################
 
