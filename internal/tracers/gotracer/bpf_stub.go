@@ -12,7 +12,7 @@ import (
 )
 
 type BpfOffTableT struct {
-	Table [74]uint64
+	Table [78]uint64
 }
 
 type BpfConnectionInfoT struct{}
@@ -99,6 +99,12 @@ type BpfPrograms struct {
 	ObiUprobeProcGoexit1                          *ebpf.Program
 	ObiUprobeProcNewproc1                         *ebpf.Program
 	ObiUprobeProcNewproc1Ret                      *ebpf.Program
+	ObiUprobeRuntimeChanrecv1                     *ebpf.Program
+	ObiUprobeRuntimeChanrecv1Return               *ebpf.Program
+	ObiUprobeRuntimeChanrecv2                     *ebpf.Program
+	ObiUprobeRuntimeChanrecv2Return               *ebpf.Program
+	ObiUprobeRuntimeChansend1                     *ebpf.Program
+	ObiUprobeRuntimeChansend1Return               *ebpf.Program
 	ObiUprobeProtocolRoundtrip                    *ebpf.Program
 	ObiUprobeProtocolRoundtripRet                 *ebpf.Program
 	ObiUprobeQueryDC                              *ebpf.Program

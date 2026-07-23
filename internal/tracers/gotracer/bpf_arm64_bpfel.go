@@ -13,12 +13,39 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type BpfChanFuncInvocationT struct {
+	_             structs.HostLayout
+	ChanPtr       uint64
+	Handoff       BpfChanHandoffT
+	HasHandoff    bool
+	DirectHandoff bool
+	Pad           [6]uint8
+}
+
+type BpfChanHandoffKeyT struct {
+	_    structs.HostLayout
+	Chan BpfGoAddrKeyT
+	Slot uint64
+}
+
+type BpfChanHandoffT struct {
+	_  structs.HostLayout
+	Tp BpfTpInfoT
+}
+
 type BpfConnectionInfoT struct {
 	_      structs.HostLayout
 	S_addr [16]uint8
 	D_addr [16]uint8
 	S_port uint16
 	D_port uint16
+}
+
+type BpfDirectChanHandoffT struct {
+	_         structs.HostLayout
+	Handoff   BpfChanHandoffT
+	Ambiguous bool
+	Pad       [7]uint8
 }
 
 type BpfEgressKeyT struct {
@@ -163,7 +190,7 @@ type BpfNewFuncInvocationT struct {
 
 type BpfOffTableT struct {
 	_     structs.HostLayout
-	Table [74]uint64
+	Table [78]uint64
 }
 
 type BpfOtelSpanT struct {
@@ -424,6 +451,12 @@ type BpfProgramSpecs struct {
 	ObiUprobeRedisWithWriterRet                   *ebpf.ProgramSpec `ebpf:"obi_uprobe_redis_with_writer_ret"`
 	ObiUprobeRoundTrip                            *ebpf.ProgramSpec `ebpf:"obi_uprobe_roundTrip"`
 	ObiUprobeRoundTripReturn                      *ebpf.ProgramSpec `ebpf:"obi_uprobe_roundTripReturn"`
+	ObiUprobeRuntimeChanrecv1                     *ebpf.ProgramSpec `ebpf:"obi_uprobe_runtime_chanrecv1"`
+	ObiUprobeRuntimeChanrecv1Return               *ebpf.ProgramSpec `ebpf:"obi_uprobe_runtime_chanrecv1_return"`
+	ObiUprobeRuntimeChanrecv2                     *ebpf.ProgramSpec `ebpf:"obi_uprobe_runtime_chanrecv2"`
+	ObiUprobeRuntimeChanrecv2Return               *ebpf.ProgramSpec `ebpf:"obi_uprobe_runtime_chanrecv2_return"`
+	ObiUprobeRuntimeChansend1                     *ebpf.ProgramSpec `ebpf:"obi_uprobe_runtime_chansend1"`
+	ObiUprobeRuntimeChansend1Return               *ebpf.ProgramSpec `ebpf:"obi_uprobe_runtime_chansend1_return"`
 	ObiUprobeSaramaBrokerWrite                    *ebpf.ProgramSpec `ebpf:"obi_uprobe_sarama_broker_write"`
 	ObiUprobeSaramaResponsePromiseHandle          *ebpf.ProgramSpec `ebpf:"obi_uprobe_sarama_response_promise_handle"`
 	ObiUprobeSaramaSendInternal                   *ebpf.ProgramSpec `ebpf:"obi_uprobe_sarama_sendInternal"`
@@ -446,7 +479,12 @@ type BpfProgramSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfMapSpecs struct {
 	ActiveSpans                   *ebpf.MapSpec `ebpf:"active_spans"`
+	BufferedChannelSenders        *ebpf.MapSpec `ebpf:"buffered_channel_senders"`
+	ChanrecvInvocations           *ebpf.MapSpec `ebpf:"chanrecv_invocations"`
+	ChansendInvocations           *ebpf.MapSpec `ebpf:"chansend_invocations"`
 	DebugEvents                   *ebpf.MapSpec `ebpf:"debug_events"`
+	DirectChannelReceivers        *ebpf.MapSpec `ebpf:"direct_channel_receivers"`
+	DirectChannelSenders          *ebpf.MapSpec `ebpf:"direct_channel_senders"`
 	Events                        *ebpf.MapSpec `ebpf:"events"`
 	FetchRequests                 *ebpf.MapSpec `ebpf:"fetch_requests"`
 	FramerInvocationMap           *ebpf.MapSpec `ebpf:"framer_invocation_map"`
@@ -540,7 +578,12 @@ func (o *BpfObjects) Close() error {
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfMaps struct {
 	ActiveSpans                   *ebpf.Map `ebpf:"active_spans"`
+	BufferedChannelSenders        *ebpf.Map `ebpf:"buffered_channel_senders"`
+	ChanrecvInvocations           *ebpf.Map `ebpf:"chanrecv_invocations"`
+	ChansendInvocations           *ebpf.Map `ebpf:"chansend_invocations"`
 	DebugEvents                   *ebpf.Map `ebpf:"debug_events"`
+	DirectChannelReceivers        *ebpf.Map `ebpf:"direct_channel_receivers"`
+	DirectChannelSenders          *ebpf.Map `ebpf:"direct_channel_senders"`
 	Events                        *ebpf.Map `ebpf:"events"`
 	FetchRequests                 *ebpf.Map `ebpf:"fetch_requests"`
 	FramerInvocationMap           *ebpf.Map `ebpf:"framer_invocation_map"`
@@ -589,7 +632,12 @@ type BpfMaps struct {
 func (m *BpfMaps) Close() error {
 	return _BpfClose(
 		m.ActiveSpans,
+		m.BufferedChannelSenders,
+		m.ChanrecvInvocations,
+		m.ChansendInvocations,
 		m.DebugEvents,
+		m.DirectChannelReceivers,
+		m.DirectChannelSenders,
 		m.Events,
 		m.FetchRequests,
 		m.FramerInvocationMap,
@@ -738,6 +786,12 @@ type BpfPrograms struct {
 	ObiUprobeRedisWithWriterRet                   *ebpf.Program `ebpf:"obi_uprobe_redis_with_writer_ret"`
 	ObiUprobeRoundTrip                            *ebpf.Program `ebpf:"obi_uprobe_roundTrip"`
 	ObiUprobeRoundTripReturn                      *ebpf.Program `ebpf:"obi_uprobe_roundTripReturn"`
+	ObiUprobeRuntimeChanrecv1                     *ebpf.Program `ebpf:"obi_uprobe_runtime_chanrecv1"`
+	ObiUprobeRuntimeChanrecv1Return               *ebpf.Program `ebpf:"obi_uprobe_runtime_chanrecv1_return"`
+	ObiUprobeRuntimeChanrecv2                     *ebpf.Program `ebpf:"obi_uprobe_runtime_chanrecv2"`
+	ObiUprobeRuntimeChanrecv2Return               *ebpf.Program `ebpf:"obi_uprobe_runtime_chanrecv2_return"`
+	ObiUprobeRuntimeChansend1                     *ebpf.Program `ebpf:"obi_uprobe_runtime_chansend1"`
+	ObiUprobeRuntimeChansend1Return               *ebpf.Program `ebpf:"obi_uprobe_runtime_chansend1_return"`
 	ObiUprobeSaramaBrokerWrite                    *ebpf.Program `ebpf:"obi_uprobe_sarama_broker_write"`
 	ObiUprobeSaramaResponsePromiseHandle          *ebpf.Program `ebpf:"obi_uprobe_sarama_response_promise_handle"`
 	ObiUprobeSaramaSendInternal                   *ebpf.Program `ebpf:"obi_uprobe_sarama_sendInternal"`
@@ -828,6 +882,12 @@ func (p *BpfPrograms) Close() error {
 		p.ObiUprobeRedisWithWriterRet,
 		p.ObiUprobeRoundTrip,
 		p.ObiUprobeRoundTripReturn,
+		p.ObiUprobeRuntimeChanrecv1,
+		p.ObiUprobeRuntimeChanrecv1Return,
+		p.ObiUprobeRuntimeChanrecv2,
+		p.ObiUprobeRuntimeChanrecv2Return,
+		p.ObiUprobeRuntimeChansend1,
+		p.ObiUprobeRuntimeChansend1Return,
 		p.ObiUprobeSaramaBrokerWrite,
 		p.ObiUprobeSaramaResponsePromiseHandle,
 		p.ObiUprobeSaramaSendInternal,

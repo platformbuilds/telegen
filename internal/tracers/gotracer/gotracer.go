@@ -203,6 +203,10 @@ func (p *Tracer) RegisterOffsets(fileInfo *exec.FileInfo, offsets *goexec.Offset
 		goexec.PgxConfigHostPos,
 		goexec.MuxTemplatePos,
 		goexec.GinFullpathPos,
+		goexec.HchanQcountPos,
+		goexec.HchanDataqsizPos,
+		goexec.HchanSendxPos,
+		goexec.HchanRecvxPos,
 	} {
 		if val, ok := offsets.Field[field].(uint64); ok {
 			offTable.Table[field] = val
@@ -255,6 +259,18 @@ func (p *Tracer) GoProbes() map[string][]*ebpfcommon.ProbeDesc {
 		}},
 		"runtime.goexit1": {{
 			Start: p.bpfObjects.ObiUprobeProcGoexit1,
+		}},
+		"runtime.chansend1": {{
+			Start: p.bpfObjects.ObiUprobeRuntimeChansend1,
+			End:   p.bpfObjects.ObiUprobeRuntimeChansend1Return,
+		}},
+		"runtime.chanrecv1": {{
+			Start: p.bpfObjects.ObiUprobeRuntimeChanrecv1,
+			End:   p.bpfObjects.ObiUprobeRuntimeChanrecv1Return,
+		}},
+		"runtime.chanrecv2": {{
+			Start: p.bpfObjects.ObiUprobeRuntimeChanrecv2,
+			End:   p.bpfObjects.ObiUprobeRuntimeChanrecv2Return,
 		}},
 		// Go net/http
 		"net/http.serverHandler.ServeHTTP": {{

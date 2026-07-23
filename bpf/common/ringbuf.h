@@ -25,6 +25,7 @@
 #define EVENT_GO_MONGO 14
 #define EVENT_FAILED_CONNECT 15
 #define EVENT_DNS_REQUEST 16
+#define EVENT_GO_CHANNEL_LINK 18
 
 // setting here the following map definitions without pinning them to a global namespace
 // would lead that services running both HTTP and GRPC server would duplicate

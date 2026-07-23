@@ -13,6 +13,30 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type BpfChannelLinkTraceT struct {
+	_        structs.HostLayout
+	Type     uint8
+	Pad      [7]uint8
+	SenderTp struct {
+		_        structs.HostLayout
+		TraceId  [16]uint8
+		SpanId   [8]uint8
+		ParentId [8]uint8
+		Ts       uint64
+		Flags    uint8
+		Pad      [7]uint8
+	}
+	ReceiverTp struct {
+		_        structs.HostLayout
+		TraceId  [16]uint8
+		SpanId   [8]uint8
+		ParentId [8]uint8
+		Ts       uint64
+		Flags    uint8
+		Pad      [7]uint8
+	}
+}
+
 type BpfConnectionInfoT struct {
 	_      structs.HostLayout
 	S_addr [16]uint8
@@ -451,6 +475,7 @@ type BpfVariableSpecs struct {
 	Unused10                *ebpf.VariableSpec `ebpf:"unused_10"`
 	Unused11                *ebpf.VariableSpec `ebpf:"unused_11"`
 	Unused12                *ebpf.VariableSpec `ebpf:"unused_12"`
+	Unused13                *ebpf.VariableSpec `ebpf:"unused_13"`
 	Unused3                 *ebpf.VariableSpec `ebpf:"unused_3"`
 	Unused4                 *ebpf.VariableSpec `ebpf:"unused_4"`
 	Unused5                 *ebpf.VariableSpec `ebpf:"unused_5"`
@@ -504,6 +529,7 @@ type BpfVariables struct {
 	Unused10                *ebpf.Variable `ebpf:"unused_10"`
 	Unused11                *ebpf.Variable `ebpf:"unused_11"`
 	Unused12                *ebpf.Variable `ebpf:"unused_12"`
+	Unused13                *ebpf.Variable `ebpf:"unused_13"`
 	Unused3                 *ebpf.Variable `ebpf:"unused_3"`
 	Unused4                 *ebpf.Variable `ebpf:"unused_4"`
 	Unused5                 *ebpf.Variable `ebpf:"unused_5"`
