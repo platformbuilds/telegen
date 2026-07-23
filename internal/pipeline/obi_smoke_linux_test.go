@@ -3,10 +3,12 @@
 package pipeline
 
 import (
+	"compress/gzip"
 	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -24,7 +26,19 @@ func TestLinuxOBISmoke_ForwardToOTLP(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		body, err := io.ReadAll(r.Body)
+
+		bodyReader := io.Reader(r.Body)
+		if strings.Contains(strings.ToLower(r.Header.Get("Content-Encoding")), "gzip") {
+			gz, err := gzip.NewReader(r.Body)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			defer func() { _ = gz.Close() }()
+			bodyReader = gz
+		}
+
+		body, err := io.ReadAll(bodyReader)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
