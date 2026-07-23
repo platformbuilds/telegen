@@ -16,7 +16,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "go_runtime.c"
 #include "go_nethttp.c"
 #include "go_sql.c"
 #include "go_grpc.c"
@@ -25,3 +24,4 @@
 #include "go_sarama.c"
 #include "go_sdk.c"
 #include "go_mongo.c"
+#include "go_runtime.c"

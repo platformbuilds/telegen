@@ -5,11 +5,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/caarlos0/env/v9"
+	"github.com/caarlos0/env/v11"
 	"gopkg.in/yaml.v3"
 
 	"github.com/mirastacklabs-ai/telegen/internal/appolly/services"
 	"github.com/mirastacklabs-ai/telegen/internal/nodeexporter"
+	"github.com/mirastacklabs-ai/telegen/internal/netinfra"
 	obiconfig "github.com/mirastacklabs-ai/telegen/internal/obiconfig"
 	"github.com/mirastacklabs-ai/telegen/internal/profiler"
 	"github.com/mirastacklabs-ai/telegen/internal/storagedef"
@@ -90,6 +91,10 @@ type Config struct {
 	// VMware configures VMware vSphere (vCenter) metric + event collection.
 	// Activated when vmware.enabled: true or --mode collector/unified is used.
 	VMware vmwaredef.Config `yaml:"vmware"`
+
+	// NetInfra configures network infrastructure metric collection
+	// (Cisco ACI, Arista CloudVision, Palo Alto, FortiGate).
+	NetInfra netinfra.Config `yaml:"netinfra"`
 }
 
 // FilelogConfig configures the file-based log collection pipeline.
