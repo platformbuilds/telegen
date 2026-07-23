@@ -1,5 +1,5 @@
 # CodeQL Configuration for Telegen
-# Suppresses intentional TLS configuration patterns
+# Suppresses intentional TLS and observability-agent logging patterns
 
 name: "Telegen CodeQL Config"
 
@@ -20,3 +20,13 @@ query-filters:
       # Only exclude in files where TLS verification is user-configurable
       # The http_client.go uses cfg.VerifySSL and cfg.TLS.InsecureSkipVerify
       # which are explicit user configuration options
+  - exclude:
+      id: go/clear-text-logging
+      # Telegen is an observability agent that intentionally logs captured
+      # request/response telemetry (including headers) for debugging.
+      # Sensitive-field redaction is handled downstream in the otel-collector
+      # pipeline, not by dropping data in telegen.
+  - exclude:
+      id: go/log-injection
+      # Agent debug logs intentionally include user-derived telemetry fields
+      # (e.g. HTTP paths) needed to diagnose capture/parsing failures.
