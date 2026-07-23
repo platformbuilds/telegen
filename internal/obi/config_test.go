@@ -32,6 +32,7 @@ import (
 	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/perapp"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/prom"
+	"gopkg.in/yaml.v3"
 )
 
 type envMap map[string]string
@@ -130,13 +131,14 @@ discovery:
 		EnforceSysCaps:  false,
 		TracePrinter:    "json",
 		EBPF: config.EBPFTracer{
-			BatchLength:        100,
-			BatchTimeout:       time.Second,
-			HTTPRequestTimeout: 0,
-			MaxTransactionTime: 5 * time.Minute,
-			TCBackend:          config.TCBackendAuto,
-			DNSRequestTimeout:  5 * time.Second,
-			ContextPropagation: config.ContextPropagationDisabled,
+			BatchLength:          100,
+			BatchTimeout:         time.Second,
+			HTTPRequestTimeout:   0,
+			StatsWakeupDataBytes: 4096,
+			MaxTransactionTime:   5 * time.Minute,
+			TCBackend:            config.TCBackendAuto,
+			DNSRequestTimeout:    5 * time.Second,
+			ContextPropagation:   config.ContextPropagationDisabled,
 			RedisDBCache: config.RedisDBCacheConfig{
 				Enabled: false,
 				MaxSize: 1000,
@@ -145,9 +147,13 @@ discovery:
 				MySQL:    0,
 				Postgres: 0,
 				Kafka:    0,
+				MSSQL:    0,
+				TCP:      0,
 			},
+			PayloadExtraction:                   DefaultConfig.EBPF.PayloadExtraction,
 			MySQLPreparedStatementsCacheSize:    1024,
 			PostgresPreparedStatementsCacheSize: 1024,
+			MSSQLPreparedStatementsCacheSize:    1024,
 			MongoRequestsCacheSize:              1024,
 			KafkaTopicUUIDCacheSize:             1024,
 			CouchbaseDBCacheSize:                1024,
@@ -157,6 +163,8 @@ discovery:
 				AsyncWriterWorkers:    8,
 				AsyncWriterChannelLen: 500,
 			},
+			BPFFSPath:      "/sys/fs/bpf/",
+			InstrumentCuda: config.CudaModeAuto,
 		},
 		NetworkFlows: nc,
 		Metrics: perapp.MetricsConfig{
@@ -194,7 +202,11 @@ discovery:
 				instrumentations.InstrumentationRedis,
 				instrumentations.InstrumentationKafka,
 				instrumentations.InstrumentationMQTT,
+				instrumentations.InstrumentationNATS,
+				instrumentations.InstrumentationAMQP,
 				instrumentations.InstrumentationMongo,
+				instrumentations.InstrumentationMemcached,
+				instrumentations.InstrumentationSunRPC,
 				// no traces for DNS and GPU by default
 			},
 		},
@@ -596,7 +608,7 @@ func TestDefaultLegacyExclusionFilter(t *testing.T) {
 func TestWillUseTC(t *testing.T) {
 	env := envMap{"OTEL_EBPF_BPF_CONTEXT_PROPAGATION": "ip"}
 	cfg := loadConfig(t, env)
-	assert.True(t, cfg.willUseTC())
+	assert.False(t, cfg.willUseTC())
 
 	env = envMap{"OTEL_EBPF_BPF_CONTEXT_PROPAGATION": "headers"}
 	cfg = loadConfig(t, env)
@@ -616,11 +628,54 @@ func TestWillUseTC(t *testing.T) {
 
 	env = envMap{"OTEL_EBPF_BPF_CONTEXT_PROPAGATION": "ip"}
 	cfg = loadConfig(t, env)
-	assert.True(t, cfg.willUseTC())
+	assert.False(t, cfg.willUseTC())
 
 	env = envMap{"OTEL_EBPF_BPF_CONTEXT_PROPAGATION": "disabled", "OTEL_EBPF_NETWORK_SOURCE": "tc", "OTEL_EBPF_NETWORK_METRICS": "true"}
 	cfg = loadConfig(t, env)
 	assert.True(t, cfg.willUseTC())
+}
+
+func TestConfig_DeprecatedInstrumentGPUEnvAlias(t *testing.T) {
+	cfg := loadConfig(t, envMap{"OTEL_EBPF_INSTRUMENT_GPU": "true"})
+	assert.Equal(t, config.CudaModeOn, cfg.EBPF.InstrumentCuda)
+
+	cfg = loadConfig(t, envMap{"OTEL_EBPF_INSTRUMENT_GPU": "false"})
+	assert.Equal(t, config.CudaModeOff, cfg.EBPF.InstrumentCuda)
+}
+
+func TestConfig_DeprecatedInstrumentGPUAliasPrecedence(t *testing.T) {
+	cfg := loadConfig(t, envMap{
+		"OTEL_EBPF_INSTRUMENT_GPU":  "true",
+		"OTEL_EBPF_INSTRUMENT_CUDA": "auto",
+	})
+	assert.Equal(t, config.CudaModeAuto, cfg.EBPF.InstrumentCuda)
+}
+
+func TestConfig_EBPFNewFieldsRoundTrip(t *testing.T) {
+	t.Setenv("OTEL_EBPF_STATS_WAKEUP_DATA_BYTES", "8192")
+	t.Setenv("OTEL_EBPF_INSTRUMENT_CUDA", "on")
+	t.Setenv("OTEL_EBPF_BPF_FS_PATH", "/tmp/otel-bpf")
+	t.Setenv("OTEL_EBPF_FORCE_BPF_MAP_READER", "legacy")
+
+	cfg, err := LoadConfig(bytes.NewBufferString("ebpf:\n  maps_config:\n    global_scale_factor: 2\n"))
+	require.NoError(t, err)
+
+	assert.Equal(t, 8192, cfg.EBPF.StatsWakeupDataBytes)
+	assert.Equal(t, config.CudaModeOn, cfg.EBPF.InstrumentCuda)
+	assert.Equal(t, "/tmp/otel-bpf", cfg.EBPF.BPFFSPath)
+	assert.Equal(t, config.MapReaderLegacy, cfg.EBPF.ForceBPFMapReader)
+	assert.Equal(t, 2, cfg.EBPF.MapsConfig.GlobalScaleFactor)
+
+	raw, err := yaml.Marshal(cfg.EBPF)
+	require.NoError(t, err)
+
+	var rt config.EBPFTracer
+	require.NoError(t, yaml.Unmarshal(raw, &rt))
+	assert.Equal(t, cfg.EBPF.StatsWakeupDataBytes, rt.StatsWakeupDataBytes)
+	assert.Equal(t, cfg.EBPF.InstrumentCuda, rt.InstrumentCuda)
+	assert.Equal(t, cfg.EBPF.BPFFSPath, rt.BPFFSPath)
+	assert.Equal(t, cfg.EBPF.ForceBPFMapReader, rt.ForceBPFMapReader)
+	assert.Equal(t, cfg.EBPF.MapsConfig.GlobalScaleFactor, rt.MapsConfig.GlobalScaleFactor)
 }
 
 func TestConfig_SpanMetricsEnabledForTraces(t *testing.T) {

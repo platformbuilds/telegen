@@ -2,6 +2,10 @@
 
 Complete reference for all Telegen configuration options.
 
+> Current runtime uses top-level keys such as `exports`, `pipelines`, `vmware`, and `netinfra`.
+> Some legacy examples in this page still use older grouped layouts; prefer
+> `api/config.example.yaml` and `configs/netinfra-firewalls.yaml` for active examples.
+
 ## Configuration File Locations
 
 Telegen searches for configuration in this order:

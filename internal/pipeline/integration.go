@@ -72,6 +72,113 @@ type Integration struct {
 	fallbackMetrics func(context.Context, pmetric.Metrics) error
 }
 
+// ProcessTraces applies configured quality gates/transforms to traces without routing.
+func (v *Integration) ProcessTraces(ctx context.Context, traces ptrace.Traces) (ptrace.Traces, error) {
+	if !v.config.Enabled {
+		return traces, nil
+	}
+
+	// Apply rate limiting
+	if v.rateLimiter != nil {
+		var err error
+		traces, err = v.rateLimiter.ProcessTraces(ctx, traces)
+		if err != nil || traces.SpanCount() == 0 {
+			return traces, err
+		}
+	}
+
+	// Apply transformation
+	if v.transformEngine != nil {
+		var err error
+		traces, err = v.transformEngine.ProcessTraces(ctx, traces)
+		if err != nil {
+			v.logger.Warn("trace transformation error", "error", err)
+		}
+	}
+
+	// Apply PII redaction
+	if v.piiMatcher != nil {
+		v.piiMatcher.RedactTraces(traces)
+	}
+	return traces, nil
+}
+
+// ProcessLogs applies configured quality gates/transforms to logs without routing.
+func (v *Integration) ProcessLogs(ctx context.Context, logs plog.Logs) (plog.Logs, error) {
+	if !v.config.Enabled {
+		return logs, nil
+	}
+
+	// Apply rate limiting
+	if v.rateLimiter != nil {
+		var err error
+		logs, err = v.rateLimiter.ProcessLogs(ctx, logs)
+		if err != nil || logs.LogRecordCount() == 0 {
+			return logs, err
+		}
+	}
+
+	// Apply transformation
+	if v.transformEngine != nil {
+		var err error
+		logs, err = v.transformEngine.ProcessLogs(ctx, logs)
+		if err != nil {
+			v.logger.Warn("log transformation error", "error", err)
+		}
+	}
+
+	// Apply PII redaction
+	if v.piiMatcher != nil {
+		v.piiMatcher.RedactLogs(logs)
+	}
+	return logs, nil
+}
+
+// ProcessMetrics applies configured quality gates/transforms to metrics without routing.
+func (v *Integration) ProcessMetrics(ctx context.Context, metrics pmetric.Metrics) (pmetric.Metrics, error) {
+	if !v.config.Enabled {
+		return metrics, nil
+	}
+
+	// Apply cardinality limiting
+	if v.cardinalityLimiter != nil {
+		var err error
+		metrics, err = v.cardinalityLimiter.ProcessMetrics(ctx, metrics)
+		if err != nil || metrics.DataPointCount() == 0 {
+			return metrics, err
+		}
+	}
+
+	// Apply rate limiting
+	if v.rateLimiter != nil {
+		var err error
+		metrics, err = v.rateLimiter.ProcessMetrics(ctx, metrics)
+		if err != nil || metrics.DataPointCount() == 0 {
+			return metrics, err
+		}
+	}
+
+	// Apply attribute limiting
+	if v.attributeLimiter != nil {
+		metrics, _ = v.attributeLimiter.ProcessMetrics(ctx, metrics)
+	}
+
+	// Apply transformation
+	if v.transformEngine != nil {
+		var err error
+		metrics, err = v.transformEngine.ProcessMetrics(ctx, metrics)
+		if err != nil {
+			v.logger.Warn("metric transformation error", "error", err)
+		}
+	}
+
+	// Apply PII redaction
+	if v.piiMatcher != nil {
+		v.piiMatcher.RedactMetrics(metrics)
+	}
+	return metrics, nil
+}
+
 // NewIntegration creates a V3 integration layer.
 func NewIntegration(config IntegrationConfig, logger *slog.Logger) (*Integration, error) {
 	if logger == nil {
@@ -156,27 +263,10 @@ func (v *Integration) RouteTraces(ctx context.Context, traces ptrace.Traces) err
 		return v.fallbackTraces(ctx, traces)
 	}
 
-	// Apply rate limiting
-	if v.rateLimiter != nil {
-		var err error
-		traces, err = v.rateLimiter.ProcessTraces(ctx, traces)
-		if err != nil || traces.SpanCount() == 0 {
-			return err
-		}
-	}
-
-	// Apply transformation
-	if v.transformEngine != nil {
-		var err error
-		traces, err = v.transformEngine.ProcessTraces(ctx, traces)
-		if err != nil {
-			v.logger.Warn("trace transformation error", "error", err)
-		}
-	}
-
-	// Apply PII redaction
-	if v.piiMatcher != nil {
-		v.piiMatcher.RedactTraces(traces)
+	var err error
+	traces, err = v.ProcessTraces(ctx, traces)
+	if err != nil || traces.SpanCount() == 0 {
+		return err
 	}
 
 	// Route to V3 pipeline
@@ -202,27 +292,10 @@ func (v *Integration) RouteLogs(ctx context.Context, logs plog.Logs) error {
 		return v.fallbackLogs(ctx, logs)
 	}
 
-	// Apply rate limiting
-	if v.rateLimiter != nil {
-		var err error
-		logs, err = v.rateLimiter.ProcessLogs(ctx, logs)
-		if err != nil || logs.LogRecordCount() == 0 {
-			return err
-		}
-	}
-
-	// Apply transformation
-	if v.transformEngine != nil {
-		var err error
-		logs, err = v.transformEngine.ProcessLogs(ctx, logs)
-		if err != nil {
-			v.logger.Warn("log transformation error", "error", err)
-		}
-	}
-
-	// Apply PII redaction
-	if v.piiMatcher != nil {
-		v.piiMatcher.RedactLogs(logs)
+	var err error
+	logs, err = v.ProcessLogs(ctx, logs)
+	if err != nil || logs.LogRecordCount() == 0 {
+		return err
 	}
 
 	// Route to V3 pipeline
@@ -248,41 +321,10 @@ func (v *Integration) RouteMetrics(ctx context.Context, metrics pmetric.Metrics)
 		return v.fallbackMetrics(ctx, metrics)
 	}
 
-	// Apply cardinality limiting
-	if v.cardinalityLimiter != nil {
-		var err error
-		metrics, err = v.cardinalityLimiter.ProcessMetrics(ctx, metrics)
-		if err != nil || metrics.DataPointCount() == 0 {
-			return err
-		}
-	}
-
-	// Apply rate limiting
-	if v.rateLimiter != nil {
-		var err error
-		metrics, err = v.rateLimiter.ProcessMetrics(ctx, metrics)
-		if err != nil || metrics.DataPointCount() == 0 {
-			return err
-		}
-	}
-
-	// Apply attribute limiting
-	if v.attributeLimiter != nil {
-		metrics, _ = v.attributeLimiter.ProcessMetrics(ctx, metrics)
-	}
-
-	// Apply transformation
-	if v.transformEngine != nil {
-		var err error
-		metrics, err = v.transformEngine.ProcessMetrics(ctx, metrics)
-		if err != nil {
-			v.logger.Warn("metric transformation error", "error", err)
-		}
-	}
-
-	// Apply PII redaction
-	if v.piiMatcher != nil {
-		v.piiMatcher.RedactMetrics(metrics)
+	var err error
+	metrics, err = v.ProcessMetrics(ctx, metrics)
+	if err != nil || metrics.DataPointCount() == 0 {
+		return err
 	}
 
 	// Route to V3 pipeline

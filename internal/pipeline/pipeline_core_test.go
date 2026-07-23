@@ -2,14 +2,19 @@ package pipeline
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/prometheus/prometheus/prompb"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 
+	"github.com/mirastacklabs-ai/telegen/internal/config"
 	"github.com/mirastacklabs-ai/telegen/internal/pipeline/adapters"
 )
 
@@ -294,6 +299,61 @@ func TestUnifiedPipelineAdapterAccess(t *testing.T) {
 	}
 	if gpuAdapter.Name() != "GPU/AI-ML Tracing" {
 		t.Errorf("expected name 'GPU/AI-ML Tracing', got '%s'", gpuAdapter.Name())
+	}
+}
+
+func TestUnifiedPipelineRemoteWriteParity(t *testing.T) {
+	got := make(chan *prompb.WriteRequest, 1)
+	rw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() { _ = r.Body.Close() }()
+		var wr prompb.WriteRequest
+		b, _ := io.ReadAll(r.Body)
+		if err := wr.Unmarshal(b); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		got <- &wr
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer rw.Close()
+
+	cfg := DefaultUnifiedPipelineConfig()
+	cfg.Exporter.Endpoint = "localhost:4317"
+	cfg.Exporter.Insecure = true
+	cfg.RemoteWrite = &config.RemoteWrite{
+		Endpoints: []config.RWEndpoint{
+			{URL: rw.URL, Timeout: "2s", Compression: ""},
+		},
+	}
+
+	p, err := NewUnifiedPipeline(cfg)
+	if err != nil {
+		t.Fatalf("NewUnifiedPipeline failed: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := p.Start(ctx); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer func() { _ = p.Stop(context.Background()) }()
+
+	p.EnqueueMetrics(&prompb.WriteRequest{
+		Timeseries: []prompb.TimeSeries{
+			{
+				Labels:  []prompb.Label{{Name: "__name__", Value: "v3_remote_write_test"}},
+				Samples: []prompb.Sample{{Timestamp: time.Now().UnixMilli(), Value: 1}},
+			},
+		},
+	})
+
+	select {
+	case wr := <-got:
+		if len(wr.Timeseries) != 1 {
+			t.Fatalf("expected 1 timeseries, got %d", len(wr.Timeseries))
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout waiting for remote write payload")
 	}
 }
 

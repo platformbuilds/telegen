@@ -1,0 +1,18 @@
+Telegen includes and integrates with third-party open-source software.
+
+This product depends on:
+
+1) OpenTelemetry eBPF Instrumentation (OBI)
+   - Module: go.opentelemetry.io/obi
+   - Version: v0.10.0
+   - Copyright: The OpenTelemetry Authors
+   - License: Apache License 2.0
+   - Source: https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation
+   - Integration model: Telegen keeps a synchronized forked runtime
+     implementation under internal/ for eBPF tracer and bytecode packages
+     that upstream ships under pkg/internal/. Go's internal visibility rules
+     prevent importing those module-private runtime packages directly from
+     go.opentelemetry.io/obi in external modules, so Telegen re-syncs
+     behavior to upstream releases while preserving feature parity.
+
+See LICENSE files of dependencies for full license text where applicable.

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/mirastacklabs-ai/telegen/internal/config"
-	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
 	"github.com/prometheus/prometheus/prompb"
 )
 
@@ -84,13 +83,22 @@ func TestPipelineE2E_RemoteWriteAWSLabels(t *testing.T) {
 	cfg.Exports.RemoteWrite.Endpoints = []config.RWEndpoint{{URL: rw.URL, Timeout: "2s", Compression: ""}}
 	cfg.Queues.Metrics.MaxAgeStr = "1m"
 
-	st := selftelemetry.NewRegistry("telegen")
-	pl := New(cfg, st)
+	upCfg := DefaultUnifiedPipelineConfig()
+	upCfg.Exporter.Endpoint = "localhost:4317"
+	upCfg.Exporter.Insecure = true
+	upCfg.RemoteWrite = &cfg.Exports.RemoteWrite
+	upCfg.RuntimeConfig = cfg
+
+	pl, err := NewUnifiedPipeline(upCfg)
+	if err != nil {
+		t.Fatalf("new unified pipeline: %v", err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := pl.Start(ctx); err != nil {
 		t.Fatalf("start: %v", err)
 	}
+	defer func() { _ = pl.Stop(context.Background()) }()
 
 	// Enqueue a simple metric and ensure AWS labels got injected on the wire
 	wr := &prompb.WriteRequest{Timeseries: []prompb.TimeSeries{{Labels: []prompb.Label{{Name: "__name__", Value: "test_metric"}, {Name: "job", Value: "telegen"}, {Name: "instance", Value: "test"}}, Samples: []prompb.Sample{{Timestamp: time.Now().UnixMilli(), Value: 1}}}}}

@@ -100,6 +100,10 @@ typedef enum {
     // route resolution
     _mux_template_pos,
     _gin_fullpath_pos,
+    _hchan_qcount_pos,
+    _hchan_dataqsiz_pos,
+    _hchan_sendx_pos,
+    _hchan_recvx_pos,
     _last_go_offset,
 } go_offset_const;
 
