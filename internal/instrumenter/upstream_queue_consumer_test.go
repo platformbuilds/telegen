@@ -19,11 +19,12 @@ func TestConsumeUpstreamSpanQueue(t *testing.T) {
 	defer q.Close()
 
 	got := make(chan int, 1)
-	go ConsumeUpstreamSpanQueue(ctx, q, func(_ context.Context, batch []request.Span) error {
+	ready := make(chan struct{})
+	go consumeUpstreamSpanQueue(ctx, q, func(_ context.Context, batch []request.Span) error {
 		got <- len(batch)
 		return nil
-	})
-	time.Sleep(50 * time.Millisecond)
+	}, ready)
+	<-ready
 
 	q.Send([]request.Span{{}, {}})
 

@@ -14,11 +14,23 @@ func ConsumeUpstreamSpanQueue(
 	q *msg.Queue[[]request.Span],
 	consumer func(context.Context, []request.Span) error,
 ) {
+	consumeUpstreamSpanQueue(ctx, q, consumer, nil)
+}
+
+func consumeUpstreamSpanQueue(
+	ctx context.Context,
+	q *msg.Queue[[]request.Span],
+	consumer func(context.Context, []request.Span) error,
+	ready chan<- struct{},
+) {
 	if q == nil || consumer == nil {
 		return
 	}
 
 	in := q.Subscribe(msg.SubscriberName("telegen.upstream_span_consumer"))
+	if ready != nil {
+		close(ready)
+	}
 	for {
 		select {
 		case <-ctx.Done():
