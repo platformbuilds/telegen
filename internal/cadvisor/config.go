@@ -20,44 +20,44 @@ type Config struct {
 
 	// ContainerdSocket is the path to containerd socket for container info
 	// Default: /run/containerd/containerd.sock
-	ContainerdSocket string `yaml:"containerdSocket"`
+	ContainerdSocket string `yaml:"containerd_socket"`
 
 	// CRISocket is the path to CRI socket (alternative to containerd)
 	// Default: empty (auto-detect)
-	CRISocket string `yaml:"criSocket"`
+	CRISocket string `yaml:"cri_socket"`
 
 	// CollectInterval is how often to collect metrics
 	// Default: 10s
-	CollectInterval time.Duration `yaml:"collectInterval"`
+	CollectInterval time.Duration `yaml:"collect_interval"`
 
 	// Namespaces to collect metrics from (empty = all)
 	Namespaces []string `yaml:"namespaces"`
 
 	// NamespacesExclude namespaces to exclude from collection
-	NamespacesExclude []string `yaml:"namespacesExclude"`
+	NamespacesExclude []string `yaml:"namespaces_exclude"`
 
 	// DisabledMetrics is a list of metrics to disable
-	DisabledMetrics []string `yaml:"disabledMetrics"`
+	DisabledMetrics []string `yaml:"disabled_metrics"`
 
 	// HousekeepingInterval is how often to perform housekeeping
 	// Default: 1m
-	HousekeepingInterval time.Duration `yaml:"housekeepingInterval"`
+	HousekeepingInterval time.Duration `yaml:"housekeeping_interval"`
 
 	// MemoryPressureLevels to track (low, medium, critical)
-	MemoryPressureLevels []string `yaml:"memoryPressureLevels"`
+	MemoryPressureLevels []string `yaml:"memory_pressure_levels"`
 
 	// DiskIOEnabled controls disk I/O metrics collection
-	DiskIOEnabled bool `yaml:"diskIOEnabled"`
+	DiskIOEnabled bool `yaml:"disk_io_enabled"`
 
 	// NetworkEnabled controls network metrics collection
-	NetworkEnabled bool `yaml:"networkEnabled"`
+	NetworkEnabled bool `yaml:"network_enabled"`
 
 	// PerCPUEnabled controls per-CPU metrics collection
-	PerCPUEnabled bool `yaml:"perCPUEnabled"`
+	PerCPUEnabled bool `yaml:"per_cpu_enabled"`
 
 	// MaxProcs limits the number of concurrent metric readers
 	// Default: runtime.NumCPU()
-	MaxProcs int `yaml:"maxProcs"`
+	MaxProcs int `yaml:"max_procs"`
 }
 
 // DefaultConfig returns a Config with sensible defaults
@@ -86,15 +86,15 @@ func (c *Config) Validate() error {
 	}
 
 	if c.CollectInterval < time.Second {
-		return errors.New("collectInterval must be at least 1 second")
+		return errors.New("collect_interval must be at least 1 second")
 	}
 
 	if c.HousekeepingInterval < 10*time.Second {
-		return errors.New("housekeepingInterval must be at least 10 seconds")
+		return errors.New("housekeeping_interval must be at least 10 seconds")
 	}
 
 	if c.MaxProcs < 1 {
-		return errors.New("maxProcs must be at least 1")
+		return errors.New("max_procs must be at least 1")
 	}
 
 	return nil
