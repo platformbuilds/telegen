@@ -158,18 +158,18 @@ func BuildCommonContextInfo(
 
 // BuildCommonContextInfoWithExporter is like BuildCommonContextInfo but accepts shared
 // exporters from the unified OTLP pipeline. When the shared exporters are non-nil,
-// all eBPF metrics will be exported through shared exporters instead of creating new ones.
+// eBPF metrics and traces are exported through shared exporters instead of creating
+// per-subsystem exporters.
 // This enables the telegen design principle of "one agent, one exporter connection".
 //
 // Parameters:
 //   - sharedMetricsExporter: SDK-compatible metrics exporter (sdkmetric.Exporter)
-//   - sharedTracesExporter: kept only for backward compatibility and intentionally unused.
+//   - sharedTracesExporter: Collector-compatible shared traces exporter.
 func BuildCommonContextInfoWithExporter(
 	ctx context.Context, config *obi.Config,
 	sharedMetricsExporter sdkmetric.Exporter,
 	sharedTracesExporter exporter.Traces,
 ) (*global.ContextInfo, error) {
-	_ = sharedTracesExporter
 	if config == nil {
 		return nil, fmt.Errorf("config cannot be nil")
 	}
@@ -204,6 +204,7 @@ func BuildCommonContextInfoWithExporter(
 			Cfg:            &config.OTELMetrics,
 			SharedExporter: sharedMetricsExporter,
 		},
+		OTELTracesExporter: sharedTracesExporter,
 	}
 	if config.Attributes.HostID.Override == "" {
 		ctxInfo.FetchHostID(ctx, config.Attributes.HostID.FetchTimeout)

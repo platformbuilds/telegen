@@ -21,6 +21,10 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	collogspb "go.opentelemetry.io/proto/otlp/collector/logs/v1"
+	colmetricspb "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
+	coltracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 // GRPCTransport implements OTLP export over gRPC.
@@ -171,14 +175,47 @@ func (t *GRPCTransport) Send(ctx context.Context, signal SignalType, data []byte
 		defer cancel()
 	}
 
+	req, resp, err := grpcPayloadForSignal(signal, data)
+	if err != nil {
+		return err
+	}
+
 	// Make the gRPC call
-	var response []byte
-	err := conn.Invoke(ctx, method, data, &response)
+	err = conn.Invoke(ctx, method, req, resp)
 	if err != nil {
 		return t.handleError(err)
 	}
 
 	return nil
+}
+
+func grpcPayloadForSignal(signal SignalType, data []byte) (any, any, error) {
+	switch signal {
+	case SignalTraces:
+		req := &coltracepb.ExportTraceServiceRequest{}
+		if err := proto.Unmarshal(data, req); err != nil {
+			return nil, nil, fmt.Errorf("decode traces request: %w", err)
+		}
+		return req, &coltracepb.ExportTraceServiceResponse{}, nil
+	case SignalMetrics:
+		req := &colmetricspb.ExportMetricsServiceRequest{}
+		if err := proto.Unmarshal(data, req); err != nil {
+			return nil, nil, fmt.Errorf("decode metrics request: %w", err)
+		}
+		return req, &colmetricspb.ExportMetricsServiceResponse{}, nil
+	case SignalLogs:
+		req := &collogspb.ExportLogsServiceRequest{}
+		if err := proto.Unmarshal(data, req); err != nil {
+			return nil, nil, fmt.Errorf("decode logs request: %w", err)
+		}
+		return req, &collogspb.ExportLogsServiceResponse{}, nil
+	case SignalProfiles:
+		// Profiles protobuf package is not linked here yet; keep legacy raw behavior.
+		resp := []byte{}
+		return data, &resp, nil
+	default:
+		return nil, nil, fmt.Errorf("unsupported OTLP signal type: %q", signal)
+	}
 }
 
 // getServiceMethod returns the gRPC service method for the signal type.
