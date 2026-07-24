@@ -16,7 +16,7 @@ type Config struct {
 
 	// CgroupRoot is the root path for cgroups
 	// Default: /sys/fs/cgroup (cgroups v2) or /sys/fs/cgroup/unified
-	CgroupRoot string `yaml:"cgroupRoot"`
+	CgroupRoot string `yaml:"cgroup_root"`
 
 	// ContainerdSocket is the path to containerd socket for container info
 	// Default: /run/containerd/containerd.sock
@@ -82,7 +82,7 @@ func (c *Config) Validate() error {
 	}
 
 	if c.CgroupRoot == "" {
-		return errors.New("cgroupRoot is required")
+		return errors.New("cgroup_root is required")
 	}
 
 	if c.CollectInterval < time.Second {

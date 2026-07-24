@@ -9,14 +9,14 @@ import (
 	"strings"
 
 	"github.com/mirastacklabs-ai/telegen/internal/config"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
 	otlp "github.com/mirastacklabs-ai/telegen/internal/exporters/otlp"
 	"github.com/mirastacklabs-ai/telegen/internal/instrumenter"
 	"github.com/mirastacklabs-ai/telegen/internal/jfr/converter"
 	"github.com/mirastacklabs-ai/telegen/internal/jfr/watcher"
 	"github.com/mirastacklabs-ai/telegen/internal/obi"
 	obiconfig "github.com/mirastacklabs-ai/telegen/internal/obiconfig"
-	obrequest "go.opentelemetry.io/obi/pkg/appolly/app/request"
-	obmsg "go.opentelemetry.io/obi/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
 	"go.uber.org/zap"
 )
 
@@ -247,11 +247,11 @@ func (p *UnifiedPipeline) startEBPFSource(ctx context.Context) error {
 	}
 	p.ebpfCtxInfo = ctxInfo
 
-	appQueue := obmsg.NewQueue[[]obrequest.Span](
-		obmsg.ChannelBufferLen(256),
-		obmsg.Name("telegen.obi.app_export"),
+	appQueue := msg.NewQueue[[]request.Span](
+		msg.ChannelBufferLen(256),
+		msg.Name("telegen.obi.app_export"),
 	)
-	go instrumenter.ConsumeUpstreamSpanQueue(ctx, appQueue, func(_ context.Context, batch []obrequest.Span) error {
+	go instrumenter.ConsumeUpstreamSpanQueue(ctx, appQueue, func(_ context.Context, batch []request.Span) error {
 		if err := p.forwardOBISpanBatch(ctx, batch); err != nil {
 			return err
 		}

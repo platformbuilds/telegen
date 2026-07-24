@@ -114,6 +114,7 @@ ARG BUILD_DATE=unknown
 # CGO_ENABLED=0 allows cross-compilation without C toolchain
 # Sets version in both pkg/buildinfo and internal/version packages
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+    -tags obiupstream \
     -trimpath \
     -ldflags="-s -w \
         -X 'github.com/mirastacklabs-ai/telegen/pkg/buildinfo.Version=${VERSION}' \

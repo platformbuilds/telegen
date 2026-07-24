@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
+	obrequest "github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	obsvc "github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
 	"go.opentelemetry.io/collector/pdata/ptrace/ptraceotlp"
-	obrequest "go.opentelemetry.io/obi/pkg/appolly/app/request"
-	obsvc "go.opentelemetry.io/obi/pkg/appolly/app/svc"
 )
 
 func TestLinuxOBISmoke_ForwardToOTLP(t *testing.T) {

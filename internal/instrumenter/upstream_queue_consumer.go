@@ -4,21 +4,21 @@ import (
 	"context"
 	"log/slog"
 
-	obrequest "go.opentelemetry.io/obi/pkg/appolly/app/request"
-	obmsg "go.opentelemetry.io/obi/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
 )
 
 // ConsumeUpstreamSpanQueue drains batches emitted to upstream OBI's override queue.
 func ConsumeUpstreamSpanQueue(
 	ctx context.Context,
-	q *obmsg.Queue[[]obrequest.Span],
-	consumer func(context.Context, []obrequest.Span) error,
+	q *msg.Queue[[]request.Span],
+	consumer func(context.Context, []request.Span) error,
 ) {
 	if q == nil || consumer == nil {
 		return
 	}
 
-	in := q.Subscribe(obmsg.SubscriberName("telegen.upstream_span_consumer"))
+	in := q.Subscribe(msg.SubscriberName("telegen.upstream_span_consumer"))
 	for {
 		select {
 		case <-ctx.Done():
