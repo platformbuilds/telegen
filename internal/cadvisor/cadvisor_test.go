@@ -35,15 +35,11 @@ func TestConfigValidation(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "missing cgroup root",
+			name: "omitted optional fields get defaults",
 			config: Config{
-				Enabled:              true,
-				CgroupRoot:           "",
-				CollectInterval:      10 * time.Second,
-				HousekeepingInterval: 1 * time.Minute,
-				MaxProcs:             4,
+				Enabled: true,
 			},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name: "collect interval too short",
@@ -64,17 +60,6 @@ func TestConfigValidation(t *testing.T) {
 				CollectInterval:      10 * time.Second,
 				HousekeepingInterval: 5 * time.Second,
 				MaxProcs:             4,
-			},
-			wantErr: true,
-		},
-		{
-			name: "invalid max procs",
-			config: Config{
-				Enabled:              true,
-				CgroupRoot:           "/sys/fs/cgroup",
-				CollectInterval:      10 * time.Second,
-				HousekeepingInterval: 1 * time.Minute,
-				MaxProcs:             0,
 			},
 			wantErr: true,
 		},

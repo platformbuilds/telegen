@@ -75,11 +75,33 @@ func DefaultConfig() *Config {
 	}
 }
 
+// applyDefaults fills zero-value optional fields so YAML that omits them
+// still validates and runs with DefaultConfig semantics.
+func (c *Config) applyDefaults() {
+	if c.CgroupRoot == "" {
+		c.CgroupRoot = "/sys/fs/cgroup"
+	}
+	if c.ContainerdSocket == "" {
+		c.ContainerdSocket = "/run/containerd/containerd.sock"
+	}
+	if c.CollectInterval == 0 {
+		c.CollectInterval = 10 * time.Second
+	}
+	if c.HousekeepingInterval == 0 {
+		c.HousekeepingInterval = time.Minute
+	}
+	if c.MaxProcs < 1 {
+		c.MaxProcs = 4
+	}
+}
+
 // Validate checks the configuration for errors
 func (c *Config) Validate() error {
 	if !c.Enabled {
 		return nil
 	}
+
+	c.applyDefaults()
 
 	if c.CgroupRoot == "" {
 		return errors.New("cgroup_root is required")
