@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	obrequest "go.opentelemetry.io/obi/pkg/appolly/app/request"
-	obmsg "go.opentelemetry.io/obi/pkg/pipe/msg"
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
 )
 
 func TestConsumeUpstreamSpanQueue(t *testing.T) {
@@ -15,17 +15,17 @@ func TestConsumeUpstreamSpanQueue(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	q := obmsg.NewQueue[[]obrequest.Span](obmsg.ChannelBufferLen(2), obmsg.Name("test-upstream-span-queue"))
+	q := msg.NewQueue[[]request.Span](msg.ChannelBufferLen(2), msg.Name("test-upstream-span-queue"))
 	defer q.Close()
 
 	got := make(chan int, 1)
-	go ConsumeUpstreamSpanQueue(ctx, q, func(_ context.Context, batch []obrequest.Span) error {
+	go ConsumeUpstreamSpanQueue(ctx, q, func(_ context.Context, batch []request.Span) error {
 		got <- len(batch)
 		return nil
 	})
 	time.Sleep(50 * time.Millisecond)
 
-	q.Send([]obrequest.Span{{}, {}})
+	q.Send([]request.Span{{}, {}})
 
 	select {
 	case n := <-got:

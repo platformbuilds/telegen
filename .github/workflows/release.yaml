@@ -59,6 +59,7 @@ jobs:
         run: |
           mkdir -p dist
           go build \
+            -tags obiupstream \
             -trimpath \
             -ldflags="-s -w \
               -X 'github.com/mirastacklabs-ai/telegen/pkg/buildinfo.Version=${{ steps.version.outputs.VERSION }}' \

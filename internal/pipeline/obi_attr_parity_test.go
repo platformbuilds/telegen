@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	obrequest "go.opentelemetry.io/obi/pkg/appolly/app/request"
-	obsvc "go.opentelemetry.io/obi/pkg/appolly/app/svc"
+	obrequest "github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	obsvc "github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
 )
 
 func TestForwardOBISpanBatchAttributeParity(t *testing.T) {

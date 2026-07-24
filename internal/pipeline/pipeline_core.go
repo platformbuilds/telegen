@@ -24,8 +24,6 @@ import (
 	"go.opentelemetry.io/collector/pdata/pmetric/pmetricotlp"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	"go.opentelemetry.io/collector/pdata/ptrace/ptraceotlp"
-	obrequest "go.opentelemetry.io/obi/pkg/appolly/app/request"
-	obsvc "go.opentelemetry.io/obi/pkg/appolly/app/svc"
 	"go.opentelemetry.io/otel/attribute"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -39,10 +37,10 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/logs/filetailer"
 	awsm "github.com/mirastacklabs-ai/telegen/internal/metadata/aws"
 	"github.com/mirastacklabs-ai/telegen/internal/metrics/host"
+	"github.com/mirastacklabs-ai/telegen/internal/nodeexporter"
 	"github.com/mirastacklabs-ai/telegen/internal/pipeline/adapters"
 	"github.com/mirastacklabs-ai/telegen/internal/pipeline/converters"
 	"github.com/mirastacklabs-ai/telegen/internal/queue"
-	localattr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/instrumentations"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/tracesgen"
@@ -120,6 +118,7 @@ type UnifiedPipeline struct {
 	integration       *Integration
 	rw                *remotewrite.Client
 	qMetrics          *queue.Ring[*prompb.WriteRequest]
+	nodeExp           *nodeexporter.Exporter
 	awsLabels         map[string]string
 	sharedOTLP        *exportotlp.Clients
 	ebpfCtxInfo       *global.ContextInfo
@@ -348,6 +347,12 @@ func (p *UnifiedPipeline) Stop(ctx context.Context) error {
 	// Stop accepting new signals.
 	close(p.stopCh)
 	p.cancel()
+
+	if p.nodeExp != nil {
+		if err := p.nodeExp.Shutdown(ctx); err != nil {
+			p.logger.Error("error stopping node exporter", "error", err)
+		}
+	}
 
 	// Stop all adapters first.
 	if err := p.adapterRegistry.StopAll(ctx); err != nil {
@@ -845,13 +850,27 @@ func (p *UnifiedPipeline) startRuntimeSources(ctx context.Context) error {
 		}
 	}
 
-	// Host metrics parity: preserve legacy prompb -> remote-write path.
-	if hostname, _ := os.Hostname(); true {
-		col := host.New("telegen", hostname, 15*time.Second, p.EnqueueMetrics)
-		if len(p.awsLabels) > 0 {
-			col.SetExtraLabels(p.awsLabels)
+	// Host metrics: OTLP-native path via the node_exporter subsystem.
+	// The legacy prompb -> remote-write collector is used only when a
+	// remote-write endpoint is configured and node_exporter streaming is disabled.
+	if rcfg.NodeExporter.Enabled && rcfg.NodeExporter.Export.Enabled {
+		ne, err := nodeexporter.New(rcfg.NodeExporter)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("create node exporter: %w", err))
+		} else if err := ne.ConfigureOTLPStreaming(ctx, p.GetMetricsExporter()); err != nil {
+			errs = append(errs, fmt.Errorf("start node exporter OTLP streaming: %w", err))
+		} else {
+			p.nodeExp = ne
+			p.logger.Info("node_exporter OTLP host metrics started", "interval", rcfg.NodeExporter.Export.Interval)
 		}
-		go col.Run(p.stopCh)
+	} else if len(rcfg.Exports.RemoteWrite.Endpoints) > 0 {
+		if hostname, _ := os.Hostname(); true {
+			col := host.New("telegen", hostname, 15*time.Second, p.EnqueueMetrics)
+			if len(p.awsLabels) > 0 {
+				col.SetExtraLabels(p.awsLabels)
+			}
+			go col.Run(p.stopCh)
+		}
 	}
 
 	// File logs parity: keep using shared SDK LoggerProvider.
@@ -892,19 +911,15 @@ func (p *UnifiedPipeline) startRuntimeSources(ctx context.Context) error {
 	return nil
 }
 
-func (p *UnifiedPipeline) forwardOBISpanBatch(ctx context.Context, batch []obrequest.Span) error {
+func (p *UnifiedPipeline) forwardOBISpanBatch(ctx context.Context, batch []localrequest.Span) error {
 	if len(batch) == 0 {
 		return nil
-	}
-	localBatch := make([]localrequest.Span, 0, len(batch))
-	for _, span := range batch {
-		localBatch = append(localBatch, convertUpstreamSpan(span))
 	}
 
 	// Convert OBI request spans into OTLP traces and route through V3.
 	grouped := tracesgen.GroupSpans(
 		ctx,
-		localBatch,
+		batch,
 		nil,
 		sdktrace.AlwaysSample(),
 		instrumentations.NewInstrumentationSelection([]instrumentations.Instrumentation{instrumentations.InstrumentationALL}),
@@ -931,135 +946,6 @@ func (p *UnifiedPipeline) forwardOBISpanBatch(ctx context.Context, batch []obreq
 		}
 	}
 	return nil
-}
-
-func convertUpstreamSpan(span obrequest.Span) localrequest.Span {
-	out := localrequest.Span{
-		Type:              localrequest.EventType(span.Type),
-		Flags:             span.Flags,
-		Method:            span.Method,
-		Path:              span.Path,
-		Route:             span.Route,
-		Peer:              span.Peer,
-		PeerPort:          span.PeerPort,
-		Host:              span.Host,
-		HostPort:          span.HostPort,
-		Status:            span.Status,
-		ResponseLength:    span.ResponseLength,
-		ContentLength:     span.ContentLength,
-		RequestStart:      span.RequestStart,
-		Start:             span.Start,
-		End:               span.End,
-		Service:           convertUpstreamService(span.Service),
-		TraceID:           span.TraceID,
-		SpanID:            span.SpanID,
-		ParentSpanID:      span.ParentSpanID,
-		TraceFlags:        span.TraceFlags,
-		PeerName:          span.PeerName,
-		HostName:          span.HostName,
-		OtherNamespace:    span.OtherNamespace,
-		OtherK8SNamespace: span.OtherK8SNamespace,
-		Statement:         span.Statement,
-		SubType:           span.SubType,
-		DBError: localrequest.DBError{
-			ErrorCode:   span.DBError.ErrorCode,
-			Description: span.DBError.Description,
-		},
-		DBNamespace:       span.DBNamespace,
-		SQLCommand:        span.SQLCommand,
-		OverrideTraceName: span.OverrideTraceName,
-	}
-
-	out.Pid = localrequest.PidInfo{
-		HostPID:   uint32(span.Pid.HostPID),
-		UserPID:   uint32(span.Pid.UserPID),
-		Namespace: span.Pid.Namespace,
-	}
-
-	if span.SQLError != nil {
-		out.SQLError = &localrequest.SQLError{
-			Code:     span.SQLError.Code,
-			SQLState: span.SQLError.SQLState,
-			Message:  span.SQLError.Message,
-		}
-	}
-	if span.MessagingInfo != nil {
-		out.MessagingInfo = &localrequest.MessagingInfo{
-			Offset:    span.MessagingInfo.Offset,
-			Partition: span.MessagingInfo.Partition,
-		}
-	}
-	if span.GraphQL != nil {
-		out.GraphQL = &localrequest.GraphQL{
-			Document:      span.GraphQL.Document,
-			OperationName: span.GraphQL.OperationName,
-			OperationType: span.GraphQL.OperationType,
-		}
-	}
-	if span.Elasticsearch != nil {
-		out.Elasticsearch = &localrequest.Elasticsearch{
-			DBCollectionName: span.Elasticsearch.DBCollectionName,
-			NodeName:         span.Elasticsearch.NodeName,
-			DBOperationName:  span.Elasticsearch.DBOperationName,
-			DBQueryText:      span.Elasticsearch.DBQueryText,
-			DBSystemName:     span.Elasticsearch.DBSystemName,
-		}
-	}
-	if span.AWS != nil {
-		out.AWS = &localrequest.AWS{
-			S3: localrequest.AWSS3{
-				Meta: localrequest.AWSMeta{
-					RequestID:         span.AWS.S3.Meta.RequestID,
-					ExtendedRequestID: span.AWS.S3.Meta.ExtendedRequestID,
-					Region:            span.AWS.S3.Meta.Region,
-				},
-				Method: span.AWS.S3.Method,
-				Bucket: span.AWS.S3.Bucket,
-				Key:    span.AWS.S3.Key,
-			},
-			SQS: localrequest.AWSSQS{
-				Meta: localrequest.AWSMeta{
-					RequestID:         span.AWS.SQS.Meta.RequestID,
-					ExtendedRequestID: span.AWS.SQS.Meta.ExtendedRequestID,
-					Region:            span.AWS.SQS.Meta.Region,
-				},
-				OperationName: span.AWS.SQS.OperationName,
-				OperationType: span.AWS.SQS.OperationType,
-				Destination:   span.AWS.SQS.Destination,
-				QueueURL:      span.AWS.SQS.QueueURL,
-				MessageID:     span.AWS.SQS.MessageID,
-			},
-		}
-	}
-	return out
-}
-
-func convertUpstreamService(svc obsvc.Attrs) localsvc.Attrs {
-	out := localsvc.Attrs{
-		UID: localsvc.UID{
-			Name:      svc.UID.Name,
-			Namespace: svc.UID.Namespace,
-			Instance:  svc.UID.Instance,
-		},
-		SDKLanguage:        localsvc.InstrumentableType(svc.SDKLanguage),
-		ProcPID:            int32(svc.ProcPID),
-		HostName:           svc.HostName,
-		Sampler:            svc.Sampler,
-		LogEnricherEnabled: svc.LogEnricherEnabled,
-	}
-	if len(svc.Metadata) > 0 {
-		out.Metadata = make(map[localattr.Name]string, len(svc.Metadata))
-		for k, v := range svc.Metadata {
-			out.Metadata[localattr.Name(string(k))] = v
-		}
-	}
-	if len(svc.EnvVars) > 0 {
-		out.EnvVars = make(map[string]string, len(svc.EnvVars))
-		for k, v := range svc.EnvVars {
-			out.EnvVars[k] = v
-		}
-	}
-	return out
 }
 
 // GetMetricsExporter returns the shared SDK metrics exporter for downstream components.
