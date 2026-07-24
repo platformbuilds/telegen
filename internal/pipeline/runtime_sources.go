@@ -260,8 +260,9 @@ func (p *UnifiedPipeline) startEBPFSource(ctx context.Context) error {
 	})
 
 	sharedMetricsExporter := p.GetMetricsExporter()
+	sharedTracesExporter := p.GetTracesExporter()
 	go func() {
-		if err := instrumenter.RunUpstream(ctx, obiCfg, sharedMetricsExporter, appQueue); err != nil && ctx.Err() == nil {
+		if err := instrumenter.RunUpstream(ctx, obiCfg, sharedMetricsExporter, sharedTracesExporter, appQueue); err != nil && ctx.Err() == nil {
 			p.logger.Error("ebpf upstream OBI runtime error", "error", err)
 		}
 	}()

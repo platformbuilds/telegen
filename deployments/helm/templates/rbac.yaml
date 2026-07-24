@@ -114,6 +114,14 @@ rules:
       - get
       - list
       - watch
+  # EndpointSlice (kube-state-metrics / client-go replaces Endpoints on k8s 1.33+)
+  - apiGroups: ["discovery.k8s.io"]
+    resources:
+      - endpointslices
+    verbs:
+      - get
+      - list
+      - watch
   # Events for correlation
   - apiGroups: [""]
     resources:
