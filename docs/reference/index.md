@@ -13,6 +13,7 @@ This section contains detailed technical reference material.
 
 metrics-reference
 signals-reference
+vmware-vcenter-dashboards
 semantic-conventions
 cli-reference
 api-reference
@@ -24,6 +25,7 @@ api-reference
 |-------|-------------|
 | {doc}`metrics-reference` | Complete metrics catalog |
 | {doc}`signals-reference` | Comprehensive signals reference catalog |
+| {doc}`vmware-vcenter-dashboards` | VMware vCenter metrics/logs → MIRASTACK Data Studio queries |
 | {doc}`semantic-conventions` | OpenTelemetry semantic conventions |
 | {doc}`cli-reference` | Command-line interface |
 | {doc}`api-reference` | REST API endpoints |
