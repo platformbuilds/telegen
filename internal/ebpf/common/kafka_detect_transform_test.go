@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
 	"github.com/mirastacklabs-ai/telegen/internal/parsers/kafkaparser"
 )
 
@@ -200,4 +201,41 @@ func TestProcessKafkaRequest(t *testing.T) {
 			assert.Equal(t, tt.expected, res)
 		})
 	}
+}
+
+func TestMatchKafkaFallbackProduceServerSpan(t *testing.T) {
+	produceReq := []byte{0, 0, 0, 124, 0, 0, 0, 9, 0, 0, 0, 8, 0, 10, 112, 114, 111, 100, 117, 99, 101, 114, 45, 49, 0, 0, 0, 1, 0, 0, 117, 48, 2, 9, 109, 121, 45, 116, 111, 112, 105, 99, 2, 0, 0, 0, 0, 78, 103, 0, 0, 0, 1, 2, 0, 0, 9, 109, 121, 45, 116, 111, 112, 105, 99, 193, 136, 51, 44, 67, 57, 71, 124, 178, 93, 33, 21, 191, 31, 138, 233, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 2, 0, 0, 0, 1, 2, 0, 0, 0, 1, 1, 0, 128, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 16, 0, 0, 0, 4, 0, 0, 17}
+	event := makeTCPReq(string(produceReq), 9092)
+	event.Direction = directionRecv
+
+	cache, _ := simplelru.NewLRU[kafkaparser.UUID, string](1000, nil)
+	span, ignore, matched := matchKafkaFallback(&event, produceReq, nil, cache)
+	require.True(t, matched)
+	require.False(t, ignore)
+	assert.Equal(t, request.EventTypeKafkaServer, span.Type)
+	assert.Equal(t, request.MessagingPublish, span.Method)
+}
+
+func TestMatchKafkaFallbackFetchServerSpan(t *testing.T) {
+	fetchReq := []byte{0, 0, 0, 94, 0, 1, 0, 11, 0, 0, 0, 224, 0, 6, 115, 97, 114, 97, 109, 97, 255, 255, 255, 255, 0, 0, 1, 244, 0, 0, 0, 1, 6, 64, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0, 1, 0, 9, 105, 109, 112, 111, 114, 116, 97, 110, 116, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 0}
+	event := makeTCPReq(string(fetchReq), 9092)
+	event.Direction = directionRecv
+
+	cache, _ := simplelru.NewLRU[kafkaparser.UUID, string](1000, nil)
+	span, ignore, matched := matchKafkaFallback(&event, fetchReq, nil, cache)
+	require.True(t, matched)
+	require.False(t, ignore)
+	assert.Equal(t, request.EventTypeKafkaServer, span.Type)
+	assert.Equal(t, request.MessagingProcess, span.Method)
+}
+
+func TestMatchKafkaFallbackHTTP2PrefaceNotKafka(t *testing.T) {
+	http2Preface := []byte("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
+	event := makeTCPReq(string(http2Preface), 9092)
+	event.Direction = directionRecv
+
+	cache, _ := simplelru.NewLRU[kafkaparser.UUID, string](1000, nil)
+	_, ignore, matched := matchKafkaFallback(&event, http2Preface, nil, cache)
+	assert.False(t, matched)
+	assert.False(t, ignore)
 }

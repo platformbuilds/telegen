@@ -385,21 +385,19 @@ func readTCPRequestIntoSpanInner(parseCtx *EBPFParseContext, cfg *config.EBPFTra
 		// MQTT heuristic matched but full parsing failed - ignore the packet
 		slog.Debug("MQTT heuristic detection failed, ignoring", "error", err)
 	default:
-		// Kafka and gRPC can look very similar in terms of bytes. We can mistake one for another.
-		// We try gRPC first because it's more reliable in detecting false gRPC sequences.
+		// The kernel may leave a broker connection Unknown (e.g. agent attached mid-connection),
+		// so a genuine Kafka frame can reach here and look like HTTP2. Try a strict Kafka parse
+		// first: ParseKafkaRequestHeader is strict enough that real HTTP2/gRPC fails it and
+		// correctly falls through to the HTTP2 path below.
+		if span, ignore, matched := matchKafkaFallback(event, requestBuffer, responseBuffer, parseCtx.kafkaTopicUUIDToName); matched {
+			return span, ignore, nil
+		}
+		// Kafka and gRPC/HTTP2 can look similar; anything that isn't a valid Kafka frame and
+		// looks like HTTP2 is handed to the HTTP2 misclassification path.
 		if isHTTP2(requestBuffer, int(event.Len)) || isHTTP2(responseBuffer, int(event.RespLen)) {
 			evCopy := *event
 			MisclassifiedEvents <- MisclassifiedEvent{EventType: EventTypeKHTTP2, TCPInfo: &evCopy}
 			return request.Span{}, true, nil // ignore for now, next event will be parsed
-		} else {
-			// we should not arrive here, leave it for completeness
-			k, ignore, err := ProcessPossibleKafkaEvent(event, requestBuffer, responseBuffer, parseCtx.kafkaTopicUUIDToName)
-			if ignore && err == nil {
-				return request.Span{}, true, nil // parsed kafka event, but we don't want to create a span for it
-			}
-			if err == nil {
-				return TCPToKafkaToSpan(event, k), false, nil
-			}
 		}
 	}
 

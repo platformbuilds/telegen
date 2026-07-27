@@ -214,6 +214,23 @@ func ProcessKafkaRequest(pkt []byte, kafkaTopicUUIDToName *simplelru.LRU[kafkapa
 	}
 }
 
+// matchKafkaFallback attempts to parse an unclassified TCP payload as Kafka. It exists for
+// connections the kernel left Unknown (e.g. the agent attached mid-connection, so the broker's
+// inbound Produce/Fetch was never classified in-kernel). Adapted from OBI upstream
+// (pkg/ebpf/common/tcp_detect_transform.go:462-476): a parse error means "not Kafka" and is
+// swallowed (no error surfaced); matched=false lets the caller fall through to other heuristics
+// (notably the HTTP2/gRPC path), so real HTTP2 traffic is not misreported as Kafka.
+func matchKafkaFallback(event *TCPRequestInfo, requestBuffer, responseBuffer []byte, kafkaTopicUUIDToName *simplelru.LRU[kafkaparser.UUID, string]) (request.Span, bool, bool) {
+	k, ignore, err := ProcessPossibleKafkaEvent(event, requestBuffer, responseBuffer, kafkaTopicUUIDToName)
+	if err != nil {
+		return request.Span{}, false, false // not Kafka; caller falls through
+	}
+	if ignore {
+		return request.Span{}, true, true // parsed Kafka, but no span wanted
+	}
+	return TCPToKafkaToSpan(event, k), false, true
+}
+
 func TCPToKafkaToSpan(trace *TCPRequestInfo, data *KafkaInfo) request.Span {
 	peer := ""
 	hostname := ""
