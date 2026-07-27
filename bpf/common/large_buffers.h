@@ -13,11 +13,11 @@ volatile const u32 kafka_buffer_size = 0;
 enum {
     // Pessimistic guard for "event header + payload".
     // Keep this larger than k_large_buf_payload_max_size to accommodate struct overhead.
-    k_large_buf_max_size = 1 << 19, // 512K
+    k_large_buf_max_size = 1 << 14, // 16K
     k_large_buf_max_size_mask = k_large_buf_max_size - 1,
 
     // Maximum size for a large buffer payload.
-    k_large_buf_payload_max_size = 1 << 18, // 256K
+    k_large_buf_payload_max_size = 1 << 13, // 8K
     k_large_buf_payload_max_size_mask = k_large_buf_payload_max_size - 1,
 };
 
