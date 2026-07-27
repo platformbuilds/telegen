@@ -447,7 +447,7 @@ func TraceAttributesSelector(span *request.Span, optionalAttrs map[attr.Name]str
 		attrs = []attribute.KeyValue{
 			request.ServerAddr(request.HostAsServer(span)),
 			request.ServerPort(span.HostPort),
-			semconv.DBSystemNameRedis,
+			span.RedisDBSystemName(),
 		}
 		if span.Type == request.EventTypeRedisClient {
 			attrs = append(attrs, request.PeerService(request.PeerServiceFromSpan(span)))

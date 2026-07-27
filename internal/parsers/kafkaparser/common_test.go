@@ -177,6 +177,91 @@ func TestParseKafkaRequestHeader(t *testing.T) {
 	}
 }
 
+func TestParseKafkaRequestHeaderProduceFetchAndLegacyMetadata(t *testing.T) {
+	tests := []struct {
+		name      string
+		packet    []byte
+		expectErr bool
+		expected  *KafkaRequestHeader
+	}{
+		{
+			name: "valid produce request header v9",
+			packet: func() []byte {
+				pkt := make([]byte, 21)
+				binary.BigEndian.PutUint32(pkt[0:4], 150)    // MessageSize
+				binary.BigEndian.PutUint16(pkt[4:6], 0)      // APIKey (Produce)
+				binary.BigEndian.PutUint16(pkt[6:8], 9)      // APIVersion
+				binary.BigEndian.PutUint32(pkt[8:12], 54321) // CorrelationID
+				binary.BigEndian.PutUint16(pkt[12:14], 6)    // ClientID length
+				copy(pkt[14:20], "client")                   // ClientID
+				pkt[20] = 0                                  // tagged_fields
+				return pkt
+			}(),
+			expectErr: false,
+			expected: &KafkaRequestHeader{
+				MessageSize:   150,
+				APIKey:        APIKeyProduce,
+				APIVersion:    9,
+				CorrelationID: 54321,
+				ClientID:      "client",
+			},
+		},
+		{
+			name: "valid fetch request header v11",
+			packet: func() []byte {
+				pkt := make([]byte, 17)
+				binary.BigEndian.PutUint32(pkt[0:4], 120)   // MessageSize
+				binary.BigEndian.PutUint16(pkt[4:6], 1)     // APIKey (Fetch)
+				binary.BigEndian.PutUint16(pkt[6:8], 11)    // APIVersion
+				binary.BigEndian.PutUint32(pkt[8:12], 1001) // CorrelationID
+				binary.BigEndian.PutUint16(pkt[12:14], 3)   // ClientID length
+				copy(pkt[14:17], "app")                     // ClientID
+				return pkt
+			}(),
+			expectErr: false,
+			expected: &KafkaRequestHeader{
+				MessageSize:   120,
+				APIKey:        APIKeyFetch,
+				APIVersion:    11,
+				CorrelationID: 1001,
+				ClientID:      "app",
+			},
+		},
+		{
+			name: "legacy metadata request header v8 rejected gracefully",
+			packet: func() []byte {
+				pkt := make([]byte, 18)
+				binary.BigEndian.PutUint32(pkt[0:4], 100)   // MessageSize
+				binary.BigEndian.PutUint16(pkt[4:6], 3)     // APIKey (Metadata)
+				binary.BigEndian.PutUint16(pkt[6:8], 8)     // APIVersion (legacy)
+				binary.BigEndian.PutUint32(pkt[8:12], 2001) // CorrelationID
+				binary.BigEndian.PutUint16(pkt[12:14], 4)   // ClientID length
+				copy(pkt[14:18], "meta")                    // ClientID
+				return pkt
+			}(),
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			header, _, err := ParseKafkaRequestHeader(tt.packet)
+			if tt.expectErr {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, header)
+			assert.Equal(t, tt.expected.MessageSize, header.MessageSize)
+			assert.Equal(t, tt.expected.APIKey, header.APIKey)
+			assert.Equal(t, tt.expected.APIVersion, header.APIVersion)
+			assert.Equal(t, tt.expected.CorrelationID, header.CorrelationID)
+			assert.Equal(t, tt.expected.ClientID, header.ClientID)
+		})
+	}
+}
+
 func TestValidateKafkaHeader(t *testing.T) {
 	tests := []struct {
 		name      string
