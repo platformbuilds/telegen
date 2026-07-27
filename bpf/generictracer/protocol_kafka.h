@@ -85,6 +85,18 @@ enum {
     // only versions 10-13 contain topic_id which we are interested in
     k_kafka_min_metadata_api_version = 10,
     k_kafka_max_metadata_api_version = 13,
+    // Additional API keys used for connection classification. Produce/Fetch are
+    // the steady-state data plane and let us classify long-lived connections that
+    // never re-send Metadata (e.g. segmentio/kafka-go, which caps Metadata at v8).
+    k_kafka_api_key_produce = 0,
+    k_kafka_api_key_fetch = 1,
+    // Classification upper bounds, aligned with the userspace parser sanity limits
+    // in internal/parsers/kafkaparser/common.go (Produce<=13, Fetch<=18).
+    k_kafka_max_produce_api_version = 13,
+    k_kafka_max_fetch_api_version = 18,
+    // Relaxed lower bound for Metadata classification. v10-13 is still required by
+    // userspace ONLY to extract topic_id; classification no longer needs it.
+    k_kafka_min_classify_metadata_api_version = 0,
 
     // Sanity checks
     k_kafka_message_size_max = 1 << 13, // 8K
@@ -155,24 +167,32 @@ kafka_check_request_header_fields_without_message_size(struct kafka_request_hdr 
 
     bpf_probe_read(&hdr->request_api_key, k_kafka_hdr_request_api_key, (const void *)(data));
     hdr->request_api_key = bpf_ntohs(hdr->request_api_key);
-    if (hdr->request_api_key != k_kafka_api_key_metadata) {
-        bpf_dbg_printk("request_api_key "
-                       "provided %d, is not metadata(%d)",
-                       hdr->request_api_key,
-                       k_kafka_api_key_metadata);
-        return -1;
-    }
-
     offset += k_kafka_hdr_request_api_key;
     bpf_probe_read(
         &hdr->request_api_version, k_kafka_hdr_request_api_version, (const void *)(data + offset));
     hdr->request_api_version = bpf_ntohs(hdr->request_api_version);
-    if (hdr->request_api_version < k_kafka_min_metadata_api_version ||
-        hdr->request_api_version > k_kafka_max_metadata_api_version) {
-        bpf_dbg_printk("provided "
-                       "api_version %d not supported for the provided request_api_key %d ",
-                       hdr->request_api_version,
-                       hdr->request_api_key);
+    // Accept plausible Produce(0) / Fetch(1) / Metadata(3) request headers.
+    int valid = 0;
+    switch (hdr->request_api_key) {
+    case k_kafka_api_key_produce:
+        valid = (hdr->request_api_version >= 0 &&
+                 hdr->request_api_version <= k_kafka_max_produce_api_version);
+        break;
+    case k_kafka_api_key_fetch:
+        valid = (hdr->request_api_version >= 0 &&
+                 hdr->request_api_version <= k_kafka_max_fetch_api_version);
+        break;
+    case k_kafka_api_key_metadata:
+        valid = (hdr->request_api_version >= k_kafka_min_classify_metadata_api_version &&
+                 hdr->request_api_version <= k_kafka_max_metadata_api_version);
+        break;
+    default:
+        valid = 0;
+    }
+    if (!valid) {
+        bpf_dbg_printk("kafka classify reject: api_key=%d api_version=%d",
+                       hdr->request_api_key,
+                       hdr->request_api_version);
         return -1;
     }
 

@@ -147,7 +147,7 @@ func spanOTELGetters(name attr.Name) (attributes.Getter[*Span, attribute.KeyValu
 			case EventTypeSQLClient:
 				return DBSystemName(span.DBSystemName().Value.AsString())
 			case EventTypeRedisClient, EventTypeRedisServer:
-				return semconv.DBSystemNameRedis
+				return span.RedisDBSystemName()
 			case EventTypeMongoClient:
 				return semconv.DBSystemNameMongoDB
 			case EventTypeCouchbaseClient:

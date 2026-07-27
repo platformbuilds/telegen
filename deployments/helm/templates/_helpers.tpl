@@ -132,45 +132,42 @@ internal_metrics:
 # -----------------------------------------------------------------------------
 ebpf:
   enabled: {{ .Values.ebpf.enabled | default true }}
-  batch_length: {{ .Values.ebpf.batchLength | default 100 }}
-  batch_timeout: {{ .Values.ebpf.batchTimeout | default "1s" }}
-  http_request_timeout: {{ .Values.ebpf.httpRequestTimeout | default "0s" }}
-  dns_request_timeout: {{ .Values.ebpf.dnsRequestTimeout | default "5s" }}
-  max_transaction_time: {{ .Values.ebpf.maxTransactionTime | default "5m" }}
-  tc_backend: {{ .Values.ebpf.tcBackend | default "auto" }}
-  context_propagation: {{ .Values.ebpf.contextPropagation | default "disabled" }}
-  buffer_sizes:
-    http: {{ .Values.ebpf.bufferSizes.http | default 0 }}
-    mysql: {{ .Values.ebpf.bufferSizes.mysql | default 0 }}
-    postgres: {{ .Values.ebpf.bufferSizes.postgres | default 0 }}
-    kafka: {{ .Values.ebpf.bufferSizes.kafka | default 0 }}
-  ringbuf_size: {{ .Values.ebpf.ringbufSize | default 262144 }}
-  perf_buffer_size: {{ .Values.ebpf.perfBufferSize | default 8192 }}
-  bpf_fs: {{ .Values.ebpf.bpfFs | default "/sys/fs/bpf" | quote }}
-  pin_objects: {{ .Values.ebpf.pinObjects | default false }}
-  mysql_prepared_statements_cache_size: {{ .Values.ebpf.mysqlPreparedStatementsCacheSize | default 1024 }}
-  postgres_prepared_statements_cache_size: {{ .Values.ebpf.postgresPreparedStatementsCacheSize | default 1024 }}
-  mongo_requests_cache_size: {{ .Values.ebpf.mongoRequestsCacheSize | default 1024 }}
-  kafka_topic_uuid_cache_size: {{ .Values.ebpf.kafkaTopicUuidCacheSize | default 1024 }}
-  couchbase_db_cache_size: {{ .Values.ebpf.couchbaseDbCacheSize | default 1024 }}
-  redis_db_cache:
-    enabled: {{ .Values.ebpf.redisDbCache.enabled | default false }}
-    max_size: {{ .Values.ebpf.redisDbCache.maxSize | default 1000 }}
-  override_bpf_loop_enabled: {{ .Values.ebpf.overrideBpfLoopEnabled | default false }}
-  payload_extraction:
-    http:
-      graphql:
-        enabled: {{ .Values.ebpf.payloadExtraction.http.graphql.enabled | default false }}
-      elasticsearch:
-        enabled: {{ .Values.ebpf.payloadExtraction.http.elasticsearch.enabled | default false }}
-      aws:
-        enabled: {{ .Values.ebpf.payloadExtraction.http.aws.enabled | default false }}
-  log_enricher:
-    cache_ttl: {{ .Values.ebpf.logEnricher.cacheTtl | default "30m" }}
-    cache_size: {{ .Values.ebpf.logEnricher.cacheSize | default 128 }}
-    async_writer_workers: {{ .Values.ebpf.logEnricher.asyncWriterWorkers | default 8 }}
-    async_writer_channel_len: {{ .Values.ebpf.logEnricher.asyncWriterChannelLen | default 500 }}
-  # Discovery is part of ebpf config; keep it nested under ebpf.
+  tracer:
+    batch_length: {{ .Values.ebpf.batchLength | default 100 }}
+    batch_timeout: {{ .Values.ebpf.batchTimeout | default "1s" }}
+    http_request_timeout: {{ .Values.ebpf.httpRequestTimeout | default "0s" }}
+    dns_request_timeout: {{ .Values.ebpf.dnsRequestTimeout | default "5s" }}
+    max_transaction_time: {{ .Values.ebpf.maxTransactionTime | default "5m" }}
+    traffic_control_backend: {{ .Values.ebpf.tcBackend | default "auto" }}
+    context_propagation: {{ .Values.ebpf.contextPropagation | default "disabled" }}
+    buffer_sizes:
+      http: {{ .Values.ebpf.bufferSizes.http | default 0 }}
+      mysql: {{ .Values.ebpf.bufferSizes.mysql | default 0 }}
+      postgres: {{ .Values.ebpf.bufferSizes.postgres | default 0 }}
+      kafka: {{ .Values.ebpf.bufferSizes.kafka | default 0 }}
+    bpf_fs_path: {{ .Values.ebpf.bpfFs | default "/sys/fs/bpf" | quote }}
+    mysql_prepared_statements_cache_size: {{ .Values.ebpf.mysqlPreparedStatementsCacheSize | default 1024 }}
+    postgres_prepared_statements_cache_size: {{ .Values.ebpf.postgresPreparedStatementsCacheSize | default 1024 }}
+    mongo_requests_cache_size: {{ .Values.ebpf.mongoRequestsCacheSize | default 1024 }}
+    kafka_topic_uuid_cache_size: {{ .Values.ebpf.kafkaTopicUuidCacheSize | default 1024 }}
+    couchbase_db_cache_size: {{ .Values.ebpf.couchbaseDbCacheSize | default 1024 }}
+    redis_db_cache:
+      enabled: {{ .Values.ebpf.redisDbCache.enabled | default false }}
+      max_size: {{ .Values.ebpf.redisDbCache.maxSize | default 1000 }}
+    override_bpfloop_enabled: {{ .Values.ebpf.overrideBpfLoopEnabled | default false }}
+    payload_extraction:
+      http:
+        graphql:
+          enabled: {{ .Values.ebpf.payloadExtraction.http.graphql.enabled | default false }}
+        elasticsearch:
+          enabled: {{ .Values.ebpf.payloadExtraction.http.elasticsearch.enabled | default false }}
+        aws:
+          enabled: {{ .Values.ebpf.payloadExtraction.http.aws.enabled | default false }}
+    log_enricher:
+      cache_ttl: {{ .Values.ebpf.logEnricher.cacheTtl | default "30m" }}
+      cache_size: {{ .Values.ebpf.logEnricher.cacheSize | default 128 }}
+      async_writer_workers: {{ .Values.ebpf.logEnricher.asyncWriterWorkers | default 8 }}
+      async_writer_channel_len: {{ .Values.ebpf.logEnricher.asyncWriterChannelLen | default 500 }}
   discovery:
     exclude_otel_instrumented_services: {{ .Values.discovery.excludeOtelInstrumentedServices | default true }}
     exclude_otel_instrumented_services_span_metrics: {{ .Values.discovery.excludeOtelInstrumentedServicesSpanMetrics | default false }}
@@ -280,6 +277,61 @@ ebpf:
     disabled_route_harvesters: {{ .Values.discovery.disabledRouteHarvesters | default list | toJson }}
     route_harvester_advanced:
       java_harvest_delay: {{ .Values.discovery.routeHarvesterAdvanced.javaHarvestDelay | default "60s" }}
+  network:
+    enabled: {{ .Values.network.enabled | default true }}
+  name_resolver:
+    sources:
+      {{- range .Values.nameResolver.sources | default (list "host" "k8s") }}
+      - {{ . }}
+      {{- end }}
+    cache_len: {{ .Values.nameResolver.cacheLen | default 1024 }}
+    cache_ttl: {{ .Values.nameResolver.cacheTtl | default "5m" }}
+  routes:
+    unmatch: {{ .Values.routes.unmatch | default "heuristic" }}
+    wildcard_char: {{ .Values.routes.wildcardChar | default "*" | quote }}
+    max_path_segment_cardinality: {{ .Values.routes.maxPathSegmentCardinality | default 10 }}
+    patterns: {{ .Values.routes.patterns | default list | toJson }}
+  filter:
+    application:
+      by_attribute: {{ .Values.filter.application.byAttribute | default list | toJson }}
+    network:
+      by_attribute: {{ .Values.filter.network.byAttribute | default list | toJson }}
+  otel_metrics_export:
+    protocol: {{ .Values.otelMetricsExport.protocol | default "unset" }}
+    metrics_protocol: {{ .Values.otelMetricsExport.metricsProtocol | default "unset" }}
+    otel_interval_ms: {{ .Values.otelMetricsExport.otelIntervalMs | default 60000 }}
+    buckets:
+      duration_histogram_buckets: {{ .Values.otelMetricsExport.buckets.durationHistogramBuckets | default (list 0.005 0.01 0.025 0.05 0.1 0.25 0.5 1 2.5 5 10) | toJson }}
+      request_size_histogram_buckets: {{ .Values.otelMetricsExport.buckets.requestSizeHistogramBuckets | default (list 0 100 1024 10240 102400 1048576) | toJson }}
+    reporters_cache_len: {{ .Values.otelMetricsExport.reportersCacheLen | default 256 }}
+    histogram_aggregation: {{ .Values.otelMetricsExport.histogramAggregation | default "explicit" }}
+    instrumentations:
+      {{- range .Values.otelMetricsExport.instrumentations | default (list "all") }}
+      - {{ . }}
+      {{- end }}
+    ttl: {{ .Values.otelMetricsExport.ttl | default "5m" }}
+  otel_traces_export:
+    protocol: {{ .Values.otelTracesExport.protocol | default "unset" }}
+    traces_protocol: {{ .Values.otelTracesExport.tracesProtocol | default "unset" }}
+    max_queue_size: {{ .Values.otelTracesExport.maxQueueSize | default 4096 }}
+    batch_timeout: {{ .Values.otelTracesExport.batchTimeout | default "15s" }}
+    reporters_cache_len: {{ .Values.otelTracesExport.reportersCacheLen | default 256 }}
+    instrumentations:
+      {{- range .Values.otelTracesExport.instrumentations | default (list "http" "grpc" "sql" "redis" "kafka" "mqtt" "mongo") }}
+      - {{ . }}
+      {{- end }}
+  prometheus_export:
+    enabled: {{ .Values.prometheusExport.enabled | default true }}
+    path: {{ .Values.prometheusExport.path | default "/metrics" }}
+    port: {{ .Values.prometheusExport.port | default 0 }}
+    buckets:
+      duration_histogram_buckets: {{ .Values.prometheusExport.buckets.durationHistogramBuckets | default (list 0.005 0.01 0.025 0.05 0.1 0.25 0.5 1 2.5 5 10) | toJson }}
+    instrumentations:
+      {{- range .Values.prometheusExport.instrumentations | default (list "all") }}
+      - {{ . }}
+      {{- end }}
+    ttl: {{ .Values.prometheusExport.ttl | default "5m" }}
+    span_metrics_service_cache_size: {{ .Values.prometheusExport.spanMetricsServiceCacheSize | default 10000 }}
 
 # -----------------------------------------------------------------------------
 # Channel Configuration
@@ -287,57 +339,6 @@ ebpf:
 channel_buffer_len: {{ .Values.channel.bufferLen | default 50 }}
 channel_send_timeout: {{ .Values.channel.sendTimeout | default "1m" }}
 channel_send_timeout_panic: {{ .Values.channel.sendTimeoutPanic | default false }}
-
-# -----------------------------------------------------------------------------
-# Network Observability Configuration
-# -----------------------------------------------------------------------------
-network:
-  enabled: {{ .Values.network.enabled | default true }}
-  capture:
-    enabled: {{ .Values.network.capture.enabled | default true }}
-    interfaces: {{ .Values.network.capture.interfaces | default list | toJson }}
-    exclude_loopback: {{ .Values.network.capture.excludeLoopback | default true }}
-    bpf_filter: {{ .Values.network.capture.bpfFilter | default "" | quote }}
-  dns:
-    enabled: {{ .Values.network.dns.enabled | default true }}
-    cache_size: {{ .Values.network.dns.cacheSize | default 10000 }}
-    capture_queries: {{ .Values.network.dns.captureQueries | default true }}
-    capture_responses: {{ .Values.network.dns.captureResponses | default true }}
-  tcp:
-    enabled: {{ .Values.network.tcp.enabled | default true }}
-    state_tracking: {{ .Values.network.tcp.stateTracking | default true }}
-    retransmissions: {{ .Values.network.tcp.retransmissions | default true }}
-    rtt: {{ .Values.network.tcp.rtt | default true }}
-  aggregation:
-    interval: {{ .Values.network.aggregation.interval | default "30s" }}
-    max_flows: {{ .Values.network.aggregation.maxFlows | default 100000 }}
-  protocols:
-    http:
-      enabled: {{ .Values.network.protocols.http.enabled | default true }}
-      parse_headers: {{ .Values.network.protocols.http.parseHeaders | default true }}
-      max_body_size: {{ .Values.network.protocols.http.maxBodySize | default 65536 }}
-    grpc:
-      enabled: {{ .Values.network.protocols.grpc.enabled | default true }}
-    mysql:
-      enabled: {{ .Values.network.protocols.mysql.enabled | default true }}
-      capture_query: {{ .Values.network.protocols.mysql.captureQuery | default true }}
-    postgres:
-      enabled: {{ .Values.network.protocols.postgres.enabled | default true }}
-      capture_query: {{ .Values.network.protocols.postgres.captureQuery | default true }}
-    redis:
-      enabled: {{ .Values.network.protocols.redis.enabled | default true }}
-      capture_command: {{ .Values.network.protocols.redis.captureCommand | default true }}
-    mongodb:
-      enabled: {{ .Values.network.protocols.mongodb.enabled | default true }}
-      capture_query: {{ .Values.network.protocols.mongodb.captureQuery | default true }}
-    kafka:
-      enabled: {{ .Values.network.protocols.kafka.enabled | default true }}
-    rabbitmq:
-      enabled: {{ .Values.network.protocols.rabbitmq.enabled | default true }}
-    mqtt:
-      enabled: {{ .Values.network.protocols.mqtt.enabled | default true }}
-    dns:
-      enabled: {{ .Values.network.protocols.dns.enabled | default true }}
 
 # -----------------------------------------------------------------------------
 # Kubernetes Metrics Configuration (kube-state-metrics + cAdvisor equivalent)
@@ -430,25 +431,17 @@ kube_metrics:
       enable_description: {{ .Values.kubeMetrics.signalMetadata.fields.enableDescription | default false }}
 
 # -----------------------------------------------------------------------------
-# Kubernetes Attributes Configuration
+# Kubernetes metadata decoration (telegen Config.kubernetes)
 # -----------------------------------------------------------------------------
-attributes:
-  instance_id:
-    hostname_dns_resolution: {{ .Values.attributes.instanceId.hostnameDnsResolution | default true }}
-  kubernetes:
-    enable: {{ .Values.attributes.kubernetes.enable | default true }}
-    informers_sync_timeout: {{ .Values.attributes.kubernetes.informersSyncTimeout | default "30s" }}
-    informers_resync_period: {{ .Values.attributes.kubernetes.informersResyncPeriod | default "30m" }}
-    resource_labels:
-      {{- range .Values.attributes.kubernetes.resourceLabels | default (list "app" "app.kubernetes.io/name" "app.kubernetes.io/component") }}
-      - {{ . }}
-      {{- end }}
-  host_id:
-    fetch_timeout: {{ .Values.attributes.hostId.fetchTimeout | default "500ms" }}
-  rename_unresolved_hosts: {{ .Values.attributes.renameUnresolvedHosts | default "unresolved" | quote }}
-  rename_unresolved_hosts_outgoing: {{ .Values.attributes.renameUnresolvedHostsOutgoing | default "outgoing" | quote }}
-  rename_unresolved_hosts_incoming: {{ .Values.attributes.renameUnresolvedHostsIncoming | default "incoming" | quote }}
-  metric_span_name_aggregation_limit: {{ .Values.attributes.metricSpanNameAggregationLimit | default 100 }}
+kubernetes:
+  enable: {{ .Values.attributes.kubernetes.enable | default true }}
+  cluster_name: {{ .Values.attributes.kubernetes.clusterName | default "" | quote }}
+  informers_sync_timeout: {{ .Values.attributes.kubernetes.informersSyncTimeout | default "30s" }}
+  informers_resync_period: {{ .Values.attributes.kubernetes.informersResyncPeriod | default "30m" }}
+  resource_labels:
+    {{- range .Values.attributes.kubernetes.resourceLabels | default (list "app" "app.kubernetes.io/name" "app.kubernetes.io/component") }}
+    - {{ . }}
+    {{- end }}
 
 # -----------------------------------------------------------------------------
 # Profiling Configuration
@@ -562,47 +555,6 @@ security:
     flush_interval_ms: {{ .Values.security.export.flushIntervalMs | default 5000 }}
 
 # -----------------------------------------------------------------------------
-# Database Tracing Configuration
-# -----------------------------------------------------------------------------
-database_tracing:
-  enabled: {{ .Values.databaseTracing.enabled | default true }}
-  postgresql:
-    enabled: {{ .Values.databaseTracing.postgresql.enabled | default true }}
-    capture_query: {{ .Values.databaseTracing.postgresql.captureQuery | default true }}
-    max_query_length: {{ .Values.databaseTracing.postgresql.maxQueryLength | default 2048 }}
-    capture_errors: {{ .Values.databaseTracing.postgresql.captureErrors | default true }}
-    prune_sensitive: {{ .Values.databaseTracing.postgresql.pruneSensitive | default true }}
-    track_prepared: {{ .Values.databaseTracing.postgresql.trackPrepared | default true }}
-    slow_query_threshold: {{ .Values.databaseTracing.postgresql.slowQueryThreshold | default "1s" }}
-  mysql:
-    enabled: {{ .Values.databaseTracing.mysql.enabled | default true }}
-    capture_query: {{ .Values.databaseTracing.mysql.captureQuery | default true }}
-    max_query_length: {{ .Values.databaseTracing.mysql.maxQueryLength | default 2048 }}
-    capture_errors: {{ .Values.databaseTracing.mysql.captureErrors | default true }}
-    prune_sensitive: {{ .Values.databaseTracing.mysql.pruneSensitive | default true }}
-    track_prepared: {{ .Values.databaseTracing.mysql.trackPrepared | default true }}
-    slow_query_threshold: {{ .Values.databaseTracing.mysql.slowQueryThreshold | default "1s" }}
-  oracle:
-    enabled: {{ .Values.databaseTracing.oracle.enabled | default true }}
-    capture_sql: {{ .Values.databaseTracing.oracle.captureSql | default true }}
-    capture_plsql: {{ .Values.databaseTracing.oracle.capturePlsql | default true }}
-    capture_wait_events: {{ .Values.databaseTracing.oracle.captureWaitEvents | default true }}
-    max_sql_length: {{ .Values.databaseTracing.oracle.maxSqlLength | default 2048 }}
-    slow_query_threshold: {{ .Values.databaseTracing.oracle.slowQueryThreshold | default "2s" }}
-  kafka:
-    enabled: {{ .Values.databaseTracing.kafka.enabled | default true }}
-    capture_headers: {{ .Values.databaseTracing.kafka.captureHeaders | default true }}
-    track_consumer_lag: {{ .Values.databaseTracing.kafka.trackConsumerLag | default true }}
-    capture_topic_info: {{ .Values.databaseTracing.kafka.captureTopicInfo | default true }}
-  redis:
-    enabled: {{ .Values.databaseTracing.redis.enabled | default true }}
-    capture_keys: {{ .Values.databaseTracing.redis.captureKeys | default true }}
-    max_key_length: {{ .Values.databaseTracing.redis.maxKeyLength | default 256 }}
-    track_hot_keys: {{ .Values.databaseTracing.redis.trackHotKeys | default true }}
-    max_hot_keys: {{ .Values.databaseTracing.redis.maxHotKeys | default 10000 }}
-    slow_command_threshold: {{ .Values.databaseTracing.redis.slowCommandThreshold | default "100ms" }}
-
-# -----------------------------------------------------------------------------
 # Query Statistics Configuration
 # -----------------------------------------------------------------------------
 stats:
@@ -672,35 +624,6 @@ cloud:
     resource_group: {{ .Values.cloud.azure.resourceGroup | default "" | quote }}
     imds_endpoint: {{ .Values.cloud.azure.imdsEndpoint | default "" | quote }}
     imds_timeout: {{ .Values.cloud.azure.imdsTimeout | default "2s" }}
-
-# -----------------------------------------------------------------------------
-# Name Resolver Configuration
-# -----------------------------------------------------------------------------
-name_resolver:
-  sources:
-    {{- range .Values.nameResolver.sources | default (list "host" "k8s") }}
-    - {{ . }}
-    {{- end }}
-  cache_len: {{ .Values.nameResolver.cacheLen | default 1024 }}
-  cache_ttl: {{ .Values.nameResolver.cacheTtl | default "5m" }}
-
-# -----------------------------------------------------------------------------
-# Routes Configuration
-# -----------------------------------------------------------------------------
-routes:
-  unmatch: {{ .Values.routes.unmatch | default "heuristic" }}
-  wildcard_char: {{ .Values.routes.wildcardChar | default "*" | quote }}
-  max_path_segment_cardinality: {{ .Values.routes.maxPathSegmentCardinality | default 10 }}
-  patterns: {{ .Values.routes.patterns | default list | toJson }}
-
-# -----------------------------------------------------------------------------
-# Filter Configuration
-# -----------------------------------------------------------------------------
-filter:
-  application:
-    by_attribute: {{ .Values.filter.application.byAttribute | default list | toJson }}
-  network:
-    by_attribute: {{ .Values.filter.network.byAttribute | default list | toJson }}
 
 # -----------------------------------------------------------------------------
 # Queues Configuration
@@ -883,54 +806,6 @@ exports:
       headers: {{ .Values.otlp.headers | default dict | toJson }}
       gzip: {{ .Values.otlp.gzip | default true }}
       timeout: {{ .Values.otlp.timeout | default "10s" | quote }}
-
-# -----------------------------------------------------------------------------
-# OpenTelemetry Metrics Export Configuration
-# -----------------------------------------------------------------------------
-otel_metrics_export:
-  protocol: {{ .Values.otelMetricsExport.protocol | default "unset" }}
-  metrics_protocol: {{ .Values.otelMetricsExport.metricsProtocol | default "unset" }}
-  otel_interval_ms: {{ .Values.otelMetricsExport.otelIntervalMs | default 60000 }}
-  buckets:
-    duration_histogram_buckets: {{ .Values.otelMetricsExport.buckets.durationHistogramBuckets | default (list 0.005 0.01 0.025 0.05 0.1 0.25 0.5 1 2.5 5 10) | toJson }}
-    request_size_histogram_buckets: {{ .Values.otelMetricsExport.buckets.requestSizeHistogramBuckets | default (list 0 100 1024 10240 102400 1048576) | toJson }}
-  reporters_cache_len: {{ .Values.otelMetricsExport.reportersCacheLen | default 256 }}
-  histogram_aggregation: {{ .Values.otelMetricsExport.histogramAggregation | default "explicit" }}
-  instrumentations:
-    {{- range .Values.otelMetricsExport.instrumentations | default (list "all") }}
-    - {{ . }}
-    {{- end }}
-  ttl: {{ .Values.otelMetricsExport.ttl | default "5m" }}
-
-# -----------------------------------------------------------------------------
-# OpenTelemetry Traces Export Configuration
-# -----------------------------------------------------------------------------
-otel_traces_export:
-  protocol: {{ .Values.otelTracesExport.protocol | default "unset" }}
-  traces_protocol: {{ .Values.otelTracesExport.tracesProtocol | default "unset" }}
-  max_queue_size: {{ .Values.otelTracesExport.maxQueueSize | default 4096 }}
-  batch_timeout: {{ .Values.otelTracesExport.batchTimeout | default "15s" }}
-  reporters_cache_len: {{ .Values.otelTracesExport.reportersCacheLen | default 256 }}
-  instrumentations:
-    {{- range .Values.otelTracesExport.instrumentations | default (list "http" "grpc" "sql" "redis" "kafka" "mqtt" "mongo") }}
-    - {{ . }}
-    {{- end }}
-
-# -----------------------------------------------------------------------------
-# Prometheus Export Configuration
-# -----------------------------------------------------------------------------
-prometheus_export:
-  enabled: {{ .Values.prometheusExport.enabled | default true }}
-  path: {{ .Values.prometheusExport.path | default "/metrics" }}
-  port: {{ .Values.prometheusExport.port | default 0 }}
-  buckets:
-    duration_histogram_buckets: {{ .Values.prometheusExport.buckets.durationHistogramBuckets | default (list 0.005 0.01 0.025 0.05 0.1 0.25 0.5 1 2.5 5 10) | toJson }}
-  instrumentations:
-    {{- range .Values.prometheusExport.instrumentations | default (list "all") }}
-    - {{ . }}
-    {{- end }}
-  ttl: {{ .Values.prometheusExport.ttl | default "5m" }}
-  span_metrics_service_cache_size: {{ .Values.prometheusExport.spanMetricsServiceCacheSize | default 10000 }}
 
 # -----------------------------------------------------------------------------
 # Anomaly Detection Configuration

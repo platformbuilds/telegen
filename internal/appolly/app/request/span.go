@@ -20,6 +20,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
+	telegenSemconv "github.com/mirastacklabs-ai/telegen/internal/semconv"
+	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
 )
 
 type EventType uint8
@@ -990,19 +992,40 @@ func (s *Span) IsSelfReferenceSpan() bool {
 	return s.Peer == s.Host && (s.Service.UID.Namespace == s.OtherNamespace || s.OtherNamespace == "")
 }
 
+func (s *Span) dbSystemProcessHints() []string {
+	hints := []string{s.Service.UID.Name, s.Service.UID.Instance}
+	if cn, ok := s.Service.Metadata[attr.K8sContainerName]; ok && cn != "" {
+		hints = append(hints, cn)
+	}
+	return hints
+}
+
 func (s *Span) DBSystemName() attribute.KeyValue {
 	if s.Type == EventTypeSQLClient || s.Type == EventTypeSQLServer {
 		switch s.SubType {
 		case int(DBPostgres):
 			return semconv.DBSystemNamePostgreSQL
 		case int(DBMySQL):
-			return semconv.DBSystemNameMySQL
+			sys := telegenSemconv.ResolveDBSystemFromExecutableHints(
+				telegenSemconv.DBSystemMySQL,
+				s.dbSystemProcessHints()...,
+			)
+			return DBSystemName(sys)
 		case int(DBMSSQL):
 			return attribute.String("db.system.name", "mssql")
 		}
 	}
 
 	return semconv.DBSystemNameOtherSQL
+}
+
+// RedisDBSystemName returns db.system for RESP-compatible stores, refined by process hints.
+func (s *Span) RedisDBSystemName() attribute.KeyValue {
+	sys := telegenSemconv.ResolveDBSystemFromExecutableHints(
+		telegenSemconv.DBSystemRedis,
+		s.dbSystemProcessHints()...,
+	)
+	return DBSystemName(sys)
 }
 
 func (s *Span) HasOriginalHost() bool {

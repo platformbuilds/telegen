@@ -204,6 +204,61 @@ func TestTCPReqKafkaParsing(t *testing.T) {
 	assert.Equal(t, request.EventTypeKafkaClient, s.Type)
 }
 
+func TestReadTCPRequestIntoSpanKafkaProduce(t *testing.T) {
+	produceReq := []byte{0, 0, 0, 124, 0, 0, 0, 9, 0, 0, 0, 8, 0, 10, 112, 114, 111, 100, 117, 99, 101, 114, 45, 49, 0, 0, 0, 1, 0, 0, 117, 48, 2, 9, 109, 121, 45, 116, 111, 112, 105, 99, 2, 0, 0, 0, 0, 78, 103, 0, 0, 0, 1, 2, 0, 0, 9, 109, 121, 45, 116, 111, 112, 105, 99, 193, 136, 51, 44, 67, 57, 71, 124, 178, 93, 33, 21, 191, 31, 138, 233, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 2, 0, 0, 0, 1, 2, 0, 0, 0, 1, 1, 0, 128, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 16, 0, 0, 0, 4, 0, 0, 17}
+	tri := makeTCPReq(string(produceReq), 9092)
+	tri.ProtocolType = ProtocolTypeKafka
+
+	cfg := config.EBPFTracer{KafkaTopicUUIDCacheSize: 16}
+	ctx := NewEBPFParseContext(&cfg, nil, nil)
+	binaryRecord := bytes.Buffer{}
+	require.NoError(t, binary.Write(&binaryRecord, binary.LittleEndian, tri))
+	fltr := TestPidsFilter{services: map[uint32]svc.Attrs{}}
+
+	span, ignore, err := ReadTCPRequestIntoSpan(ctx, &cfg, &ringbuf.Record{RawSample: binaryRecord.Bytes()}, &fltr)
+	require.NoError(t, err)
+	require.False(t, ignore)
+	assert.Equal(t, request.EventTypeKafkaClient, span.Type)
+	assert.Equal(t, request.MessagingPublish, span.Method)
+	assert.Equal(t, "my-topic", span.Path)
+}
+
+func TestReadTCPRequestIntoSpanKafkaFetch(t *testing.T) {
+	fetchReq := []byte{0, 0, 0, 94, 0, 1, 0, 11, 0, 0, 0, 224, 0, 6, 115, 97, 114, 97, 109, 97, 255, 255, 255, 255, 0, 0, 1, 244, 0, 0, 0, 1, 6, 64, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0, 1, 0, 9, 105, 109, 112, 111, 114, 116, 97, 110, 116, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 0}
+	tri := makeTCPReq(string(fetchReq), 9092)
+	tri.ProtocolType = ProtocolTypeKafka
+
+	cfg := config.EBPFTracer{KafkaTopicUUIDCacheSize: 16}
+	ctx := NewEBPFParseContext(&cfg, nil, nil)
+	binaryRecord := bytes.Buffer{}
+	require.NoError(t, binary.Write(&binaryRecord, binary.LittleEndian, tri))
+	fltr := TestPidsFilter{services: map[uint32]svc.Attrs{}}
+
+	span, ignore, err := ReadTCPRequestIntoSpan(ctx, &cfg, &ringbuf.Record{RawSample: binaryRecord.Bytes()}, &fltr)
+	require.NoError(t, err)
+	require.False(t, ignore)
+	assert.Equal(t, request.EventTypeKafkaClient, span.Type)
+	assert.Equal(t, request.MessagingProcess, span.Method)
+	assert.Equal(t, "important", span.Path)
+}
+
+func TestReadTCPRequestIntoSpanKafkaInvalidPayload(t *testing.T) {
+	tri := makeTCPReq(string([]byte{0x01, 0x02, 0x03, 0x04}), 9092)
+	tri.ProtocolType = ProtocolTypeKafka
+
+	cfg := config.EBPFTracer{KafkaTopicUUIDCacheSize: 16}
+	ctx := NewEBPFParseContext(&cfg, nil, nil)
+	binaryRecord := bytes.Buffer{}
+	require.NoError(t, binary.Write(&binaryRecord, binary.LittleEndian, tri))
+	fltr := TestPidsFilter{services: map[uint32]svc.Attrs{}}
+
+	span, ignore, err := ReadTCPRequestIntoSpan(ctx, &cfg, &ringbuf.Record{RawSample: binaryRecord.Bytes()}, &fltr)
+	require.Error(t, err)
+	assert.True(t, ignore)
+	assert.Equal(t, request.Span{}, span)
+	assert.Contains(t, err.Error(), "failed to handle Kafka event")
+}
+
 func TestTCPReqMQTTParsing(t *testing.T) {
 	// MQTT PUBLISH packet with topic "test/topic" and no payload
 	b := []byte{
