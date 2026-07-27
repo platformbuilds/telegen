@@ -152,7 +152,7 @@ jobs:
             VERSION=${{ steps.version.outputs.VERSION }}
             REVISION=${{ github.sha }}
             BUILD_DATE=${{ steps.version.outputs.BUILD_DATE }}
-            SKIP_BPF_GENERATE=1
+            SKIP_BPF_GENERATE=0
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -170,7 +170,7 @@ jobs:
             VERSION=${{ steps.version.outputs.VERSION }}
             REVISION=${{ github.sha }}
             BUILD_DATE=${{ steps.version.outputs.BUILD_DATE }}
-            SKIP_BPF_GENERATE=1
+            SKIP_BPF_GENERATE=0
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
