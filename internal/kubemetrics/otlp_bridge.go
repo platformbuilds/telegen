@@ -59,9 +59,10 @@ func NewOTLPBridge(
 }
 
 // ConvertText parses Prometheus text exposition into OTEL metricdata metrics.
-// OpenMetrics-only types (info/stateset) are rewritten to gauge for parser compatibility.
+// OpenMetrics-only types (info/stateset) are rewritten to gauge, and duplicate
+// HELP/TYPE metadata lines are removed for parser compatibility.
 func (b *OTLPBridge) ConvertText(data []byte) ([]metricdata.Metrics, error) {
-	families, err := ParsePrometheusText(sanitizeOpenMetricsTypes(data))
+	families, err := ParsePrometheusText(sanitizePrometheusText(data))
 	if err != nil {
 		return nil, err
 	}
@@ -76,6 +77,13 @@ func (b *OTLPBridge) ConvertText(data []byte) ([]metricdata.Metrics, error) {
 	}
 
 	return metrics, nil
+}
+
+// sanitizePrometheusText applies compatibility rewrites needed before parsing
+// with expfmt.NewTextParser(model.LegacyValidation).
+func sanitizePrometheusText(data []byte) []byte {
+	normalized := sanitizeOpenMetricsTypes(data)
+	return dedupeMetricMetadataLines(normalized)
 }
 
 // ExportPrometheusMetrics exports Prometheus metrics via OTLP
@@ -392,6 +400,51 @@ func sanitizeOpenMetricsTypes(data []byte) []byte {
 	}
 
 	return bytes.Join(lines, []byte{'\n'})
+}
+
+// dedupeMetricMetadataLines removes repeated HELP/TYPE lines for the same metric
+// name while preserving sample lines. Some kubestate payloads repeat metadata
+// headers per object, which LegacyValidation rejects.
+func dedupeMetricMetadataLines(data []byte) []byte {
+	lines := bytes.Split(data, []byte{'\n'})
+	seenHelp := make(map[string]struct{})
+	seenType := make(map[string]struct{})
+	out := make([][]byte, 0, len(lines))
+	changed := false
+
+	for _, line := range lines {
+		trimmed := bytes.TrimSpace(line)
+
+		if bytes.HasPrefix(trimmed, []byte("# HELP ")) {
+			fields := bytes.Fields(trimmed)
+			if len(fields) >= 3 {
+				metricName := string(fields[2])
+				if _, exists := seenHelp[metricName]; exists {
+					changed = true
+					continue
+				}
+				seenHelp[metricName] = struct{}{}
+			}
+		} else if bytes.HasPrefix(trimmed, []byte("# TYPE ")) {
+			fields := bytes.Fields(trimmed)
+			if len(fields) >= 3 {
+				metricName := string(fields[2])
+				if _, exists := seenType[metricName]; exists {
+					changed = true
+					continue
+				}
+				seenType[metricName] = struct{}{}
+			}
+		}
+
+		out = append(out, line)
+	}
+
+	if !changed {
+		return data
+	}
+
+	return bytes.Join(out, []byte{'\n'})
 }
 
 // ParsePrometheusText parses Prometheus text format to MetricFamily map
