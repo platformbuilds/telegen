@@ -142,15 +142,18 @@ func TestPostgresQueryParsing(t *testing.T) {
 			sql:   "INSERT INTO `users` (`name`, `email`, `created_at`, `updated_at`) VALUES ('John Doe', 'john@example.com', '2025-12-04 17:26:46.884968', '2025-12-04 17:26:46.884968')",
 		},
 		{
-			name:  "Query with expanded field names",
-			bytes: []byte{81, 0, 0, 3, 114, 83, 69, 76, 69, 67, 84, 32, 68, 73, 83, 84, 73, 78, 67, 84, 32, 34, 97, 117, 116, 104, 95, 112, 101, 114, 109, 105, 115, 115, 105, 111, 110, 34, 46, 34, 105, 100, 34, 44, 32, 34, 100, 106, 97, 110, 103, 111, 95, 99, 111, 110, 116, 101, 110, 116, 95, 116, 121, 112, 101, 34, 46, 34, 97, 112, 112, 95, 108, 97, 98, 101, 108, 34, 44, 32, 34, 100, 106, 97, 110, 103, 111, 95, 99, 111, 110, 116, 101, 110, 116, 95, 116, 121, 112, 101, 34, 46, 34, 109, 111, 100, 101, 108, 34, 44, 32, 34, 97, 117, 116, 104, 95, 112, 101, 114, 109, 105, 115, 115, 105, 111, 110, 34, 46, 34, 99, 111, 100, 101, 110, 97, 109, 101, 34, 32, 70, 82, 79, 77, 32, 34, 97, 117, 116, 104, 95, 112, 101, 114, 109, 105, 115, 115, 105, 111, 110, 34, 32, 76, 69, 70, 84, 32, 79, 85, 84, 69, 82, 32, 74, 79, 73, 78, 32, 34, 97, 117, 116, 104, 95, 117, 115, 101, 114, 95, 117, 115, 101, 114, 95, 112, 101, 114, 109, 105, 115, 115, 105, 111, 110, 115, 34, 32, 79, 78, 32, 40, 34, 97, 117, 116, 104, 95, 112, 101, 114, 109, 105, 115, 115, 105, 111, 110, 34, 46, 34, 105, 100, 34, 32, 61, 32, 34, 97, 117, 116, 104, 95, 117, 115, 101, 114, 95, 117, 115, 101, 114, 95, 112, 101, 114},
+			name: "Query with expanded field names",
+			bytes: buildPostgresFrame(
+				kPostgresQuery,
+				append([]byte(`SELECT DISTINCT "auth_permission"."id" FROM "auth_permission" LEFT OUTER JOIN "auth_user_user_permissions" ON ("auth_permission"."id" = "auth_user_user_permissions"."permission_id")`), 0),
+			),
 			op:    "SELECT",
 			table: "auth_permission,auth_user_user_permissions",
-			sql:   "SELECT DISTINCT \"auth_permission\".\"id\", \"django_content_type\".\"app_label\", \"django_content_type\".\"model\", \"auth_permission\".\"codename\" FROM \"auth_permission\" LEFT OUTER JOIN \"auth_user_user_permissions\" ON (\"auth_permission\".\"id\" = \"auth_user_user_per",
+			sql:   `SELECT DISTINCT "auth_permission"."id" FROM "auth_permission" LEFT OUTER JOIN "auth_user_user_permissions" ON ("auth_permission"."id" = "auth_user_user_permissions"."permission_id")`,
 		},
 		{
 			name:  "Query prepared statement",
-			bytes: []byte{81, 0, 0, 0, 28, 101, 120, 101, 99, 117, 116, 101, 32, 109, 121, 95, 99, 111, 110, 116, 97, 99, 116, 115, 32, 40, 49, 41, 0, 69, 76, 69, 67, 84, 32, 42, 32, 102, 114, 111, 109, 32, 97, 99, 99, 111, 117, 110, 116, 105, 110, 103, 46, 99, 111, 110, 116, 97, 99, 116, 115, 32, 87, 72, 69, 82, 69, 32, 105, 100, 32, 61, 32, 36, 49, 0, 53, 90, 51, 106, 119, 55, 54, 111, 100, 85, 115, 57, 78, 75, 72, 73, 76, 119, 120, 104, 108, 81, 118, 50, 98, 122, 70, 72, 111, 73, 70, 48, 61},
+			bytes: buildPostgresFrame(kPostgresQuery, append([]byte("execute my_contacts (1)"), 0)),
 			op:    "execute",
 			table: "my_contacts",
 			sql:   "execute my_contacts (1)",

@@ -30,12 +30,53 @@ const (
 	kPostgresBind    = byte('B')
 	kPostgresQuery   = byte('Q')
 	kPostgresCommand = byte('C')
+
+	// kPgHdrSize mirrors k_pg_hdr_size in bpf/generictracer/protocol_postgres.h.
+	kPgHdrSize = 5
+	// kPgMessagesInPacketMax mirrors k_pg_messages_in_packet_max in the same kernel header.
+	kPgMessagesInPacketMax = 10
 )
+
+// isPostgresFrameConsistent walks up to kPgMessagesInPacketMax Postgres frames and reports
+// whether the declared frame lengths consume the buffer exactly while including at least one
+// known frontend command {Q,P,B,E}. It mirrors the kernel classifier is_postgres in
+// bpf/generictracer/protocol_postgres.h:104-163 and is port-independent. This rejects MariaDB
+// COM_STMT_* packets whose coincidental Postgres length is inconsistent with the buffer.
+func isPostgresFrameConsistent(b []byte) bool {
+	messageSize := 0
+	includesKnownCommand := false
+
+	for i := 0; i < kPgMessagesInPacketMax; i++ {
+		if messageSize+kPgHdrSize > len(b) {
+			break
+		}
+
+		msgType := b[messageSize]
+		msgLen := int(int32(binary.BigEndian.Uint32(b[messageSize+1 : messageSize+5])))
+		if msgLen < 0 {
+			return false
+		}
+
+		messageSize += msgLen + 1
+		if msgLen == 0 {
+			break
+		}
+
+		switch msgType {
+		case kPostgresQuery, 'P', kPostgresBind, 'E': // Q, Parse, Bind, Execute
+			includesKnownCommand = true
+		}
+	}
+
+	return messageSize == len(b) && includesKnownCommand
+}
 
 func isPostgres(b []byte) bool {
 	op, ok := isValidPostgresPayload(b)
-
-	return ok && (op == kPostgresQuery || op == kPostgresCommand || op == kPostgresBind)
+	if !ok || !(op == kPostgresQuery || op == kPostgresCommand || op == kPostgresBind) {
+		return false
+	}
+	return isPostgresFrameConsistent(b)
 }
 
 func isPostgresBindCommand(b []byte) bool {

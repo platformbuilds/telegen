@@ -53,3 +53,24 @@ func TestResolveDBSystemFromExecutableHints_MySQLFamily(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveDBSystemFromExecutableHints_PostgreSQLSafetyNet(t *testing.T) {
+	tests := []struct {
+		name  string
+		hints []string
+		want  string
+	}{
+		{name: "postgres process keeps postgresql", hints: []string{"postgres"}, want: DBSystemPostgreSQL},
+		{name: "mariadb process downgrades", hints: []string{"mariadbd"}, want: DBSystemMariaDB},
+		{name: "mysql process downgrades", hints: []string{"mysqld"}, want: DBSystemMySQL},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ResolveDBSystemFromExecutableHints(DBSystemPostgreSQL, tt.hints...)
+			if got != tt.want {
+				t.Fatalf("ResolveDBSystemFromExecutableHints() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

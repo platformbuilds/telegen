@@ -4,8 +4,10 @@
 package ebpfcommon
 
 import (
+	"encoding/binary"
 	"testing"
 
+	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -126,4 +128,73 @@ func TestPostgresMessagesIteratorNoAllocs(t *testing.T) {
 	if allocs != 0 {
 		t.Errorf("MessageIterator allocated %v allocs per run; want 0", allocs)
 	}
+}
+
+func buildPostgresFrame(msgType byte, payload []byte) []byte {
+	frame := make([]byte, kPgHdrSize+len(payload))
+	frame[0] = msgType
+	binary.BigEndian.PutUint32(frame[1:5], uint32(len(payload)+4))
+	copy(frame[5:], payload)
+	return frame
+}
+
+func buildMySQLPacket(command byte, payload []byte) []byte {
+	packet := make([]byte, 5+len(payload))
+	packetLen := len(payload) + 1 // command byte + payload
+	packet[0] = byte(packetLen)
+	packet[1] = byte(packetLen >> 8)
+	packet[2] = byte(packetLen >> 16)
+	packet[3] = 0
+	packet[4] = command
+	copy(packet[5:], payload)
+	return packet
+}
+
+func TestIsPostgresFrameConsistency(t *testing.T) {
+	query := buildPostgresFrame(kPostgresQuery, append([]byte("SELECT 1"), 0))
+	require.True(t, isPostgres(query), "single well-formed query frame must be classified as postgres")
+
+	pipelined := append(
+		buildPostgresFrame(kPostgresQuery, append([]byte("BEGIN"), 0)),
+		buildPostgresFrame(kPostgresBind, []byte{0})...,
+	)
+	require.True(t, isPostgres(pipelined), "well-formed pipelined Query+Bind frames must be classified as postgres")
+}
+
+func TestIsPostgresRejectsMariaDBExecutePacket(t *testing.T) {
+	mariaExecute := buildMySQLPacket(kMySQLExecute, []byte{
+		0x01, 0x00, 0x00, 0x00, // statement id
+		0x00,                   // flags
+		0x01, 0x00, 0x00, 0x00, // iteration count
+		0x00,       // null-bitmap (1 param)
+		0x01,       // new params bound flag
+		0x0f, 0x00, // param type: VAR_STRING
+		0x03, 'f', 'o', 'o', // value
+	})
+
+	require.False(t, isPostgres(mariaExecute), "MariaDB COM_STMT_EXECUTE must not be classified as postgres")
+}
+
+func TestDetectSQLPayloadMariaDBPacketsClassifyAsMySQL(t *testing.T) {
+	mariaPrepare := buildMySQLPacket(kMySQLPrepare, []byte("SELECT * FROM accounts WHERE id = ?"))
+	op, table, sql, kind := detectSQLPayload(true, mariaPrepare)
+	require.Equal(t, request.DBMySQL, kind, "COM_STMT_PREPARE must classify as MySQL")
+	require.Equal(t, "SELECT", op)
+	require.Equal(t, "accounts", table)
+	require.Contains(t, sql, "SELECT * FROM accounts")
+
+	mariaExecute := buildMySQLPacket(kMySQLExecute, []byte{
+		0x02, 0x00, 0x00, 0x00, // statement id
+		0x00,
+		0x01, 0x00, 0x00, 0x00,
+		0x00,
+		0x01,
+		0x0f, 0x00,
+		0x03, 'b', 'a', 'r',
+	})
+	op, table, sql, kind = detectSQLPayload(true, mariaExecute)
+	require.Equal(t, request.DBMySQL, kind, "COM_STMT_EXECUTE must classify as MySQL even without SQL text")
+	require.NotEqual(t, "PREPARED STATEMENT", op, "must never fallback to postgres prepared statement parser")
+	require.Equal(t, "", table)
+	require.Equal(t, "", sql)
 }
