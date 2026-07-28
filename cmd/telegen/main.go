@@ -117,8 +117,10 @@ func main() {
 
 	// Get the shared metrics exporter from the pipeline for kube_metrics and node_exporter
 	var sharedMetricsExporter sdkmetric.Exporter
+	var sharedLogsProvider *sdklog.LoggerProvider
 	if pl != nil {
 		sharedMetricsExporter = pl.GetMetricsExporter()
+		sharedLogsProvider = pl.GetLogsLoggerProvider()
 	}
 
 	// Start storage manager if storage collection is enabled (collector / unified mode, or explicit config).
@@ -244,7 +246,7 @@ func main() {
 
 	// Start kube_metrics if enabled or auto-detected
 	// This provides kube-state-metrics + cAdvisor equivalent metrics natively
-	kubeMetricsProvider := startKubeMetrics(ctx, cfg, sharedMetricsExporter)
+	kubeMetricsProvider := startKubeMetrics(ctx, cfg, sharedMetricsExporter, sharedLogsProvider)
 	if kubeMetricsProvider != nil {
 		signalsStarted++
 	}
@@ -538,7 +540,12 @@ func buildUnifiedPipelineConfig(cfg *config.Config) pipeline.UnifiedPipelineConf
 
 // startKubeMetrics initializes and starts the kubemetrics provider if enabled or auto-detected.
 // Returns nil if kubemetrics is disabled or if running outside a Kubernetes cluster without explicit config.
-func startKubeMetrics(ctx context.Context, cfg *config.Config, metricsExporter sdkmetric.Exporter) *kubemetrics.Provider {
+func startKubeMetrics(
+	ctx context.Context,
+	cfg *config.Config,
+	metricsExporter sdkmetric.Exporter,
+	logsProvider *sdklog.LoggerProvider,
+) *kubemetrics.Provider {
 	// Create a structured logger for kubemetrics (uses global logger with component tag)
 	kubeLogger := logger.With("component", "kubemetrics")
 
@@ -608,31 +615,54 @@ func startKubeMetrics(ctx context.Context, cfg *config.Config, metricsExporter s
 	)
 
 	// Configure OTLP streaming if enabled
-	if cfg.KubeMetrics.Streaming.Enabled && cfg.KubeMetrics.Streaming.UseOTLP {
-		configureKubeMetricsStreaming(ctx, provider, cfg, metricsExporter)
+	if (cfg.KubeMetrics.Streaming.Enabled && cfg.KubeMetrics.Streaming.UseOTLP) || cfg.KubeMetrics.LogsStreaming.Enabled {
+		configureKubeMetricsStreaming(ctx, provider, cfg, metricsExporter, logsProvider)
 	}
 
 	return provider
 }
 
 // configureKubeMetricsStreaming sets up OTLP streaming for kubemetrics
-func configureKubeMetricsStreaming(ctx context.Context, provider *kubemetrics.Provider, cfg *config.Config, metricsExporter sdkmetric.Exporter) {
-	// Use the shared OTLP metrics exporter from the pipeline
-	if metricsExporter == nil {
-		logger.Warn("kube_metrics OTLP streaming configured but no OTLP metrics exporter available")
+func configureKubeMetricsStreaming(
+	ctx context.Context,
+	provider *kubemetrics.Provider,
+	cfg *config.Config,
+	metricsExporter sdkmetric.Exporter,
+	logsProvider *sdklog.LoggerProvider,
+) {
+	// Use the shared OTLP metrics exporter from the pipeline.
+	if cfg.KubeMetrics.Streaming.Enabled && cfg.KubeMetrics.Streaming.UseOTLP && metricsExporter == nil {
+		logger.Warn("kube_metrics OTLP metrics streaming configured but no OTLP metrics exporter available")
+	}
+
+	// Use the shared OTLP logs provider from the pipeline when logs streaming is enabled.
+	var logsExporter kubemetrics.LogsExporter
+	if cfg.KubeMetrics.LogsStreaming.Enabled {
+		if logsProvider == nil {
+			logger.Warn("kube_metrics OTLP logs streaming configured but no OTLP logs provider available")
+		} else {
+			logsExporter = kubemetrics.NewLoggerProviderExporter(logsProvider)
+		}
+	}
+
+	// If neither exporter is available, there is nothing to wire.
+	if metricsExporter == nil && logsExporter == nil {
 		return
 	}
 
-	// Get the Kubernetes client for logs streaming (events watching)
+	// Get the Kubernetes client for logs streaming (events watching).
 	kubeClient := provider.GetKubernetesClient()
 
-	// Setup streaming - logs exporter is nil for now (can be added when OTLP logs are configured)
-	if err := provider.SetupStreaming(metricsExporter, nil, kubeClient); err != nil {
+	// Setup streaming with the available exporters.
+	if err := provider.SetupStreaming(metricsExporter, logsExporter, kubeClient); err != nil {
 		logger.Error("kube_metrics failed to configure OTLP streaming", "error", err)
 		return
 	}
 
-	logger.Info("kube_metrics OTLP streaming enabled", "interval", cfg.KubeMetrics.Streaming.Interval)
+	logger.Info("kube_metrics OTLP streaming enabled",
+		"metrics_enabled", cfg.KubeMetrics.Streaming.Enabled && cfg.KubeMetrics.Streaming.UseOTLP,
+		"logs_enabled", cfg.KubeMetrics.LogsStreaming.Enabled,
+		"metrics_interval", cfg.KubeMetrics.Streaming.Interval)
 }
 
 // convertKafkaConfig converts the config.KafkaLogsConfig to kafka.Config

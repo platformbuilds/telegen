@@ -58,6 +58,26 @@ func NewOTLPBridge(
 	}
 }
 
+// ConvertText parses Prometheus text exposition into OTEL metricdata metrics.
+// OpenMetrics-only types (info/stateset) are rewritten to gauge for parser compatibility.
+func (b *OTLPBridge) ConvertText(data []byte) ([]metricdata.Metrics, error) {
+	families, err := ParsePrometheusText(sanitizeOpenMetricsTypes(data))
+	if err != nil {
+		return nil, err
+	}
+
+	metrics := make([]metricdata.Metrics, 0, len(families))
+	now := time.Now()
+	for name, family := range families {
+		m := b.convertFamily(name, family, now)
+		if m != nil {
+			metrics = append(metrics, *m)
+		}
+	}
+
+	return metrics, nil
+}
+
 // ExportPrometheusMetrics exports Prometheus metrics via OTLP
 func (b *OTLPBridge) ExportPrometheusMetrics(ctx context.Context, families map[string]*dto.MetricFamily) error {
 	rm := b.convertToResourceMetrics(families)
@@ -338,6 +358,40 @@ func guessUnit(name string) string {
 	}
 
 	return "1"
+}
+
+// sanitizeOpenMetricsTypes rewrites OpenMetrics-only TYPE hints that are not
+// understood by the legacy text parser into gauge so metric families can still
+// be parsed without renaming metrics or changing label cardinality.
+func sanitizeOpenMetricsTypes(data []byte) []byte {
+	lines := bytes.Split(data, []byte{'\n'})
+	changed := false
+
+	for i, line := range lines {
+		trimmed := bytes.TrimSpace(line)
+		if !bytes.HasPrefix(trimmed, []byte("# TYPE ")) {
+			continue
+		}
+
+		fields := bytes.Fields(trimmed)
+		if len(fields) != 4 {
+			continue
+		}
+
+		metricType := string(fields[3])
+		if metricType != "info" && metricType != "stateset" {
+			continue
+		}
+
+		lines[i] = []byte("# TYPE " + string(fields[2]) + " gauge")
+		changed = true
+	}
+
+	if !changed {
+		return data
+	}
+
+	return bytes.Join(lines, []byte{'\n'})
 }
 
 // ParsePrometheusText parses Prometheus text format to MetricFamily map

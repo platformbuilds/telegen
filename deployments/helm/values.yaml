@@ -631,7 +631,7 @@ kubeMetrics:
 
   # Kubernetes Events as OTLP Logs
   logsStreaming:
-    enabled: false
+    enabled: true
     bufferSize: 1000
     flushInterval: 5s
     eventTypes:

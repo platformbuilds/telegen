@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/attribute"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -380,28 +381,53 @@ func (l *LogsStreamingExporter) Stats() map[string]interface{} {
 	}
 }
 
-// SDKLogExporter wraps the OTEL SDK log exporter
-type SDKLogExporter struct {
-	exporter sdklog.Exporter
+// LoggerProviderExporter exports logs via an SDK LoggerProvider.
+type LoggerProviderExporter struct {
+	loggerProvider *sdklog.LoggerProvider
+	loggerName     string
 }
 
-// NewSDKLogExporter creates a new SDK log exporter wrapper
-func NewSDKLogExporter(exporter sdklog.Exporter) *SDKLogExporter {
-	return &SDKLogExporter{exporter: exporter}
+// NewLoggerProviderExporter creates a new LoggerProvider-backed logs exporter.
+func NewLoggerProviderExporter(loggerProvider *sdklog.LoggerProvider) *LoggerProviderExporter {
+	return &LoggerProviderExporter{
+		loggerProvider: loggerProvider,
+		loggerName:     "telegen.kubemetrics.events",
+	}
 }
 
-// Export exports logs to the OTEL SDK exporter
-func (s *SDKLogExporter) Export(ctx context.Context, logs []OTLPLogRecord) error {
-	// Convert OTLPLogRecord to SDK log records
-	// Note: This is a simplified conversion - in production you'd use the full SDK
-	// The actual implementation would depend on the SDK's internal types
+// Export exports logs through the shared LoggerProvider.
+func (s *LoggerProviderExporter) Export(ctx context.Context, logs []OTLPLogRecord) error {
+	if s == nil || s.loggerProvider == nil || len(logs) == 0 {
+		return nil
+	}
 
-	// For now, we'll use the exporter's ForceFlush as a placeholder
-	// A full implementation would create log.Record objects and export them
-	return s.exporter.ForceFlush(ctx)
+	logger := s.loggerProvider.Logger(s.loggerName)
+	for _, src := range logs {
+		var rec otellog.Record
+		rec.SetTimestamp(src.Timestamp)
+		rec.SetObservedTimestamp(src.ObservedTimestamp)
+		rec.SetSeverity(otellog.Severity(src.SeverityNumber))
+		rec.SetSeverityText(src.SeverityText)
+		rec.SetBody(otellog.StringValue(src.Body))
+
+		if len(src.Attributes) > 0 {
+			attrs := make([]otellog.KeyValue, 0, len(src.Attributes))
+			for _, attr := range src.Attributes {
+				attrs = append(attrs, otellog.KeyValueFromAttribute(attr))
+			}
+			rec.AddAttributes(attrs...)
+		}
+
+		logger.Emit(ctx, rec)
+	}
+
+	return nil
 }
 
 // Shutdown shuts down the exporter
-func (s *SDKLogExporter) Shutdown(ctx context.Context) error {
-	return s.exporter.Shutdown(ctx)
+func (s *LoggerProviderExporter) Shutdown(ctx context.Context) error {
+	if s == nil || s.loggerProvider == nil {
+		return nil
+	}
+	return s.loggerProvider.ForceFlush(ctx)
 }
