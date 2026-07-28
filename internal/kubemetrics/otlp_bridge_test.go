@@ -86,6 +86,60 @@ kube_node_status_condition{node="n1",condition="Ready",status="true"} 1
 	assertGaugeWithAttribute(t, byName["kube_node_status_condition"], "status", "true")
 }
 
+func TestSanitizePrometheusTextDedupesHelpType(t *testing.T) {
+	input := []byte(`# HELP kube_pod_info Information about pod.
+# TYPE kube_pod_info info
+kube_pod_info{namespace="default",pod="a"} 1
+# HELP kube_pod_info Information about pod.
+# TYPE kube_pod_info info
+kube_pod_info{namespace="default",pod="b"} 1
+`)
+
+	output := string(sanitizePrometheusText(input))
+	if strings.Count(output, "# HELP kube_pod_info") != 1 {
+		t.Fatalf("expected one HELP line after dedupe, got output:\n%s", output)
+	}
+	if strings.Count(output, "# TYPE kube_pod_info") != 1 {
+		t.Fatalf("expected one TYPE line after dedupe, got output:\n%s", output)
+	}
+	if !strings.Contains(output, "# TYPE kube_pod_info gauge") {
+		t.Fatalf("expected TYPE rewrite info->gauge to be preserved, got output:\n%s", output)
+	}
+}
+
+func TestOTLPBridgeConvertTextHandlesDuplicateMetadataLines(t *testing.T) {
+	exposition := []byte(`# HELP kube_pod_info Information about pod.
+# TYPE kube_pod_info info
+kube_pod_info{namespace="default",pod="demo-a"} 1
+# HELP kube_pod_info Information about pod.
+# TYPE kube_pod_info info
+kube_pod_info{namespace="default",pod="demo-b"} 1
+`)
+
+	bridge := NewOTLPBridge(nil, nil, slog.Default(), sigdef.DefaultMetadataFieldsConfig(), false)
+	metrics, err := bridge.ConvertText(exposition)
+	if err != nil {
+		t.Fatalf("ConvertText failed: %v", err)
+	}
+
+	if len(metrics) != 1 {
+		t.Fatalf("expected exactly one metric family, got %d", len(metrics))
+	}
+
+	metric := metrics[0]
+	if metric.Name != "kube_pod_info" {
+		t.Fatalf("expected kube_pod_info metric, got %q", metric.Name)
+	}
+
+	gauge, ok := metric.Data.(metricdata.Gauge[float64])
+	if !ok {
+		t.Fatalf("expected gauge data type, got %T", metric.Data)
+	}
+	if len(gauge.DataPoints) != 2 {
+		t.Fatalf("expected two data points for duplicate metadata input, got %d", len(gauge.DataPoints))
+	}
+}
+
 func assertGaugeWithAttribute(t *testing.T, metric metricdata.Metrics, key, expected string) {
 	t.Helper()
 
