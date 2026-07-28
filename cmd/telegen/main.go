@@ -601,7 +601,16 @@ func startKubeMetrics(
 		return nil
 	}
 
-	// Start the provider (HTTP server + collectors)
+	// Configure OTLP streaming BEFORE starting the provider. The streaming
+	// exporters must exist when Provider.Start runs, because Provider.Start
+	// only launches p.metricsStreaming / p.logsStreaming when they are
+	// non-nil. This mirrors the construct-then-start contract used by
+	// vmware, netinfra and snmp.
+	if (cfg.KubeMetrics.Streaming.Enabled && cfg.KubeMetrics.Streaming.UseOTLP) || cfg.KubeMetrics.LogsStreaming.Enabled {
+		configureKubeMetricsStreaming(ctx, provider, cfg, metricsExporter, logsProvider)
+	}
+
+	// Start the provider (HTTP server + collectors + streaming exporters)
 	if err := provider.Start(ctx); err != nil {
 		logger.Warn("kube_metrics failed to start", "error", err)
 		return nil
@@ -613,11 +622,6 @@ func startKubeMetrics(
 		"kubestate_enabled", cfg.KubeMetrics.KubeState.Enabled,
 		"cadvisor_enabled", cfg.KubeMetrics.Cadvisor.Enabled,
 	)
-
-	// Configure OTLP streaming if enabled
-	if (cfg.KubeMetrics.Streaming.Enabled && cfg.KubeMetrics.Streaming.UseOTLP) || cfg.KubeMetrics.LogsStreaming.Enabled {
-		configureKubeMetricsStreaming(ctx, provider, cfg, metricsExporter, logsProvider)
-	}
 
 	return provider
 }
