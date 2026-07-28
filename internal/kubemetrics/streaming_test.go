@@ -6,27 +6,49 @@ package kubemetrics
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
-// MockMetricsExporter is a mock OTEL metrics exporter for testing
+// MockMetricsExporter is a mock OTEL metrics exporter for testing.
+// It is safe for concurrent use because the streaming exporter calls Export
+// from a background goroutine.
 type MockMetricsExporter struct {
+	mu       sync.Mutex
 	exported []*metricdata.ResourceMetrics
 	err      error
 }
 
 func (m *MockMetricsExporter) Export(ctx context.Context, rm *metricdata.ResourceMetrics) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.err != nil {
 		return m.err
 	}
 	m.exported = append(m.exported, rm)
 	return nil
+}
+
+// Count returns how many times Export has been called.
+func (m *MockMetricsExporter) Count() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.exported)
+}
+
+func (m *MockMetricsExporter) Temporality(k sdkmetric.InstrumentKind) metricdata.Temporality {
+	return metricdata.CumulativeTemporality
+}
+
+func (m *MockMetricsExporter) Aggregation(k sdkmetric.InstrumentKind) sdkmetric.Aggregation {
+	return sdkmetric.DefaultAggregationSelector(k)
 }
 
 func (m *MockMetricsExporter) ForceFlush(ctx context.Context) error {

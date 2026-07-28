@@ -105,6 +105,13 @@ type Provider struct {
 
 	server   *http.Server
 	serverMu sync.Mutex
+
+	// startMu guards started/startCtx to make streaming start-order-independent.
+	// If SetupStreaming runs after Start, the newly-created streamers are started
+	// immediately using startCtx (StreamingExporter.Start is idempotent).
+	startMu  sync.Mutex
+	started  bool
+	startCtx context.Context
 }
 
 // New creates a new Kubernetes metrics provider
@@ -182,11 +189,38 @@ func (p *Provider) SetupStreaming(
 		p.logsStreaming = logsStreamer
 	}
 
+	// If Start already ran (SetupStreaming called after Start), start the
+	// just-created streamers now. StreamingExporter.Start is idempotent, so
+	// this is safe even when Start also starts them in the normal order.
+	p.startMu.Lock()
+	started := p.started
+	sctx := p.startCtx
+	p.startMu.Unlock()
+	if started && sctx != nil {
+		if p.metricsStreaming != nil {
+			if err := p.metricsStreaming.Start(sctx); err != nil {
+				return fmt.Errorf("failed to start metrics streaming: %w", err)
+			}
+		}
+		if p.logsStreaming != nil {
+			if err := p.logsStreaming.Start(sctx); err != nil {
+				return fmt.Errorf("failed to start logs streaming: %w", err)
+			}
+		}
+	}
+
 	return nil
 }
 
 // Start starts the metrics provider
 func (p *Provider) Start(ctx context.Context) error {
+	// Record that the provider is running so a later SetupStreaming call can
+	// start streamers created after Start (defense-in-depth against wiring order).
+	p.startMu.Lock()
+	p.started = true
+	p.startCtx = ctx
+	p.startMu.Unlock()
+
 	// Start kubestate
 	if p.kubestate != nil {
 		if err := p.kubestate.Start(ctx); err != nil {
