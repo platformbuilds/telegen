@@ -350,10 +350,10 @@ func (p *Provider) telemetryHandler(w http.ResponseWriter, r *http.Request) {
 		stats := p.kubestate.Stats()
 		_, _ = fmt.Fprintf(w, "# HELP kubemetrics_kubestate_stores_total Number of metrics stores\n")
 		_, _ = fmt.Fprintf(w, "# TYPE kubemetrics_kubestate_stores_total gauge\n")
-		_, _ = fmt.Fprintf(w, "kubemetrics_kubestate_stores_total %v\n", stats["stores"])
+		_, _ = fmt.Fprintf(w, "kubemetrics_kubestate_stores_total %v\n", stats["store_count"])
 		_, _ = fmt.Fprintf(w, "# HELP kubemetrics_kubestate_informers_total Number of active informers\n")
 		_, _ = fmt.Fprintf(w, "# TYPE kubemetrics_kubestate_informers_total gauge\n")
-		_, _ = fmt.Fprintf(w, "kubemetrics_kubestate_informers_total %v\n", stats["informers"])
+		_, _ = fmt.Fprintf(w, "kubemetrics_kubestate_informers_total %v\n", stats["informer_count"])
 	}
 
 	if p.cadvisor != nil {

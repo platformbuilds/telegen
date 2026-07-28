@@ -4,6 +4,7 @@
 package kubemetrics
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"math"
@@ -288,11 +289,20 @@ func (s *StreamingExporter) collectResourceMetrics() *metricdata.ResourceMetrics
 
 // collectKubestateMetrics collects kubestate metrics in OTEL format
 func (s *StreamingExporter) collectKubestateMetrics() []metricdata.Metrics {
+	stats := s.provider.kubestate.Stats()
+	metricsBytes, err := s.provider.kubestate.GetMetricsBytes()
+	return s.collectKubestateMetricsFromData(stats, metricsBytes, err)
+}
+
+func (s *StreamingExporter) collectKubestateMetricsFromData(
+	stats map[string]interface{},
+	metricsBytes []byte,
+	metricsErr error,
+) []metricdata.Metrics {
 	metrics := make([]metricdata.Metrics, 0)
 
 	// Get stats from kubestate stores
-	stats := s.provider.kubestate.Stats()
-	storeCount, _ := stats["stores"].(int)
+	storeCount, _ := stats["store_count"].(int)
 
 	// Add signal metadata if enabled
 	var signalAttrs []attribute.KeyValue
@@ -323,9 +333,29 @@ func (s *StreamingExporter) collectKubestateMetrics() []metricdata.Metrics {
 		},
 	})
 
-	// TODO: Parse actual kubestate metrics from WriteMetrics output
-	// For now, kubestate exposes via Prometheus format - full OTLP conversion
-	// requires parsing the prometheus text format to OTEL datapoints
+	if metricsErr != nil {
+		s.logger.Error("failed to read kubestate metrics bytes", "error", metricsErr)
+		return metrics
+	}
+
+	if len(bytes.TrimSpace(metricsBytes)) == 0 {
+		s.logger.Debug("kubestate metrics payload is empty; informer caches may still be warming")
+		return metrics
+	}
+
+	bridge := NewOTLPBridge(nil, s.resource, s.logger, s.config.MetadataConfig, s.config.IncludeSignalMetadata)
+	convertedMetrics, err := bridge.ConvertText(metricsBytes)
+	if err != nil {
+		s.logger.Error("failed to convert kubestate metrics payload to otel metricdata", "error", err)
+		return metrics
+	}
+
+	if len(convertedMetrics) == 0 {
+		s.logger.Debug("kubestate metrics conversion produced zero metric families")
+		return metrics
+	}
+
+	metrics = append(metrics, convertedMetrics...)
 
 	return metrics
 }

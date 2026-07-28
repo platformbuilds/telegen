@@ -5,6 +5,7 @@ package kubemetrics
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -248,5 +249,54 @@ func TestOTLPLogRecord(t *testing.T) {
 	}
 	if len(record.Attributes) != 2 {
 		t.Errorf("expected 2 attributes, got %d", len(record.Attributes))
+	}
+}
+
+func TestCollectKubestateMetricsFromData_ConvertsKubeSeries(t *testing.T) {
+	cfg := DefaultStreamingConfig()
+	cfg.IncludeSignalMetadata = false
+
+	exporter := &StreamingExporter{
+		config: &cfg,
+		logger: slog.Default(),
+	}
+
+	stats := map[string]interface{}{"store_count": 2}
+	payload := []byte(`# HELP kube_pod_info Information about pod.
+# TYPE kube_pod_info info
+kube_pod_info{namespace="default",pod="demo-pod",uid="u-1"} 1
+# HELP kube_pod_status_phase Pod phase.
+# TYPE kube_pod_status_phase gauge
+kube_pod_status_phase{namespace="default",pod="demo-pod",phase="Running"} 1
+`)
+
+	metrics := exporter.collectKubestateMetricsFromData(stats, payload, nil)
+	if len(metrics) < 3 {
+		t.Fatalf("expected at least 3 metrics (self + kube_*), got %d", len(metrics))
+	}
+
+	seen := map[string]metricdata.Metrics{}
+	for _, metric := range metrics {
+		seen[metric.Name] = metric
+	}
+
+	if _, ok := seen["kube_pod_info"]; !ok {
+		t.Fatalf("expected kube_pod_info to be exported")
+	}
+	if _, ok := seen["kube_pod_status_phase"]; !ok {
+		t.Fatalf("expected kube_pod_status_phase to be exported")
+	}
+
+	selfMetric, ok := seen["telegen_kubestate_stores_total"]
+	if !ok {
+		t.Fatalf("expected telegen_kubestate_stores_total self-telemetry metric")
+	}
+
+	gauge, ok := selfMetric.Data.(metricdata.Gauge[int64])
+	if !ok || len(gauge.DataPoints) == 0 {
+		t.Fatalf("expected self metric to be an int64 gauge with datapoints, got %T", selfMetric.Data)
+	}
+	if gauge.DataPoints[0].Value != 2 {
+		t.Fatalf("expected store_count value 2, got %d", gauge.DataPoints[0].Value)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/cache"
 )
 
 func TestConfigValidation(t *testing.T) {
@@ -574,5 +575,33 @@ func TestConfigFilter(t *testing.T) {
 				t.Errorf("ConfigFilter.IsIncluded(%s) = %v, want %v", tt.metric, got, tt.include)
 			}
 		})
+	}
+}
+
+func TestKubeStateStatsKeys(t *testing.T) {
+	store := NewMetricsStore([]byte{}, func(obj interface{}) []byte { return nil })
+	ks := &KubeState{
+		config:    &Config{},
+		started:   true,
+		stores:    []*MetricsStore{store, store, store},
+		informers: make([]cache.SharedInformer, 2),
+	}
+
+	stats := ks.Stats()
+
+	storeCount, ok := stats["store_count"].(int)
+	if !ok {
+		t.Fatalf("expected store_count key with int value, got %#v", stats["store_count"])
+	}
+	informerCount, ok := stats["informer_count"].(int)
+	if !ok {
+		t.Fatalf("expected informer_count key with int value, got %#v", stats["informer_count"])
+	}
+
+	if storeCount != 3 {
+		t.Fatalf("expected store_count=3, got %d", storeCount)
+	}
+	if informerCount != 2 {
+		t.Fatalf("expected informer_count=2, got %d", informerCount)
 	}
 }
