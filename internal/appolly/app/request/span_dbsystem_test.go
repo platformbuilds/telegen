@@ -101,3 +101,44 @@ func TestSpan_DBSystemName_MySQLFamily(t *testing.T) {
 		})
 	}
 }
+
+func TestSpan_DBSystemName_PostgreSQLSafetyNet(t *testing.T) {
+	tests := []struct {
+		name string
+		span *Span
+		want string
+	}{
+		{
+			name: "postgres stays postgresql without mysql-family hints",
+			span: &Span{
+				Type:    EventTypeSQLClient,
+				SubType: int(DBPostgres),
+				Service: svc.Attrs{
+					UID: svc.UID{Name: "postgres", Instance: "postgres-0"},
+				},
+			},
+			want: telegenSemconv.DBSystemPostgreSQL,
+		},
+		{
+			name: "postgres subtype with mariadb hints downgrades to mariadb",
+			span: &Span{
+				Type:    EventTypeSQLServer,
+				SubType: int(DBPostgres),
+				Service: svc.Attrs{
+					UID:      svc.UID{Name: "mariadb", Instance: "mariadb-0"},
+					Metadata: map[attr.Name]string{attr.K8sContainerName: "mariadbd"},
+				},
+			},
+			want: telegenSemconv.DBSystemMariaDB,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.span.DBSystemName().Value.AsString()
+			if got != tt.want {
+				t.Fatalf("DBSystemName() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

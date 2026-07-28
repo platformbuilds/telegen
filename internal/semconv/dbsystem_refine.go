@@ -39,6 +39,17 @@ func ResolveDBSystemFromExecutableHints(defaultSystem string, hints ...string) s
 			return DBSystemMySQL
 		}
 		return defaultSystem
+	case DBSystemPostgreSQL:
+		// Defense in depth: if the process/container is explicitly a MariaDB/MySQL server,
+		// never emit postgresql. A genuine Postgres process matches none of these tokens and
+		// keeps postgresql unchanged.
+		if strings.Contains(combined, "mariadb") || strings.Contains(combined, "mariadbd") {
+			return DBSystemMariaDB
+		}
+		if strings.Contains(combined, "mysqld") || strings.Contains(combined, "mysql") {
+			return DBSystemMySQL
+		}
+		return DBSystemPostgreSQL
 	default:
 		return defaultSystem
 	}

@@ -31,6 +31,9 @@ const kMySQLPrepare = uint8(0x16)
 // https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_execute.html
 const kMySQLExecute = uint8(0x17)
 
+// kMySQLPayloadLengthMax mirrors bpf/generictracer/protocol_mysql.h:61 (8K).
+const kMySQLPayloadLengthMax = 1 << 13
+
 func isMySQL(b []byte) bool {
 	return isValidMySQLPayload(b)
 }
@@ -46,13 +49,21 @@ func readMySQLHeader(b []byte) mySQLHdr {
 }
 
 func isValidMySQLPayload(b []byte) bool {
-	// the header is at least 5 bytes
+	// header is 4 bytes (3B payload length + 1B sequence id) + 1B command
 	if len(b) < 6 {
 		return false
 	}
 
 	hdr := readMySQLHeader(b)
-	if hdr.length == 0 {
+	if hdr.length == 0 || hdr.length > kMySQLPayloadLengthMax {
+		return false
+	}
+
+	// Frame-length consistency (mirrors kernel is_mysql, protocol_mysql.h:205-294):
+	// a single MySQL packet is a 4-byte header followed by exactly payload_length bytes.
+	// Reject buffers where the declared payload is shorter than what we captured (i.e. the
+	// bytes are not a single clean MySQL frame); allow >= for large/truncated captures.
+	if int(hdr.length) < len(b)-4 {
 		return false
 	}
 

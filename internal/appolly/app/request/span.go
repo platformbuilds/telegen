@@ -1004,7 +1004,11 @@ func (s *Span) DBSystemName() attribute.KeyValue {
 	if s.Type == EventTypeSQLClient || s.Type == EventTypeSQLServer {
 		switch s.SubType {
 		case int(DBPostgres):
-			return semconv.DBSystemNamePostgreSQL
+			sys := telegenSemconv.ResolveDBSystemFromExecutableHints(
+				telegenSemconv.DBSystemPostgreSQL,
+				s.dbSystemProcessHints()...,
+			)
+			return DBSystemName(sys)
 		case int(DBMySQL):
 			sys := telegenSemconv.ResolveDBSystemFromExecutableHints(
 				telegenSemconv.DBSystemMySQL,
