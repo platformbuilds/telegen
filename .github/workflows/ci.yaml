@@ -151,7 +151,7 @@ jobs:
 
       - name: Run verifier check
         run: |
-          sudo -E env TELEGEN_BPF_VERIFIER_CHECK=1 go test -v ./internal/bpfverifier -run TestLoadAllTracerBpfObjects -count=1
+          sudo -E env TELEGEN_BPF_VERIFIER_CHECK=1 go test -v ./internal/bpfverifier -run 'TestLoadAllTracerBpfObjects|TestGoTracerAttachAndEmitHTTP' -count=1
 
   obi-smoke:
     name: OBI Linux Smoke
@@ -218,7 +218,7 @@ jobs:
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: [lint, test, verifier]
+    needs: [lint, test, verifier, obi-smoke]
     steps:
       - name: Checkout
         uses: actions/checkout@v6

@@ -132,6 +132,11 @@ type ProbeDesc struct {
 
 	// Optional list of the offsets of every RET instruction in the symbol
 	ReturnOffsets []uint64
+
+	// Skip is set when an optional uprobe symbol was not resolved. Callers must
+	// not attempt to attach probes with Skip set; attaching at the zero offset
+	// can succeed at the wrong address and leave the process uninstrumented.
+	Skip bool
 }
 
 type Filter struct {

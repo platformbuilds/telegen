@@ -69,13 +69,14 @@ static __always_inline void amqp091_fill_conn(void *channel_ptr, kafka_go_req_t 
 }
 
 static __always_inline void
-amqp091_set_destination(unsigned char *dst, u64 dst_size, void *src_ptr, u64 src_len) {
+amqp091_set_destination(unsigned char *dst, void *src_ptr, u64 src_len) {
     if (!dst || !src_ptr || src_len == 0) {
         return;
     }
 
-    u64 max_len = dst_size - 1;
-    bpf_clamp_umax(src_len, max_len);
+    // bpf_clamp_umax requires a compile-time constant upper bound (same pattern as
+    // go_kafka_go.c). Do not pass a runtime (dst_size - 1) value.
+    bpf_clamp_umax(src_len, MAX_TOPIC_NAME_LEN - 1);
     bpf_probe_read_user(dst, src_len, src_ptr);
     dst[src_len] = '\0';
 }
@@ -93,7 +94,7 @@ amqp091_start(struct pt_regs *ctx, u8 op, void *destination_ptr, u64 destination
 
     client_trace_parent(goroutine_addr, &req.tp);
     amqp091_fill_conn(channel_ptr, &req);
-    amqp091_set_destination(req.topic, sizeof(req.topic), destination_ptr, destination_len);
+    amqp091_set_destination(req.topic, destination_ptr, destination_len);
 
     go_addr_key_t g_key = {};
     go_addr_key_from_id(&g_key, goroutine_addr);

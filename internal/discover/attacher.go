@@ -236,7 +236,20 @@ func (ta *traceAttacher) getTracer(ie *ebpf.Instrumentable) bool {
 	ie.Tracer = tracer
 
 	if err := tracer.NewExecutable(exe, ie); err != nil {
+		ta.log.Error("couldn't attach eBPF probes to process",
+			"error", err,
+			"tracer_type", tracerType,
+			"pid", ie.FileInfo.Pid,
+			"cmd", ie.FileInfo.CmdExePath)
 		ta.Metrics.InstrumentationError(ie.FileInfo.ExecutableName(), imetrics.InstrumentationErrorAttachingUprobe)
+		tracer.UnlinkExecutable(ie.FileInfo)
+
+		if tracerType == ebpf.Go {
+			ta.log.Warn("Go-specific tracer attach failed; falling back to generic instrumentation",
+				"pid", ie.FileInfo.Pid,
+				"cmd", ie.FileInfo.CmdExePath)
+			return ta.fallbackGenericAfterGoFailure(ie)
+		}
 		return false
 	}
 
@@ -259,6 +272,47 @@ func (ta *traceAttacher) getTracer(ie *ebpf.Instrumentable) bool {
 	}
 	ta.Metrics.InstrumentProcess(ie.FileInfo.ExecutableName())
 	ta.log.Debug(".done")
+	return true
+}
+
+// fallbackGenericAfterGoFailure instruments a Go process with the generic tracer after
+// gotracer uprobe attach failed. Without this path the process is left completely dark.
+func (ta *traceAttacher) fallbackGenericAfterGoFailure(ie *ebpf.Instrumentable) bool {
+	if ta.reusableTracer != nil {
+		return ta.reuseTracer(ta.reusableTracer, ie)
+	}
+
+	programs := ta.withCommonTracersGroup(newGenericTracersGroup(ta.EbpfEventContext.CommonPIDsFilter, ta.Cfg, ta.Metrics))
+	if len(programs) == 0 {
+		return false
+	}
+
+	exe, ok := ta.loadExecutable(ie)
+	if !ok {
+		return false
+	}
+
+	tracer := ebpf.NewProcessTracer(ebpf.Generic, programs, ta.Cfg.ShutdownTimeout, ta.Metrics)
+	if err := tracer.Init(ta.EbpfEventContext); err != nil {
+		ta.log.Error("couldn't load generic tracer after Go attach failure", "error", err,
+			"pid", ie.FileInfo.Pid, "cmd", ie.FileInfo.CmdExePath)
+		ta.Metrics.InstrumentationError(ie.FileInfo.ExecutableName(), imetrics.InstrumentationErrorInspectionFailed)
+		return false
+	}
+
+	ie.Tracer = tracer
+	if err := tracer.NewExecutable(exe, ie); err != nil {
+		ta.log.Error("couldn't attach generic tracer after Go attach failure", "error", err,
+			"pid", ie.FileInfo.Pid, "cmd", ie.FileInfo.CmdExePath)
+		ta.Metrics.InstrumentationError(ie.FileInfo.ExecutableName(), imetrics.InstrumentationErrorAttachingUprobe)
+		tracer.UnlinkExecutable(ie.FileInfo)
+		return false
+	}
+
+	ta.monitorPIDs(tracer, ie)
+	ta.existingTracers[ie.FileInfo.Ino] = tracer
+	ta.reusableTracer = tracer
+	ta.Metrics.InstrumentProcess(ie.FileInfo.ExecutableName())
 	return true
 }
 
@@ -322,14 +376,27 @@ func (ta *traceAttacher) reuseTracer(tracer *ebpf.ProcessTracer, ie *ebpf.Instru
 	}
 
 	if err := tracer.NewExecutable(exe, ie); err != nil {
-		ta.log.Debug("Failed to attach uprobes for new executable", "pid", ie.FileInfo.Pid, "error", err)
+		ta.log.Error("Failed to attach uprobes for executable",
+			"pid", ie.FileInfo.Pid,
+			"cmd", ie.FileInfo.CmdExePath,
+			"tracer_type", tracer.Type,
+			"error", err)
+		if tracer.Type == ebpf.Go {
+			ta.log.Warn("reused Go tracer attach failed; falling back to generic instrumentation",
+				"pid", ie.FileInfo.Pid,
+				"cmd", ie.FileInfo.CmdExePath)
+			return ta.fallbackGenericAfterGoFailure(ie)
+		}
+		// Generic kprobes remain process-wide; continue monitoring the PID so
+		// kernel-level spans still flow even if uprobe attach failed.
 	}
 
-	ta.log.Debug("reusing Generic tracer for",
+	ta.log.Debug("reusing tracer for",
 		"pid", ie.FileInfo.Pid,
 		"child", ie.ChildPids,
 		"cmd", ie.FileInfo.CmdExePath,
-		"language", ie.Type)
+		"language", ie.Type,
+		"tracer_type", tracer.Type)
 
 	ta.monitorPIDs(tracer, ie)
 	ta.existingTracers[ie.FileInfo.Ino] = tracer

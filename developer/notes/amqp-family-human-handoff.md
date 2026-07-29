@@ -33,6 +33,8 @@ This catches unsafe `data[]` dereferences of userspace pointers (the root cause 
 
 A clean `docker build` does **not** imply loadability — the verifier is a load-time kernel check, not a compile-time check. The `verifier-check` target depends on `docker-generate` so it can never test stale bytecode.
 
+**Load success is not enough.** A clean BPF load does **not** imply attachment or span emission. The 3.1.26 Go blackout loaded and verified gotracer successfully, yet Go processes emitted zero spans because unresolved optional uprobes (e.g. `amqp091`) were still attached at address `0`. The CI `verifier` job therefore also runs `TestGoTracerAttachAndEmitHTTP` (attach + emit against a live Go HTTP server). That attach+emit smoke — and the `obi-smoke` OTLP forward smoke — are mandatory blockers for the `docker` job and must be green before any `release/mark-v*` tag.
+
 The AMQP 0-9-1 large-buffer path is capped at `K_TCP_MAX_LEN` (256 bytes) when the kernel cannot hint the protocol type. This is a known caveat tracked for Phase C.
 
 ## 3) Real-broker protocol verification matrix
