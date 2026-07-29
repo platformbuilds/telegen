@@ -102,17 +102,72 @@ static __always_inline bool openwire_has_magic(const unsigned char *data, u32 da
         return false;
     }
 
-#pragma unroll
-    for (u32 i = 0; i < 56; i++) {
-        if (i + 8 > data_len) {
-            break;
-        }
-        if (data[i] == 'A' && data[i + 1] == 'c' && data[i + 2] == 't' && data[i + 3] == 'i' &&
-            data[i + 4] == 'v' && data[i + 5] == 'e' && data[i + 6] == 'M' && data[i + 7] == 'Q') {
-            return true;
-        }
-    }
-    return false;
+    bool found = false;
+#define MATCH_ACTIVEMQ_AT(_off)                                                                 \
+    found = found ||                                                                            \
+            (((_off) + 8 <= data_len) && data[_off] == 'A' && data[(_off) + 1] == 'c' &&      \
+             data[(_off) + 2] == 't' && data[(_off) + 3] == 'i' && data[(_off) + 4] == 'v' && \
+             data[(_off) + 5] == 'e' && data[(_off) + 6] == 'M' && data[(_off) + 7] == 'Q')
+
+    MATCH_ACTIVEMQ_AT(0);
+    MATCH_ACTIVEMQ_AT(1);
+    MATCH_ACTIVEMQ_AT(2);
+    MATCH_ACTIVEMQ_AT(3);
+    MATCH_ACTIVEMQ_AT(4);
+    MATCH_ACTIVEMQ_AT(5);
+    MATCH_ACTIVEMQ_AT(6);
+    MATCH_ACTIVEMQ_AT(7);
+    MATCH_ACTIVEMQ_AT(8);
+    MATCH_ACTIVEMQ_AT(9);
+    MATCH_ACTIVEMQ_AT(10);
+    MATCH_ACTIVEMQ_AT(11);
+    MATCH_ACTIVEMQ_AT(12);
+    MATCH_ACTIVEMQ_AT(13);
+    MATCH_ACTIVEMQ_AT(14);
+    MATCH_ACTIVEMQ_AT(15);
+    MATCH_ACTIVEMQ_AT(16);
+    MATCH_ACTIVEMQ_AT(17);
+    MATCH_ACTIVEMQ_AT(18);
+    MATCH_ACTIVEMQ_AT(19);
+    MATCH_ACTIVEMQ_AT(20);
+    MATCH_ACTIVEMQ_AT(21);
+    MATCH_ACTIVEMQ_AT(22);
+    MATCH_ACTIVEMQ_AT(23);
+    MATCH_ACTIVEMQ_AT(24);
+    MATCH_ACTIVEMQ_AT(25);
+    MATCH_ACTIVEMQ_AT(26);
+    MATCH_ACTIVEMQ_AT(27);
+    MATCH_ACTIVEMQ_AT(28);
+    MATCH_ACTIVEMQ_AT(29);
+    MATCH_ACTIVEMQ_AT(30);
+    MATCH_ACTIVEMQ_AT(31);
+    MATCH_ACTIVEMQ_AT(32);
+    MATCH_ACTIVEMQ_AT(33);
+    MATCH_ACTIVEMQ_AT(34);
+    MATCH_ACTIVEMQ_AT(35);
+    MATCH_ACTIVEMQ_AT(36);
+    MATCH_ACTIVEMQ_AT(37);
+    MATCH_ACTIVEMQ_AT(38);
+    MATCH_ACTIVEMQ_AT(39);
+    MATCH_ACTIVEMQ_AT(40);
+    MATCH_ACTIVEMQ_AT(41);
+    MATCH_ACTIVEMQ_AT(42);
+    MATCH_ACTIVEMQ_AT(43);
+    MATCH_ACTIVEMQ_AT(44);
+    MATCH_ACTIVEMQ_AT(45);
+    MATCH_ACTIVEMQ_AT(46);
+    MATCH_ACTIVEMQ_AT(47);
+    MATCH_ACTIVEMQ_AT(48);
+    MATCH_ACTIVEMQ_AT(49);
+    MATCH_ACTIVEMQ_AT(50);
+    MATCH_ACTIVEMQ_AT(51);
+    MATCH_ACTIVEMQ_AT(52);
+    MATCH_ACTIVEMQ_AT(53);
+    MATCH_ACTIVEMQ_AT(54);
+    MATCH_ACTIVEMQ_AT(55);
+
+#undef MATCH_ACTIVEMQ_AT
+    return found;
 }
 
 static __always_inline bool openwire_has_known_command(const unsigned char *data, u32 data_len) {
@@ -141,14 +196,38 @@ static __always_inline bool stomp_match_line(const unsigned char *data,
         return false;
     }
 
-#pragma unroll
-    for (u32 i = 0; i < 11; i++) {
-        if (i >= cmd_len) {
-            break;
-        }
-        if (data[i] != (u8)cmd[i]) {
-            return false;
-        }
+    if (cmd_len > 0 && data[0] != (u8)cmd[0]) {
+        return false;
+    }
+    if (cmd_len > 1 && data[1] != (u8)cmd[1]) {
+        return false;
+    }
+    if (cmd_len > 2 && data[2] != (u8)cmd[2]) {
+        return false;
+    }
+    if (cmd_len > 3 && data[3] != (u8)cmd[3]) {
+        return false;
+    }
+    if (cmd_len > 4 && data[4] != (u8)cmd[4]) {
+        return false;
+    }
+    if (cmd_len > 5 && data[5] != (u8)cmd[5]) {
+        return false;
+    }
+    if (cmd_len > 6 && data[6] != (u8)cmd[6]) {
+        return false;
+    }
+    if (cmd_len > 7 && data[7] != (u8)cmd[7]) {
+        return false;
+    }
+    if (cmd_len > 8 && data[8] != (u8)cmd[8]) {
+        return false;
+    }
+    if (cmd_len > 9 && data[9] != (u8)cmd[9]) {
+        return false;
+    }
+    if (cmd_len > 10 && data[10] != (u8)cmd[10]) {
+        return false;
     }
 
     if (data[cmd_len] == '\n') {
