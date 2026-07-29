@@ -71,7 +71,14 @@ docker-generate:
 		-e "PATH=/usr/lib/llvm20/bin:/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
 		--entrypoint /bin/sh \
 		$(GEN_IMG) \
-		-c 'export BPF2GO_STRIP="$$(ls /usr/lib/llvm*/bin/llvm-strip 2>/dev/null | head -n1)"; go generate ./internal/profiler/...'
+		-c 'export BPF2GO_STRIP="$$(ls /usr/lib/llvm*/bin/llvm-strip 2>/dev/null | head -n1)"; \
+		    go generate ./internal/ebpf/common/... && \
+		    go generate ./internal/tracers/... && \
+		    go generate ./internal/netollyebpf/... && \
+		    go generate ./internal/ebpflogger/... && \
+		    go generate ./internal/ebpfwatcher/... && \
+		    go generate ./internal/rdns/... && \
+		    go generate ./internal/profiler/...'
 
 ### Build Targets ###########################################################
 
@@ -100,6 +107,19 @@ test:
 .PHONY: lint
 lint:
 	golangci-lint run ./...
+
+.PHONY: verifier-check
+verifier-check: docker-generate
+	@echo "### Running BPF verifier load checks in Linux container..."
+	$(OCI_BIN) run --rm \
+		--privileged \
+		-v /sys/kernel/btf:/sys/kernel/btf:ro \
+		-v $(PWD):/src \
+		-w /src \
+		-e TELEGEN_BPF_VERIFIER_CHECK=1 \
+		--entrypoint /bin/sh \
+		$(GEN_IMG) \
+		-c 'go test -v ./internal/bpfverifier -run TestLoadAllTracerBpfObjects -count=1'
 
 ### Docker Targets ##########################################################
 
