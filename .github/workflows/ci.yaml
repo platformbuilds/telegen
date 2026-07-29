@@ -149,9 +149,13 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: Run verifier check
+      - name: Run verifier load check
         run: |
-          sudo -E env TELEGEN_BPF_VERIFIER_CHECK=1 go test -v ./internal/bpfverifier -run 'TestLoadAllTracerBpfObjects|TestGoTracerAttachAndEmitHTTP' -count=1
+          sudo -E env TELEGEN_BPF_VERIFIER_CHECK=1 go test -v ./internal/bpfverifier -run TestLoadAllTracerBpfObjects -count=1
+
+      - name: Run gotracer attach+emit smoke
+        run: |
+          sudo -E env TELEGEN_BPF_VERIFIER_CHECK=1 go test -v ./internal/bpfverifier -run TestGoTracerAttachAndEmitHTTP -count=1
 
   obi-smoke:
     name: OBI Linux Smoke
