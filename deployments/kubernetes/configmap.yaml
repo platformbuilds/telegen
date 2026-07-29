@@ -234,6 +234,7 @@ data:
         mysql: 0
         postgres: 0
         kafka: 0
+        mq: 0
       ringbuf_size: 262144
       perf_buffer_size: 8192
       bpf_fs: "/sys/fs/bpf"

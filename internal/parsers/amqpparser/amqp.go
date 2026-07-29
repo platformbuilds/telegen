@@ -39,63 +39,64 @@ type ClassMethod struct {
 // String returns a human-readable "class.method" label.
 func (cm ClassMethod) String() string {
 	names := map[ClassMethod]string{
-		{10, 10}: "connection.start",
-		{10, 11}: "connection.start-ok",
-		{10, 20}: "connection.secure",
-		{10, 21}: "connection.secure-ok",
-		{10, 30}: "connection.tune",
-		{10, 31}: "connection.tune-ok",
-		{10, 40}: "connection.open",
-		{10, 41}: "connection.open-ok",
-		{10, 50}: "connection.close",
-		{10, 51}: "connection.close-ok",
-		{20, 10}: "channel.open",
-		{20, 11}: "channel.open-ok",
-		{20, 20}: "channel.flow",
-		{20, 21}: "channel.flow-ok",
-		{20, 40}: "channel.close",
-		{20, 41}: "channel.close-ok",
-		{40, 10}: "exchange.declare",
-		{40, 11}: "exchange.declare-ok",
-		{40, 20}: "exchange.delete",
-		{40, 21}: "exchange.delete-ok",
-		{40, 30}: "exchange.bind",
-		{40, 31}: "exchange.bind-ok",
-		{40, 40}: "exchange.unbind",
-		{40, 51}: "exchange.unbind-ok",
-		{50, 10}: "queue.declare",
-		{50, 11}: "queue.declare-ok",
-		{50, 20}: "queue.bind",
-		{50, 21}: "queue.bind-ok",
-		{50, 30}: "queue.purge",
-		{50, 31}: "queue.purge-ok",
-		{50, 40}: "queue.delete",
-		{50, 41}: "queue.delete-ok",
-		{50, 50}: "queue.unbind",
-		{50, 51}: "queue.unbind-ok",
-		{60, 10}: "basic.qos",
-		{60, 11}: "basic.qos-ok",
-		{60, 20}: "basic.consume",
-		{60, 21}: "basic.consume-ok",
-		{60, 30}: "basic.cancel",
-		{60, 31}: "basic.cancel-ok",
-		{60, 40}: "basic.publish",
-		{60, 50}: "basic.return",
-		{60, 60}: "basic.deliver",
-		{60, 70}: "basic.get",
-		{60, 71}: "basic.get-ok",
-		{60, 72}: "basic.get-empty",
-		{60, 80}: "basic.ack",
-		{60, 90}: "basic.reject",
+		{10, 10}:  "connection.start",
+		{10, 11}:  "connection.start-ok",
+		{10, 20}:  "connection.secure",
+		{10, 21}:  "connection.secure-ok",
+		{10, 30}:  "connection.tune",
+		{10, 31}:  "connection.tune-ok",
+		{10, 40}:  "connection.open",
+		{10, 41}:  "connection.open-ok",
+		{10, 50}:  "connection.close",
+		{10, 51}:  "connection.close-ok",
+		{20, 10}:  "channel.open",
+		{20, 11}:  "channel.open-ok",
+		{20, 20}:  "channel.flow",
+		{20, 21}:  "channel.flow-ok",
+		{20, 40}:  "channel.close",
+		{20, 41}:  "channel.close-ok",
+		{40, 10}:  "exchange.declare",
+		{40, 11}:  "exchange.declare-ok",
+		{40, 20}:  "exchange.delete",
+		{40, 21}:  "exchange.delete-ok",
+		{40, 30}:  "exchange.bind",
+		{40, 31}:  "exchange.bind-ok",
+		{40, 40}:  "exchange.unbind",
+		{40, 51}:  "exchange.unbind-ok",
+		{50, 10}:  "queue.declare",
+		{50, 11}:  "queue.declare-ok",
+		{50, 20}:  "queue.bind",
+		{50, 21}:  "queue.bind-ok",
+		{50, 30}:  "queue.purge",
+		{50, 31}:  "queue.purge-ok",
+		{50, 40}:  "queue.delete",
+		{50, 41}:  "queue.delete-ok",
+		{50, 50}:  "queue.unbind",
+		{50, 51}:  "queue.unbind-ok",
+		{60, 10}:  "basic.qos",
+		{60, 11}:  "basic.qos-ok",
+		{60, 20}:  "basic.consume",
+		{60, 21}:  "basic.consume-ok",
+		{60, 30}:  "basic.cancel",
+		{60, 31}:  "basic.cancel-ok",
+		{60, 40}:  "basic.publish",
+		{60, 50}:  "basic.return",
+		{60, 60}:  "basic.deliver",
+		{60, 70}:  "basic.get",
+		{60, 71}:  "basic.get-ok",
+		{60, 72}:  "basic.get-empty",
+		{60, 80}:  "basic.ack",
+		{60, 90}:  "basic.reject",
 		{60, 100}: "basic.recover-async",
 		{60, 110}: "basic.recover",
 		{60, 111}: "basic.recover-ok",
-		{90, 10}: "tx.select",
-		{90, 11}: "tx.select-ok",
-		{90, 20}: "tx.commit",
-		{90, 21}: "tx.commit-ok",
-		{90, 30}: "tx.rollback",
-		{90, 31}: "tx.rollback-ok",
+		{60, 120}: "basic.nack",
+		{90, 10}:  "tx.select",
+		{90, 11}:  "tx.select-ok",
+		{90, 20}:  "tx.commit",
+		{90, 21}:  "tx.commit-ok",
+		{90, 30}:  "tx.rollback",
+		{90, 31}:  "tx.rollback-ok",
 	}
 	if name, ok := names[cm]; ok {
 		return name
@@ -108,22 +109,23 @@ func (cm ClassMethod) String() string {
 // immediately as one-sided records.
 func (cm ClassMethod) isSynchronous() bool {
 	asyncMethods := map[ClassMethod]bool{
-		{60, 40}: true, // basic.publish
-		{60, 50}: true, // basic.return
-		{60, 60}: true, // basic.deliver
-		{60, 80}: true, // basic.ack
-		{60, 90}: true, // basic.reject
+		{60, 40}:  true, // basic.publish
+		{60, 50}:  true, // basic.return
+		{60, 60}:  true, // basic.deliver
+		{60, 80}:  true, // basic.ack
+		{60, 90}:  true, // basic.reject
 		{60, 100}: true, // basic.recover-async
+		{60, 120}: true, // basic.nack
 	}
 	return !asyncMethods[cm]
 }
 
 // Frame represents a parsed AMQP 0-9-1 frame.
 type Frame struct {
-	Type       uint8
-	Channel    uint16
-	Method     ClassMethod // valid only when Type == FrameMethod
-	Payload    []byte
+	Type        uint8
+	Channel     uint16
+	Method      ClassMethod // valid only when Type == FrameMethod
+	Payload     []byte
 	Synchronous bool
 }
 
@@ -245,7 +247,15 @@ func IsAMQP(buf []byte) bool {
 	}
 	if len(buf) >= MinFrameLen {
 		ft := buf[0]
-		return ft == FrameMethod || ft == FrameHeader || ft == FrameBody || ft == FrameHeartbeat
+		if ft != FrameMethod && ft != FrameHeader && ft != FrameBody && ft != FrameHeartbeat {
+			return false
+		}
+		payloadSize := binary.BigEndian.Uint32(buf[3:7])
+		totalSize := int(7 + payloadSize + 1)
+		if totalSize < MinFrameLen || totalSize > len(buf) {
+			return false
+		}
+		return buf[totalSize-1] == FrameEnd
 	}
 	return false
 }

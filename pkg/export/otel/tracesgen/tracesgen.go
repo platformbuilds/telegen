@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	expirable2 "github.com/hashicorp/golang-lru/v2/expirable"
@@ -25,6 +26,7 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
 	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
 	"github.com/mirastacklabs-ai/telegen/internal/ebpf/common/dnsparser"
+	telegenSemconv "github.com/mirastacklabs-ai/telegen/internal/semconv"
 	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
 	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
@@ -294,8 +296,12 @@ func acceptSpan(is instrumentations.InstrumentationSelection, span *request.Span
 		return is.MQTTEnabled()
 	case request.EventTypeNATSClient:
 		return is.NATSEnabled()
-	case request.EventTypeAMQPClient:
+	case request.EventTypeAMQPClient, request.EventTypeAMQPServer:
 		return is.AMQPEnabled()
+	case request.EventTypeOpenWireClient, request.EventTypeOpenWireServer:
+		return is.OpenWireEnabled()
+	case request.EventTypeSTOMPClient, request.EventTypeSTOMPServer:
+		return is.STOMPEnabled()
 	case request.EventTypeSunRPCClient, request.EventTypeSunRPCServer:
 		return is.SunRPCEnabled()
 	case request.EventTypeMongoClient:
@@ -506,6 +512,49 @@ func TraceAttributesSelector(span *request.Span, optionalAttrs map[attr.Name]str
 		if span.Type == request.EventTypeMQTTClient {
 			attrs = append(attrs, request.PeerService(request.PeerServiceFromSpan(span)))
 		}
+	case request.EventTypeAMQPServer, request.EventTypeAMQPClient:
+		operation := request.MessagingOperationType(span.Method)
+		messagingSystem := telegenSemconv.ResolveAMQP091MessagingSystem()
+		if span.MessagingInfo != nil && strings.HasPrefix(span.MessagingInfo.OperationName, "amqp1.") {
+			messagingSystem = telegenSemconv.ResolveAMQP1MessagingSystem(messagingSystemHints(span)...)
+		}
+		attrs = []attribute.KeyValue{
+			request.ServerAddr(request.HostAsServer(span)),
+			request.ServerPort(span.HostPort),
+			semconv.MessagingSystemKey.String(messagingSystem),
+			semconv.MessagingDestinationName(span.Path),
+			semconv.MessagingClientID(span.Statement),
+			operation,
+		}
+		if span.Type == request.EventTypeAMQPClient {
+			attrs = append(attrs, request.PeerService(request.PeerServiceFromSpan(span)))
+		}
+	case request.EventTypeOpenWireServer, request.EventTypeOpenWireClient:
+		operation := request.MessagingOperationType(span.Method)
+		attrs = []attribute.KeyValue{
+			request.ServerAddr(request.HostAsServer(span)),
+			request.ServerPort(span.HostPort),
+			semconv.MessagingSystemKey.String(telegenSemconv.ResolveOpenWireMessagingSystem()),
+			semconv.MessagingDestinationName(span.Path),
+			semconv.MessagingClientID(span.Statement),
+			operation,
+		}
+		if span.Type == request.EventTypeOpenWireClient {
+			attrs = append(attrs, request.PeerService(request.PeerServiceFromSpan(span)))
+		}
+	case request.EventTypeSTOMPServer, request.EventTypeSTOMPClient:
+		operation := request.MessagingOperationType(span.Method)
+		attrs = []attribute.KeyValue{
+			request.ServerAddr(request.HostAsServer(span)),
+			request.ServerPort(span.HostPort),
+			semconv.MessagingSystemKey.String(telegenSemconv.ResolveSTOMPMessagingSystem(messagingSystemHints(span)...)),
+			semconv.MessagingDestinationName(span.Path),
+			semconv.MessagingClientID(span.Statement),
+			operation,
+		}
+		if span.Type == request.EventTypeSTOMPClient {
+			attrs = append(attrs, request.PeerService(request.PeerServiceFromSpan(span)))
+		}
 	case request.EventTypeMongoClient:
 		attrs = []attribute.KeyValue{
 			request.ServerAddr(request.HostAsServer(span)),
@@ -582,15 +631,15 @@ func TraceAttributesSelector(span *request.Span, optionalAttrs map[attr.Name]str
 
 func spanKind(span *request.Span) trace2.SpanKind {
 	switch span.Type {
-	case request.EventTypeHTTP, request.EventTypeGRPC, request.EventTypeRedisServer, request.EventTypeKafkaServer, request.EventTypeMQTTServer, request.EventTypeSunRPCServer, request.EventTypeSQLServer:
+	case request.EventTypeHTTP, request.EventTypeGRPC, request.EventTypeRedisServer, request.EventTypeKafkaServer, request.EventTypeMQTTServer, request.EventTypeAMQPServer, request.EventTypeOpenWireServer, request.EventTypeSTOMPServer, request.EventTypeSunRPCServer, request.EventTypeSQLServer:
 		return trace2.SpanKindServer
 	case request.EventTypeHTTPClient, request.EventTypeGRPCClient, request.EventTypeSQLClient, request.EventTypeRedisClient, request.EventTypeMongoClient, request.EventTypeCouchbaseClient, request.EventTypeMemcachedClient, request.EventTypeSunRPCClient, request.EventTypeFailedConnect:
 		return trace2.SpanKindClient
-	case request.EventTypeKafkaClient, request.EventTypeMQTTClient, request.EventTypeNATSClient, request.EventTypeAMQPClient:
+	case request.EventTypeKafkaClient, request.EventTypeMQTTClient, request.EventTypeNATSClient, request.EventTypeAMQPClient, request.EventTypeOpenWireClient, request.EventTypeSTOMPClient:
 		switch span.Method {
 		case request.MessagingPublish:
 			return trace2.SpanKindProducer
-		case request.MessagingProcess:
+		case request.MessagingProcess, request.MessagingReceive, request.MessagingSettle:
 			return trace2.SpanKindConsumer
 		}
 	}
@@ -657,7 +706,13 @@ func getSignalMetadataForSpan(span *request.Span) *sigdef.SignalMetadata {
 	case request.EventTypeKafkaClient, request.EventTypeKafkaServer:
 		return sigdef.KafkaTraces
 	case request.EventTypeMQTTClient, request.EventTypeMQTTServer:
-		return sigdef.RabbitMQTraces // Using RabbitMQ for MQTT as closest match
+		return sigdef.MQTTTraces
+	case request.EventTypeAMQPClient, request.EventTypeAMQPServer:
+		return sigdef.RabbitMQTraces
+	case request.EventTypeOpenWireClient, request.EventTypeOpenWireServer:
+		return sigdef.OpenWireTraces
+	case request.EventTypeSTOMPClient, request.EventTypeSTOMPServer:
+		return sigdef.STOMPTraces
 	case request.EventTypeMongoClient:
 		return sigdef.MongoDBTraces
 	case request.EventTypeCouchbaseClient:
@@ -669,4 +724,15 @@ func getSignalMetadataForSpan(span *request.Span) *sigdef.SignalMetadata {
 	default:
 		return nil
 	}
+}
+
+func messagingSystemHints(span *request.Span) []string {
+	hints := []string{span.Service.UID.Name, span.Service.UID.Instance}
+	if cn, ok := span.Service.Metadata[attr.K8sContainerName]; ok && cn != "" {
+		hints = append(hints, cn)
+	}
+	if span.HostPort > 0 {
+		hints = append(hints, "port:"+strconv.Itoa(span.HostPort))
+	}
+	return hints
 }

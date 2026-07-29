@@ -305,7 +305,7 @@ ebpf:
     mysql: 0
     postgres: 0
     kafka: 0
-    amqp: 0      # AMQP 0-9-1 (RabbitMQ)
+    mq: 0        # MQ protocols (AMQP 0-9-1 / AMQP 1.0 / OpenWire / STOMP)
     cql: 0       # Cassandra Query Language
     nats: 0      # NATS messaging
   
@@ -454,7 +454,6 @@ network:
     # AMQP 0-9-1 — used by RabbitMQ clients that speak the wire protocol directly
     amqp:
       enabled: true
-      capture_routing_key: true
     # CQL (Cassandra Query Language) — Apache Cassandra / DataStax DSE
     cql:
       enabled: true

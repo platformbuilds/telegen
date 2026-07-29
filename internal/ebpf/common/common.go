@@ -45,6 +45,7 @@ type (
 	GoSaramaClientInfo   BpfKafkaClientReqT
 	GoRedisClientInfo    BpfRedisClientReqT
 	GoKafkaGoClientInfo  BpfKafkaGoReqT
+	GoAMQP091ClientInfo  BpfKafkaGoReqT
 	TCPLargeBufferHeader BpfTcpLargeBufferT
 	GoOTelSpanTrace      BpfOtelSpanT
 	GoMongoClientInfo    BpfMongoGoClientReqT
@@ -80,6 +81,7 @@ const (
 	EventTypeGoMongo        = 14 // EVENT_GO_MONGO - Go MongoDB spans
 	EventTypeFailedConnect  = 15 // EVENT_FAILED_CONNECT - Failed Connections
 	EventTypeDNS            = 16 // EVENT_DNS_REQUEST - DNS events
+	EventTypeGoAMQP091      = 17 // EVENT_GO_AMQP091 - AMQP 0-9-1 client for Go
 	EventTypeGoChannelLink  = 18 // EVENT_GO_CHANNEL_LINK - Go channel handoff span links
 )
 
@@ -90,17 +92,20 @@ const (
 	ProtocolTypePostgres
 	ProtocolTypeHTTP // not used, written for consistency
 	ProtocolTypeKafka
-	ProtocolTypeMQTT       // placeholder for future kernel-space detection
-	ProtocolTypeAMQP       // AMQP 0-9-1 (RabbitMQ)
-	ProtocolTypeCQL        // Cassandra Query Language (Cassandra/ScyllaDB)
-	ProtocolTypeNATS       // NATS messaging
-	ProtocolTypeMemcached  // Memcached ASCII text protocol
-	ProtocolTypeClickHouse // ClickHouse native TCP protocol
-	ProtocolTypeZooKeeper  // Apache ZooKeeper Jute binary protocol
-	ProtocolTypeDubbo2     // Apache Dubbo2 RPC protocol
-	ProtocolTypeFDB        // FoundationDB client protocol
-	ProtocolTypeMSSQL      // Microsoft SQL Server (TDS)
-	ProtocolTypeSunRPC     // ONC RPC over TCP
+	ProtocolTypeMQTT             // placeholder for future kernel-space detection
+	ProtocolTypeAMQP             // AMQP 0-9-1 (RabbitMQ)
+	ProtocolTypeCQL              // Cassandra Query Language (Cassandra/ScyllaDB)
+	ProtocolTypeNATS             // NATS messaging
+	ProtocolTypeMemcached        // Memcached ASCII text protocol
+	ProtocolTypeClickHouse       // ClickHouse native TCP protocol
+	ProtocolTypeZooKeeper        // Apache ZooKeeper Jute binary protocol
+	ProtocolTypeDubbo2           // Apache Dubbo2 RPC protocol
+	ProtocolTypeFDB              // FoundationDB client protocol
+	ProtocolTypeMSSQL            // Microsoft SQL Server (TDS)
+	ProtocolTypeSunRPC           // ONC RPC over TCP
+	ProtocolTypeAMQP1      uint8 = 16
+	ProtocolTypeOpenWire   uint8 = 17
+	ProtocolTypeSTOMP      uint8 = 18
 )
 
 var IntegrityModeOverride = false
@@ -176,6 +181,9 @@ type EBPFParseContext struct {
 	postgresPreparedStatements *simplelru.LRU[postgresPreparedStatementsKey, string]
 	postgresPortals            *simplelru.LRU[postgresPortalsKey, string]
 	kafkaTopicUUIDToName       *simplelru.LRU[kafkaparser.UUID, string]
+	amqpLastDestinationCache   *simplelru.LRU[amqpChannelKey, string]
+	amqp10LinkAddressCache     *simplelru.LRU[amqp10LinkKey, string]
+	openWireDestinationCache   *simplelru.LRU[openWireDestinationKey, string]
 	payloadExtraction          config.PayloadExtraction
 	httpEnricher               *ebpfhttp.HTTPEnricher
 	dnsEvents                  *expirable.LRU[dnsparser.DNSId, *request.Span]
@@ -211,6 +219,9 @@ func NewEBPFParseContext(cfg *config.EBPFTracer, spansChan *msg.Queue[[]request.
 		postgresPreparedStatements *simplelru.LRU[postgresPreparedStatementsKey, string]
 		postgresPortals            *simplelru.LRU[postgresPortalsKey, string]
 		kafkaTopicUUIDToName       *simplelru.LRU[kafkaparser.UUID, string]
+		amqpLastDestinationCache   *simplelru.LRU[amqpChannelKey, string]
+		amqp10LinkAddressCache     *simplelru.LRU[amqp10LinkKey, string]
+		openWireDestinationCache   *simplelru.LRU[openWireDestinationKey, string]
 		mongoRequestCache          PendingMongoDBRequests
 		payloadExtraction          config.PayloadExtraction
 		httpEnricher               *ebpfhttp.HTTPEnricher
@@ -258,6 +269,23 @@ func NewEBPFParseContext(cfg *config.EBPFTracer, spansChan *msg.Queue[[]request.
 			ptlog().Error("failed to create Kafka topic UUID to name cache", "error", err)
 		}
 
+		amqpCacheSize := cfg.AMQPLastDestinationCacheSize
+		if amqpCacheSize <= 0 {
+			amqpCacheSize = 1024
+		}
+		amqpLastDestinationCache, err = simplelru.NewLRU[amqpChannelKey, string](amqpCacheSize, nil)
+		if err != nil {
+			ptlog().Error("failed to create AMQP destination cache", "error", err)
+		}
+		amqp10LinkAddressCache, err = simplelru.NewLRU[amqp10LinkKey, string](amqpCacheSize, nil)
+		if err != nil {
+			ptlog().Error("failed to create AMQP 1.0 link cache", "error", err)
+		}
+		openWireDestinationCache, err = simplelru.NewLRU[openWireDestinationKey, string](amqpCacheSize, nil)
+		if err != nil {
+			ptlog().Error("failed to create OpenWire destination cache", "error", err)
+		}
+
 		mongoRequestCache = expirable.NewLRU[MongoRequestKey, *MongoRequestValue](cfg.MongoRequestsCacheSize, nil, 0)
 
 		payloadExtraction = cfg.PayloadExtraction
@@ -290,6 +318,9 @@ func NewEBPFParseContext(cfg *config.EBPFTracer, spansChan *msg.Queue[[]request.
 		postgresPreparedStatements: postgresPreparedStatements,
 		postgresPortals:            postgresPortals,
 		kafkaTopicUUIDToName:       kafkaTopicUUIDToName,
+		amqpLastDestinationCache:   amqpLastDestinationCache,
+		amqp10LinkAddressCache:     amqp10LinkAddressCache,
+		openWireDestinationCache:   openWireDestinationCache,
 		payloadExtraction:          payloadExtraction,
 		httpEnricher:               httpEnricher,
 		dnsEvents:                  dnsEvents,
@@ -338,6 +369,9 @@ func ReadBPFTraceAsSpan(parseCtx *EBPFParseContext, cfg *config.EBPFTracer, reco
 		return finalizeParsedSpan(parseCtx, span, ignore, err)
 	case EventTypeGoKafkaGo:
 		span, ignore, err := ReadGoKafkaGoRequestIntoSpan(record)
+		return finalizeParsedSpan(parseCtx, span, ignore, err)
+	case EventTypeGoAMQP091:
+		span, ignore, err := ReadGoAMQP091RequestIntoSpan(record)
 		return finalizeParsedSpan(parseCtx, span, ignore, err)
 	case EventTypeTCPLargeBuffer:
 		span, ignore, err := appendTCPLargeBuffer(parseCtx, record)

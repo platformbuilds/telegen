@@ -841,6 +841,12 @@ func getSignalMetadataForMetric(span *request.Span) []attribute.KeyValue {
 		metadata = sigdef.MessagingDurationMetrics
 	case request.EventTypeMQTTClient, request.EventTypeMQTTServer:
 		metadata = sigdef.MessagingDurationMetrics
+	case request.EventTypeAMQPClient, request.EventTypeAMQPServer:
+		metadata = sigdef.MessagingDurationMetrics
+	case request.EventTypeOpenWireClient, request.EventTypeOpenWireServer:
+		metadata = sigdef.MessagingDurationMetrics
+	case request.EventTypeSTOMPClient, request.EventTypeSTOMPServer:
+		metadata = sigdef.MessagingDurationMetrics
 	case request.EventTypeGPUKernelLaunch, request.EventTypeGPUMalloc, request.EventTypeGPUMemcpy:
 		metadata = sigdef.GPUKernelMetrics
 	default:
@@ -913,6 +919,39 @@ func (r *Metrics) record(span *request.Span, mr *MetricsReporter) {
 			}
 		case request.EventTypeMQTTClient, request.EventTypeMQTTServer:
 			if mr.is.MQTTEnabled() {
+				switch span.Method {
+				case request.MessagingPublish:
+					msgPublishDuration, attrs := r.msgPublishDuration.ForRecord(span)
+					msgPublishDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
+				case request.MessagingProcess:
+					msgProcessDuration, attrs := r.msgProcessDuration.ForRecord(span)
+					msgProcessDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
+				}
+			}
+		case request.EventTypeAMQPClient, request.EventTypeAMQPServer:
+			if mr.is.AMQPEnabled() {
+				switch span.Method {
+				case request.MessagingPublish:
+					msgPublishDuration, attrs := r.msgPublishDuration.ForRecord(span)
+					msgPublishDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
+				case request.MessagingProcess:
+					msgProcessDuration, attrs := r.msgProcessDuration.ForRecord(span)
+					msgProcessDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
+				}
+			}
+		case request.EventTypeOpenWireClient, request.EventTypeOpenWireServer:
+			if mr.is.OpenWireEnabled() {
+				switch span.Method {
+				case request.MessagingPublish:
+					msgPublishDuration, attrs := r.msgPublishDuration.ForRecord(span)
+					msgPublishDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
+				case request.MessagingProcess:
+					msgProcessDuration, attrs := r.msgProcessDuration.ForRecord(span)
+					msgProcessDuration.Record(ctx, duration, instrument.WithAttributeSet(attrs), instrument.WithAttributes(signalMeta...))
+				}
+			}
+		case request.EventTypeSTOMPClient, request.EventTypeSTOMPServer:
+			if mr.is.STOMPEnabled() {
 				switch span.Method {
 				case request.MessagingPublish:
 					msgPublishDuration, attrs := r.msgPublishDuration.ForRecord(span)

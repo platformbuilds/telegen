@@ -478,39 +478,46 @@ agent:
 
 ## Messaging Protocols
 
-Telegen captures tracing data for AMQP 0-9-1, CQL (Cassandra), and NATS at the eBPF level — no SDK instrumentation or configuration changes required.
+Telegen captures messaging traces at the eBPF level with no application code changes.
+Current wire-protocol coverage includes:
+
+- AMQP 0-9-1 (RabbitMQ semantics)
+- AMQP 1.0 (broker inferred from process/port hints)
+- OpenWire (ActiveMQ Classic)
+- STOMP
+- CQL (Cassandra) and NATS
 
 ---
 
-### AMQP 0-9-1 Tracing
+### AMQP-family tracing
 
-AMQP 0-9-1 is the wire protocol used by RabbitMQ and other brokers. Telegen captures publish and consume operations at the channel level.
+Telegen emits spans from both kernel protocol hints and userspace fallback parsing for AMQP-family brokers.
+The span operation type is normalized (`publish`, `receive`, `settle`, `create`, `process`) while the raw protocol verb is preserved in `messaging.operation.name`.
 
 #### What's Captured
 
 | Field | Description |
 |-------|-------------|
-| `messaging.system` | `rabbitmq` |
-| `messaging.operation` | `publish` or `process` |
-| `messaging.destination.name` | Exchange name |
-| `messaging.rabbitmq.destination.routing_key` | Routing key |
-| `messaging.client_id` | AMQP channel ID |
+| `messaging.system` | `rabbitmq`, `activemq`, `servicebus`, or `jms` (hint-resolved) |
+| `messaging.operation.type` | `publish`, `receive`, `settle`, `create`, `process` |
+| `messaging.operation.name` | Raw verb, for example `basic.publish`, `amqp1.transfer`, `openwire.message`, `stomp.send` |
+| `messaging.destination.name` | Queue/topic/exchange-derived destination |
 | `net.peer.ip` / `net.peer.port` | Broker address |
 
 #### Sample Span
 
 ```json
 {
-  "name": "orders.created publish",
-  "kind": "PRODUCER",
+  "name": "orders.created receive",
+  "kind": "CONSUMER",
   "duration_ms": 0.8,
   "attributes": {
-    "messaging.system": "rabbitmq",
-    "messaging.operation": "publish",
-    "messaging.destination.name": "events",
-    "messaging.rabbitmq.destination.routing_key": "orders.created",
+    "messaging.system": "activemq",
+    "messaging.operation.type": "receive",
+    "messaging.operation.name": "amqp1.transfer",
+    "messaging.destination.name": "orders.created",
     "net.peer.ip": "10.0.2.50",
-    "net.peer.port": 5672
+    "net.peer.port": 61616
   }
 }
 ```
@@ -518,13 +525,16 @@ AMQP 0-9-1 is the wire protocol used by RabbitMQ and other brokers. Telegen capt
 #### Configuration
 
 ```yaml
-agent:
-  network:
-    protocols:
-      amqp:
-        enabled: true
-        capture_routing_key: true
+ebpf:
+  buffer_sizes:
+    mq: 0   # shared large-buffer budget for AMQP/OpenWire/STOMP
 ```
+
+#### Limits and caveats
+
+- Per-event in-kernel small buffers are capped (`request` 256 bytes, `response` 128 bytes).
+- Larger payload recovery depends on MQ large-buffer capture (`ebpf.buffer_sizes.mq`).
+- AMQP Go library coverage is available for `github.com/rabbitmq/amqp091-go` and `github.com/streadway/amqp` via uprobes; other language clients rely on TCP protocol parsing.
 
 ---
 

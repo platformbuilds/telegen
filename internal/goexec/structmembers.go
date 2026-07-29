@@ -83,6 +83,9 @@ const (
 	KafkaGoWriterTopicPos
 	KafkaGoProtocolConnPos
 	KafkaGoReaderTopicPos
+	// amqp091 go
+	AMQP091ChannelConnectionPos
+	AMQP091ConnectionConnPos
 	// kafka sarama
 	SaramaBrokerCorrIDPos
 	SaramaResponseCorrIDPos
@@ -394,6 +397,30 @@ var structMembers = map[string]structInfo{
 		lib: "github.com/segmentio/kafka-go",
 		fields: map[string]GoOffset{
 			"topic": KafkaGoReaderTopicPos,
+		},
+	},
+	"github.com/rabbitmq/amqp091-go.Channel": {
+		lib: "github.com/rabbitmq/amqp091-go",
+		fields: map[string]GoOffset{
+			"connection": AMQP091ChannelConnectionPos,
+		},
+	},
+	"github.com/rabbitmq/amqp091-go.Connection": {
+		lib: "github.com/rabbitmq/amqp091-go",
+		fields: map[string]GoOffset{
+			"conn": AMQP091ConnectionConnPos,
+		},
+	},
+	"github.com/streadway/amqp.Channel": {
+		lib: "github.com/streadway/amqp",
+		fields: map[string]GoOffset{
+			"connection": AMQP091ChannelConnectionPos,
+		},
+	},
+	"github.com/streadway/amqp.Connection": {
+		lib: "github.com/streadway/amqp",
+		fields: map[string]GoOffset{
+			"conn": AMQP091ConnectionConnPos,
 		},
 	},
 	"go.opentelemetry.io/otel/internal/global.tracer": {

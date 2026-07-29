@@ -15,6 +15,8 @@ const (
 	InstrumentationMQTT      Instrumentation = "mqtt"
 	InstrumentationNATS      Instrumentation = "nats"
 	InstrumentationAMQP      Instrumentation = "amqp"
+	InstrumentationOpenWire  Instrumentation = "openwire"
+	InstrumentationSTOMP     Instrumentation = "stomp"
 	InstrumentationGPU       Instrumentation = "gpu"
 	InstrumentationMongo     Instrumentation = "mongo"
 	InstrumentationDNS       Instrumentation = "dns"
@@ -39,6 +41,8 @@ const (
 	flagMQTT
 	flagNATS
 	flagAMQP
+	flagOpenWire
+	flagSTOMP
 	flagGPU
 	flagMongo
 	flagDNS
@@ -68,6 +72,10 @@ func instrumentationToFlag(str Instrumentation) InstrumentationSelection {
 		return flagNATS
 	case InstrumentationAMQP:
 		return flagAMQP
+	case InstrumentationOpenWire:
+		return flagOpenWire
+	case InstrumentationSTOMP:
+		return flagSTOMP
 	case InstrumentationGPU:
 		return flagGPU
 	case InstrumentationMongo:
@@ -131,8 +139,16 @@ func (s InstrumentationSelection) AMQPEnabled() bool {
 	return s&flagAMQP != 0
 }
 
+func (s InstrumentationSelection) OpenWireEnabled() bool {
+	return s&flagOpenWire != 0
+}
+
+func (s InstrumentationSelection) STOMPEnabled() bool {
+	return s&flagSTOMP != 0
+}
+
 func (s InstrumentationSelection) MQEnabled() bool {
-	return s.KafkaEnabled() || s.MQTTEnabled() || s.NATSEnabled() || s.AMQPEnabled()
+	return s.KafkaEnabled() || s.MQTTEnabled() || s.NATSEnabled() || s.AMQPEnabled() || s.OpenWireEnabled() || s.STOMPEnabled()
 }
 
 func (s InstrumentationSelection) GPUEnabled() bool {

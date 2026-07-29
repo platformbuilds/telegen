@@ -392,7 +392,7 @@ agent:
       rabbitmq: { enabled: true }
       mqtt: { enabled: true }
       # AMQP 0-9-1 wire protocol (RabbitMQ clients)
-      amqp: { enabled: true, capture_routing_key: true }
+      amqp: { enabled: true }
       # Cassandra Query Language (CQL v3–v5)
       cql: { enabled: true, capture_query: true }
       # NATS lightweight pub/sub messaging

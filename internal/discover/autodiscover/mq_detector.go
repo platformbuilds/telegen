@@ -114,6 +114,7 @@ func (d *MQDetector) identifyMQ(port ListeningPort) *MQInfo {
 		// RabbitMQ
 		5672:  {MQTypeRabbitMQ, "RabbitMQ (AMQP)"},
 		5671:  {MQTypeRabbitMQ, "RabbitMQ (AMQPS)"},
+		5552:  {MQTypeRabbitMQ, "RabbitMQ (Stream)"},
 		15672: {MQTypeRabbitMQ, "RabbitMQ (Management)"},
 		25672: {MQTypeRabbitMQ, "RabbitMQ (Clustering)"},
 
@@ -130,6 +131,8 @@ func (d *MQDetector) identifyMQ(port ListeningPort) *MQInfo {
 		// ActiveMQ
 		61616: {MQTypeActiveMQ, "ActiveMQ (OpenWire)"},
 		61617: {MQTypeActiveMQ, "ActiveMQ (OpenWire SSL)"},
+		61613: {MQTypeActiveMQ, "ActiveMQ (STOMP)"},
+		61614: {MQTypeActiveMQ, "ActiveMQ (STOMP SSL)"},
 		// Note: ActiveMQ AMQP port 5672 overlaps with RabbitMQ, so it's excluded
 		8161: {MQTypeActiveMQ, "ActiveMQ (Web Console)"},
 
@@ -177,6 +180,10 @@ func (d *MQDetector) detectMQProcesses() []MQInfo {
 		"nats-server": MQTypeNATS,
 		"pulsar":      MQTypePulsar,
 		"activemq":    MQTypeActiveMQ,
+		"artemis":     MQTypeActiveMQ,
+		"openwire":    MQTypeActiveMQ,
+		"stomp":       MQTypeActiveMQ,
+		"qpid":        MQTypeActiveMQ,
 		"mosquitto":   MQTypeMQTT,
 		"emqx":        MQTypeMQTT,
 		"nsqd":        MQTypeNSQ,

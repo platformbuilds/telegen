@@ -22,6 +22,7 @@
 #include "go_redis.c"
 #include "go_kafka_go.c"
 #include "go_sarama.c"
+#include "go_amqp091.c"
 #include "go_sdk.c"
 #include "go_mongo.c"
 #include "go_runtime.c"
