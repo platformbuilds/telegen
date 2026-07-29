@@ -24,7 +24,6 @@ permissions:
   security-events: write  # Required for uploading SARIF results to Code Scanning
 
 env:
-  GO_VERSION: '1.25'
   GOLANGCI_LINT_VERSION: 'v2.8.0'
   GEN_IMG: 'ghcr.io/open-telemetry/obi-generator:0.2.15'
 
@@ -90,7 +89,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
           cache: true
 
       - name: Run golangci-lint
@@ -116,7 +115,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
           cache: true
 
       - name: Run tests
@@ -146,16 +145,21 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
           cache: true
 
       - name: Run verifier load check
         run: |
-          sudo -E env TELEGEN_BPF_VERIFIER_CHECK=1 go test -v ./internal/bpfverifier -run TestLoadAllTracerBpfObjects -count=1
+          GO_BIN="$(command -v go)"
+          go version
+          # sudo's secure_path would otherwise pick the runner's older Go while
+          # setup-go sets GOTOOLCHAIN=local (blocking auto-download of go.mod's toolchain).
+          sudo -E env "PATH=$PATH" TELEGEN_BPF_VERIFIER_CHECK=1 "$GO_BIN" test -v ./internal/bpfverifier -run TestLoadAllTracerBpfObjects -count=1
 
       - name: Run gotracer attach+emit smoke
         run: |
-          sudo -E env TELEGEN_BPF_VERIFIER_CHECK=1 go test -v ./internal/bpfverifier -run TestGoTracerAttachAndEmitHTTP -count=1
+          GO_BIN="$(command -v go)"
+          sudo -E env "PATH=$PATH" TELEGEN_BPF_VERIFIER_CHECK=1 "$GO_BIN" test -v ./internal/bpfverifier -run TestGoTracerAttachAndEmitHTTP -count=1
 
   obi-smoke:
     name: OBI Linux Smoke
@@ -174,7 +178,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
           cache: true
 
       - name: Run OBI->OTLP smoke test
@@ -202,7 +206,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
           cache: true
 
       - name: Build
