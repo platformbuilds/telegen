@@ -1,0 +1,29 @@
+name:                     ISCSI
+query:                    api/cluster/counter/tables/iscsi_lif
+object:                   iscsi_lif
+
+counters:
+  - ^^id
+  - ^name                  => lif
+  - ^node.name             => node
+  - ^svm.name              => svm
+  - average_latency        => avg_latency
+  - average_other_latency  => avg_other_latency
+  - average_read_latency   => avg_read_latency
+  - average_write_latency  => avg_write_latency
+  - cmd_transferred        => cmd_transfered    # for backward compatibility with Zapi
+  - iscsi_other_ops
+  - iscsi_read_ops
+  - iscsi_write_ops
+  - protocol_errors
+  - read_data
+  - write_data
+
+override:
+  - cmd_transferred: rate
+
+export_options:
+  instance_keys:
+    - lif
+    - node
+    - svm

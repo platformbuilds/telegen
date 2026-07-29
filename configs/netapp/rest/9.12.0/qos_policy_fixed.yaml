@@ -1,0 +1,31 @@
+
+name:               QosPolicyFixed
+query:              api/private/cli/qos/policy-group
+object:             qos_policy_fixed
+
+counters:
+  - ^^uuid                => uuid
+  - ^class                => class
+  - ^is_shared            => capacity_shared
+  - ^num_workloads        => object_count
+  - ^policy_group         => name
+  - ^throughput_policy    => throughput_policy
+  - ^vserver              => svm
+  - filter:
+      - class=user_defined
+
+plugins:
+  - QosPolicyFixed
+
+export_options:
+  instance_keys:
+    - class
+    - name
+    - svm
+  instance_labels:
+    - capacity_shared
+    - max_throughput_iops
+    - max_throughput_mbps
+    - min_throughput_iops
+    - min_throughput_mbps
+    - object_count

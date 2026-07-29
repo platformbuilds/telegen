@@ -1,0 +1,43 @@
+name:                       Qtree
+query:                      api/storage/qtrees
+object:                     qtree
+
+client_timeout: 2m
+
+counters:
+  - ^^name                => qtree
+  - ^^svm.name            => svm
+  - ^^volume.name         => volume
+  - ^export_policy.name   => export_policy
+  - ^security_style       => security_style
+  - id                    => id
+  - filter:
+      - name=!""
+
+
+endpoints:
+  - query: api/private/cli/qtree
+    counters:
+      - ^^qtree           => qtree
+      - ^^volume          => volume
+      - ^^vserver         => svm
+      - ^oplock_mode      => oplocks
+      - ^status           => status
+      - filter:
+          - qtree=!""
+
+plugins:
+  - LabelAgent:
+      replace:
+        - oplocks oplocks `enable` `enabled`
+
+export_options:
+  instance_keys:
+    - qtree
+    - svm
+    - volume
+  instance_labels:
+    - export_policy
+    - oplocks
+    - security_style
+    - status

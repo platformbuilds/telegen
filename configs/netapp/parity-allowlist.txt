@@ -1,0 +1,7 @@
+# Telegen NetApp ↔ Harvest ONTAP metric parity allowlist.
+#
+# Full Harvest catalog parity (1,558 families) is required. This file must remain
+# empty of metric names. Comment-only lines are OK.
+#
+# Verify:
+#   HARVEST_ONTAP_METRICS_JSON=/path/to/harvest/mcp/metadata/ontap_metrics.json make netapp-parity

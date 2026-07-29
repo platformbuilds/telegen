@@ -1,0 +1,35 @@
+name: Volume
+query: storage-systems/{array_id}/volumes
+object: eseries_volume
+
+counters:
+  - ^^name                                => volume
+  - ^listOfMappings                       => list_of_mappings
+  - ^metadata                             => metadata
+  - ^offline                              => offline
+  - ^raidLevel                            => raid_level
+  - ^status                               => status
+  - ^volumeGroupRef                       => volume_group_ref
+  - ^wwn                                  => wwid
+  - blkSize                               => block_size
+  - capacity                              => reported_capacity
+  - totalSizeInBytes                      => allocated_capacity
+
+plugins:
+  - Volume
+  - VolumeMapping
+
+export_options:
+  instance_keys:
+    - volume
+  instance_labels:
+    - hosts
+    - luns
+    - mapping_types
+    - offline
+    - pool
+    - raid_level
+    - status
+    - volume
+    - workload
+    - wwid
