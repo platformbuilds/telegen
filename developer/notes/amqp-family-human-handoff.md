@@ -23,17 +23,22 @@ docker run --rm --privileged --pid=host --network=host \
 
 ## 2) BPF verifier gate
 
-Before any `release/mark-v*` tag, run the BPF verifier check to confirm all tracer collections load successfully under the kernel verifier:
+Before any `release/mark-v*` tag, the CI `verifier` job must be green. The **hard** gate is:
+
+1. **generictracer** bare load (`TestLoadAllTracerBpfObjects/generictracer`) — catches MQ/AMQP kernel-classifier verifier rejects.
+2. **gotracer attach+emit** (`TestGoTracerAttachAndEmitHTTP`) — catches the 3.1.26 Go blackout class (loads fine, never emits).
+
+Local convenience (Docker, privileged):
 
 ```bash
 make verifier-check
 ```
 
-This catches unsafe `data[]` dereferences of userspace pointers (the root cause of this regression) that would otherwise pass a clean `docker build` and only fail at load time with `R8 invalid mem access 'scalar'`.
-
 A clean `docker build` does **not** imply loadability — the verifier is a load-time kernel check, not a compile-time check. The `verifier-check` target depends on `docker-generate` so it can never test stale bytecode.
 
-**Load success is not enough.** A clean BPF load does **not** imply attachment or span emission. The 3.1.26 Go blackout loaded and verified gotracer successfully, yet Go processes emitted zero spans because unresolved optional uprobes (e.g. `amqp091`) were still attached at address `0`. The CI `verifier` job therefore also runs `TestGoTracerAttachAndEmitHTTP` (attach + emit against a live Go HTTP server). That attach+emit smoke — and the `obi-smoke` OTLP forward smoke — are mandatory blockers for the `docker` job and must be green before any `release/mark-v*` tag.
+**Load success is not enough.** A clean BPF load does **not** imply attachment or span emission. Unresolved optional Go uprobes (e.g. `amqp091`) must be `Skip`'d; the attach+emit smoke is mandatory.
+
+Other tracers in `TestLoadAllTracerBpfObjects` (gotracer/gpuevent/logenricher/…) use bare `LoadBpfObjects` without the production `resolveMaps` / constant-rewrite path and may soft-skip on ubuntu-latest (CO-RE / pin / MaxEntries). That soft path is **advisory** until those loads use the production Init path. The `obi-smoke` OTLP forward smoke remains a `docker` job blocker.
 
 The AMQP 0-9-1 large-buffer path is capped at `K_TCP_MAX_LEN` (256 bytes) when the kernel cannot hint the protocol type. This is a known caveat tracked for Phase C.
 
