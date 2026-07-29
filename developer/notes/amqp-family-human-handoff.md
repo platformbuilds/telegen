@@ -21,7 +21,21 @@ docker run --rm --privileged --pid=host --network=host \
   telegen:amqp-family-local --help
 ```
 
-## 2) Real-broker protocol verification matrix
+## 2) BPF verifier gate
+
+Before any `release/mark-v*` tag, run the BPF verifier check to confirm all tracer collections load successfully under the kernel verifier:
+
+```bash
+make verifier-check
+```
+
+This catches unsafe `data[]` dereferences of userspace pointers (the root cause of this regression) that would otherwise pass a clean `docker build` and only fail at load time with `R8 invalid mem access 'scalar'`.
+
+A clean `docker build` does **not** imply loadability — the verifier is a load-time kernel check, not a compile-time check. The `verifier-check` target depends on `docker-generate` so it can never test stale bytecode.
+
+The AMQP 0-9-1 large-buffer path is capped at `K_TCP_MAX_LEN` (256 bytes) when the kernel cannot hint the protocol type. This is a known caveat tracked for Phase C.
+
+## 3) Real-broker protocol verification matrix
 
 ### RabbitMQ (AMQP 0-9-1)
 
@@ -49,13 +63,13 @@ docker run --rm --privileged --pid=host --network=host \
   - `messaging.operation.name` values (`openwire.producer_info`, `openwire.message`, `openwire.message_ack`)
   - destination recovery on ack path.
 
-## 3) Kernel hint and fallback parity
+## 4) Kernel hint and fallback parity
 
 - Execute one run with normal protocol hints.
 - Execute one run where userspace heuristic parsing is forced/observed for the same traffic shape.
 - Compare spans for equivalent operation typing and destination extraction.
 
-## 4) Config and limits checks
+## 5) Config and limits checks
 
 - Confirm `ebpf.buffer_sizes.mq` is accepted by all deployment configs.
 - Confirm no `capture_routing_key` option is used anywhere in runtime config.
