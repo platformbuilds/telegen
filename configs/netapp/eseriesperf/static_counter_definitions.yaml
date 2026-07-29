@@ -1,0 +1,268 @@
+objects:
+  eseries_volume:
+    counter_definitions:
+      - name: observedTimeInMS
+        type: delta
+      - name: lastResetTimeInMS
+        type: delta
+      - name: readOps
+        type: rate
+      - name: writeOps
+        type: rate
+      - name: readHitOps
+        type: rate
+      - name: writeHitOps
+        type: rate
+      - name: readTimeTotal
+        type: average
+        base_counter: readOps
+      - name: writeTimeTotal
+        type: average
+        base_counter: writeOps
+      - name: readBytes
+        type: rate
+      - name: writeBytes
+        type: rate
+      - name: idleTime
+        type: delta
+      - name: otherOps
+        type: rate
+      - name: queueDepthTotal
+        type: delta
+      - name: queueDepthMax
+        type: raw
+
+  eseries_controller:
+    counter_definitions:
+      - name: observedTimeInMS
+        type: delta
+      - name: lastResetTimeInMS
+        type: delta
+      - name: readIopsTotal
+        type: rate
+      - name: writeIopsTotal
+        type: rate
+      - name: readBytesTotal
+        type: rate
+      - name: writeBytesTotal
+        type: rate
+      - name: cacheHitsIopsTotal
+        type: rate
+      - name: cpuUtilizationStats.0.sumCpuUtilization
+        type: rate
+
+  eseries_drive:
+    counter_definitions:
+      - name: observedTimeInMS
+        type: delta
+      - name: lastResetTimeInMS
+        type: delta
+      - name: readOps
+        type: rate
+      - name: writeOps
+        type: rate
+      - name: readTimeTotal
+        type: average
+        base_counter: readOps
+      - name: writeTimeTotal
+        type: average
+        base_counter: writeOps
+      - name: readBytes
+        type: rate
+      - name: writeBytes
+        type: rate
+      - name: idleTime
+        type: delta
+
+  eseries_pool:
+    counter_definitions:
+      - name: observedTimeInMS
+        type: delta
+      - name: lastResetTimeInMS
+        type: delta
+      - name: readOps
+        type: rate
+      - name: writeOps
+        type: rate
+      - name: readHitOps
+        type: rate
+      - name: writeHitOps
+        type: rate
+      - name: otherOps
+        type: rate
+      - name: readTimeTotal
+        type: average
+        base_counter: readOps
+      - name: writeTimeTotal
+        type: average
+        base_counter: writeOps
+      - name: readBytes
+        type: rate
+      - name: writeBytes
+        type: rate
+      - name: idleTime
+        type: delta
+      - name: queueDepthTotal
+        type: delta
+      - name: queueDepthMax
+        type: raw
+
+  eseries_application:
+    counter_definitions:
+      - name: observedTimeInMS
+        type: delta
+      - name: lastResetTimeInMS
+        type: delta
+      - name: readOps
+        type: rate
+      - name: writeOps
+        type: rate
+      - name: readHitOps
+        type: rate
+      - name: writeHitOps
+        type: rate
+      - name: otherOps
+        type: rate
+      - name: readTimeTotal
+        type: average
+        base_counter: readOps
+      - name: writeTimeTotal
+        type: average
+        base_counter: writeOps
+      - name: readBytes
+        type: rate
+      - name: writeBytes
+        type: rate
+      - name: idleTime
+        type: delta
+      - name: queueDepthTotal
+        type: delta
+      - name: queueDepthMax
+        type: raw
+
+  eseries_workload:
+    counter_definitions:
+      - name: observedTimeInMS
+        type: delta
+      - name: lastResetTimeInMS
+        type: delta
+      - name: readOps
+        type: rate
+      - name: writeOps
+        type: rate
+      - name: readHitOps
+        type: rate
+      - name: writeHitOps
+        type: rate
+      - name: otherOps
+        type: rate
+      - name: readTimeTotal
+        type: average
+        base_counter: readOps
+      - name: writeTimeTotal
+        type: average
+        base_counter: writeOps
+      - name: readBytes
+        type: rate
+      - name: writeBytes
+        type: rate
+      - name: idleTime
+        type: delta
+      - name: queueDepthTotal
+        type: delta
+      - name: queueDepthMax
+        type: raw
+
+  eseries_interface:
+    counter_definitions:
+      - name: observedTimeInMS
+        type: delta
+      - name: lastResetTimeInMS
+        type: delta
+      - name: readOps
+        type: rate
+      - name: writeOps
+        type: rate
+      - name: otherOps
+        type: rate
+      - name: readTimeTotal
+        type: average
+        base_counter: readOps
+      - name: writeTimeTotal
+        type: average
+        base_counter: writeOps
+      - name: otherTimeTotal
+        type: average
+        base_counter: otherOps
+      - name: readBytes
+        type: rate
+      - name: writeBytes
+        type: rate
+      - name: queueDepthTotal
+        type: delta
+      - name: queueDepthMax
+        type: raw
+      - name: channelErrorCount
+        type: delta
+
+  eseries_array:
+    counter_definitions:
+      - name: observedTimeInMS
+        type: delta
+      - name: lastResetTimeInMS
+        type: delta
+      - name: readIopsTotal
+        type: rate
+      - name: writeIopsTotal
+        type: rate
+      - name: readBytesTotal
+        type: rate
+      - name: writeBytesTotal
+        type: rate
+      - name: cacheHitsIopsTotal
+        type: rate
+
+  eseries_ssd_cache:
+    counter_definitions:
+      - name: statistics.timestamp
+        type: delta
+      - name: statistics.reads
+        type: rate
+      - name: statistics.writes
+        type: rate
+      - name: statistics.readBlocks
+        type: rate
+      - name: statistics.writeBlocks
+        type: rate
+      - name: statistics.fullCacheHits
+        type: rate
+      - name: statistics.fullCacheHitBlocks
+        type: rate
+      - name: statistics.partialCacheHits
+        type: rate
+      - name: statistics.partialCacheHitBlocks
+        type: rate
+      - name: statistics.completeCacheMiss
+        type: rate
+      - name: statistics.completeCacheMissBlocks
+        type: rate
+      - name: statistics.populateOnReads
+        type: rate
+      - name: statistics.populateOnReadBlocks
+        type: rate
+      - name: statistics.populateOnWrites
+        type: rate
+      - name: statistics.populateOnWriteBlocks
+        type: rate
+      - name: statistics.invalidates
+        type: rate
+      - name: statistics.recycles
+        type: rate
+      - name: statistics.availableBytes
+        type: raw
+      - name: statistics.allocatedBytes
+        type: raw
+      - name: statistics.populatedCleanBytes
+        type: raw
+      - name: statistics.populatedDirtyBytes
+        type: raw

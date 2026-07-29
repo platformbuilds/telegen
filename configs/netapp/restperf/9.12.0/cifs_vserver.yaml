@@ -1,0 +1,27 @@
+
+name:                     CIFSvserver
+query:                    api/cluster/counter/tables/svm_cifs
+object:                   svm_cifs
+
+counters:
+  - ^^id
+  - ^node.name               => node
+  - ^svm.name                => svm
+  - average_read_latency     => read_latency
+  - average_write_latency    => write_latency
+  - connections
+  - established_sessions
+  - latency                  => latency
+  - op_count                 => op_count
+  - open_files
+  - signed_sessions
+  - total_ops                => ops
+  - total_read_ops           => read_ops
+  - total_write_ops          => write_ops
+
+export_options:
+  instance_keys:
+    - svm
+
+override:
+  - op_count: rate

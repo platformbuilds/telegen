@@ -569,9 +569,31 @@ var (
 	StorageNetAppMetrics = &SignalMetadata{
 		Category:      "Storage Metrics",
 		SubCategory:   "NetApp ONTAP",
-		SourceModule:  "internal/storage",
+		SourceModule:  "internal/storage/netapp",
 		BPFComponent:  "",
-		Description:   "NetApp ONTAP cluster/volume metrics",
+		Description:   "NetApp ONTAP Harvest-parity REST/RestPerf/KeyPerf metrics",
+		CollectorType: CollectorTypeAPI,
+		SignalType:    SignalMetrics,
+	}
+
+	// StorageNetAppEMSLogs metadata
+	StorageNetAppEMSLogs = &SignalMetadata{
+		Category:      "Storage Logs",
+		SubCategory:   "NetApp EMS",
+		SourceModule:  "internal/storage/netapp/ems",
+		BPFComponent:  "",
+		Description:   "NetApp ONTAP EMS events exported as OTLP logs",
+		CollectorType: CollectorTypeAPI,
+		SignalType:    SignalLogs,
+	}
+
+	// StorageNetAppESeriesMetrics metadata
+	StorageNetAppESeriesMetrics = &SignalMetadata{
+		Category:      "Storage Metrics",
+		SubCategory:   "NetApp E-Series",
+		SourceModule:  "internal/storage/netapp/eseries",
+		BPFComponent:  "",
+		Description:   "NetApp E-Series SANtricity metrics",
 		CollectorType: CollectorTypeAPI,
 		SignalType:    SignalMetrics,
 	}

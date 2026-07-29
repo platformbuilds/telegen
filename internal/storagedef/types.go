@@ -113,13 +113,63 @@ type PureConfig struct {
 	Collect             []string `mapstructure:"collect" yaml:"collect"`
 }
 
+// Coverage profile for NetApp ONTAP collectors.
+const (
+	CoverageFull           = "full"
+	CoverageHarvestDefault = "harvest_default"
+)
+
+// NetAppEMSConfig configures EMS event collection.
+type NetAppEMSConfig struct {
+	Enabled      bool   `mapstructure:"enabled" yaml:"enabled"`
+	ResolveAfter string `mapstructure:"resolve_after" yaml:"resolve_after"` // e.g. 672h
+}
+
+// NetAppSchedules overrides per-engine poll intervals.
+type NetAppSchedules struct {
+	RestData       time.Duration `mapstructure:"rest_data" yaml:"rest_data"`
+	RestPerfData   time.Duration `mapstructure:"restperf_data" yaml:"restperf_data"`
+	EMSData        time.Duration `mapstructure:"ems_data" yaml:"ems_data"`
+	CounterRefresh time.Duration `mapstructure:"counter_refresh" yaml:"counter_refresh"`
+}
+
 // NetAppConfig holds NetApp ONTAP collector configuration
 type NetAppConfig struct {
 	BaseCollectorConfig `mapstructure:",squash" yaml:",inline"`
+	Username            string          `mapstructure:"username" yaml:"username"`
+	Password            string          `mapstructure:"password" yaml:"password"`
+	AuthStyle           string          `mapstructure:"auth_style" yaml:"auth_style"` // basic | certificate | bearer
+	AuthToken           string          `mapstructure:"auth_token" yaml:"auth_token"`
+	ClusterID           string          `mapstructure:"cluster_id" yaml:"cluster_id"`
+	Collect             []string        `mapstructure:"collect" yaml:"collect"` // legacy coarse toggles
+	Coverage            string          `mapstructure:"coverage" yaml:"coverage"`
+	Collectors          []string        `mapstructure:"collectors" yaml:"collectors"` // rest, restperf, keyperf, ems
+	TemplatesDir        string          `mapstructure:"templates_dir" yaml:"templates_dir"`
+	GCNVOntapMode       bool            `mapstructure:"gcnv_ontap_mode" yaml:"gcnv_ontap_mode"`
+	ClientCert          string          `mapstructure:"client_cert" yaml:"client_cert"`
+	ClientKey           string          `mapstructure:"client_key" yaml:"client_key"`
+	CAFile              string          `mapstructure:"ca_file" yaml:"ca_file"`
+	EMS                 NetAppEMSConfig `mapstructure:"ems" yaml:"ems"`
+	Schedules           NetAppSchedules `mapstructure:"schedules" yaml:"schedules"`
+}
+
+// ESeriesConfig holds NetApp E-Series collector configuration.
+type ESeriesConfig struct {
+	BaseCollectorConfig `mapstructure:",squash" yaml:",inline"`
 	Username            string   `mapstructure:"username" yaml:"username"`
 	Password            string   `mapstructure:"password" yaml:"password"`
-	ClusterID           string   `mapstructure:"cluster_id" yaml:"cluster_id"`
+	APIVersion          string   `mapstructure:"api_version" yaml:"api_version"`
 	Collect             []string `mapstructure:"collect" yaml:"collect"`
+	Coverage            string   `mapstructure:"coverage" yaml:"coverage"`
+	TemplatesDir        string   `mapstructure:"templates_dir" yaml:"templates_dir"`
+}
+
+// LogRecord is an OTLP-oriented log/event record (EMS, etc.).
+type LogRecord struct {
+	Timestamp  time.Time
+	Severity   string
+	Body       string
+	Attributes map[string]string
 }
 
 // TLSConfig contains TLS configuration for collectors
@@ -147,12 +197,13 @@ type Config struct {
 	CollectInterval time.Duration `mapstructure:"collect_interval" yaml:"collect_interval"`
 
 	// Per-vendor configurations
-	DellPowerStore []DellConfig   `mapstructure:"dell_powerstore" yaml:"dell_powerstore"`
-	HPEPrimera     []HPEConfig    `mapstructure:"hpe_primera" yaml:"hpe_primera"`
-	PureFlashArray []PureConfig   `mapstructure:"pure_flasharray" yaml:"pure_flasharray"`
-	NetAppONTAP    []NetAppConfig `mapstructure:"netapp_ontap" yaml:"netapp_ontap"`
+	DellPowerStore []DellConfig    `mapstructure:"dell_powerstore" yaml:"dell_powerstore"`
+	HPEPrimera     []HPEConfig     `mapstructure:"hpe_primera" yaml:"hpe_primera"`
+	PureFlashArray []PureConfig    `mapstructure:"pure_flasharray" yaml:"pure_flasharray"`
+	NetAppONTAP    []NetAppConfig  `mapstructure:"netapp_ontap" yaml:"netapp_ontap"`
+	NetAppESeries  []ESeriesConfig `mapstructure:"netapp_eseries" yaml:"netapp_eseries"`
 
-	// OTLP export configuration
+	// OTLP export configuration (legacy fallback; prefer shared pipeline exporter)
 	OTLP OTLPConfig `mapstructure:"otlp" yaml:"otlp"`
 }
 

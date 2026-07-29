@@ -130,10 +130,11 @@ func main() {
 	if storageEnabled && (len(cfg.Storage.PureFlashArray) > 0 ||
 		len(cfg.Storage.DellPowerStore) > 0 ||
 		len(cfg.Storage.HPEPrimera) > 0 ||
-		len(cfg.Storage.NetAppONTAP) > 0) {
+		len(cfg.Storage.NetAppONTAP) > 0 ||
+		len(cfg.Storage.NetAppESeries) > 0) {
 		cfg.Storage.Enabled = true // ensure manager sees it as enabled
 		var err error
-		storageMgr, err = storage.NewManager(cfg.Storage, logger)
+		storageMgr, err = storage.NewManager(cfg.Storage, sharedMetricsExporter, sharedLogsProvider, logger)
 		if err != nil {
 			logger.Warn("storage manager failed to initialize, continuing without storage metrics",
 				"error", err,
@@ -152,6 +153,7 @@ func main() {
 					"dell_arrays", len(cfg.Storage.DellPowerStore),
 					"hpe_arrays", len(cfg.Storage.HPEPrimera),
 					"netapp_arrays", len(cfg.Storage.NetAppONTAP),
+					"netapp_eseries", len(cfg.Storage.NetAppESeries),
 				)
 			}
 		}

@@ -1,0 +1,18 @@
+
+name:             SecurityLogin
+query:            api/security/login/messages
+object:           security_login
+
+counters:
+  - ^^uuid        => uuid
+  - ^banner       => banner
+  - ^scope        => scope
+  - ^svm.name     => svm
+
+export_options:
+  instance_keys:
+    - uuid
+  instance_labels:
+    - banner
+    - scope
+    - svm
