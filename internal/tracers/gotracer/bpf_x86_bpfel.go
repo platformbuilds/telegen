@@ -190,7 +190,7 @@ type BpfNewFuncInvocationT struct {
 
 type BpfOffTableT struct {
 	_     structs.HostLayout
-	Table [78]uint64
+	Table [80]uint64
 }
 
 type BpfOtelSpanT struct {
@@ -391,6 +391,18 @@ type BpfProgramSpecs struct {
 	ObiUprobeSetAttributes                        *ebpf.ProgramSpec `ebpf:"obi_uprobe_SetAttributes"`
 	ObiUprobeSetName                              *ebpf.ProgramSpec `ebpf:"obi_uprobe_SetName"`
 	ObiUprobeSetStatus                            *ebpf.ProgramSpec `ebpf:"obi_uprobe_SetStatus"`
+	ObiUprobeAmqp091Ack                           *ebpf.ProgramSpec `ebpf:"obi_uprobe_amqp091_ack"`
+	ObiUprobeAmqp091AckRet                        *ebpf.ProgramSpec `ebpf:"obi_uprobe_amqp091_ack_ret"`
+	ObiUprobeAmqp091Consume                       *ebpf.ProgramSpec `ebpf:"obi_uprobe_amqp091_consume"`
+	ObiUprobeAmqp091ConsumeRet                    *ebpf.ProgramSpec `ebpf:"obi_uprobe_amqp091_consume_ret"`
+	ObiUprobeAmqp091Get                           *ebpf.ProgramSpec `ebpf:"obi_uprobe_amqp091_get"`
+	ObiUprobeAmqp091GetRet                        *ebpf.ProgramSpec `ebpf:"obi_uprobe_amqp091_get_ret"`
+	ObiUprobeAmqp091Nack                          *ebpf.ProgramSpec `ebpf:"obi_uprobe_amqp091_nack"`
+	ObiUprobeAmqp091NackRet                       *ebpf.ProgramSpec `ebpf:"obi_uprobe_amqp091_nack_ret"`
+	ObiUprobeAmqp091Publish                       *ebpf.ProgramSpec `ebpf:"obi_uprobe_amqp091_publish"`
+	ObiUprobeAmqp091PublishRet                    *ebpf.ProgramSpec `ebpf:"obi_uprobe_amqp091_publish_ret"`
+	ObiUprobeAmqp091Reject                        *ebpf.ProgramSpec `ebpf:"obi_uprobe_amqp091_reject"`
+	ObiUprobeAmqp091RejectRet                     *ebpf.ProgramSpec `ebpf:"obi_uprobe_amqp091_reject_ret"`
 	ObiUprobeClientStreamRecvMsgReturn            *ebpf.ProgramSpec `ebpf:"obi_uprobe_clientStream_RecvMsg_return"`
 	ObiUprobeClientRoundTrip                      *ebpf.ProgramSpec `ebpf:"obi_uprobe_client_roundTrip"`
 	ObiUprobeConnServe                            *ebpf.ProgramSpec `ebpf:"obi_uprobe_connServe"`
@@ -500,6 +512,7 @@ type BpfMapSpecs struct {
 	KafkaRequests                 *ebpf.MapSpec `ebpf:"kafka_requests"`
 	MsgBufferMem                  *ebpf.MapSpec `ebpf:"msg_buffer_mem"`
 	Newproc1                      *ebpf.MapSpec `ebpf:"newproc1"`
+	OngoingAmqp091Requests        *ebpf.MapSpec `ebpf:"ongoing_amqp091_requests"`
 	OngoingClientConnections      *ebpf.MapSpec `ebpf:"ongoing_client_connections"`
 	OngoingGoroutines             *ebpf.MapSpec `ebpf:"ongoing_goroutines"`
 	OngoingGrpcClientRequests     *ebpf.MapSpec `ebpf:"ongoing_grpc_client_requests"`
@@ -599,6 +612,7 @@ type BpfMaps struct {
 	KafkaRequests                 *ebpf.Map `ebpf:"kafka_requests"`
 	MsgBufferMem                  *ebpf.Map `ebpf:"msg_buffer_mem"`
 	Newproc1                      *ebpf.Map `ebpf:"newproc1"`
+	OngoingAmqp091Requests        *ebpf.Map `ebpf:"ongoing_amqp091_requests"`
 	OngoingClientConnections      *ebpf.Map `ebpf:"ongoing_client_connections"`
 	OngoingGoroutines             *ebpf.Map `ebpf:"ongoing_goroutines"`
 	OngoingGrpcClientRequests     *ebpf.Map `ebpf:"ongoing_grpc_client_requests"`
@@ -653,6 +667,7 @@ func (m *BpfMaps) Close() error {
 		m.KafkaRequests,
 		m.MsgBufferMem,
 		m.Newproc1,
+		m.OngoingAmqp091Requests,
 		m.OngoingClientConnections,
 		m.OngoingGoroutines,
 		m.OngoingGrpcClientRequests,
@@ -726,6 +741,18 @@ type BpfPrograms struct {
 	ObiUprobeSetAttributes                        *ebpf.Program `ebpf:"obi_uprobe_SetAttributes"`
 	ObiUprobeSetName                              *ebpf.Program `ebpf:"obi_uprobe_SetName"`
 	ObiUprobeSetStatus                            *ebpf.Program `ebpf:"obi_uprobe_SetStatus"`
+	ObiUprobeAmqp091Ack                           *ebpf.Program `ebpf:"obi_uprobe_amqp091_ack"`
+	ObiUprobeAmqp091AckRet                        *ebpf.Program `ebpf:"obi_uprobe_amqp091_ack_ret"`
+	ObiUprobeAmqp091Consume                       *ebpf.Program `ebpf:"obi_uprobe_amqp091_consume"`
+	ObiUprobeAmqp091ConsumeRet                    *ebpf.Program `ebpf:"obi_uprobe_amqp091_consume_ret"`
+	ObiUprobeAmqp091Get                           *ebpf.Program `ebpf:"obi_uprobe_amqp091_get"`
+	ObiUprobeAmqp091GetRet                        *ebpf.Program `ebpf:"obi_uprobe_amqp091_get_ret"`
+	ObiUprobeAmqp091Nack                          *ebpf.Program `ebpf:"obi_uprobe_amqp091_nack"`
+	ObiUprobeAmqp091NackRet                       *ebpf.Program `ebpf:"obi_uprobe_amqp091_nack_ret"`
+	ObiUprobeAmqp091Publish                       *ebpf.Program `ebpf:"obi_uprobe_amqp091_publish"`
+	ObiUprobeAmqp091PublishRet                    *ebpf.Program `ebpf:"obi_uprobe_amqp091_publish_ret"`
+	ObiUprobeAmqp091Reject                        *ebpf.Program `ebpf:"obi_uprobe_amqp091_reject"`
+	ObiUprobeAmqp091RejectRet                     *ebpf.Program `ebpf:"obi_uprobe_amqp091_reject_ret"`
 	ObiUprobeClientStreamRecvMsgReturn            *ebpf.Program `ebpf:"obi_uprobe_clientStream_RecvMsg_return"`
 	ObiUprobeClientRoundTrip                      *ebpf.Program `ebpf:"obi_uprobe_client_roundTrip"`
 	ObiUprobeConnServe                            *ebpf.Program `ebpf:"obi_uprobe_connServe"`
@@ -822,6 +849,18 @@ func (p *BpfPrograms) Close() error {
 		p.ObiUprobeSetAttributes,
 		p.ObiUprobeSetName,
 		p.ObiUprobeSetStatus,
+		p.ObiUprobeAmqp091Ack,
+		p.ObiUprobeAmqp091AckRet,
+		p.ObiUprobeAmqp091Consume,
+		p.ObiUprobeAmqp091ConsumeRet,
+		p.ObiUprobeAmqp091Get,
+		p.ObiUprobeAmqp091GetRet,
+		p.ObiUprobeAmqp091Nack,
+		p.ObiUprobeAmqp091NackRet,
+		p.ObiUprobeAmqp091Publish,
+		p.ObiUprobeAmqp091PublishRet,
+		p.ObiUprobeAmqp091Reject,
+		p.ObiUprobeAmqp091RejectRet,
 		p.ObiUprobeClientStreamRecvMsgReturn,
 		p.ObiUprobeClientRoundTrip,
 		p.ObiUprobeConnServe,

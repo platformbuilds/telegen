@@ -919,6 +919,45 @@ func (r *metricsReporter) observe(span *request.Span) {
 					).Metric.Observe(duration)
 				}
 			}
+		case request.EventTypeAMQPClient, request.EventTypeAMQPServer:
+			if r.is.AMQPEnabled() {
+				switch span.Method {
+				case request.MessagingPublish:
+					r.msgPublishDuration.WithLabelValues(
+						labelValues(span, r.attrMsgPublishDuration)...,
+					).Metric.Observe(duration)
+				case request.MessagingProcess:
+					r.msgProcessDuration.WithLabelValues(
+						labelValues(span, r.attrMsgProcessDuration)...,
+					).Metric.Observe(duration)
+				}
+			}
+		case request.EventTypeOpenWireClient, request.EventTypeOpenWireServer:
+			if r.is.OpenWireEnabled() {
+				switch span.Method {
+				case request.MessagingPublish:
+					r.msgPublishDuration.WithLabelValues(
+						labelValues(span, r.attrMsgPublishDuration)...,
+					).Metric.Observe(duration)
+				case request.MessagingProcess:
+					r.msgProcessDuration.WithLabelValues(
+						labelValues(span, r.attrMsgProcessDuration)...,
+					).Metric.Observe(duration)
+				}
+			}
+		case request.EventTypeSTOMPClient, request.EventTypeSTOMPServer:
+			if r.is.STOMPEnabled() {
+				switch span.Method {
+				case request.MessagingPublish:
+					r.msgPublishDuration.WithLabelValues(
+						labelValues(span, r.attrMsgPublishDuration)...,
+					).Metric.Observe(duration)
+				case request.MessagingProcess:
+					r.msgProcessDuration.WithLabelValues(
+						labelValues(span, r.attrMsgProcessDuration)...,
+					).Metric.Observe(duration)
+				}
+			}
 		case request.EventTypeGPUKernelLaunch:
 			if r.is.GPUEnabled() {
 				r.gpuKernelCallsTotal.WithLabelValues(

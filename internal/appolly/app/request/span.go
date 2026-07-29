@@ -62,6 +62,11 @@ const (
 	EventTypeSQLServer
 	EventTypeSunRPCClient
 	EventTypeSunRPCServer
+	EventTypeAMQPServer
+	EventTypeOpenWireClient
+	EventTypeOpenWireServer
+	EventTypeSTOMPClient
+	EventTypeSTOMPServer
 )
 
 const (
@@ -190,6 +195,16 @@ func (t EventType) String() string {
 		return "SunRPCClient"
 	case EventTypeSunRPCServer:
 		return "SunRPCServer"
+	case EventTypeAMQPServer:
+		return "AMQPServer"
+	case EventTypeOpenWireClient:
+		return "OpenWireClient"
+	case EventTypeOpenWireServer:
+		return "OpenWireServer"
+	case EventTypeSTOMPClient:
+		return "STOMPClient"
+	case EventTypeSTOMPServer:
+		return "STOMPServer"
 	default:
 		return fmt.Sprintf("UNKNOWN (%d)", t)
 	}
@@ -202,6 +217,9 @@ func (t EventType) MarshalText() ([]byte, error) {
 const (
 	MessagingPublish = "publish"
 	MessagingProcess = "process"
+	MessagingReceive = "receive"
+	MessagingSettle  = "settle"
+	MessagingCreate  = "create"
 )
 
 type converter struct {
@@ -239,6 +257,8 @@ type MessagingInfo struct {
 	// ConsumerGroupID is the Kafka consumer group identifier (from JoinGroup/SyncGroup events).
 	// Corresponds to OpenTelemetry semantic convention messaging.kafka.consumer.group.id.
 	ConsumerGroupID string `json:"consumerGroupId,omitempty"`
+	// OperationName keeps protocol-specific method names (for example "basic.publish").
+	OperationName string `json:"operationName,omitempty"`
 }
 
 type GraphQL struct {
@@ -594,7 +614,7 @@ func (s *Span) IsValid() bool {
 
 func (s *Span) IsClientSpan() bool {
 	switch s.Type {
-	case EventTypeGRPCClient, EventTypeHTTPClient, EventTypeRedisClient, EventTypeKafkaClient, EventTypeMQTTClient, EventTypeSQLClient, EventTypeSunRPCClient, EventTypeMongoClient, EventTypeFailedConnect, EventTypeCouchbaseClient:
+	case EventTypeGRPCClient, EventTypeHTTPClient, EventTypeRedisClient, EventTypeKafkaClient, EventTypeMQTTClient, EventTypeAMQPClient, EventTypeOpenWireClient, EventTypeSTOMPClient, EventTypeSQLClient, EventTypeSunRPCClient, EventTypeMongoClient, EventTypeFailedConnect, EventTypeCouchbaseClient:
 		return true
 	}
 
@@ -716,15 +736,15 @@ func (s *Span) ResponseBodyLength() int64 {
 // ServiceGraphKind returns the Kind string representation that is compliant with service graph metrics specification
 func (s *Span) ServiceGraphKind() string {
 	switch s.Type {
-	case EventTypeHTTP, EventTypeGRPC, EventTypeKafkaServer, EventTypeMQTTServer, EventTypeRedisServer, EventTypeSunRPCServer, EventTypeSQLServer:
+	case EventTypeHTTP, EventTypeGRPC, EventTypeKafkaServer, EventTypeMQTTServer, EventTypeAMQPServer, EventTypeOpenWireServer, EventTypeSTOMPServer, EventTypeRedisServer, EventTypeSunRPCServer, EventTypeSQLServer:
 		return "SPAN_KIND_SERVER"
 	case EventTypeHTTPClient, EventTypeGRPCClient, EventTypeSQLClient, EventTypeSunRPCClient, EventTypeRedisClient, EventTypeMongoClient, EventTypeFailedConnect, EventTypeCouchbaseClient:
 		return "SPAN_KIND_CLIENT"
-	case EventTypeKafkaClient, EventTypeMQTTClient:
+	case EventTypeKafkaClient, EventTypeMQTTClient, EventTypeAMQPClient, EventTypeOpenWireClient, EventTypeSTOMPClient:
 		switch s.Method {
 		case MessagingPublish:
 			return "SPAN_KIND_PRODUCER"
-		case MessagingProcess:
+		case MessagingProcess, MessagingReceive, MessagingSettle:
 			return "SPAN_KIND_CONSUMER"
 		}
 	}
@@ -737,7 +757,7 @@ func (s *Span) ServiceGraphConnectionType() string {
 	switch s.Type {
 	case EventTypeSQLClient, EventTypeSQLServer, EventTypeRedisClient, EventTypeMongoClient, EventTypeCouchbaseClient:
 		return "database"
-	case EventTypeKafkaClient, EventTypeMQTTClient:
+	case EventTypeKafkaClient, EventTypeMQTTClient, EventTypeAMQPClient, EventTypeAMQPServer, EventTypeOpenWireClient, EventTypeOpenWireServer, EventTypeSTOMPClient, EventTypeSTOMPServer:
 		return "messaging_system"
 	case EventTypeHTTPClient:
 		if s.SubType == HTTPSubtypeAWSSQS {
@@ -824,7 +844,7 @@ func (s *Span) TraceName() string {
 			return "MEMCACHED"
 		}
 		return s.Method
-	case EventTypeKafkaClient, EventTypeKafkaServer, EventTypeMQTTClient, EventTypeMQTTServer, EventTypeNATSClient, EventTypeAMQPClient:
+	case EventTypeKafkaClient, EventTypeKafkaServer, EventTypeMQTTClient, EventTypeMQTTServer, EventTypeNATSClient, EventTypeAMQPClient, EventTypeAMQPServer, EventTypeOpenWireClient, EventTypeOpenWireServer, EventTypeSTOMPClient, EventTypeSTOMPServer:
 		if s.Path == "" {
 			return s.Method
 		}

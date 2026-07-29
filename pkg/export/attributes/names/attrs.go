@@ -178,11 +178,13 @@ const (
 	DBNamespace          = Name(semconv.DBNamespaceKey)
 
 	// Messaging
-	MessagingPartition      = Name(semconv.MessagingDestinationPartitionIDKey)
-	MessagingKafkaOffset    = Name(semconv.MessagingKafkaOffsetKey)
+	MessagingPartition   = Name(semconv.MessagingDestinationPartitionIDKey)
+	MessagingKafkaOffset = Name(semconv.MessagingKafkaOffsetKey)
 	// MessagingKafkaConsumerGroupID is the OTel semconv key for the Kafka consumer group ID.
 	// See https://opentelemetry.io/docs/specs/semconv/messaging/kafka/
 	MessagingKafkaConsumerGroupID = Name("messaging.kafka.consumer.group.id")
+	MessagingRabbitmqRoutingKey   = Name("messaging.rabbitmq.destination.routing_key")
+	MessagingRabbitmqDeliveryTag  = Name("messaging.rabbitmq.message.delivery_tag")
 
 	// Elasticsearch
 	ElasticsearchNodeName = Name(semconv.ElasticsearchNodeNameKey)

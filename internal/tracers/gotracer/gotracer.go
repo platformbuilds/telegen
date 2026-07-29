@@ -169,6 +169,9 @@ func (p *Tracer) RegisterOffsets(fileInfo *exec.FileInfo, offsets *goexec.Offset
 		goexec.KafkaGoWriterTopicPos,
 		goexec.KafkaGoProtocolConnPos,
 		goexec.KafkaGoReaderTopicPos,
+		// amqp091 go
+		goexec.AMQP091ChannelConnectionPos,
+		goexec.AMQP091ConnectionConnPos,
 		// kafka sarama
 		goexec.SaramaBrokerCorrIDPos,
 		goexec.SaramaResponseCorrIDPos,
@@ -458,6 +461,56 @@ func (p *Tracer) GoProbes() map[string][]*ebpfcommon.ProbeDesc {
 		}},
 		"github.com/Shopify/sarama.(*Broker).sendInternal": {{
 			Start: p.bpfObjects.ObiUprobeSaramaSendInternal,
+		}},
+		// AMQP 0-9-1 (RabbitMQ amqp091-go)
+		"github.com/rabbitmq/amqp091-go.(*Channel).PublishWithDeferredConfirm": {{
+			Start: p.bpfObjects.ObiUprobeAmqp091Publish,
+			End:   p.bpfObjects.ObiUprobeAmqp091PublishRet,
+		}},
+		"github.com/rabbitmq/amqp091-go.(*Channel).ConsumeWithContext": {{
+			Start: p.bpfObjects.ObiUprobeAmqp091Consume,
+			End:   p.bpfObjects.ObiUprobeAmqp091ConsumeRet,
+		}},
+		"github.com/rabbitmq/amqp091-go.(*Channel).Get": {{
+			Start: p.bpfObjects.ObiUprobeAmqp091Get,
+			End:   p.bpfObjects.ObiUprobeAmqp091GetRet,
+		}},
+		"github.com/rabbitmq/amqp091-go.(*Channel).Ack": {{
+			Start: p.bpfObjects.ObiUprobeAmqp091Ack,
+			End:   p.bpfObjects.ObiUprobeAmqp091AckRet,
+		}},
+		"github.com/rabbitmq/amqp091-go.(*Channel).Nack": {{
+			Start: p.bpfObjects.ObiUprobeAmqp091Nack,
+			End:   p.bpfObjects.ObiUprobeAmqp091NackRet,
+		}},
+		"github.com/rabbitmq/amqp091-go.(*Channel).Reject": {{
+			Start: p.bpfObjects.ObiUprobeAmqp091Reject,
+			End:   p.bpfObjects.ObiUprobeAmqp091RejectRet,
+		}},
+		// AMQP 0-9-1 (legacy streadway client)
+		"github.com/streadway/amqp.(*Channel).Publish": {{
+			Start: p.bpfObjects.ObiUprobeAmqp091Publish,
+			End:   p.bpfObjects.ObiUprobeAmqp091PublishRet,
+		}},
+		"github.com/streadway/amqp.(*Channel).Consume": {{
+			Start: p.bpfObjects.ObiUprobeAmqp091Consume,
+			End:   p.bpfObjects.ObiUprobeAmqp091ConsumeRet,
+		}},
+		"github.com/streadway/amqp.(*Channel).Get": {{
+			Start: p.bpfObjects.ObiUprobeAmqp091Get,
+			End:   p.bpfObjects.ObiUprobeAmqp091GetRet,
+		}},
+		"github.com/streadway/amqp.(*Channel).Ack": {{
+			Start: p.bpfObjects.ObiUprobeAmqp091Ack,
+			End:   p.bpfObjects.ObiUprobeAmqp091AckRet,
+		}},
+		"github.com/streadway/amqp.(*Channel).Nack": {{
+			Start: p.bpfObjects.ObiUprobeAmqp091Nack,
+			End:   p.bpfObjects.ObiUprobeAmqp091NackRet,
+		}},
+		"github.com/streadway/amqp.(*Channel).Reject": {{
+			Start: p.bpfObjects.ObiUprobeAmqp091Reject,
+			End:   p.bpfObjects.ObiUprobeAmqp091RejectRet,
 		}},
 		// Go OTel SDK
 		"go.opentelemetry.io/otel/internal/global.(*tracer).Start": {{

@@ -21,6 +21,10 @@ enum protocol_type : u8 {
     k_protocol_type_http = 3,
     k_protocol_type_kafka = 4,
     k_protocol_type_mqtt = 5,
+    k_protocol_type_amqp = 6,
+    k_protocol_type_amqp1 = 16,
+    k_protocol_type_openwire = 17,
+    k_protocol_type_stomp = 18,
 };
 
 // Struct to keep information on the connections in flight

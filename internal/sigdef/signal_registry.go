@@ -765,6 +765,39 @@ var (
 		SignalType:    SignalTraces,
 	}
 
+	// AMQP10Traces metadata
+	AMQP10Traces = &SignalMetadata{
+		Category:      "Message Queue Traces",
+		SubCategory:   "AMQP 1.0",
+		SourceModule:  "internal/tracers/generictracer",
+		BPFComponent:  "bpf/generictracer/protocol_tcp.h",
+		Description:   "AMQP 1.0 message operations",
+		CollectorType: CollectorTypeEBPF,
+		SignalType:    SignalTraces,
+	}
+
+	// OpenWireTraces metadata
+	OpenWireTraces = &SignalMetadata{
+		Category:      "Message Queue Traces",
+		SubCategory:   "OpenWire",
+		SourceModule:  "internal/tracers/generictracer",
+		BPFComponent:  "bpf/generictracer/protocol_tcp.h",
+		Description:   "OpenWire message operations",
+		CollectorType: CollectorTypeEBPF,
+		SignalType:    SignalTraces,
+	}
+
+	// STOMPTraces metadata
+	STOMPTraces = &SignalMetadata{
+		Category:      "Message Queue Traces",
+		SubCategory:   "STOMP",
+		SourceModule:  "internal/tracers/generictracer",
+		BPFComponent:  "bpf/generictracer/protocol_tcp.h",
+		Description:   "STOMP frame operations",
+		CollectorType: CollectorTypeEBPF,
+		SignalType:    SignalTraces,
+	}
+
 	// MQTTTraces metadata
 	MQTTTraces = &SignalMetadata{
 		Category:      "Message Queue Traces",

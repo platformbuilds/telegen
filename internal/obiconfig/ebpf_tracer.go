@@ -125,6 +125,9 @@ type EBPFTracer struct {
 	// MongoDB requests cache size.
 	MongoRequestsCacheSize int `yaml:"mongo_requests_cache_size" env:"OTEL_EBPF_BPF_MONGO_REQUESTS_CACHE_SIZE" validate:"gt=0"`
 
+	// AMQP per-channel destination cache size for settle operations.
+	AMQPLastDestinationCacheSize int `yaml:"amqp_last_destination_cache_size" env:"OTEL_EBPF_BPF_AMQP_LAST_DESTINATION_CACHE_SIZE" validate:"gt=0"`
+
 	// Configure data extraction/parsing based on protocol
 	PayloadExtraction PayloadExtraction `yaml:"payload_extraction"`
 
@@ -176,6 +179,7 @@ type EBPFBufferSizes struct {
 	HTTP     uint32 `yaml:"http" env:"OTEL_EBPF_BPF_BUFFER_SIZE_HTTP" validate:"lte=262144"`
 	MySQL    uint32 `yaml:"mysql" env:"OTEL_EBPF_BPF_BUFFER_SIZE_MYSQL" validate:"lte=65536"`
 	Kafka    uint32 `yaml:"kafka" env:"OTEL_EBPF_BPF_BUFFER_SIZE_KAFKA" validate:"lte=65536"`
+	MQ       uint32 `yaml:"mq" env:"OTEL_EBPF_BPF_BUFFER_SIZE_MQ" validate:"lte=65536"`
 	Postgres uint32 `yaml:"postgres" env:"OTEL_EBPF_BPF_BUFFER_SIZE_POSTGRES" validate:"lte=65536"`
 	MSSQL    uint32 `yaml:"mssql" env:"OTEL_EBPF_BPF_BUFFER_SIZE_MSSQL" validate:"lte=65536"`
 	TCP      uint32 `yaml:"tcp" env:"OTEL_EBPF_BPF_BUFFER_SIZE_TCP" validate:"lte=65536"`

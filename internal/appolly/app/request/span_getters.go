@@ -4,10 +4,14 @@
 package request // import "github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
 
 import (
+	"strconv"
+	"strings"
+
 	"go.opentelemetry.io/otel/attribute"
 	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 
 	"github.com/mirastacklabs-ai/telegen/internal/ebpf/common/dnsparser"
+	telegenSemconv "github.com/mirastacklabs-ai/telegen/internal/semconv"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/attributes"
 	attr "github.com/mirastacklabs-ai/telegen/pkg/export/attributes/names"
 )
@@ -178,6 +182,18 @@ func spanOTELGetters(name attr.Name) (attributes.Getter[*Span, attribute.KeyValu
 			if span.Type == EventTypeMQTTClient || span.Type == EventTypeMQTTServer {
 				return semconv.MessagingSystemKey.String("mqtt")
 			}
+			if span.Type == EventTypeAMQPClient || span.Type == EventTypeAMQPServer {
+				if span.MessagingInfo != nil && strings.HasPrefix(span.MessagingInfo.OperationName, "amqp1.") {
+					return semconv.MessagingSystemKey.String(telegenSemconv.ResolveAMQP1MessagingSystem(messagingSystemProcessHints(span)...))
+				}
+				return semconv.MessagingSystemKey.String(telegenSemconv.ResolveAMQP091MessagingSystem())
+			}
+			if span.Type == EventTypeOpenWireClient || span.Type == EventTypeOpenWireServer {
+				return semconv.MessagingSystemKey.String(telegenSemconv.ResolveOpenWireMessagingSystem())
+			}
+			if span.Type == EventTypeSTOMPClient || span.Type == EventTypeSTOMPServer {
+				return semconv.MessagingSystemKey.String(telegenSemconv.ResolveSTOMPMessagingSystem(messagingSystemProcessHints(span)...))
+			}
 			if span.Type == EventTypeHTTPClient && span.SubType == HTTPSubtypeAWSSQS && span.AWS != nil {
 				return semconv.MessagingSystemAWSSQS
 			}
@@ -185,10 +201,11 @@ func spanOTELGetters(name attr.Name) (attributes.Getter[*Span, attribute.KeyValu
 		}
 	case attr.MessagingDestination:
 		getter = func(span *Span) attribute.KeyValue {
-			if span.Type == EventTypeKafkaClient || span.Type == EventTypeKafkaServer {
-				return semconv.MessagingDestinationName(span.Path)
-			}
-			if span.Type == EventTypeMQTTClient || span.Type == EventTypeMQTTServer {
+			if span.Type == EventTypeKafkaClient || span.Type == EventTypeKafkaServer ||
+				span.Type == EventTypeMQTTClient || span.Type == EventTypeMQTTServer ||
+				span.Type == EventTypeAMQPClient || span.Type == EventTypeAMQPServer ||
+				span.Type == EventTypeOpenWireClient || span.Type == EventTypeOpenWireServer ||
+				span.Type == EventTypeSTOMPClient || span.Type == EventTypeSTOMPServer {
 				return semconv.MessagingDestinationName(span.Path)
 			}
 			if span.Type == EventTypeHTTPClient && span.SubType == HTTPSubtypeAWSSQS && span.AWS != nil {
@@ -198,6 +215,17 @@ func spanOTELGetters(name attr.Name) (attributes.Getter[*Span, attribute.KeyValu
 		}
 	case attr.MessagingOpName:
 		getter = func(span *Span) attribute.KeyValue {
+			if span.Type == EventTypeKafkaClient || span.Type == EventTypeKafkaServer ||
+				span.Type == EventTypeMQTTClient || span.Type == EventTypeMQTTServer ||
+				span.Type == EventTypeNATSClient ||
+				span.Type == EventTypeAMQPClient || span.Type == EventTypeAMQPServer ||
+				span.Type == EventTypeOpenWireClient || span.Type == EventTypeOpenWireServer ||
+				span.Type == EventTypeSTOMPClient || span.Type == EventTypeSTOMPServer {
+				if span.MessagingInfo != nil && span.MessagingInfo.OperationName != "" {
+					return MessagingOperationName(span.MessagingInfo.OperationName)
+				}
+				return MessagingOperationName(span.Method)
+			}
 			if span.Type == EventTypeHTTPClient && span.SubType == HTTPSubtypeAWSSQS && span.AWS != nil {
 				return MessagingOperationName(span.AWS.SQS.OperationName)
 			}
@@ -205,6 +233,14 @@ func spanOTELGetters(name attr.Name) (attributes.Getter[*Span, attribute.KeyValu
 		}
 	case attr.MessagingOpType:
 		getter = func(span *Span) attribute.KeyValue {
+			if span.Type == EventTypeKafkaClient || span.Type == EventTypeKafkaServer ||
+				span.Type == EventTypeMQTTClient || span.Type == EventTypeMQTTServer ||
+				span.Type == EventTypeNATSClient ||
+				span.Type == EventTypeAMQPClient || span.Type == EventTypeAMQPServer ||
+				span.Type == EventTypeOpenWireClient || span.Type == EventTypeOpenWireServer ||
+				span.Type == EventTypeSTOMPClient || span.Type == EventTypeSTOMPServer {
+				return MessagingOperationType(span.Method)
+			}
 			if span.Type == EventTypeHTTPClient && span.SubType == HTTPSubtypeAWSSQS && span.AWS != nil {
 				return MessagingOperationType(span.AWS.SQS.OperationType)
 			}
@@ -334,4 +370,15 @@ func spanPromGetters(attrName attr.Name) attributes.Getter[*Span, string] {
 	// unlike the OTEL getters, when the attribute is not found, we need to look for it
 	// in the metadata section
 	return func(s *Span) string { return s.Service.Metadata[attrName] }
+}
+
+func messagingSystemProcessHints(span *Span) []string {
+	hints := []string{span.Service.UID.Name, span.Service.UID.Instance}
+	if cn, ok := span.Service.Metadata[attr.K8sContainerName]; ok && cn != "" {
+		hints = append(hints, cn)
+	}
+	if span.HostPort > 0 {
+		hints = append(hints, "port:"+strconv.Itoa(span.HostPort))
+	}
+	return hints
 }

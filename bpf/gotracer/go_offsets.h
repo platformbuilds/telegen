@@ -62,6 +62,9 @@ typedef enum {
     _kafka_go_writer_topic_pos,
     _kafka_go_protocol_conn_pos,
     _kafka_go_reader_topic_pos,
+    // amqp091 go
+    _amqp091_channel_connection_pos,
+    _amqp091_connection_conn_pos,
     // kafka sarama
     _sarama_broker_corr_id_pos,
     _sarama_response_corr_id_pos,

@@ -313,6 +313,49 @@ func TestTCPReqMQTTHeuristicFailure(t *testing.T) {
 	assert.Equal(t, request.Span{}, span, "span should be empty")
 }
 
+func TestReadTCPRequestIntoSpanAMQPKernelHintMatchesFallback(t *testing.T) {
+	amqpReq := amqpMethodFrame(1, 60, 40, basicPublishArgs("", "orders.created"))
+	base := makeTCPReq("", 5672)
+	base.Len = uint32(len(amqpReq))
+	copy(base.Buf[:], amqpReq)
+
+	cfg := config.EBPFTracer{
+		HeuristicSQLDetect:                  false,
+		AMQPLastDestinationCacheSize:        16,
+		KafkaTopicUUIDCacheSize:             16,
+		CouchbaseDBCacheSize:                16,
+		MySQLPreparedStatementsCacheSize:    16,
+		PostgresPreparedStatementsCacheSize: 16,
+		MSSQLPreparedStatementsCacheSize:    16,
+		MongoRequestsCacheSize:              16,
+	}
+	ctx := NewEBPFParseContext(&cfg, nil, nil)
+	fltr := TestPidsFilter{services: map[uint32]svc.Attrs{}}
+
+	withHint := base
+	withHint.ProtocolType = ProtocolTypeAMQP
+	hintRecord := bytes.Buffer{}
+	require.NoError(t, binary.Write(&hintRecord, binary.LittleEndian, withHint))
+	hintSpan, ignore, err := ReadTCPRequestIntoSpan(ctx, &cfg, &ringbuf.Record{RawSample: hintRecord.Bytes()}, &fltr)
+	require.NoError(t, err)
+	require.False(t, ignore)
+
+	fallback := base
+	fallback.ProtocolType = ProtocolTypeUnknown
+	fallbackRecord := bytes.Buffer{}
+	require.NoError(t, binary.Write(&fallbackRecord, binary.LittleEndian, fallback))
+	fallbackSpan, ignore, err := ReadTCPRequestIntoSpan(ctx, &cfg, &ringbuf.Record{RawSample: fallbackRecord.Bytes()}, &fltr)
+	require.NoError(t, err)
+	require.False(t, ignore)
+
+	assert.Equal(t, hintSpan.Type, fallbackSpan.Type)
+	assert.Equal(t, hintSpan.Method, fallbackSpan.Method)
+	assert.Equal(t, hintSpan.Path, fallbackSpan.Path)
+	require.NotNil(t, hintSpan.MessagingInfo)
+	require.NotNil(t, fallbackSpan.MessagingInfo)
+	assert.Equal(t, hintSpan.MessagingInfo.OperationName, fallbackSpan.MessagingInfo.OperationName)
+}
+
 const charset = "\\0\\1\\2abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 func randomString(length int) string {

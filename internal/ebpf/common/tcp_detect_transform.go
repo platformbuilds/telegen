@@ -127,77 +127,38 @@ func readTCPRequestIntoSpanInner(parseCtx *EBPFParseContext, cfg *config.EBPFTra
 		}
 		return span, false, nil
 	case ProtocolTypeAMQP:
-		span, outcome, err := ProcessPossibleAMQPEvent(event, requestBuffer, responseBuffer)
-		if outcome == ParseIgnored && err == nil {
-			return request.Span{}, true, nil
-		}
-		if err == nil {
-			return span, false, nil
-		}
-		return request.Span{}, true, fmt.Errorf("failed to handle AMQP event: %w", err)
+		span, outcome, err := ProcessPossibleAMQPEvent(event, requestBuffer, responseBuffer, parseCtx.amqpLastDestinationCache)
+		return protocolOutcomeToSpan(span, outcome, err, "AMQP")
+	case ProtocolTypeAMQP1:
+		span, outcome, err := ProcessPossibleAMQP10Event(event, requestBuffer, responseBuffer, parseCtx.amqp10LinkAddressCache)
+		return protocolOutcomeToSpan(span, outcome, err, "AMQP 1.0")
+	case ProtocolTypeOpenWire:
+		span, outcome, err := ProcessPossibleOpenWireEvent(event, requestBuffer, responseBuffer, parseCtx.openWireDestinationCache)
+		return protocolOutcomeToSpan(span, outcome, err, "OpenWire")
+	case ProtocolTypeSTOMP:
+		span, outcome, err := ProcessPossibleSTOMPEvent(event, requestBuffer, responseBuffer)
+		return protocolOutcomeToSpan(span, outcome, err, "STOMP")
 	case ProtocolTypeCQL:
 		span, outcome, err := ProcessPossibleCQLEvent(event, requestBuffer, responseBuffer)
-		if outcome == ParseIgnored && err == nil {
-			return request.Span{}, true, nil
-		}
-		if err == nil {
-			return span, false, nil
-		}
-		return request.Span{}, true, fmt.Errorf("failed to handle CQL event: %w", err)
+		return protocolOutcomeToSpan(span, outcome, err, "CQL")
 	case ProtocolTypeNATS:
 		span, outcome, err := ProcessPossibleNATSEvent(event, requestBuffer, responseBuffer)
-		if outcome == ParseIgnored && err == nil {
-			return request.Span{}, true, nil
-		}
-		if err == nil {
-			return span, false, nil
-		}
-		return request.Span{}, true, fmt.Errorf("failed to handle NATS event: %w", err)
+		return protocolOutcomeToSpan(span, outcome, err, "NATS")
 	case ProtocolTypeMemcached:
 		span, outcome, err := ProcessPossibleMemcachedEvent(event, requestBuffer, responseBuffer)
-		if outcome == ParseIgnored && err == nil {
-			return request.Span{}, true, nil
-		}
-		if err == nil {
-			return span, false, nil
-		}
-		return request.Span{}, true, fmt.Errorf("failed to handle Memcached event: %w", err)
+		return protocolOutcomeToSpan(span, outcome, err, "Memcached")
 	case ProtocolTypeClickHouse:
 		span, outcome, err := ProcessPossibleClickHouseEvent(event, requestBuffer, responseBuffer)
-		if outcome == ParseIgnored && err == nil {
-			return request.Span{}, true, nil
-		}
-		if err == nil {
-			return span, false, nil
-		}
-		return request.Span{}, true, fmt.Errorf("failed to handle ClickHouse event: %w", err)
+		return protocolOutcomeToSpan(span, outcome, err, "ClickHouse")
 	case ProtocolTypeZooKeeper:
 		span, outcome, err := ProcessPossibleZooKeeperEvent(event, requestBuffer, responseBuffer)
-		if outcome == ParseIgnored && err == nil {
-			return request.Span{}, true, nil
-		}
-		if err == nil {
-			return span, false, nil
-		}
-		return request.Span{}, true, fmt.Errorf("failed to handle ZooKeeper event: %w", err)
+		return protocolOutcomeToSpan(span, outcome, err, "ZooKeeper")
 	case ProtocolTypeDubbo2:
 		span, outcome, err := ProcessPossibleDubbo2Event(event, requestBuffer, responseBuffer)
-		if outcome == ParseIgnored && err == nil {
-			return request.Span{}, true, nil
-		}
-		if err == nil {
-			return span, false, nil
-		}
-		return request.Span{}, true, fmt.Errorf("failed to handle Dubbo2 event: %w", err)
+		return protocolOutcomeToSpan(span, outcome, err, "Dubbo2")
 	case ProtocolTypeFDB:
 		span, outcome, err := ProcessPossibleFDBEvent(event, requestBuffer, responseBuffer)
-		if outcome == ParseIgnored && err == nil {
-			return request.Span{}, true, nil
-		}
-		if err == nil {
-			return span, false, nil
-		}
-		return request.Span{}, true, fmt.Errorf("failed to handle FoundationDB event: %w", err)
+		return protocolOutcomeToSpan(span, outcome, err, "FoundationDB")
 	case ProtocolTypeSunRPC:
 		span, ignore, matched, err := matchSunRPC(parseCtx, event, requestBuffer, responseBuffer)
 		if err != nil {
@@ -245,16 +206,30 @@ func readTCPRequestIntoSpanInner(parseCtx *EBPFParseContext, cfg *config.EBPFTra
 		}
 	}
 
-	// AMQP heuristic detection (fallback for unknown protocol type)
+	// AMQP-family heuristic detection order mirrors the kernel classifier.
+	if isAMQP1(requestBuffer) || isAMQP1(responseBuffer) {
+		span, outcome, err := ProcessPossibleAMQP10Event(event, requestBuffer, responseBuffer, parseCtx.amqp10LinkAddressCache)
+		if result, matched := protocolOutcomeForHeuristic(span, outcome, err, "AMQP 1.0"); matched {
+			return result.span, result.ignore, result.err
+		}
+	}
+	if isOpenWire(requestBuffer) || isOpenWire(responseBuffer) {
+		span, outcome, err := ProcessPossibleOpenWireEvent(event, requestBuffer, responseBuffer, parseCtx.openWireDestinationCache)
+		if result, matched := protocolOutcomeForHeuristic(span, outcome, err, "OpenWire"); matched {
+			return result.span, result.ignore, result.err
+		}
+	}
+	if isSTOMP(requestBuffer) || isSTOMP(responseBuffer) {
+		span, outcome, err := ProcessPossibleSTOMPEvent(event, requestBuffer, responseBuffer)
+		if result, matched := protocolOutcomeForHeuristic(span, outcome, err, "STOMP"); matched {
+			return result.span, result.ignore, result.err
+		}
+	}
 	if isAMQP(requestBuffer) || isAMQP(responseBuffer) {
-		span, outcome, err := ProcessPossibleAMQPEvent(event, requestBuffer, responseBuffer)
-		if outcome == ParseIgnored && err == nil {
-			return request.Span{}, true, nil
+		span, outcome, err := ProcessPossibleAMQPEvent(event, requestBuffer, responseBuffer, parseCtx.amqpLastDestinationCache)
+		if result, matched := protocolOutcomeForHeuristic(span, outcome, err, "AMQP"); matched {
+			return result.span, result.ignore, result.err
 		}
-		if err == nil {
-			return span, false, nil
-		}
-		slog.Debug("AMQP heuristic detection failed, ignoring", "error", err)
 	}
 
 	// CQL heuristic detection
@@ -407,6 +382,56 @@ func readTCPRequestIntoSpanInner(parseCtx *EBPFParseContext, cfg *config.EBPFTra
 	}
 
 	return request.Span{}, true, nil // ignore if we couldn't parse it
+}
+
+type protocolHeuristicResult struct {
+	span   request.Span
+	ignore bool
+	err    error
+}
+
+func protocolOutcomeToSpan(span request.Span, outcome ParseOutcome, err error, protocolName string) (request.Span, bool, error) {
+	switch outcome {
+	case ParseSuccess:
+		if err != nil {
+			return request.Span{}, true, fmt.Errorf("failed to handle %s event: %w", protocolName, err)
+		}
+		return span, false, nil
+	case ParseIgnored, ParseNeedsMore:
+		return request.Span{}, true, nil
+	case ParseInvalid:
+		if err != nil {
+			return request.Span{}, true, fmt.Errorf("failed to handle %s event: %w", protocolName, err)
+		}
+		return request.Span{}, true, fmt.Errorf("failed to handle %s event: invalid frame", protocolName)
+	default:
+		return request.Span{}, true, nil
+	}
+}
+
+func protocolOutcomeForHeuristic(
+	span request.Span,
+	outcome ParseOutcome,
+	err error,
+	protocolName string,
+) (protocolHeuristicResult, bool) {
+	switch outcome {
+	case ParseSuccess:
+		if err != nil {
+			slog.Debug(protocolName+" heuristic detection failed, ignoring", "error", err)
+			return protocolHeuristicResult{}, false
+		}
+		return protocolHeuristicResult{span: span, ignore: false, err: nil}, true
+	case ParseIgnored, ParseNeedsMore:
+		return protocolHeuristicResult{span: request.Span{}, ignore: true, err: nil}, true
+	case ParseInvalid:
+		if err != nil {
+			slog.Debug(protocolName+" heuristic detection failed, ignoring", "error", err)
+		}
+		return protocolHeuristicResult{}, false
+	default:
+		return protocolHeuristicResult{}, false
+	}
 }
 
 func getBuffers(parseCtx *EBPFParseContext, event *TCPRequestInfo) (req []byte, resp []byte) {
