@@ -151,15 +151,43 @@ jobs:
       - name: Run verifier load check
         run: |
           GO_BIN="$(command -v go)"
-          go version
-          # sudo's secure_path would otherwise pick the runner's older Go while
-          # setup-go sets GOTOOLCHAIN=local (blocking auto-download of go.mod's toolchain).
-          sudo -E env "PATH=$PATH" TELEGEN_BPF_VERIFIER_CHECK=1 "$GO_BIN" test -v ./internal/bpfverifier -run TestLoadAllTracerBpfObjects -count=1
+          echo "go=$(go version) bin=$GO_BIN GOROOT=$GOROOT"
+          # Pass Go toolchain env explicitly: sudo env_reset/secure_path otherwise
+          # falls back to the runner Go while GOTOOLCHAIN=local blocks upgrades.
+          sudo env \
+            "PATH=$PATH" \
+            "GOROOT=$GOROOT" \
+            "GOPATH=${GOPATH:-}" \
+            "GOMODCACHE=${GOMODCACHE:-}" \
+            "GOCACHE=${GOCACHE:-}" \
+            "HOME=$HOME" \
+            "GOTOOLCHAIN=local" \
+            TELEGEN_BPF_VERIFIER_CHECK=1 \
+            "$GO_BIN" version
+          sudo env \
+            "PATH=$PATH" \
+            "GOROOT=$GOROOT" \
+            "GOPATH=${GOPATH:-}" \
+            "GOMODCACHE=${GOMODCACHE:-}" \
+            "GOCACHE=${GOCACHE:-}" \
+            "HOME=$HOME" \
+            "GOTOOLCHAIN=local" \
+            TELEGEN_BPF_VERIFIER_CHECK=1 \
+            "$GO_BIN" test -v ./internal/bpfverifier -run TestLoadAllTracerBpfObjects -count=1
 
       - name: Run gotracer attach+emit smoke
         run: |
           GO_BIN="$(command -v go)"
-          sudo -E env "PATH=$PATH" TELEGEN_BPF_VERIFIER_CHECK=1 "$GO_BIN" test -v ./internal/bpfverifier -run TestGoTracerAttachAndEmitHTTP -count=1
+          sudo env \
+            "PATH=$PATH" \
+            "GOROOT=$GOROOT" \
+            "GOPATH=${GOPATH:-}" \
+            "GOMODCACHE=${GOMODCACHE:-}" \
+            "GOCACHE=${GOCACHE:-}" \
+            "HOME=$HOME" \
+            "GOTOOLCHAIN=local" \
+            TELEGEN_BPF_VERIFIER_CHECK=1 \
+            "$GO_BIN" test -v ./internal/bpfverifier -run TestGoTracerAttachAndEmitHTTP -count=1
 
   obi-smoke:
     name: OBI Linux Smoke
