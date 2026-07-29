@@ -66,6 +66,15 @@ func (i *instrumenter) instrumentProbes(exe *link.Executable, probes map[string]
 		for _, probe := range probeArray {
 			log.Debug("going to instrument function", "function", symbolName, "programs", probe)
 
+			if probe.Skip {
+				if probe.Required {
+					closeAll(closers)
+					return nil, fmt.Errorf("required symbol %q was not resolved", symbolName)
+				}
+				log.Debug("skipping unresolved optional uprobe", "function", symbolName)
+				continue
+			}
+
 			cls, err := i.uprobe(exe, probe)
 
 			if err != nil {
@@ -549,9 +558,15 @@ func gatherOffsetsImpl(elfFile *elf.File, probes map[string][]*ebpfcommon.ProbeD
 			sym, ok := syms[symbolName]
 
 			if !ok {
+				probe.Skip = true
+				if probe.Required {
+					return fmt.Errorf("required symbol %s not found in %s", symbolName, instrPath)
+				}
+				log.Debug("skipping unresolved optional uprobe", "symbol", symbolName, "path", instrPath)
 				continue
 			}
 
+			probe.Skip = false
 			progData := readSymbolData(&sym)
 
 			if progData == nil {
@@ -579,14 +594,27 @@ func (i *instrumenter) gatherGoOffsets(goProbes map[string][]*ebpfcommon.ProbeDe
 		offs, ok := i.offsets.Funcs[symbolName]
 
 		if !ok {
-			// the program function is not in the detected offsets. Ignoring
+			// Symbol not present in this binary (e.g. amqp091 in a non-AMQP app).
+			// Mark Skip so instrumentProbes does not attach at address 0.
 			log.Debug("ignoring function", "function", symbolName)
+			for _, probe := range descs {
+				probe.Skip = true
+			}
 			continue
 		}
 
 		for _, probe := range descs {
+			probe.Skip = false
 			probe.StartOffset = offs.Start
 			probe.ReturnOffsets = offs.Returns
+
+			if probe.End != nil && len(offs.Returns) == 0 {
+				if probe.Required {
+					continue
+				}
+				probe.Skip = true
+				log.Debug("skipping optional go uprobe without return offsets", "function", symbolName)
+			}
 		}
 	}
 }

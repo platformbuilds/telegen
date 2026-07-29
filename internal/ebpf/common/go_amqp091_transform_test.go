@@ -61,6 +61,13 @@ func TestGoAMQP091ToSpanMapsSettle(t *testing.T) {
 	assert.Equal(t, request.MessagingSettle, span.Method)
 }
 
+func TestGoAMQP091TopicBufferMatchesMaxTopicNameLen(t *testing.T) {
+	// Keep userspace GoAMQP091ClientInfo.Topic aligned with kafka_go_req_t.topic /
+	// MAX_TOPIC_NAME_LEN used by amqp091_set_destination's bpf_clamp_umax bound.
+	var event GoAMQP091ClientInfo
+	assert.Equal(t, 64, len(event.Topic))
+}
+
 func eventToRawSample(event GoAMQP091ClientInfo) []byte {
 	size := int(unsafe.Sizeof(event))
 	raw := make([]byte, size)
