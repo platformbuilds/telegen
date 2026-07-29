@@ -1160,30 +1160,6 @@ int obi_handle_buf_with_args(void *ctx) {
                         args->direction)) {
         bpf_dbg_printk("Found kafka connection");
         bpf_tail_call(ctx, &jump_table, k_tail_protocol_tcp);
-    } else if (is_amqp1(&args->pid_conn.conn,
-                        (const unsigned char *)args->u_buf,
-                        args->bytes_len,
-                        &args->protocol_type)) {
-        bpf_dbg_printk("Found AMQP 1.0 connection");
-        bpf_tail_call(ctx, &jump_table, k_tail_protocol_tcp);
-    } else if (is_openwire(&args->pid_conn.conn,
-                           (const unsigned char *)args->u_buf,
-                           args->bytes_len,
-                           &args->protocol_type)) {
-        bpf_dbg_printk("Found OpenWire connection");
-        bpf_tail_call(ctx, &jump_table, k_tail_protocol_tcp);
-    } else if (is_stomp(&args->pid_conn.conn,
-                        (const unsigned char *)args->u_buf,
-                        args->bytes_len,
-                        &args->protocol_type)) {
-        bpf_dbg_printk("Found STOMP connection");
-        bpf_tail_call(ctx, &jump_table, k_tail_protocol_tcp);
-    } else if (is_amqp(&args->pid_conn.conn,
-                       (const unsigned char *)args->u_buf,
-                       args->bytes_len,
-                       &args->protocol_type)) {
-        bpf_dbg_printk("Found AMQP 0-9-1 connection");
-        bpf_tail_call(ctx, &jump_table, k_tail_protocol_tcp);
     } else { // large request tracking and generic TCP
         http_info_t *info = bpf_map_lookup_elem(&ongoing_http, &args->pid_conn);
 
