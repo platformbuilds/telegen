@@ -110,7 +110,7 @@ lint:
 
 .PHONY: verifier-check
 verifier-check: docker-generate
-	@echo "### Running BPF verifier load + gotracer attach/emit checks in Linux container..."
+	@echo "### Running BPF verifier load checks in Linux container..."
 	$(OCI_BIN) run --rm \
 		--privileged \
 		-v /sys/kernel/btf:/sys/kernel/btf:ro \
@@ -119,7 +119,7 @@ verifier-check: docker-generate
 		-e TELEGEN_BPF_VERIFIER_CHECK=1 \
 		--entrypoint /bin/sh \
 		$(GEN_IMG) \
-		-c 'go test -v ./internal/bpfverifier -run "TestLoadAllTracerBpfObjects|TestGoTracerAttachAndEmitHTTP" -count=1'
+		-c 'go test -v ./internal/bpfverifier -run TestLoadAllTracerBpfObjects -count=1 && go test -v ./internal/bpfverifier -run TestGoTracerAttachAndEmitHTTP -count=1'
 
 ### Docker Targets ##########################################################
 
