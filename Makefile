@@ -104,6 +104,10 @@ run:
 test:
 	go test ./...
 
+.PHONY: netapp-parity
+netapp-parity:
+	go run ./cmd/netapp-parity -templates configs/netapp -harvest-json $${HARVEST_ONTAP_METRICS_JSON:-} -allowlist configs/netapp/parity-allowlist.txt
+
 .PHONY: lint
 lint:
 	golangci-lint run ./...

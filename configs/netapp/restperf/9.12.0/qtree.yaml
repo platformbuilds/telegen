@@ -1,0 +1,27 @@
+name:                     Qtree
+query:                    api/cluster/counter/tables/qtree
+object:                   qtree
+
+counters:
+  - ^^id                    => qtreefull
+  - ^node.name              => node
+  - ^parent_volume.name     => volume
+  - ^svm.name               => svm
+  - cifs_ops
+  - internal_ops
+  - nfs_ops
+  - total_ops
+
+plugins:
+  - LabelAgent:
+      split_regex:
+        # Example: vs0:root_vs0/harvestQtree:ff554fec-e719-11ec-85cd-005056a732ac:1025:1
+        # output: qtree label value will be harvestQtree
+        - qtreefull `(.*?):(.*?)\/(.*?):(.*?):(.*?):(.*?)` ,,qtree,,,
+      exclude_regex:
+        - qtree `^\s*$`   #exclude empty or qtree containing just spaces
+export_options:
+  instance_keys:
+    - qtree
+    - svm
+    - volume

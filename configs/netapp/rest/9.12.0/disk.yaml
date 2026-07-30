@@ -1,0 +1,65 @@
+
+name:             Disk
+query:            api/storage/disks
+object:           disk
+
+counters:
+  - ^^uid                       => uuid
+  - ^bay                        => shelf_bay
+  - ^container_type
+  - ^home_node.name             => owner_node
+  - ^model
+  - ^name                       => disk
+  - ^node.name                  => node
+  - ^node.uuid
+  - ^outage.reason.message      => outage
+  - ^pool
+  - ^serial_number
+  - ^shelf.uid                  => shelf
+  - ^state
+  - bytes_per_sector            => bytes_per_sector
+  - sector_count                => sectors
+  - stats.average_latency       => stats_average_latency
+  - stats.power_on_hours        => power_on_hours
+  - usable_size
+
+endpoints:
+  - query: api/private/cli/disk
+    counters:
+      - ^^uid                   => uuid
+      - ^type
+      - disk_io_kbps_total      => stats_io_kbps
+      - path_count              => path_count
+      - sectors_read            => stats_sectors_read
+      - sectors_written         => stats_sectors_written
+
+plugins:
+  - Disk
+  - LabelAgent:
+      replace:
+        - outage outage `"` ``
+      value_to_num:
+        - new_status outage - - `0` #ok_value is empty value, '-' would be converted to blank while processing.
+      join:
+        - index `_` node,disk
+  - MetricAgent:
+      compute_metric:
+        - uptime MULTIPLY stats.power_on_hours 60 60 #convert to second for zapi parity
+
+export_options:
+  instance_keys:
+    - disk
+    - index
+    - node
+  instance_labels:
+    - container_type
+    - failed
+    - model
+    - outage
+    - owner_node
+    - pool
+    - serial_number
+    - shared
+    - shelf
+    - shelf_bay
+    - type

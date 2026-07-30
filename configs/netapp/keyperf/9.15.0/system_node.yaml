@@ -1,0 +1,20 @@
+name:                     SystemNode
+query:                    api/cluster/nodes
+object:                   node
+
+allow_partial_aggregation: true
+
+counters:
+  - ^^uuid                                                                                => uuid
+  - ^name                                                                                 => node
+  - ^statistics.status                                                                    => status
+  - statistics.processor_utilization_raw                                                  => avg_processor_busy
+  - statistics.timestamp(timestamp)                                                       => timestamp
+  - hidden_fields:
+      - statistics
+  - filter:
+      - statistics.timestamp=!"-"
+
+export_options:
+  instance_keys:
+    - node

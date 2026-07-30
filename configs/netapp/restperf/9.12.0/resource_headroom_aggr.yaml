@@ -1,0 +1,29 @@
+name:                     HeadroomAggr
+query:                    api/cluster/counter/tables/headroom_aggregate
+object:                   headroom_aggr
+
+counters:
+  - ^^id
+  - ^name                             => instance_name
+  - ^node.name                        => node
+  - current_latency
+  - current_ops
+  - current_utilization
+  - ewma.daily                        => ewma_daily
+  - ewma.hourly                       => ewma_hourly
+  - ewma.monthly                      => ewma_monthly
+  - ewma.weekly                       => ewma_weekly
+  - optimal_point.confidence_factor   => optimal_point_confidence_factor
+  - optimal_point.latency             => optimal_point_latency
+  - optimal_point.ops                 => optimal_point_ops
+  - optimal_point.utilization         => optimal_point_utilization
+
+
+plugins:
+  - Headroom
+
+export_options:
+  instance_keys:
+    - aggr
+    - disk_type
+    - node
