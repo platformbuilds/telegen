@@ -78,8 +78,9 @@ storage:
         environment: "production"
         datacenter: "dc1"
 
-  # NetApp ONTAP collectors
+  # NetApp ONTAP collectors (Harvest-parity: Rest + RestPerf/KeyPerf + EMS)
   # ONTAP REST API documentation: https://docs.netapp.com/us-en/ontap-automation
+  # Templates: configs/netapp/{rest,restperf,keyperf,ems}
   netapp_ontap:
     - name: "ontap-prod-01"
       address: "https://10.0.10.140"
@@ -87,15 +88,35 @@ storage:
       password: "${NETAPP_PASSWORD}"
       verify_ssl: true
       timeout: 30s
-      # Optional: specific cluster to collect from
-      cluster_id: ""
+      coverage: full                 # full | harvest_default
+      collectors:                    # auto-selected by probe if omitted
+        - rest
+        - restperf
+        - keyperf
+        - ems
+      templates_dir: ""              # empty = configs/netapp
+      ems:
+        enabled: true
+        resolve_after: 672h
       labels:
         environment: "production"
         datacenter: "dc1"
 
-  # OTLP export configuration
+  # NetApp E-Series collectors
+  netapp_eseries:
+    - name: "eseries-prod-01"
+      address: "https://10.0.10.150"
+      username: "monitor"
+      password: "${NETAPP_ESERIES_PASSWORD}"
+      verify_ssl: true
+      timeout: 30s
+      labels:
+        environment: "production"
+        datacenter: "dc1"
+
+  # OTLP export configuration (legacy fallback; prefer shared pipeline exporter)
   otlp:
-    enabled: true
+    enabled: false
     # OTLP endpoint (without /v1/metrics path)
     endpoint: "localhost:4317"
     # Protocol: grpc or http

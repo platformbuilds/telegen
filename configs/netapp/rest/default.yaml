@@ -1,0 +1,75 @@
+
+collector:          Rest
+
+schedule:
+  - counter: 24h  # This handles cases such as cluster upgrades or collector cache updates.
+  - data: 3m
+
+# See https://github.com/NetApp/harvest/blob/main/docs/architecture/rest-strategy.md
+# for details on how Harvest handles the ONTAP transition from ZAPI to REST.
+
+objects:
+  Aggregate:                   aggr.yaml
+  AggregateEfficiency:         aggr_efficiency.yaml
+  AuditLog:                    audit_log.yaml
+# The CIFSSession template may slow down data collection due to a high number of metrics.
+  CIFSSession:                 cifs_session.yaml
+  CIFSShare:                    cifs_share.yaml
+  CloudTarget:                 cloud_target.yaml
+  ClusterPeer:                 clusterpeer.yaml
+  Cluster:                     cluster.yaml
+  ClusterSchedule:             clusterschedule.yaml
+  ClusterSoftware:             clustersoftware.yaml
+  Disk:                        disk.yaml
+  EmsDestination:              ems_destination.yaml
+  EthernetSwitchPort:          ethernet_switch_port.yaml
+  ExportRule:                  exports.yaml
+  FlexCache:                   flexcache.yaml
+  FCP:                         fcp.yaml
+  FRU:                         fru.yaml
+  License:                     license.yaml
+  LIF:                         lif.yaml
+  Lock:                        lock.yaml
+  Health:                      health.yaml
+  Igroup:                      igroup.yaml
+  Lun:                         lun.yaml
+  MAVRequest:                  mav_request.yaml
+  MetroclusterCheck:           metrocluster_check.yaml
+  Mediator:                    mediator.yaml
+  Namespace:                   namespace.yaml
+  NDMPSession:                ndmp_session.yaml
+  NetConnections:              netconnections.yaml
+  NetPort:                     netport.yaml
+  NetRoute:                    netroute.yaml
+  NFSClients:                  nfs_clients.yaml
+  Node:                        node.yaml
+  NtpServer:                   ntpserver.yaml
+  OntapS3:                     ontap_s3.yaml
+  OntapS3Policy:               ontap_s3_policy.yaml
+  QosPolicyAdaptive:           qos_policy_adaptive.yaml
+  QosPolicyFixed:              qos_policy_fixed.yaml
+  QosWorkload:                 qos_workload.yaml
+  Qtree:                       qtree.yaml
+  Quota:                       quota.yaml
+  Security:                    security.yaml
+  SecurityAccount:             security_account.yaml
+  SecurityAuditDestination:    security_audit_dest.yaml
+  SecurityCert:                security_certificate.yaml
+  SecurityLogin:               security_login.yaml
+  SecuritySsh:                 security_ssh.yaml
+  Sensor:                      sensor.yaml
+  Shelf:                       shelf.yaml
+  SnapMirror:                  snapmirror.yaml
+  SnapMirrorPolicy:            snapmirrorpolicy.yaml
+  Snapshot:                    snapshot.yaml
+  SnapshotPolicy:              snapshotpolicy.yaml
+  Status:                      status.yaml
+  Subsystem:                   subsystem.yaml
+  Support:                     support.yaml
+  SupportAutoUpdate:           support_auto_update.yaml
+  SVM:                         svm.yaml
+  Volume:                      volume.yaml
+  VolumeEfficiency:            volume_efficiency.yaml
+  VolumeAnalytics:             volume_analytics.yaml
+  VolumeSnaplock:              volume_snaplock.yaml
+  Vscan:                       vscan.yaml

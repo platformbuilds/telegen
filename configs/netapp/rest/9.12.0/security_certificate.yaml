@@ -1,0 +1,37 @@
+
+name:             SecurityCert
+query:            api/private/cli/security/certificate
+object:           security_certificate
+
+counters:
+  - ^^uuid
+  - ^cert_name               => name
+  - ^public_cert             => certificatePEM
+  - ^serial                  => serial_number
+  - ^type                    => type
+  - ^vserver                 => svm
+  - expiration(timestamp)    => expiry_time
+
+#endpoints:
+#  - query: api/security/certificates
+#    counters:
+#      - ^^uuid
+#      - ^scope               => scope
+
+plugins:
+  - Certificate:
+      schedule:
+        - data: 3m  # should be multiple of data poll duration
+
+export_options:
+  instance_keys:
+    - uuid
+  instance_labels:
+    - certificateExpiryStatus
+    - certificateIssuerType
+    - expiry_time
+    - name
+#    - scope
+    - serial_number
+    - svm
+    - type

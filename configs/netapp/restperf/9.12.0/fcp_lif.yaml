@@ -1,0 +1,27 @@
+name:                     FcpLif
+query:                    api/cluster/counter/tables/fcp_lif
+object:                   fcp_lif
+
+counters:
+  - ^^id
+  - ^name                   => lif
+  - ^node.name              => node
+  - ^port.id                => port
+  - ^svm.name               => svm
+  - average_latency         => avg_latency
+  - average_other_latency   => avg_other_latency
+  - average_read_latency    => avg_read_latency
+  - average_write_latency   => avg_write_latency
+  - other_ops
+  - read_data
+  - read_ops
+  - total_ops
+  - write_data
+  - write_ops
+
+export_options:
+  instance_keys:
+    - lif
+    - node
+    - port
+    - svm

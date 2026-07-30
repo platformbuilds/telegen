@@ -1,0 +1,27 @@
+name:                     LIF
+query:                    api/cluster/counter/tables/lif
+object:                   lif
+
+counters:
+  - ^^id
+  - ^current_port            => port
+  - ^name                    => lif
+  - ^node.name               => node
+  - ^svm.name                => svm
+  - received_data            => recv_data
+  - received_errors          => recv_errors
+  - received_packets         => recv_packet
+  - sent_data
+  - sent_errors
+  - sent_packets             => sent_packet
+  - up_time                  => uptime
+
+export_options:
+  instance_keys:
+    - lif
+    - node
+    - port
+    - svm
+
+override:
+  up_time: raw
