@@ -224,7 +224,7 @@ func (c *ONTAPCollector) enabledCollectors() map[string]bool {
 		out["rest"] = true
 		out["ems"] = true
 	}
-	if c.config.EMS.Enabled == false && len(c.config.Collectors) > 0 {
+	if !c.config.EMS.Enabled && len(c.config.Collectors) > 0 {
 		// respect explicit collectors list only
 	}
 	return out
