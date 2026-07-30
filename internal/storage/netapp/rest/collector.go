@@ -36,8 +36,9 @@ type Collector struct {
 func (c *Collector) CollectAll(ctx context.Context) ([]storagedef.Metric, error) {
 	base := filepath.Join(c.TemplatesDir, "rest")
 	if c.ASAr2 {
-		if p, ok := template.BestFitASAR2(base); ok {
-			base = p
+		// Use best fit ASAR2 path if available
+		if newBase, ok := template.BestFitASAR2(base); ok {
+			base = newBase
 		}
 	}
 	catalogPath := filepath.Join(c.TemplatesDir, "rest", "default.yaml")
@@ -69,8 +70,7 @@ func (c *Collector) CollectAll(ctx context.Context) ([]storagedef.Metric, error)
 		if strings.HasPrefix(strings.TrimSpace(fileName), "#") {
 			continue
 		}
-		tmplBase := filepath.Join(c.TemplatesDir, "rest")
-		tmpl, _, err := template.LoadObjectTemplate(tmplBase, fileName, c.Version)
+		tmpl, _, err := template.LoadObjectTemplate(base, fileName, c.Version)
 		if err != nil {
 			c.Log.Warn("skip rest object", "object", objectName, "error", err)
 			continue
