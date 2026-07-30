@@ -22,23 +22,39 @@ Automatically detects cloud providers, Kubernetes, databases, and runtimes witho
 :::
 
 :::{grid-item-card} 📊 Distributed Tracing
-eBPF-powered tracing for HTTP, gRPC, and database protocols without code changes.
+eBPF-powered tracing for HTTP, gRPC, databases, messaging (Kafka, AMQP, STOMP), and RPC (Dubbo2, SunRPC) without code changes.
 :::
 
 :::{grid-item-card} 🔥 Continuous Profiling
-CPU, off-CPU, memory, and mutex profiling with flame graph generation.
+CPU, off-CPU, memory, mutex, and wall-clock profiling with flame graph generation.
 :::
 
 :::{grid-item-card} 🛡️ Security Observability
-Syscall auditing, file integrity monitoring, and container escape detection.
+Syscall auditing, file integrity monitoring, container escape detection, and file tailing with trace correlation.
 :::
 
 :::{grid-item-card} 🌐 Network Observability
-DNS tracing, TCP metrics, XDP packet analysis, and service mesh integration.
+DNS tracing, TCP metrics, XDP packet analysis, service mesh integration, and firewall infra collection (PAN-OS, FortiGate, Arista, Cisco ACI).
 :::
 
 :::{grid-item-card} 📡 OpenTelemetry Native
-100% OTel-compliant output via OTLP to any compatible backend.
+100% OTel-compliant output via OTLP to any compatible backend. Unified V3 pipeline with WAL queues and failover.
+:::
+
+:::{grid-item-card} 🤖 AI/ML Observability
+GPU monitoring (NVIDIA NVML), LLM API tracing (OpenAI, Anthropic), CUDA kernel tracing, and token cost estimation.
+:::
+
+:::{grid-item-card} 🏗️ Infrastructure Collection
+Storage arrays (NetApp ONTAP/E-Series, Dell, HPE, Pure), VMware vSphere, SNMP devices, and K8s metrics streaming.
+:::
+
+:::{grid-item-card} 📨 Messaging Protocols
+Kafka, RabbitMQ/AMQP 0-9-1, AMQP 1.0, OpenWire, STOMP, NATS, MQTT — full OTel messaging semantics.
+:::
+
+:::{grid-item-card} 🔗 Go Channel Links
+Go channel send/receive operations as span links for goroutine-level trace correlation.
 :::
 
 ::::
@@ -88,6 +104,12 @@ configuration/index
 :caption: Features
 
 features/index
+features/messaging-tracing
+features/sunrpc-tracing
+features/c-cpp-instrumentation
+features/go-channel-events
+features/kube-metrics
+features/unified-pipeline
 ```
 
 ```{toctree}

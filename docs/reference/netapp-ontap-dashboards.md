@@ -16,7 +16,7 @@ choose a chart type, and paste the query.
 - **Templates:** `configs/netapp/{rest,restperf,keyperf,ems}/` (adapted from
   NetApp Harvest; see `configs/netapp/SOURCE.md`).
 
-Related feature overview: {doc}`../features/storage-netapp`.
+Related feature overview: {doc}`../features/storage-adapters` (NetApp ONTAP section).
 
 ---
 

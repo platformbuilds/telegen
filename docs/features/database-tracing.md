@@ -28,7 +28,10 @@ No database configuration or driver changes required.
 | **Redis** | RESP Protocol | Commands, pub/sub, cluster |
 | **Cassandra / DSE** | CQL v3–v5 | Queries, prepared statements, batch, consistency level |
 | **Oracle** | TNS/Net8 | SQL, PL/SQL, wait events |
-| **SQL Server** | TDS Protocol | T-SQL, stored procedures |
+| **SQL Server** | TDS Protocol (v7.0+) | T-SQL, stored procedures, prepared statements |
+| **Couchbase** | Memcached Binary Protocol + N1QL | Key-value operations, N1QL queries |
+| **IBM DB2** | DRDA | SQL queries, package statements |
+| **C/C++ Apps** | Wire protocol (via libpq, libmysqlclient, FreeTDS) | Auto-detected C/C++ DB drivers |
 
 ---
 
@@ -582,6 +585,146 @@ agent:
       cql: 0  # 0 = auto-size
     cql_prepared_statements_cache_size: 1024
 ```
+
+---
+
+## SQL Server (MSSQL) Tracing
+
+Telegen traces Microsoft SQL Server using the TDS (Tabular Data Stream) protocol. Both FreeTDS and Microsoft ODBC Driver are supported.
+
+### Captured Information
+
+| Field | Description |
+|-------|-------------|
+| `db.system` | `mssql` |
+| `db.statement` | T-SQL query text |
+| `db.operation` | SELECT, INSERT, UPDATE, DELETE, EXEC |
+| `db.name` | Database name |
+| `db.mssql.transaction_id` | Transaction ID (when available) |
+| `db.mssql.rows_affected` | Rows modified |
+
+### Sample Span
+
+```yaml
+span:
+  name: "SELECT orders"
+  kind: CLIENT
+  duration_ms: 15.3
+  attributes:
+    db.system: mssql
+    db.name: ecommerce
+    db.statement: "SELECT order_id, total FROM orders WHERE customer_id = @p1"
+    db.operation: SELECT
+    db.mssql.rows_affected: 42
+    net.peer.ip: "10.0.4.50"
+    net.peer.port: 1433
+```
+
+### TDS Protocol Versions
+
+| Version | Support |
+|---------|---------|
+| TDS 7.0 | ✅ |
+| TDS 7.1 | ✅ |
+| TDS 7.2 | ✅ |
+| TDS 7.3 | ✅ |
+| TDS 7.4 | ✅ |
+
+### C/C++ Applications
+
+MSSQL tracing automatically detects C/C++ applications using:
+- **FreeTDS** (`libtds.so`) — TDS protocol + process name detection
+- **Microsoft ODBC Driver** (`libmsodbcsql.so`) — TDS protocol detection
+- **ODBC with FreeTDS** — Same as FreeTDS
+
+See {doc}`c-cpp-instrumentation` for details on C/C++ DB driver detection.
+
+---
+
+## Couchbase Tracing
+
+Telegen traces Couchbase operations via the Memcached Binary Protocol and N1QL query parsing.
+
+### Captured Information
+
+| Field | Description |
+|-------|-------------|
+| `db.system` | `couchbase` |
+| `db.operation` | get, set, delete, query, etc. |
+| `db.couchbase.bucket` | Target bucket |
+| `db.couchbase.scope` | Scope name (Couchbase 7+) |
+| `db.couchbase.collection` | Collection name (Couchbase 7+) |
+| `db.statement` | N1QL query (for query operations) |
+| `db.couchbase.document_id` | Document ID (for KV operations) |
+
+### Sample Spans
+
+**Key-Value Operation:**
+```yaml
+span:
+  name: "get user:123"
+  kind: CLIENT
+  duration_ms: 0.8
+  attributes:
+    db.system: couchbase
+    db.operation: get
+    db.couchbase.bucket: users
+    db.couchbase.scope: _default
+    db.couchbase.collection: _default
+    db.couchbase.document_id: "user:123"
+```
+
+**N1QL Query:**
+```yaml
+span:
+  name: "SELECT query"
+  kind: CLIENT
+  duration_ms: 25.6
+  attributes:
+    db.system: couchbase
+    db.operation: query
+    db.statement: "SELECT * FROM users WHERE email = $1"
+    db.couchbase.bucket: users
+```
+
+---
+
+## C/C++ Application Instrumentation
+
+Telegen automatically instruments C and C++ applications that use standard database client libraries. No recompilation or code changes are needed.
+
+### Supported C/C++ DB Libraries
+
+| Database | Library | Detection Method |
+|----------|---------|-----------------|
+| **PostgreSQL** | libpq, libpqxx | Symbol `PQsendQuery` / `PQexec` in process memory |
+| **MySQL** | libmysqlclient, mysqlcppconn | Symbol `mysql_query` / `mysql_real_query` |
+| **SQL Server** | FreeTDS, ODBC | TDS protocol + process name |
+| **Oracle** | libclntsh (OCI) | Symbol `OCIStmtExecute` |
+
+### How It Works
+
+1. **Wire protocol capture** — The generic TCP tracer captures the wire protocol regardless of language
+2. **Driver detection** — `internal/semconv/dbsystem_refine.go` checks for known C/C++ DB library symbols
+3. **Language attribution** — `process.language=cpp` is set on the span
+4. **DB system refinement** — The `db.system` attribute is verified/refined
+
+### Sample C++ Span (libpq)
+
+```yaml
+span:
+  name: "SELECT users"
+  kind: CLIENT
+  attributes:
+    db.system: postgresql
+    db.statement: "SELECT id, name FROM users WHERE id = $1"
+    process.pid: 12345
+    process.executable.name: "my_cpp_app"
+    process.language: "cpp"
+    process.runtime.description: "libpq (PostgreSQL C client)"
+```
+
+For full details, see {doc}`c-cpp-instrumentation`.
 
 ---
 

@@ -24,10 +24,10 @@ api-reference
 
 | Topic | Description |
 |-------|-------------|
-| {doc}`metrics-reference` | Complete metrics catalog |
-| {doc}`signals-reference` | Comprehensive signals reference catalog |
-| {doc}`vmware-vcenter-dashboards` | VMware vCenter metrics/logs → MIRASTACK Data Studio queries |
-| {doc}`netapp-ontap-dashboards` | NetApp ONTAP metrics/EMS logs → MIRASTACK Data Studio queries |
-| {doc}`semantic-conventions` | OpenTelemetry semantic conventions |
+| {doc}`metrics-reference` | Complete metrics catalog (1,558+ NetApp ONTAP metrics, 74 VMware vSphere metrics, GPU, LLM, etc.) |
+| {doc}`signals-reference` | Comprehensive signals reference catalog (all signal types and sources) |
+| {doc}`vmware-vcenter-dashboards` | VMware vCenter metrics/logs → MIRASTACK Data Studio queries (44 panels, 5 dashboards) |
+| {doc}`netapp-ontap-dashboards` | NetApp ONTAP metrics/EMS logs → MIRASTACK Data Studio queries (43 panels, 6 dashboards) |
+| {doc}`semantic-conventions` | OpenTelemetry semantic conventions (GenAI, messaging, database, etc.) |
 | {doc}`cli-reference` | Command-line interface |
 | {doc}`api-reference` | REST API endpoints |

@@ -5,6 +5,230 @@ All notable changes to Telegen will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.28] - 2026-07-30
+
+### Added
+- **NetApp ONTAP Harvest-Parity Collector** — Full ONTAP observability with 65+ inventory objects, 54+ performance counter tables, KeyPerf for ASA r2, EMS events (86 message types → OTLP logs), 1,558 Harvest-compatible metric families
+- **NetApp E-Series Support** — SANtricity REST API collector (16 inventory + 9 performance objects)
+- **VMware vSphere Enhancements** — 74 distinct metrics, vCenter EventManager events as OTLP logs, synthesized inventory state-change logs, alarm handling via `AlarmStatusChangedEvent` color mapping
+- **Messaging Protocol Tracing** — AMQP 0-9-1 (RabbitMQ), AMQP 1.0 (ActiveMQ/Azure Service Bus), OpenWire (ActiveMQ), STOMP — full OTel messaging semantics with `messaging.system` resolution
+- **SunRPC/ONC RPC Tracing** — NFS, mountd, nlockmgr procedures via eBPF
+- **MSSQL/TDS Protocol Tracing** — SQL Server TDS protocol (v7.0+) with FreeTDS and Microsoft ODBC Driver support
+- **Couchbase Tracing** — Memcached Binary Protocol + N1QL query parsing
+- **C/C++ Application Instrumentation** — Auto-detection of libpq, libmysqlclient, FreeTDS, libclntsh with `process.language=cpp` attribution
+- **Go Channel-Link Events** — eBPF uprobes on `runtime.chansend`/`runtime.chanrecv` with span link creation for goroutine-level trace correlation
+- **LLM API Tracing (GenAI)** — eBPF-based HTTP enrichment for OpenAI, Anthropic, Azure APIs with token counting, cost estimation, TTFT capture
+- **CUDA Kernel Tracing** — `cudaLaunchKernel`, `cudaMemcpy`, `cudaMalloc` as OTLP spans via `gpuevent` tracer
+- **Kubernetes Metrics Streaming** — kube-state-metrics + cadvisor OTLP push (replaces Prometheus scraping), K8s events as OTLP logs
+- **Firewall Infrastructure Collection** — Palo Alto PAN-OS, FortiGate FortiOS, Arista CloudVision, Cisco ACI via `netinfra` config block
+- **Unified V3 Pipeline** — Single production pipeline with adapter registry, converting pipeline, integration layer (PII redaction), persistent WAL queues, multi-endpoint failover with circuit breakers
+- **OBI Span Bridge** — Upstream `go.opentelemetry.io/obi` span batch ingestion with `forwardOBISpanBatch`
+- **Signal Metadata** — `telegen.*` attributes (category, subcategory, source module, BPF component, collector type) auto-attached to all signals via `sigdef.SignalMetadata`
+- **Dubbo2 Protocol Tracing** — Apache Dubbo2 RPC over TCP (magic `0xDA 0xBB`) with serialization format detection (Hessian2, FastJSON, etc.)
+- **Persistent WAL Queues** — Per-signal `queue.PersistentQueue` with replay workers for reliability
+- **Multi-Endpoint Exporter** — Failover/fanout with circuit-breaker semantics
+- **Shared OTLP Clients** — gRPC-primary with HTTP fallback, exposed via `GetMetricsExporter`, `GetLogsLoggerProvider`, `GetTracesExporter`
+
+### Changed
+- **README.md** — Full rewrite covering all signals, protocols, infrastructure, deployment
+- **Documentation** — Comprehensive update of all feature docs, reference pages, and index files
+- **Signal Registry** — Exhaustive `SignalMetadata` catalog in `internal/sigdef/signal_registry.go` covering all signal types
+- **Instrumentation Options** — Added `InstrumentationSunRPC`, `InstrumentationMSSQL`, `InstrumentationCouchbase` to bitmask
+- **BPF Verifier CI Gate** — Added verifier CI job and BPF gate documentation
+- **eBPF CO-RE BPF Objects** — Updated for all new protocol tracers
+
+### Fixed
+- **K8s Metrics Streaming** — Dedupe repeated HELP/TYPE headers before OTLP conversion, start OTLP streaming before provider startup
+- **Go Tracer** — Skip unresolved Go uprobes and fall back to generic tracer
+- **VMware vSphere** — Harden vSphere collection reliability and event fidelity
+- **NetApp ONTAP** — Hotfix unsafe MQ kernel classifier
+- **eBPF** — Shrink large-buffer scratch maps to fit per-CPU limit
+- **Kafka Tracing** — Broaden Kafka detection and align telemetry config, restore broker Kafka server-span fallback
+- **cadvisor** — Default omitted optional fields before validation, align remaining config keys to snake_case YAML
+
+---
+
+## [3.1.27] - 2026-07-28
+
+### Fixed
+- **CI** — Hard-fail only generictracer in BPF load gate
+- **CI** — Pass full Go toolchain env through sudo for verifier
+- **CI** — Preserve setup-go under sudo for verifier jobs
+- **CI** — Run gotracer attach-emit smoke in a separate process
+
+---
+
+## [3.1.26] - 2026-07-25
+
+### Fixed
+- **eBPF** — Hotfix unsafe MQ kernel classifier
+
+---
+
+## [3.1.25] - 2026-07-23
+
+### Added
+- **AMQP Protocols** — RabbitMQ AMQP 0-9-1 and AMQP 1.0 tracing (feat-bugfix)
+
+---
+
+## [3.1.24] - 2026-07-20
+
+### Fixed
+- **K8s Metrics** — Dedupe repeated HELP/TYPE headers before OTLP conversion
+
+---
+
+## [3.1.23] - 2026-07-18
+
+### Fixed
+- **K8s Metrics** — Start OTLP streaming before provider startup
+
+---
+
+## [3.1.22] - 2026-07-15
+
+### Fixed
+- **K8s Metrics** — Stream kube metrics and events to OTLP
+- **C/C++ Instrumentation** — Now instruments C and C++ applications using standard DB drivers
+
+---
+
+## [3.1.21] - 2026-07-12
+
+### Fixed
+- **Tracing** — Restore broker Kafka server-span fallback
+
+---
+
+## [3.1.20] - 2026-07-10
+
+### Fixed
+- **eBPF** — Shrink large-buffer scratch maps to fit per-CPU limit
+
+---
+
+## [3.1.19] - 2026-07-08
+
+### Fixed
+- **Release** — Regenerate eBPF artifacts in tagged images
+
+---
+
+## [3.1.18] - 2026-07-05
+
+### Fixed
+- **Tracing** — Broaden Kafka detection and align telemetry config
+
+---
+
+## [3.1.17] - 2026-07-03
+
+### Fixed
+- **eBPF** — Restore upi-sim trace export and discovery wiring
+
+---
+
+## [3.1.16] - 2026-07-01
+
+### Fixed
+- **cadvisor** — Default omitted optional fields before validation
+
+---
+
+## [3.1.15] - 2026-06-30
+
+### Fixed
+- **cadvisor** — Align remaining config keys to snake_case YAML
+
+---
+
+## [3.1.14] - 2026-06-28
+
+### Fixed
+- **Pipeline** — Restore k8s metrics and obiupstream release build
+
+---
+
+## [3.1.13] - 2026-06-25
+
+### Fixed
+- **Env Parse Crash** — Fix env parse crash and wire go channel-link events (#104)
+- **Go Channel Events** — eBPF uprobes on `runtime.chansend`/`runtime.chanrecv` for span link creation
+
+---
+
+## [3.1.12] - 2026-06-23
+
+### Changed
+- **Release** — Use Docker Hub username secret for login
+
+---
+
+## [3.1.11] - 2026-06-20
+
+### Fixed
+- **Release** — Hardcode Docker Hub org auth and image targets
+
+---
+
+## [3.1.10] - 2026-06-18
+
+### Fixed
+- **Release** — Login to Docker Hub with org namespace
+
+---
+
+## [3.1.9] - 2026-06-15
+
+### Fixed
+- **Release** — Make GHCR visibility update best-effort
+
+---
+
+## [3.1.8] - 2026-06-12
+
+### Changed
+- **Release** — Stamp docker builds with explicit version metadata
+
+---
+
+## [3.1.7] - 2026-06-10
+
+### Fixed
+- **Release** — Publish release images to Docker Hub namespace
+
+---
+
+## [3.1.6] - 2026-06-08
+
+### Fixed
+- **Release** — Enforce public visibility for GHCR package
+
+---
+
+## [3.1.5] - 2026-06-05
+
+### Fixed
+- **Release** — Enforce public visibility for GHCR package
+
+---
+
+## [3.1.4] - 2026-06-03
+
+### Fixed
+- **eBPF** — Satisfy staticcheck in Dubbo2 frame handling
+
+---
+
+## [3.1.3] - 2026-06-01
+
+### Fixed
+- **eBPF Watcher** — Read process exit status from task_struct
+- **VMware** — Harden vSphere collection reliability and event fidelity
+
+---
+
 ## [2.10.1] - 2026-02-05
 
 ### Added

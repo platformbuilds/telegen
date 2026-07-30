@@ -8,3 +8,8 @@ custdeploy/*
 
 # Binary output
 telegen
+
+# AI Plans
+.kilo
+.kilo/*
+
