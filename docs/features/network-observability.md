@@ -9,8 +9,11 @@ Network observability includes:
 - **DNS tracing** - Query/response correlation
 - **TCP metrics** - RTT, retransmits, connection tracking
 - **HTTP/gRPC tracing** - Request/response details
+- **Messaging protocol tracing** - AMQP 0-9-1, AMQP 1.0, OpenWire, STOMP, Kafka, NATS, MQTT
 - **Flow tracking** - Connection topology
 - **XDP packet analysis** - High-performance packet inspection
+- **Firewall/network infrastructure** - Palo Alto PAN-OS, FortiGate FortiOS, Arista CloudVision, Cisco ACI
+- **Per-connection statistics** - Byte counters on TCP close
 
 ---
 
@@ -610,6 +613,117 @@ agent:
     conn_stats:
       enabled: true
 ```
+
+---
+
+## Network Infrastructure Collection
+
+Telegen collects metrics from network infrastructure devices via their REST APIs. This enables observability for firewalls, SDN controllers, and network appliances.
+
+### Supported Platforms
+
+| Vendor | Platform | Collects |
+|--------|----------|---------|
+| **Palo Alto** | PAN-OS | System, interfaces (API key or username/password) |
+| **Fortinet** | FortiGate FortiOS | System, interfaces (Bearer token) |
+| **Arista** | CloudVision (CVP) | Inventory, interfaces, BGP, system |
+| **Cisco** | ACI | Fabric health, node health, tenant health, interface stats |
+
+### Configuration
+
+```yaml
+netinfra:
+  enabled: false
+  collect_interval: 30s
+
+  paloalto:
+    - name: "pan-dc1"
+      base_url: "https://10.10.10.20"
+      api_key: "${PALOALTO_API_KEY}"
+      verify_ssl: true
+      timeout: 30s
+      collect_interval: 30s
+      collect: ["system", "interfaces"]
+      labels:
+        site: "dc1"
+        team: "network"
+
+  fortigate:
+    - name: "fg-edge-1"
+      base_url: "https://10.10.20.30"
+      token: "${FORTIGATE_TOKEN}"
+      verify_ssl: true
+      timeout: 30s
+      collect_interval: 30s
+      collect: ["system", "interfaces"]
+      labels:
+        site: "edge"
+        team: "security"
+
+  cloudvision:
+    - name: "cvp-prod"
+      cvp_url: "https://cloudvision.example.com"
+      token: "${ARISTA_CVP_TOKEN}"
+      verify_ssl: true
+      timeout: 30s
+      collect_interval: 30s
+      collect: ["inventory", "interfaces", "bgp", "system"]
+      labels:
+        site: "prod"
+
+  aci:
+    - name: "aci-fabric-a"
+      apic_url: "https://apic.example.com"
+      username: "${ACI_USERNAME}"
+      password: "${ACI_PASSWORD}"
+      verify_ssl: true
+      timeout: 30s
+      collect_interval: 30s
+      collect: ["fabric_health", "node_health", "tenant_health", "interface_stats"]
+      labels:
+        site: "fabric-a"
+```
+
+### Export Flow
+
+Firewall metrics use the **shared V3 pipeline metrics exporter** (OTLP `send_mode: failover` / remoteWrite `active`). No private transport.
+
+### Runtime Notes
+
+- Use `--mode collector` or `--mode unified` for mixed black-box + host/eBPF collection
+- `netinfra.enabled` can remain `false` if you force mode via CLI and provide at least one target
+- If shared OTLP metrics exporter is unavailable at startup, Telegen logs degraded status and continues with other enabled sources
+
+For full details, see {doc}`../configuration/netinfra-firewalls`.
+
+---
+
+## Messaging Protocol Tracing
+
+Telegen provides deep observability for message queue and event streaming platforms using eBPF protocol tracing. For full details, see {doc}`messaging-tracing`.
+
+### Supported Messaging Protocols
+
+| Protocol | Version | Default System | Detection Method |
+|----------|---------|---------------|-----------------|
+| **Kafka** | All | Kafka | Magic byte `0x00 0x00 0x00 0x00` + API key |
+| **AMQP 0-9-1** | — | RabbitMQ | Preface `AMQP\x00\x00\x09\x01` |
+| **AMQP 1.0** | — | ActiveMQ | Preface `AMQP\x00\x01\x00\x00` |
+| **OpenWire** | — | ActiveMQ | "ActiveMQ" magic string in first 56 bytes |
+| **STOMP** | 1.0, 1.1, 1.2 | ActiveMQ | Command matching (SEND, MESSAGE, etc.) |
+| **NATS** | — | NATS | Text-based protocol detection |
+| **MQTT** | 3.1, 3.1.1, 5.0 | MQTT | Fixed header detection |
+
+### Messaging System Resolution
+
+AMQP 1.0 is used by multiple brokers. Telegen resolves the correct `messaging.system` using hints:
+
+| Hint | Resolved System |
+|------|----------------|
+| `servicebus` / `azure-servicebus` | Azure Service Bus |
+| `artemis` / `activemq` / `openwire` / `stomp` | ActiveMQ |
+| `rabbit` / `beam.smp` | RabbitMQ |
+| `qpid` / `solace` | JMS |
 
 ---
 

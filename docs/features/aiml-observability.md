@@ -1,13 +1,15 @@
 # AI/ML Observability
 
-Telegen provides observability for AI/ML workloads, including GPU monitoring and LLM inference metrics.
+Telegen provides comprehensive observability for AI/ML workloads: GPU monitoring, LLM API tracing via eBPF, inference metrics, and training observability.
 
 ## Overview
 
 AI/ML observability includes:
 
-- **GPU monitoring** - NVIDIA and AMD GPU metrics
-- **LLM inference** - Token throughput, latency, TTFT
+- **GPU monitoring** - NVIDIA and AMD GPU metrics via NVML
+- **LLM API tracing** - eBPF-based tracing for OpenAI, Anthropic, Azure, and other LLM APIs (HTTP enrichment)
+- **LLM inference** - Token throughput, latency, TTFT, cost estimation
+- **CUDA tracing** - Kernel launches, memory operations as spans
 - **Model serving** - Batch size, queue depth, inference time
 - **Training metrics** - Loss, throughput, GPU utilization
 
@@ -146,6 +148,150 @@ llm_queue_depth{model="llama-3-70b"}
 | `model` | Model name/version |
 | `instance` | Server instance |
 | `gpu` | GPU device index |
+
+---
+
+## LLM API Tracing (eBPF)
+
+Telegen traces LLM API calls at the HTTP layer using eBPF uprobes and generic TCP tracing. This captures requests to OpenAI, Anthropic, Azure OpenAI, and other LLM providers without any SDK changes.
+
+### How It Works
+
+1. **HTTP enrichment** — `internal/ebpf/common/http/genai_parsers.go` parses LLM API request/response payloads
+2. **Partial JSON parsing** — `internal/ebpf/common/http/partial_json.go` handles streaming JSON responses (SSE/streaming)
+3. **Payload extraction** — `internal/obiconfig/payload_extraction.go` extracts token counts, model names, and latency from HTTP bodies
+4. **Span generation** — LLM API calls are converted to OTLP spans with GenAI semantic conventions
+
+### Captured Attributes
+
+| Attribute | Description |
+|-----------|-------------|
+| `gen_ai.system` | LLM provider (openai, anthropic, azure_openai, etc.) |
+| `gen_ai.request.model` | Model name (gpt-4, claude-3-opus, etc.) |
+| `gen_ai.request.temperature` | Sampling temperature |
+| `gen_ai.request.max_tokens` | Max tokens requested |
+| `gen_ai.response.id` | Response ID |
+| `gen_ai.response.model` | Model used (may differ from request) |
+| `gen_ai.usage.input_tokens` | Prompt tokens |
+| `gen_ai.usage.output_tokens` | Completion tokens |
+| `gen_ai.usage.total_tokens` | Total tokens |
+| `gen_ai.response.finish_reason` | stop, length, content_filter, etc. |
+| `gen_ai.operation.name` | chat, completion, embedding, etc. |
+
+### Sample Span
+
+```yaml
+span:
+  name: "openai.chat.completions"
+  kind: CLIENT
+  duration_ms: 1250
+  attributes:
+    gen_ai.system: "openai"
+    gen_ai.request.model: "gpt-4"
+    gen_ai.request.temperature: 0.7
+    gen_ai.usage.input_tokens: 150
+    gen_ai.usage.output_tokens: 350
+    gen_ai.usage.total_tokens: 500
+    gen_ai.response.finish_reason: "stop"
+    http.request.method: "POST"
+    url.full: "https://api.openai.com/v1/chat/completions"
+```
+
+### Cost Estimation
+
+Telegen calculates estimated API costs per request:
+
+```yaml
+span:
+  attributes:
+    gen_ai.usage.input_tokens: 150
+    gen_ai.usage.output_tokens: 350
+    gen_ai.cost.input_cost_usd: 0.0003    # $0.50/1M input tokens
+    gen_ai.cost.output_cost_usd: 0.0035    # $10.00/1M output tokens
+    gen_ai.cost.total_cost_usd: 0.0038
+```
+
+Configure cost rates in `api/config.example.yaml`:
+
+```yaml
+aiml:
+  llm:
+    cost_rates:
+      "openai/gpt-4":
+        input_cost_per_1m: 0.50
+        output_cost_per_1m: 10.00
+      "openai/gpt-3.5-turbo":
+        input_cost_per_1m: 0.50
+        output_cost_per_1m: 1.50
+      "anthropic/claude-3-opus":
+        input_cost_per_1m: 15.00
+        output_cost_per_1m: 75.00
+```
+
+### Streaming Support
+
+TeleMgen traces streaming LLM responses (SSE - Server-Sent Events):
+
+- **Time-to-first-token (TTFT)** is captured from the first SSE chunk
+- **Inter-token latency** is calculated from chunk intervals
+- The span duration covers the entire streaming response
+
+---
+
+## CUDA Kernel Tracing
+
+Telegen traces CUDA operations as spans using eBPF (`gpuevent` tracer):
+
+### Captured Operations
+
+| Operation | Span Name | Attributes |
+|-----------|-----------|------------|
+| `cudaLaunchKernel` | `cuda.kernel.launch` | grid/block dimensions, shared memory |
+| `cudaMemcpy` | `cuda.memcpy` | direction (H2D, D2H, D2D), bytes copied |
+| `cudaMalloc` | `cuda.malloc` | bytes allocated |
+| `cudaFree` | `cuda.free` | bytes freed |
+
+### Sample CUDA Span
+
+```yaml
+span:
+  name: "cuda.kernel.launch"
+  kind: INTERNAL
+  duration_ms: 0.05
+  attributes:
+    cuda.kernel.name: "matmul_kernel"
+    cuda.kernel.grid.x: 256
+    cuda.kernel.grid.y: 1
+    cuda.kernel.grid.z: 1
+    cuda.kernel.block.x: 32
+    cuda.kernel.block.y: 32
+    cuda.kernel.shared_memory: 4096
+    gpu.device.id: 0
+    gpu.device.name: "NVIDIA A100-SXM4-80GB"
+```
+
+---
+
+## OpenTelemetry GenAI Semantic Conventions
+
+Telegen uses the [OpenTelemetry GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) for all LLM spans. This ensures compatibility with GenAI observability backends (LangSmith, Helicone, etc.).
+
+### Supported GenAI Attributes
+
+| Attribute | Status | Description |
+|-----------|--------|-------------|
+| `gen_ai.system` | ✅ | LLM provider |
+| `gen_ai.request.model` | ✅ | Model name |
+| `gen_ai.request.temperature` | ✅ | Sampling temperature |
+| `gen_ai.request.max_tokens` | ✅ | Max tokens |
+| `gen_ai.response.model` | ✅ | Response model |
+| `gen_ai.usage.input_tokens` | ✅ | Input token count |
+| `gen_ai.usage.output_tokens` | ✅ | Output token count |
+| `gen_ai.usage.total_tokens` | ✅ | Total token count |
+| `gen_ai.response.finish_reason` | ✅ | Completion reason |
+| `gen_ai.operation.name` | ✅ | Operation type |
+| `gen_ai.tool.name` | 🚧 | Tool/function calls (planned) |
+| `gen_ai.prompt.template` | 🚧 | Prompt template (planned) |
 
 ---
 
