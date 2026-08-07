@@ -189,7 +189,9 @@ func NewMetricsExporter(
 	// Build resource from config
 	res, err := buildProfilerResource(cfg)
 	if err != nil {
-		_ = exporter.Shutdown(ctx)
+		if shutdownErr := exporter.Shutdown(ctx); shutdownErr != nil {
+			log.Warn("failed shutting down metrics exporter after resource build failure", "error", shutdownErr)
+		}
 		return nil, fmt.Errorf("failed to build resource: %w", err)
 	}
 

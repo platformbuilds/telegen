@@ -2092,3 +2092,52 @@ ok  	github.com/mirastacklabs-ai/telegen/internal/route/harvest	1.786s
 +- moved worker release into goroutine defer so Init/Attach/Cleanup lifecycle remains mutually exclusive even when caller times out early.
 +- outcome: no concurrent `jvm.JAttacher.Init()` writes; targeted and package-level race tests pass.
 ```
+
+### task-9.5 (COMPLETED: profiler errcheck follow-up + race-test revalidation)
+
+#### PRE output
+
+```text
+$ golangci-lint run --timeout=10m
+Error: internal/profiler/metrics_exporter.go:192:3: Error return value of `exporter.Shutdown` is not checked (errcheck)
+Error: internal/profiler/profilers.go:66:3: Error return value is not checked (errcheck)
+Error: internal/profiler/profilers.go:176:3: Error return value of `p.ringReader.Close` is not checked (errcheck)
+Error: internal/profiler/profilers.go:181:3: Error return value of `unix.Close` is not checked (errcheck)
+...
+Error: internal/profiler/symbols.go:390:10: Error return value of `r.Resolve` is not checked (errcheck)
+16 issues:
+* errcheck: 16
+```
+
+#### POST output
+
+```text
+$ gofmt -w internal/profiler/metrics_exporter.go internal/profiler/profilers.go internal/profiler/runner.go internal/profiler/symbols.go && golangci-lint run --timeout=10m
+0 issues.
+
+$ go test -race ./internal/profiler/... -count=1
+ok  	github.com/mirastacklabs-ai/telegen/internal/profiler	2.179s [no tests to run]
+?   	github.com/mirastacklabs-ai/telegen/internal/profiler/perfmap	[no test files]
+
+$ go test -v -race ./...
+PASS
+ok  	github.com/mirastacklabs-ai/telegen/pkg/pipe/msg	13.335s
+PASS
+ok  	github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm	13.188s
+PASS
+ok  	github.com/mirastacklabs-ai/telegen/pkg/pipe/swarm/swarms	13.239s
+
+$ go test -race ./internal/route/harvest -run '^TestHarvestRoutes_MultipleTimeouts$' -count=1
+ok  	github.com/mirastacklabs-ai/telegen/internal/route/harvest	1.510s
+```
+
+#### Diff hunk
+
+```diff
++completed profiler errcheck follow-up from CI:
++- checked exporter shutdown errors in `internal/profiler/metrics_exporter.go` and logged cleanup failure context.
++- removed unchecked close/recover patterns across CPU/off-CPU/wall/memory/mutex profilers in `internal/profiler/profilers.go` by handling and debug-logging cleanup errors.
++- checked Java injector close in `internal/profiler/runner.go`.
++- checked symbol resolution errors in `internal/profiler/symbols.go` stack resolution loop and continued safely on per-frame resolve failures.
++- reformatted touched files, reran full lint, and validated race test coverage (`./internal/profiler/...`, `./...`, and targeted `TestHarvestRoutes_MultipleTimeouts`).
+```

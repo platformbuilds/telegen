@@ -387,7 +387,10 @@ func (r *SymbolResolver) ResolveStack(pid uint32, addresses []uint64) []Resolved
 		if addr == 0 {
 			break
 		}
-		frame, _ := r.Resolve(pid, addr)
+		frame, err := r.Resolve(pid, addr)
+		if err != nil {
+			continue
+		}
 		if frame != nil {
 			frames = append(frames, *frame)
 		}
