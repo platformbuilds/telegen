@@ -29,6 +29,10 @@ type Options struct {
 	TagAllowlist    []string
 	BaseURL         string
 	DisableProbe    bool
+	Region          string
+	IMDSv2Only      bool
+	IMDSEndpoint    string
+	IMDSTimeout     time.Duration
 }
 
 type Provider struct {
@@ -55,6 +59,9 @@ type Data struct {
 }
 
 func New(opts Options) *Provider {
+	if opts.IMDSTimeout > 0 {
+		opts.Timeout = opts.IMDSTimeout
+	}
 	if opts.Timeout <= 0 {
 		opts.Timeout = 200 * time.Millisecond
 	}
@@ -62,7 +69,15 @@ func New(opts Options) *Provider {
 		opts.RefreshInterval = 15 * time.Minute
 	}
 	base := imdsBase
-	if strings.TrimSpace(opts.BaseURL) != "" {
+	if strings.TrimSpace(opts.IMDSEndpoint) != "" {
+		endpoint := strings.TrimRight(opts.IMDSEndpoint, "/")
+		if strings.HasSuffix(endpoint, "/latest") {
+			base = endpoint
+		} else {
+			base = endpoint + "/latest"
+		}
+		opts.DisableProbe = true
+	} else if strings.TrimSpace(opts.BaseURL) != "" {
 		base = strings.TrimRight(opts.BaseURL, "/")
 	}
 	return &Provider{http: &http.Client{Timeout: opts.Timeout}, opts: opts, base: base}
@@ -99,6 +114,9 @@ func (p *Provider) fetchOnce(ctx context.Context) (*Data, error) {
 	}
 	token, err := p.getToken(ctx)
 	if err != nil {
+		if p.opts.IMDSv2Only {
+			return nil, err
+		}
 		token = ""
 	}
 	// Instance identity document has a lot of info
@@ -158,6 +176,9 @@ func (p *Provider) fetchOnce(ctx context.Context) (*Data, error) {
 				}
 			}
 		}
+	}
+	if strings.TrimSpace(p.opts.Region) != "" {
+		d.Region = strings.TrimSpace(p.opts.Region)
 	}
 	return d, nil
 }

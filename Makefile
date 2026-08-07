@@ -30,6 +30,8 @@ GEN_IMG ?= ghcr.io/open-telemetry/obi-generator:0.2.15
 # Tools directory
 TOOLS = $(CURDIR)/.tools
 TOOLS_MOD_DIR := ./internal/tools
+# Optional local path to the private reference chart used for offline validation.
+PRIVATE_CHART_DIR ?=
 
 # cilium/ebpf bpf2go tool
 CILIUM_EBPF_VER ?= v0.20.0
@@ -115,6 +117,12 @@ netapp-parity:
 .PHONY: lint
 lint:
 	golangci-lint run ./...
+
+.PHONY: validate-configs
+validate-configs:
+	@echo "### Validating shipped configuration files..."
+	go build -o bin/$(CMD) ./cmd/$(CMD)
+	TELEGEN_BIN=bin/$(CMD) PRIVATE_CHART_DIR="$(PRIVATE_CHART_DIR)" ./scripts/validate-configs.sh
 
 .PHONY: verifier-check
 verifier-check: docker-generate
@@ -244,6 +252,7 @@ help:
 	@echo "  test               Run tests"
 	@echo "  test-fast          Run tests without race detector"
 	@echo "  lint               Run linter"
+	@echo "  validate-configs   Validate shipped config files"
 	@echo "  clean              Remove build artifacts"
 	@echo "  dev                Development build (generate + build)"
 	@echo "  tools              Install development tools"

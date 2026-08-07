@@ -73,14 +73,15 @@ type TraceOpts struct {
 		Timeout  time.Duration
 	}
 	HTTP struct {
-		Enabled   bool
-		Endpoint  string
-		Insecure  bool
-		TracesURL string
-		LogsURL   string
-		Headers   map[string]string
-		Gzip      bool
-		Timeout   time.Duration
+		Enabled    bool
+		Endpoint   string
+		Insecure   bool
+		TracesURL  string
+		LogsURL    string
+		MetricsURL string
+		Headers    map[string]string
+		Gzip       bool
+		Timeout    time.Duration
 	}
 }
 
@@ -215,6 +216,9 @@ func New(ctx context.Context, o TraceOpts, res *resource.Resource) (*Clients, er
 		httpMetricOpts := []otlpmetrichttp.Option{
 			otlpmetrichttp.WithEndpoint(o.HTTP.Endpoint),
 			otlpmetrichttp.WithHeaders(o.HTTP.Headers),
+		}
+		if o.HTTP.MetricsURL != "" {
+			httpMetricOpts = append(httpMetricOpts, otlpmetrichttp.WithURLPath(o.HTTP.MetricsURL))
 		}
 		if !o.TLS.Enable || o.HTTP.Insecure {
 			httpMetricOpts = append(httpMetricOpts, otlpmetrichttp.WithInsecure())

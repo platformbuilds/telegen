@@ -2248,3 +2248,68 @@ telegen-3.2.0-rc1.tgz
 +- updated helm artifact push/upload paths to use normalized `CHART_VERSION` filename.
 +- updated release changelog Helm install example to use `CHART_VERSION`, matching published chart versions.
 ```
+
+### config-schema-reconciliation (COMPLETED: strict YAML + parse-and-wire + config guard)
+
+#### PRE output
+
+```text
+$ make validate-configs PRIVATE_CHART_DIR="/Users/aarvee/repos/github/private/mirastack/deployments/reference/kubernetes/helm/telegen"
+...
+47  deployments/openshift/agent-daemonset.yaml#config.yaml
+25  deployments/helm/templates/configmap.yaml (values.yaml render)
+...
+make: *** [validate-configs] Error 1
+```
+
+#### POST output
+
+```text
+$ go build ./... && go test ./cmd/telegen ./internal/config/... ./internal/pipeline/... ./internal/cloud/unified/... ./internal/snmp/... ./internal/metadata/aws ./internal/exporters/otlp && golangci-lint run ./... && make validate-configs PRIVATE_CHART_DIR="/Users/aarvee/repos/github/private/mirastack/deployments/reference/kubernetes/helm/telegen"
+ok  	github.com/mirastacklabs-ai/telegen/cmd/telegen	1.137s
+ok  	github.com/mirastacklabs-ai/telegen/internal/config	(cached)
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline	(cached)
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline/adapters	(cached)
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline/converters	(cached)
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline/limits	(cached)
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline/transform	(cached)
+?   	github.com/mirastacklabs-ai/telegen/internal/cloud/unified	[no test files]
+?   	github.com/mirastacklabs-ai/telegen/internal/cloud/unified/collectors	[no test files]
+?   	github.com/mirastacklabs-ai/telegen/internal/cloud/unified/providers	[no test files]
+ok  	github.com/mirastacklabs-ai/telegen/internal/snmp	(cached)
+ok  	github.com/mirastacklabs-ai/telegen/internal/metadata/aws	(cached)
+ok  	github.com/mirastacklabs-ai/telegen/internal/exporters/otlp	(cached)
+0 issues.
+### Validating shipped configuration files...
+0  api/config.example.yaml
+0  deployments/systemd/config.yaml
+0  deployments/systemd/collector-config.yaml
+0  deployments/docker/configs/agent.yaml
+0  deployments/docker/configs/collector.yaml
+0  deployments/ecs/config.yaml
+0  deployments/ecs/collector-config.yaml
+0  deployments/kubernetes/configmap.yaml#config.yaml
+0  deployments/openshift/agent-daemonset.yaml#config.yaml
+0  deployments/helm/templates/configmap.yaml (values.yaml render)
+0  private helm values-agent.yaml render
+0  private helm values-collector.yaml render
+0  private helm values.yaml render
+
+$ python3 - <<'PY'  # log-level behavior proof via startup WARN suppression
+... runs telegen twice with --skip-preflight and different agent.log_level ...
+PY
+LEVEL=ERROR warn_present=False error_present=True
+LEVEL=INFO warn_present=True error_present=True
+```
+
+#### Diff hunk
+
+```diff
++completed strict-schema reconciliation and guardrail rollout:
++- extended `internal/config/config.go` for high-value keys: `agent.instance_id/mode/log_level/log_format/shutdown_timeout/enforce_sys_caps`, `selfTelemetry.pprof_port`, `exports.otlp.http.metrics_path`, expanded `cloud.*` (AWS/GCP/Azure), and `snmp_receiver`.
++- wired runtime behavior in `cmd/telegen/main.go`: config-driven logger rebuild, mode resolution (`--mode` + `agent.mode`), shutdown timeout context, enforce_sys_caps soft-fail path, dedicated `pprof_port`, cloud manager lifecycle, and SNMP receiver lifecycle.
++- wired OTLP HTTP metrics path and cloud AWS knobs through runtime export path (`internal/pipeline/pipeline_core.go`, `internal/exporters/otlp/otlp.go`, `internal/metadata/aws/aws.go`).
++- commented unsupported keys (not deleted) across shipped configs: `api/config.example.yaml`, systemd/docker/ecs references, kubernetes/openshift embedded config blocks, public chart helper template, and private chart helper template.
++- added config regression guard: new `scripts/validate-configs.sh`, new `make validate-configs`, and CI lint-job step (`.github/workflows/ci.yaml`) running validation each PR/push.
++- final local gate passed: build + targeted tests + golangci-lint + validate-configs all green, including private helm renders.
+```
