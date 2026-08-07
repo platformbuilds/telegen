@@ -2208,3 +2208,43 @@ ok  	github.com/mirastacklabs-ai/telegen/internal/snmp	11.026s
 +- `internal/snmp/poller.go`: replaced architecture-dependent `strconv.Atoi` + `uint16` cast with bounded `strconv.ParseUint(..., 10, 16)` and default fallback.
 +- reran formatting, full lint, and targeted package race tests to verify no regressions.
 ```
+
+### task-9.5 (COMPLETED: release-helm semver packaging fix)
+
+#### PRE output
+
+```text
+$ helm package deployments/helm --destination .helm-packages
+Error: validation: chart.metadata.version "3.2.0rc1" is invalid
+Error: Process completed with exit code 1.
+```
+
+#### POST output
+
+```text
+$ tmpdir=$(mktemp -d) && cp -R deployments/helm "$tmpdir/helm" && TMPDIR_PATH="$tmpdir" python3 - <<'PY'
+import os
+from pathlib import Path
+chart = Path(os.environ['TMPDIR_PATH']) / 'helm' / 'Chart.yaml'
+text = chart.read_text()
+text = text.replace('version: 3.0.0', 'version: 3.2.0-rc1')
+text = text.replace('appVersion: "3.0.0"', 'appVersion: "3.2.0rc1"')
+chart.write_text(text)
+print(chart)
+PY
+$ helm package "$tmpdir/helm" --destination "$tmpdir/out" && ls "$tmpdir/out"
+/var/folders/.../tmp.0Ez1mK7koA/helm/Chart.yaml
+Successfully packaged chart and saved it to: /var/folders/.../tmp.0Ez1mK7koA/out/telegen-3.2.0-rc1.tgz
+telegen-3.2.0-rc1.tgz
+```
+
+#### Diff hunk
+
+```diff
++fixed Helm chart packaging for prerelease tags in `.github/workflows/release.yaml`:
++- added `CHART_VERSION` normalization in workflow version extraction: `X.Y.ZrcN` -> `X.Y.Z-rcN` when prerelease suffix is attached directly to patch number.
++- updated release-helm chart metadata mutation to use normalized `CHART_VERSION` for `Chart.yaml` `version`.
++- kept `appVersion` on raw release `VERSION` to preserve image tag/documentation semantics.
++- updated helm artifact push/upload paths to use normalized `CHART_VERSION` filename.
++- updated release changelog Helm install example to use `CHART_VERSION`, matching published chart versions.
+```
