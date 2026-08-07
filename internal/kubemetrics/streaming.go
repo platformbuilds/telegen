@@ -424,16 +424,8 @@ func (s *StreamingExporter) collectCadvisorMetrics() []metricdata.Metrics {
 
 		// Memory metrics
 		if stat.Memory != nil {
-			// Memory values are uint64 but OTLP uses int64. Cap at MaxInt64
-			// (>9 exabytes, practically impossible for container memory)
-			usageBytes := stat.Memory.UsageBytes
-			if usageBytes > uint64(math.MaxInt64) {
-				usageBytes = uint64(math.MaxInt64)
-			}
-			workingSetBytes := stat.Memory.WorkingSetBytes
-			if workingSetBytes > uint64(math.MaxInt64) {
-				workingSetBytes = uint64(math.MaxInt64)
-			}
+			usageBytes := clampUint64ToInt64(stat.Memory.UsageBytes)
+			workingSetBytes := clampUint64ToInt64(stat.Memory.WorkingSetBytes)
 			metrics = append(metrics, metricdata.Metrics{
 				Name:        "container_memory_usage_bytes",
 				Description: "Current memory usage in bytes",
@@ -442,7 +434,7 @@ func (s *StreamingExporter) collectCadvisorMetrics() []metricdata.Metrics {
 					DataPoints: []metricdata.DataPoint[int64]{
 						{
 							Time:       now,
-							Value:      int64(usageBytes),
+							Value:      usageBytes,
 							Attributes: attrSet,
 						},
 					},
@@ -456,7 +448,7 @@ func (s *StreamingExporter) collectCadvisorMetrics() []metricdata.Metrics {
 					DataPoints: []metricdata.DataPoint[int64]{
 						{
 							Time:       now,
-							Value:      int64(workingSetBytes),
+							Value:      workingSetBytes,
 							Attributes: attrSet,
 						},
 					},
@@ -480,7 +472,7 @@ func (s *StreamingExporter) collectCadvisorMetrics() []metricdata.Metrics {
 						DataPoints: []metricdata.DataPoint[int64]{
 							{
 								Time:       now,
-								Value:      int64(iface.RxBytes),
+								Value:      clampUint64ToInt64(iface.RxBytes),
 								Attributes: netAttrSet,
 							},
 						},
@@ -496,7 +488,7 @@ func (s *StreamingExporter) collectCadvisorMetrics() []metricdata.Metrics {
 						DataPoints: []metricdata.DataPoint[int64]{
 							{
 								Time:       now,
-								Value:      int64(iface.TxBytes),
+								Value:      clampUint64ToInt64(iface.TxBytes),
 								Attributes: netAttrSet,
 							},
 						},
@@ -517,7 +509,7 @@ func (s *StreamingExporter) collectCadvisorMetrics() []metricdata.Metrics {
 					DataPoints: []metricdata.DataPoint[int64]{
 						{
 							Time:       now,
-							Value:      int64(stat.DiskIO.ReadBytes),
+							Value:      clampUint64ToInt64(stat.DiskIO.ReadBytes),
 							Attributes: attrSet,
 						},
 					},
@@ -533,7 +525,7 @@ func (s *StreamingExporter) collectCadvisorMetrics() []metricdata.Metrics {
 					DataPoints: []metricdata.DataPoint[int64]{
 						{
 							Time:       now,
-							Value:      int64(stat.DiskIO.WriteBytes),
+							Value:      clampUint64ToInt64(stat.DiskIO.WriteBytes),
 							Attributes: attrSet,
 						},
 					},
@@ -575,4 +567,12 @@ func countMetrics(rm *metricdata.ResourceMetrics) int {
 		count += len(sm.Metrics)
 	}
 	return count
+}
+
+// clampUint64ToInt64 prevents overflow when OTEL metric types require int64.
+func clampUint64ToInt64(v uint64) int64 {
+	if v > uint64(math.MaxInt64) {
+		return math.MaxInt64
+	}
+	return int64(v)
 }
