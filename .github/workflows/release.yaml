@@ -98,8 +98,15 @@ jobs:
         run: |
           # Extract version from tag: release/mark-v1.0.0 -> 1.0.0
           VERSION="${GITHUB_REF_NAME#release/mark-v}"
+          CHART_VERSION="${VERSION}"
+          # Helm chart versions must be valid SemVer (e.g. 3.2.0-rc1, not 3.2.0rc1).
+          if [[ "${CHART_VERSION}" =~ ^([0-9]+\.[0-9]+\.[0-9]+)([A-Za-z].*)$ ]]; then
+            CHART_VERSION="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}"
+          fi
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "CHART_VERSION=${CHART_VERSION}" >> $GITHUB_OUTPUT
           echo "Releasing version: ${VERSION}"
+          echo "Helm chart version: ${CHART_VERSION}"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -230,7 +237,7 @@ jobs:
 
       - name: Update Chart.yaml version
         run: |
-          sed -i "s/^version:.*/version: ${{ steps.version.outputs.VERSION }}/" deployments/helm/Chart.yaml
+          sed -i "s/^version:.*/version: ${{ steps.version.outputs.CHART_VERSION }}/" deployments/helm/Chart.yaml
           sed -i "s/^appVersion:.*/appVersion: \"${{ steps.version.outputs.VERSION }}\"/" deployments/helm/Chart.yaml
 
       - name: Package Helm chart
@@ -246,13 +253,13 @@ jobs:
 
       - name: Push Helm chart to OCI registry
         run: |
-          helm push .helm-packages/telegen-${{ steps.version.outputs.VERSION }}.tgz oci://${{ env.REGISTRY }}/mirastacklabs-ai/charts
+          helm push .helm-packages/telegen-${{ steps.version.outputs.CHART_VERSION }}.tgz oci://${{ env.REGISTRY }}/mirastacklabs-ai/charts
 
       - name: Upload Helm chart artifact
         uses: actions/upload-artifact@v7
         with:
           name: helm-chart
-          path: .helm-packages/telegen-${{ steps.version.outputs.VERSION }}.tgz
+          path: .helm-packages/telegen-${{ steps.version.outputs.CHART_VERSION }}.tgz
           retention-days: 1
 
   create-release:
@@ -270,7 +277,13 @@ jobs:
         run: |
           # Extract version from tag: release/mark-v1.0.0 -> 1.0.0
           VERSION="${GITHUB_REF_NAME#release/mark-v}"
+          CHART_VERSION="${VERSION}"
+          # Keep Helm install version aligned with packaged chart SemVer.
+          if [[ "${CHART_VERSION}" =~ ^([0-9]+\.[0-9]+\.[0-9]+)([A-Za-z].*)$ ]]; then
+            CHART_VERSION="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}"
+          fi
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "CHART_VERSION=${CHART_VERSION}" >> $GITHUB_OUTPUT
           echo "Releasing version: ${VERSION}"
 
       - name: Download binary artifacts
@@ -318,7 +331,7 @@ jobs:
           echo "## Helm Chart" >> CHANGELOG.md
           echo "" >> CHANGELOG.md
           echo '```bash' >> CHANGELOG.md
-          echo "helm install telegen oci://ghcr.io/mirastacklabs-ai/charts/telegen --version ${{ steps.version.outputs.VERSION }}" >> CHANGELOG.md
+          echo "helm install telegen oci://ghcr.io/mirastacklabs-ai/charts/telegen --version ${{ steps.version.outputs.CHART_VERSION }}" >> CHANGELOG.md
           echo '```' >> CHANGELOG.md
 
       - name: Create Release
