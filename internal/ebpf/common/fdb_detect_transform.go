@@ -26,7 +26,10 @@ func ProcessPossibleFDBEvent(event *TCPRequestInfo, reqBuf, respBuf []byte) (req
 		return request.Span{}, ParseIgnored, nil
 	}
 
-	respPkts, _, _ := fdbparser.ParsePackets(respBuf)
+	respPkts, _, respErr := fdbparser.ParsePackets(respBuf)
+	if respErr != nil {
+		respPkts = nil
+	}
 
 	// The primary span is the connect handshake or first data exchange.
 	req := reqPkts[0]

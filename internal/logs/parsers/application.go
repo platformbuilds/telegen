@@ -718,7 +718,10 @@ func (p *XMLLogParser) parseWindowsEventXML(line string, log *ParsedLog) (*Parse
 
 	// Extract Level (Windows uses numeric levels: 1=Critical, 2=Error, 3=Warning, 4=Information)
 	if matches := xmlWindowsLevelPattern.FindStringSubmatch(line); matches != nil {
-		level, _ := strconv.Atoi(matches[1])
+		level, err := strconv.Atoi(matches[1])
+		if err != nil {
+			level = 4
+		}
 		switch level {
 		case 1:
 			log.Severity = SeverityFatal

@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/log"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 
 	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/client"
 	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/ems"
@@ -27,15 +27,15 @@ import (
 
 // ONTAPCollector is the StorageCollector facade for a single ONTAP cluster.
 type ONTAPCollector struct {
-	config        storagedef.NetAppConfig
-	client        *client.Client
-	log           *slog.Logger
-	caps          Capabilities
-	templatesDir  string
-	logsProvider  *sdklog.LoggerProvider
-	emsCollector  *ems.Collector
-	restPerf      *restperf.Collector
-	keyPerf       *keyperf.Collector
+	config       storagedef.NetAppConfig
+	client       *client.Client
+	log          *slog.Logger
+	caps         Capabilities
+	templatesDir string
+	logsProvider *sdklog.LoggerProvider
+	emsCollector *ems.Collector
+	restPerf     *restperf.Collector
+	keyPerf      *keyperf.Collector
 
 	mu      sync.RWMutex
 	running bool
@@ -107,14 +107,17 @@ func defaultTemplatesDir() string {
 	}
 	for _, c := range candidates {
 		if st, err := os.Stat(filepath.Join(c, "rest", "default.yaml")); err == nil && !st.IsDir() {
-			abs, _ := filepath.Abs(c)
+			abs, err := filepath.Abs(c)
+			if err != nil {
+				return c
+			}
 			return abs
 		}
 	}
 	return "configs/netapp"
 }
 
-func (c *ONTAPCollector) Name() string                 { return c.config.Name }
+func (c *ONTAPCollector) Name() string                  { return c.config.Name }
 func (c *ONTAPCollector) Vendor() storagedef.VendorType { return storagedef.VendorNetApp }
 
 func (c *ONTAPCollector) Start(ctx context.Context) error {

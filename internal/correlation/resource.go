@@ -588,7 +588,10 @@ func (sc *SignalCorrelator) CorrelateLog(containerID string, timestamp time.Time
 	if found {
 		traceID, err := ParseTraceID(traceIDStr)
 		if err == nil {
-			spanID, _ := ParseSpanID(spanIDStr)
+			spanID, spanErr := ParseSpanID(spanIDStr)
+			if spanErr != nil {
+				spanID = SpanID{}
+			}
 			tc := &TraceContext{
 				TraceID: traceID,
 				SpanID:  spanID,

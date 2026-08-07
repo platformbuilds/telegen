@@ -86,30 +86,40 @@ func installProbeHandlers(mux *http.ServeMux, r *Registry) {
 
 		if successTS == 0 && failureTS == 0 {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("ok: no export attempts yet"))
+			if _, err := w.Write([]byte("ok: no export attempts yet")); err != nil {
+				return
+			}
 			return
 		}
 
 		if successTS != 0 && now-successTS <= livenessWindowNs {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("ok: recent export success"))
+			if _, err := w.Write([]byte("ok: recent export success")); err != nil {
+				return
+			}
 			return
 		}
 
 		// Report unhealthy only when last attempt failed and there is no recent success.
 		if failureTS > successTS {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte("unhealthy: export failures without recent success"))
+			if _, err := w.Write([]byte("unhealthy: export failures without recent success")); err != nil {
+				return
+			}
 			return
 		}
 
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok: no recent success but last attempt did not fail"))
+		if _, err := w.Write([]byte("ok: no recent success but last attempt did not fail")); err != nil {
+			return
+		}
 	})
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
 		if r.ready.Load() {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("ready"))
+			if _, err := w.Write([]byte("ready")); err != nil {
+				return
+			}
 		} else {
 			http.Error(w, "not ready", http.StatusServiceUnavailable)
 		}

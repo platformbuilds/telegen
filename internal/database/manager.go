@@ -295,7 +295,10 @@ func FindLibrary(name string, paths []string) (string, bool) {
 			return path, true
 		}
 		// Also check with version suffixes
-		matches, _ := filepath.Glob(path + ".*")
+		matches, err := filepath.Glob(path + ".*")
+		if err != nil {
+			continue
+		}
 		if len(matches) > 0 {
 			return matches[0], true
 		}

@@ -7,7 +7,30 @@ linters:
     - ineffassign
     - staticcheck
     - unused
+    - bodyclose
+    - rowserrcheck
+    - sqlclosecheck
+    - copyloopvar
+    - forbidigo
   settings:
+    errcheck:
+      check-type-assertions: false
+      check-blank: true
+    govet:
+      enable:
+        - copylocks
+    forbidigo:
+      forbid:
+        - pattern: 'regexp\.MustCompile\(\s*[^"`]'
+          msg: "use a literal regexp.MustCompile argument (precompile at package scope)"
+        - pattern: 'regexp\.Compile\(\s*[^"`]'
+          msg: "use a literal regexp.Compile argument (precompile/cache patterns)"
+        - pattern: 'context\.Background\(\)'
+          msg: "use a propagated context; context.Background is only allowed in main and tests"
+        - pattern: '\blog\.(Fatal|Fatalf)\('
+          msg: "avoid process-fatal logging outside main/tests"
+        - pattern: '\bos\.Exit\('
+          msg: "avoid process exits outside main/tests"
     staticcheck:
       checks:
         - all
@@ -23,6 +46,13 @@ linters:
         linters:
           - errcheck
           - unused
+          - forbidigo
+          - bodyclose
+      # main entrypoints are the only allowed production sites for process exit
+      # and root context construction.
+      - path: ^cmd/.*/main\.go
+        linters:
+          - forbidigo
       # Ignore errcheck for defer statements
       - source: "defer .*\\.Close\\(\\)"
         linters:

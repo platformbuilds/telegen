@@ -93,16 +93,16 @@ func (c *Collector) CollectAll(ctx context.Context) ([]storagedef.Metric, error)
 
 // restOptInObjects are Harvest-commented Rest objects enabled under coverage=full.
 var restOptInObjects = map[string]string{
-	"AuditLog":        "audit_log.yaml",
-	"CIFSSession":     "cifs_session.yaml",
-	"CIFSShare":       "cifs_share.yaml",
-	"ExportRule":      "exports.yaml",
-	"Lock":            "lock.yaml",
-	"MAVRequest":      "mav_request.yaml",
-	"Mediator":        "mediator.yaml",
-	"NDMPSession":     "ndmp_session.yaml",
-	"NetConnections":  "netconnections.yaml",
-	"NFSClients":      "nfs_clients.yaml",
+	"AuditLog":         "audit_log.yaml",
+	"CIFSSession":      "cifs_session.yaml",
+	"CIFSShare":        "cifs_share.yaml",
+	"ExportRule":       "exports.yaml",
+	"Lock":             "lock.yaml",
+	"MAVRequest":       "mav_request.yaml",
+	"Mediator":         "mediator.yaml",
+	"NDMPSession":      "ndmp_session.yaml",
+	"NetConnections":   "netconnections.yaml",
+	"NFSClients":       "nfs_clients.yaml",
 	"VolumeEfficiency": "volume_efficiency.yaml",
 }
 
@@ -170,7 +170,10 @@ func (c *Collector) pollObject(ctx context.Context, tmpl *template.Template, now
 			c.Log.Warn("endpoint poll failed", "query", ep.Query, "error", err)
 			continue
 		}
-		_ = fillMatrixImmutable(mat, epRecords, epKeys, epLabels, epMetrics)
+		if err := fillMatrixImmutable(mat, epRecords, epKeys, epLabels, epMetrics); err != nil {
+			c.Log.Warn("endpoint matrix fill failed", "query", ep.Query, "error", err)
+			continue
+		}
 	}
 
 	mats := plugins.ApplyAll(mat, tmpl.Plugins, c.Log)
@@ -236,7 +239,9 @@ func fillMatrix(mat *matrix.Matrix, records []json.RawMessage, keys, labels, met
 		}
 		for _, m := range metrics {
 			if f, ok := jsonpath.GetFloat(rec, m.APIName); ok {
-				_ = mat.SetValue(m.APIName, key, f)
+				if err := mat.SetValue(m.APIName, key, f); err != nil {
+					continue
+				}
 			}
 		}
 	}
@@ -257,7 +262,9 @@ func fillMatrixImmutable(mat *matrix.Matrix, records []json.RawMessage, keys, la
 		}
 		for _, m := range metrics {
 			if f, ok := jsonpath.GetFloat(rec, m.APIName); ok {
-				_ = mat.SetValue(m.APIName, key, f)
+				if err := mat.SetValue(m.APIName, key, f); err != nil {
+					continue
+				}
 			}
 		}
 	}

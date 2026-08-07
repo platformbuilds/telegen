@@ -118,10 +118,14 @@ func (c *Collector) appendMem(wr *prompb.WriteRequest) {
 	for sc.Scan() {
 		line := sc.Text()
 		if strings.HasPrefix(line, "MemTotal:") {
-			_, _ = fmt.Sscanf(line, "MemTotal: %f kB", &memTotal)
+			if _, err := fmt.Sscanf(line, "MemTotal: %f kB", &memTotal); err != nil {
+				continue
+			}
 		}
 		if strings.HasPrefix(line, "MemAvailable:") {
-			_, _ = fmt.Sscanf(line, "MemAvailable: %f kB", &memAvail)
+			if _, err := fmt.Sscanf(line, "MemAvailable: %f kB", &memAvail); err != nil {
+				continue
+			}
 		}
 	}
 	if memTotal > 0 {
@@ -155,7 +159,13 @@ func (c *Collector) appendNet(wr *prompb.WriteRequest) {
 		c.appendPoint(wr, "system_network_transmit_bytes_total", c.baseLabels(labels.Label{Name: "device", Value: strings.TrimSpace(iface)}), tx)
 	}
 }
-func atof(s string) float64 { var v float64; _, _ = fmt.Sscanf(s, "%f", &v); return v }
+func atof(s string) float64 {
+	var v float64
+	if _, err := fmt.Sscanf(s, "%f", &v); err != nil {
+		return 0
+	}
+	return v
+}
 
 // appendPSI collects cgroup v2 PSI (Pressure Stall Information) metrics for CPU, memory, and I/O.
 // PSI files follow the format:  some avg10=X.XX avg60=X.XX avg300=X.XX total=N
@@ -203,7 +213,9 @@ func (c *Collector) appendPSI(wr *prompb.WriteRequest) {
 			metricName := fmt.Sprintf("system_%s_pressure_%s_avg10", res.name, qualifier)
 			c.appendPoint(wr, metricName, c.baseLabels(), avg10/100.0) // convert percentage to ratio
 		}
-		_ = f.Close()
+		if err := f.Close(); err != nil {
+			continue
+		}
 	}
 }
 

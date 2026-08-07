@@ -91,11 +91,16 @@ func (p *Provider) fetchOnce(ctx context.Context) (*Data, error) {
 			// Not on EC2 (or blocked); attempt to infer region from env and hostname from os
 			d.Platform = inferPlatform()
 			d.Region = getenvAny("AWS_REGION", "AWS_DEFAULT_REGION")
-			d.Hostname, _ = os.Hostname()
+			if hostname, hostErr := os.Hostname(); hostErr == nil {
+				d.Hostname = hostname
+			}
 			return d, nil
 		}
 	}
-	token, _ := p.getToken(ctx)
+	token, err := p.getToken(ctx)
+	if err != nil {
+		token = ""
+	}
 	// Instance identity document has a lot of info
 	var iid struct {
 		AccountID        string `json:"accountId"`
@@ -107,7 +112,9 @@ func (p *Provider) fetchOnce(ctx context.Context) (*Data, error) {
 		PrivateIP        string `json:"privateIp"`
 	}
 	if b, err := p.get(ctx, token, p.base+"/dynamic/instance-identity/document"); err == nil {
-		_ = json.Unmarshal(b, &iid)
+		if err := json.Unmarshal(b, &iid); err != nil {
+			// keep zero-values and continue with best-effort metadata fetches
+		}
 		d.AccountID, d.Region, d.InstanceID, d.InstanceType, d.AMI, d.AZ, d.PrivateIP = iid.AccountID, iid.Region, iid.InstanceID, iid.InstanceType, iid.ImageID, iid.AvailabilityZone, iid.PrivateIP
 	}
 	// Fill additional fields best-effort
@@ -124,7 +131,7 @@ func (p *Provider) fetchOnce(ctx context.Context) (*Data, error) {
 		d.PrivateIP = stringOrEmpty(p.get(ctx, token, p.base+"/meta-data/local-ipv4"))
 	}
 	d.PublicIP = stringOrEmpty(p.get(ctx, token, p.base+"/meta-data/public-ipv4"))
-	if hn, _ := os.Hostname(); hn != "" {
+	if hn, err := os.Hostname(); err == nil && hn != "" {
 		d.Hostname = hn
 	} else {
 		d.Hostname = d.InstanceID
@@ -156,7 +163,10 @@ func (p *Provider) fetchOnce(ctx context.Context) (*Data, error) {
 }
 
 func (p *Provider) getToken(ctx context.Context) (string, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, p.base+"/api/token", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, p.base+"/api/token", nil)
+	if err != nil {
+		return "", err
+	}
 	req.Header.Set("X-aws-ec2-metadata-token-ttl-seconds", "21600")
 	resp, err := p.http.Do(req)
 	if err != nil {
@@ -166,12 +176,18 @@ func (p *Provider) getToken(ctx context.Context) (string, error) {
 	if resp.StatusCode != 200 {
 		return "", errors.New("imds token failed")
 	}
-	b, _ := io.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
 	return string(b), nil
 }
 
 func (p *Provider) get(ctx context.Context, token, url string) ([]byte, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
 	if token != "" {
 		req.Header.Set("X-aws-ec2-metadata-token", token)
 	}
@@ -271,7 +287,10 @@ func (d *Data) Resource() *resource.Resource {
 	for k, v := range d.Tags {
 		attrs = append(attrs, attribute.String("aws.ec2.tag."+k, v))
 	}
-	res, _ := resource.Merge(resource.Default(), resource.NewSchemaless(attrs...))
+	res, err := resource.Merge(resource.Default(), resource.NewSchemaless(attrs...))
+	if err != nil {
+		return resource.NewSchemaless(attrs...)
+	}
 	return res
 }
 

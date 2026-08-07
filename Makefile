@@ -127,7 +127,7 @@ verifier-check: docker-generate
 		-e TELEGEN_BPF_VERIFIER_CHECK=1 \
 		--entrypoint /bin/sh \
 		$(GEN_IMG) \
-		-c 'go test -v ./internal/bpfverifier -run TestLoadAllTracerBpfObjects -count=1 && go test -v ./internal/bpfverifier -run TestGoTracerAttachAndEmitHTTP -count=1'
+		-c 'go test -race -v ./internal/bpfverifier -run TestLoadAllTracerBpfObjects -count=1 && go test -race -v ./internal/bpfverifier -run TestGoTracerAttachAndEmitHTTP -count=1'
 
 ### Docker Targets ##########################################################
 

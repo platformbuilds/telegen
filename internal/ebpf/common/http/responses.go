@@ -81,7 +81,7 @@ func getResponseBody(resp *http.Response) ([]byte, error) {
 func decompressBody(encoding string, b []byte) ([]byte, error) {
 	var (
 		reader  io.Reader
-		closeFn func()
+		closeFn func() error
 		err     error
 	)
 
@@ -90,16 +90,19 @@ func decompressBody(encoding string, b []byte) ([]byte, error) {
 		var gr *gzip.Reader
 		gr, err = gzip.NewReader(bytes.NewReader(b))
 		reader = gr
-		closeFn = func() { _ = gr.Close() }
+		closeFn = gr.Close
 	case "zstd":
 		var zr *zstd.Decoder
 		zr, err = zstd.NewReader(bytes.NewReader(b))
 		reader = zr
-		closeFn = zr.Close
+		closeFn = func() error {
+			zr.Close()
+			return nil
+		}
 	case "deflate":
 		fr := flate.NewReader(bytes.NewReader(b))
 		reader = fr
-		closeFn = func() { _ = fr.Close() }
+		closeFn = fr.Close
 	case "br":
 		reader = brotli.NewReader(bytes.NewReader(b))
 	default:
@@ -110,7 +113,11 @@ func decompressBody(encoding string, b []byte) ([]byte, error) {
 		return nil, err
 	}
 	if closeFn != nil {
-		defer closeFn()
+		defer func() {
+			if err := closeFn(); err != nil {
+				return
+			}
+		}()
 	}
 
 	return readBodyWithLimit(reader, maxDecompressedResponseBodyBytes)

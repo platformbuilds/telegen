@@ -93,7 +93,12 @@ func New(opts Options) *Watcher {
 		opts.Workers = 2
 	}
 	if opts.Logger == nil {
-		opts.Logger, _ = zap.NewProduction()
+		logger, err := zap.NewProduction()
+		if err != nil {
+			opts.Logger = zap.NewNop()
+		} else {
+			opts.Logger = logger
+		}
 	}
 
 	// Create JFR converter for direct export

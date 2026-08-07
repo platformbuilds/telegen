@@ -24,7 +24,10 @@ func CookRates(prev, cur *Matrix) (*Matrix, error) {
 	}
 	// copy instances
 	for key, inst := range cur.Instances {
-		ni, _ := out.NewInstance(key)
+		ni, err := out.NewInstance(key)
+		if err != nil {
+			continue
+		}
 		ni.Exportable = inst.Exportable
 		for lk, lv := range inst.Labels {
 			ni.Labels[lk] = lv

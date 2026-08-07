@@ -6,6 +6,7 @@ package discover // import "github.com/mirastacklabs-ai/telegen/internal/discove
 import (
 	"debug/elf"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"syscall"
@@ -47,7 +48,9 @@ func findExecElf(p *services.ProcessInfo, svcID svc.Attrs) (*exec.FileInfo, erro
 	closeELFOnErr := true
 	defer func() {
 		if closeELFOnErr && file.ELF != nil {
-			_ = file.ELF.Close()
+			if err := file.ELF.Close(); err != nil {
+				slog.Debug("failed closing ELF on error path", "pid", p.Pid, "error", err)
+			}
 			file.ELF = nil
 		}
 	}()

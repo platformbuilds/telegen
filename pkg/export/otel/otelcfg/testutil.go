@@ -26,9 +26,13 @@ func RestoreEnvAfterExecution() func() {
 	return func() {
 		for _, v := range vals {
 			if v.exists {
-				_ = os.Setenv(v.name, v.val)
+				if err := os.Setenv(v.name, v.val); err != nil {
+					continue
+				}
 			} else {
-				_ = os.Unsetenv(v.name)
+				if err := os.Unsetenv(v.name); err != nil {
+					continue
+				}
 			}
 		}
 	}

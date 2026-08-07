@@ -80,7 +80,10 @@ func newIPGrouper(cfg Definitions) (ipGrouper, error) {
 }
 
 func (g *ipGrouper) CIDR(ip net.IP) string {
-	entries, _ := g.ranger.ContainingNetworks(ip)
+	entries, err := g.ranger.ContainingNetworks(ip)
+	if err != nil {
+		return ""
+	}
 	if len(entries) == 0 {
 		return ""
 	}

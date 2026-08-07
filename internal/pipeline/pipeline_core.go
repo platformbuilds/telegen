@@ -313,13 +313,15 @@ func (p *UnifiedPipeline) Start(ctx context.Context) error {
 	// Initialize legacy remote-write transport if configured.
 	if p.config.RemoteWrite != nil {
 		p.rw = remotewrite.New()
-		_ = p.rw.WithTLS(remotewrite.TLSConfig{
+		if err := p.rw.WithTLS(remotewrite.TLSConfig{
 			Enable:             p.config.RemoteWrite.TLS.Enable,
 			CAFile:             p.config.RemoteWrite.TLS.CAFile,
 			CertFile:           p.config.RemoteWrite.TLS.CertFile,
 			KeyFile:            p.config.RemoteWrite.TLS.KeyFile,
 			InsecureSkipVerify: p.config.RemoteWrite.TLS.InsecureSkipVerify,
-		})
+		}); err != nil {
+			p.logger.Warn("failed configuring remote write TLS", "error", err)
+		}
 		p.wg.Add(1)
 		go p.remoteWriteWorker()
 	}
@@ -414,16 +416,28 @@ func (p *UnifiedPipeline) Stop(ctx context.Context) error {
 
 	// Flush and close queues.
 	if p.traceQueue != nil {
-		_ = p.traceQueue.Flush()
-		_ = p.traceQueue.Close()
+		if err := p.traceQueue.Flush(); err != nil {
+			p.logger.Debug("trace queue flush failed", "error", err)
+		}
+		if err := p.traceQueue.Close(); err != nil {
+			p.logger.Debug("trace queue close failed", "error", err)
+		}
 	}
 	if p.logQueue != nil {
-		_ = p.logQueue.Flush()
-		_ = p.logQueue.Close()
+		if err := p.logQueue.Flush(); err != nil {
+			p.logger.Debug("log queue flush failed", "error", err)
+		}
+		if err := p.logQueue.Close(); err != nil {
+			p.logger.Debug("log queue close failed", "error", err)
+		}
 	}
 	if p.metricQueue != nil {
-		_ = p.metricQueue.Flush()
-		_ = p.metricQueue.Close()
+		if err := p.metricQueue.Flush(); err != nil {
+			p.logger.Debug("metric queue flush failed", "error", err)
+		}
+		if err := p.metricQueue.Close(); err != nil {
+			p.logger.Debug("metric queue close failed", "error", err)
+		}
 	}
 
 	// Stop exporters.
@@ -1170,13 +1184,15 @@ func (p *UnifiedPipeline) startRuntimeSources(ctx context.Context) error {
 			p.logger.Info("node_exporter OTLP host metrics started", "interval", rcfg.NodeExporter.Export.Interval)
 		}
 	} else if len(rcfg.Exports.RemoteWrite.Endpoints) > 0 {
-		if hostname, _ := os.Hostname(); true {
-			col := host.New("telegen", hostname, 15*time.Second, p.EnqueueMetrics)
-			if len(p.awsLabels) > 0 {
-				col.SetExtraLabels(p.awsLabels)
-			}
-			go col.Run(p.stopCh)
+		hostname, err := os.Hostname()
+		if err != nil {
+			hostname = "unknown"
 		}
+		col := host.New("telegen", hostname, 15*time.Second, p.EnqueueMetrics)
+		if len(p.awsLabels) > 0 {
+			col.SetExtraLabels(p.awsLabels)
+		}
+		go col.Run(p.stopCh)
 	}
 
 	// File logs parity: keep using shared SDK LoggerProvider.
@@ -1197,7 +1213,11 @@ func (p *UnifiedPipeline) startRuntimeSources(ctx context.Context) error {
 				ParserConfig:         filetailer.DefaultParserConfig(),
 			}
 			ft := filetailer.NewWithOptions(opts)
-			go func() { _ = ft.Run(p.stopCh) }()
+			go func() {
+				if err := ft.Run(p.stopCh); err != nil {
+					p.logger.Warn("filetailer stopped with error", "error", err)
+				}
+			}()
 		}
 	}
 
@@ -1373,5 +1393,7 @@ func (p *UnifiedPipeline) IsRunning() bool {
 
 // Close provides compatibility with the legacy pipeline lifecycle.
 func (p *UnifiedPipeline) Close() {
-	_ = p.Stop(context.Background())
+	if err := p.Stop(context.Background()); err != nil {
+		p.logger.Debug("pipeline close failed", "error", err)
+	}
 }

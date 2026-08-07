@@ -77,7 +77,9 @@ func (c *Client) Send(ctx context.Context, wr *prompb.WriteRequest, ep Endpoint)
 		if _, err := gz.Write(raw); err != nil {
 			return err
 		}
-		_ = gz.Close()
+		if err := gz.Close(); err != nil {
+			return err
+		}
 		body = buf.Bytes()
 	} else {
 		body = raw
@@ -108,7 +110,9 @@ func (c *Client) Send(ctx context.Context, wr *prompb.WriteRequest, ep Endpoint)
 	if err != nil {
 		return err
 	}
-	_ = resp.Body.Close()
+	if err := resp.Body.Close(); err != nil {
+		return err
+	}
 	if resp.StatusCode/100 == 2 {
 		return nil
 	}

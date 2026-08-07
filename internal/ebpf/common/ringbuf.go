@@ -350,7 +350,9 @@ func (rbf *ringBufForwarder) bgFlushOnTimeout(ctx context.Context, spansChan *ms
 func (rbf *ringBufForwarder) bgListenContextCancelation(ctx context.Context, eventsReader ringBufReader) {
 	<-ctx.Done()
 	rbf.logger.Debug("context is cancelled. Closing events reader")
-	_ = eventsReader.Close()
+	if err := eventsReader.Close(); err != nil {
+		rbf.logger.Debug("failed to close events reader", "error", err)
+	}
 }
 
 func (rbf *ringBufForwarder) bgListenSharedContextCancelation(ctx context.Context, closers []io.Closer, eventsReader ringBufReader) {
@@ -364,12 +366,16 @@ func (rbf *ringBufForwarder) bgListenSharedContextCancelation(ctx context.Contex
 		c := closers[i]
 		go func() {
 			defer wg.Done()
-			_ = c.Close()
+			if err := c.Close(); err != nil {
+				rbf.logger.Debug("failed to close eBPF resource", "error", err)
+			}
 		}()
 	}
 	wg.Wait()
 	rbf.logger.Debug("closing events reader")
-	_ = eventsReader.Close()
+	if err := eventsReader.Close(); err != nil {
+		rbf.logger.Debug("failed to close events reader", "error", err)
+	}
 
 	rbf.logger.Debug("the eBPF resources are closed")
 }
@@ -384,7 +390,10 @@ func (rbf *ringBufForwarder) closeAllResources() {
 		c := rbf.closers[i]
 		go func() {
 			defer wg.Done()
-			_ = c.Close()
+			if err := c.Close(); err != nil {
+				rbf.logger.Debug("failed to close eBPF resource", "error", err)
+				return
+			}
 			rbf.logger.Debug("eBPF resource closed", "num", i)
 		}()
 	}

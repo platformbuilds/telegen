@@ -34,7 +34,6 @@ func BenchmarkReadBPFTraceAsSpan(b *testing.B) {
 
 	b.ReportAllocs()
 	for name, record := range cases {
-		record := record
 		b.Run(name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				_, _, _ = ReadTCPRequestIntoSpan(parseCtx, &cfg, &record, filter)

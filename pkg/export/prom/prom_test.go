@@ -634,6 +634,7 @@ func getMetrics(t require.TestingT, promURL string) string {
 	defer mmux.Unlock()
 	resp, err := http.Get(promURL)
 	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)

@@ -306,7 +306,9 @@ func (b *Baggage) ToMap() map[string]string {
 func FromMap(m map[string]string) *Baggage {
 	bag := NewBaggage()
 	for k, v := range m {
-		_ = bag.Set(k, v)
+		if err := bag.Set(k, v); err != nil {
+			continue
+		}
 	}
 	return bag
 }
@@ -487,12 +489,16 @@ func MergeBaggage(b1, b2 *Baggage) *Baggage {
 
 	// Add all from b1
 	for _, m := range b1.Members() {
-		_ = result.SetWithProperties(m.Key, m.Value, m.Properties)
+		if err := result.SetWithProperties(m.Key, m.Value, m.Properties); err != nil {
+			continue
+		}
 	}
 
 	// Add/overwrite from b2
 	for _, m := range b2.Members() {
-		_ = result.SetWithProperties(m.Key, m.Value, m.Properties)
+		if err := result.SetWithProperties(m.Key, m.Value, m.Properties); err != nil {
+			continue
+		}
 	}
 
 	return result

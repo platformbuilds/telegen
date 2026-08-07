@@ -17,6 +17,7 @@ package profiler
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"github.com/cilium/ebpf"
@@ -65,7 +66,7 @@ type WallProfilerMaps struct {
 
 // WallProfilerPrograms contains all BPF programs
 type WallProfilerPrograms struct {
-	ProfileWall    *ebpf.Program `ebpf:"profile_wall"`
+	ProfileWall     *ebpf.Program `ebpf:"profile_wall"`
 	WallSchedSwitch *ebpf.Program `ebpf:"wall_sched_switch"`
 }
 
@@ -79,6 +80,7 @@ func (o *WallProfilerObjects) Close() error {
 
 // Close releases all BPF maps
 func (m *WallProfilerMaps) Close() error {
+	var closeErr error
 	closers := []interface{ Close() error }{
 		m.WallStacks,
 		m.WallCounts,
@@ -88,24 +90,29 @@ func (m *WallProfilerMaps) Close() error {
 	}
 	for _, c := range closers {
 		if c != nil {
-			_ = c.Close()
+			if err := c.Close(); err != nil {
+				closeErr = errors.Join(closeErr, err)
+			}
 		}
 	}
-	return nil
+	return closeErr
 }
 
 // Close releases all BPF programs
 func (p *WallProfilerPrograms) Close() error {
+	var closeErr error
 	closers := []interface{ Close() error }{
 		p.ProfileWall,
 		p.WallSchedSwitch,
 	}
 	for _, c := range closers {
 		if c != nil {
-			_ = c.Close()
+			if err := c.Close(); err != nil {
+				closeErr = errors.Join(closeErr, err)
+			}
 		}
 	}
-	return nil
+	return closeErr
 }
 
 // Placeholder BPF bytes - will be replaced by bpf2go //go:embed

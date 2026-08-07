@@ -775,7 +775,10 @@ func (c *NutanixCollector) doRequest(ctx context.Context, path string, body map[
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return nil, fmt.Errorf("request failed: %s (body read failed: %w)", resp.Status, readErr)
+		}
 		return nil, fmt.Errorf("request failed: %s - %s", resp.Status, string(respBody))
 	}
 

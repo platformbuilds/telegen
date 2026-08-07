@@ -330,7 +330,9 @@ func (p *Provider) metricsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Write kubestate metrics
 	if p.kubestate != nil {
-		_ = p.kubestate.WriteMetrics(w)
+		if err := p.kubestate.WriteMetrics(w); err != nil {
+			p.logger.Error("failed to write kubestate metrics", "error", err)
+		}
 	}
 
 	// Write cadvisor metrics
@@ -369,50 +371,68 @@ func (p *Provider) healthHandler(w http.ResponseWriter, r *http.Request) {
 
 	if healthy {
 		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, "ok")
+		if _, err := io.WriteString(w, "ok"); err != nil {
+			return
+		}
 	} else {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = io.WriteString(w, "unhealthy")
+		if _, err := io.WriteString(w, "unhealthy"); err != nil {
+			return
+		}
 	}
 }
 
 // telemetryHandler serves self-telemetry metrics
 func (p *Provider) telemetryHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	writef := func(format string, args ...any) bool {
+		if _, err := fmt.Fprintf(w, format, args...); err != nil {
+			return false
+		}
+		return true
+	}
 
 	if p.kubestate != nil {
 		stats := p.kubestate.Stats()
-		_, _ = fmt.Fprintf(w, "# HELP kubemetrics_kubestate_stores_total Number of metrics stores\n")
-		_, _ = fmt.Fprintf(w, "# TYPE kubemetrics_kubestate_stores_total gauge\n")
-		_, _ = fmt.Fprintf(w, "kubemetrics_kubestate_stores_total %v\n", stats["store_count"])
-		_, _ = fmt.Fprintf(w, "# HELP kubemetrics_kubestate_informers_total Number of active informers\n")
-		_, _ = fmt.Fprintf(w, "# TYPE kubemetrics_kubestate_informers_total gauge\n")
-		_, _ = fmt.Fprintf(w, "kubemetrics_kubestate_informers_total %v\n", stats["informer_count"])
+		if !writef("# HELP kubemetrics_kubestate_stores_total Number of metrics stores\n") ||
+			!writef("# TYPE kubemetrics_kubestate_stores_total gauge\n") ||
+			!writef("kubemetrics_kubestate_stores_total %v\n", stats["store_count"]) ||
+			!writef("# HELP kubemetrics_kubestate_informers_total Number of active informers\n") ||
+			!writef("# TYPE kubemetrics_kubestate_informers_total gauge\n") ||
+			!writef("kubemetrics_kubestate_informers_total %v\n", stats["informer_count"]) {
+			return
+		}
 	}
 
 	if p.cadvisor != nil {
 		stats := p.cadvisor.Stats()
-		_, _ = fmt.Fprintf(w, "# HELP kubemetrics_cadvisor_containers_total Number of containers being monitored\n")
-		_, _ = fmt.Fprintf(w, "# TYPE kubemetrics_cadvisor_containers_total gauge\n")
-		_, _ = fmt.Fprintf(w, "kubemetrics_cadvisor_containers_total %v\n", stats["containers"])
+		if !writef("# HELP kubemetrics_cadvisor_containers_total Number of containers being monitored\n") ||
+			!writef("# TYPE kubemetrics_cadvisor_containers_total gauge\n") ||
+			!writef("kubemetrics_cadvisor_containers_total %v\n", stats["containers"]) {
+			return
+		}
 	}
 
 	// Streaming stats
 	if p.metricsStreaming != nil {
 		stats := p.metricsStreaming.Stats()
-		_, _ = fmt.Fprintf(w, "# HELP kubemetrics_streaming_exports_total Total streaming exports\n")
-		_, _ = fmt.Fprintf(w, "# TYPE kubemetrics_streaming_exports_total counter\n")
-		_, _ = fmt.Fprintf(w, "kubemetrics_streaming_exports_total %v\n", stats["export_count"])
+		if !writef("# HELP kubemetrics_streaming_exports_total Total streaming exports\n") ||
+			!writef("# TYPE kubemetrics_streaming_exports_total counter\n") ||
+			!writef("kubemetrics_streaming_exports_total %v\n", stats["export_count"]) {
+			return
+		}
 	}
 
 	if p.logsStreaming != nil {
 		stats := p.logsStreaming.Stats()
-		_, _ = fmt.Fprintf(w, "# HELP kubemetrics_logs_events_received_total K8s events received\n")
-		_, _ = fmt.Fprintf(w, "# TYPE kubemetrics_logs_events_received_total counter\n")
-		_, _ = fmt.Fprintf(w, "kubemetrics_logs_events_received_total %v\n", stats["events_received"])
-		_, _ = fmt.Fprintf(w, "# HELP kubemetrics_logs_events_exported_total K8s events exported\n")
-		_, _ = fmt.Fprintf(w, "# TYPE kubemetrics_logs_events_exported_total counter\n")
-		_, _ = fmt.Fprintf(w, "kubemetrics_logs_events_exported_total %v\n", stats["events_exported"])
+		if !writef("# HELP kubemetrics_logs_events_received_total K8s events received\n") ||
+			!writef("# TYPE kubemetrics_logs_events_received_total counter\n") ||
+			!writef("kubemetrics_logs_events_received_total %v\n", stats["events_received"]) ||
+			!writef("# HELP kubemetrics_logs_events_exported_total K8s events exported\n") ||
+			!writef("# TYPE kubemetrics_logs_events_exported_total counter\n") ||
+			!writef("kubemetrics_logs_events_exported_total %v\n", stats["events_exported"]) {
+			return
+		}
 	}
 }
 

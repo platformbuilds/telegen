@@ -278,6 +278,12 @@ func HTTPInfoEventToSpan(parseCtx *EBPFParseContext, event *BPFHTTPInfo) (reques
 		}
 		return span, false, nil
 	}
+	if req != nil && req.Body != nil {
+		defer func() { _ = req.Body.Close() }()
+	}
+	if resp != nil && resp.Body != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
 
 	span := httpRequestResponseToSpan(parseCtx, event, req, resp)
 	if payloadTruncated {

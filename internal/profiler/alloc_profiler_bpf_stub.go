@@ -14,6 +14,7 @@ package profiler
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"github.com/cilium/ebpf"
@@ -167,6 +168,7 @@ func (o *AllocProfilerObjects) Close() error {
 
 // Close releases all BPF maps
 func (m *AllocProfilerMaps) Close() error {
+	var closeErr error
 	closers := []interface{ Close() error }{
 		m.AllocStacks,
 		m.PendingAllocs,
@@ -179,14 +181,17 @@ func (m *AllocProfilerMaps) Close() error {
 	}
 	for _, c := range closers {
 		if c != nil {
-			_ = c.Close()
+			if err := c.Close(); err != nil {
+				closeErr = errors.Join(closeErr, err)
+			}
 		}
 	}
-	return nil
+	return closeErr
 }
 
 // Close releases all BPF programs
 func (p *AllocProfilerPrograms) Close() error {
+	var closeErr error
 	closers := []interface{ Close() error }{
 		p.TraceMallocEnter,
 		p.TraceMallocExit,
@@ -200,10 +205,12 @@ func (p *AllocProfilerPrograms) Close() error {
 	}
 	for _, c := range closers {
 		if c != nil {
-			_ = c.Close()
+			if err := c.Close(); err != nil {
+				closeErr = errors.Join(closeErr, err)
+			}
 		}
 	}
-	return nil
+	return closeErr
 }
 
 // Placeholder BPF bytes - will be replaced by bpf2go //go:embed

@@ -234,7 +234,10 @@ func NewEBPFParseContext(cfg *config.EBPFTracer, spansChan *msg.Queue[[]request.
 		emitSpans                  func([]request.Span)
 	)
 
-	h2c, _ := lru.New[uint64, h2Connection](1024 * 10)
+	h2c, err := lru.New[uint64, h2Connection](1024 * 10)
+	if err != nil {
+		h2c = nil
+	}
 	largeBuffers := expirable.NewLRU[largeBufferKey, *largeBuffer](1024, nil, 5*time.Minute)
 
 	if cfg != nil {

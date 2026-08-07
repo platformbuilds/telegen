@@ -205,7 +205,11 @@ func shouldIncludeAttribute(normalizedAttrName string, patterns []attributes.Inc
 		// Check exclusions first - if any match, exclude the attribute
 		for _, excl := range pattern.Exclude {
 			normalizedPattern := strings.ReplaceAll(excl, ".", "_")
-			if match, _ := path.Match(normalizedPattern, normalizedAttrName); match {
+			match, err := path.Match(normalizedPattern, normalizedAttrName)
+			if err != nil {
+				continue
+			}
+			if match {
 				return false
 			}
 		}
@@ -219,7 +223,11 @@ func shouldIncludeAttribute(normalizedAttrName string, patterns []attributes.Inc
 		matched := false
 		for _, incl := range pattern.Include {
 			normalizedPattern := strings.ReplaceAll(incl, ".", "_")
-			if match, _ := path.Match(normalizedPattern, normalizedAttrName); match {
+			match, err := path.Match(normalizedPattern, normalizedAttrName)
+			if err != nil {
+				continue
+			}
+			if match {
 				matched = true
 				break
 			}

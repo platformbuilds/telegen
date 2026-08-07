@@ -67,24 +67,32 @@ func connect(addr string, port int) (net.Conn, error) {
 	}
 
 	if err := syscall.Connect(fd, sa); err != nil {
-		_ = syscall.Close(fd)
+		if closeErr := syscall.Close(fd); closeErr != nil {
+			return nil, fmt.Errorf("connect: %w (also failed to close socket: %v)", err, closeErr)
+		}
 		return nil, fmt.Errorf("connect: %w", err)
 	}
 
 	file := os.NewFile(uintptr(fd), fmt.Sprintf("tcp:%s:%d", addr, port))
 
 	if file == nil {
-		_ = syscall.Close(fd)
+		if closeErr := syscall.Close(fd); closeErr != nil {
+			return nil, fmt.Errorf("failed to create os.File from fd and close failed: %w", closeErr)
+		}
 		return nil, errors.New("failed to create os.File from fd")
 	}
 
 	conn, err := net.FileConn(file)
 	if err != nil {
-		_ = file.Close()
+		if closeErr := file.Close(); closeErr != nil {
+			return nil, fmt.Errorf("fileconn: %w (also failed to close file: %v)", err, closeErr)
+		}
 		return nil, fmt.Errorf("fileconn: %w", err)
 	}
 
-	_ = file.Close()
+	if err := file.Close(); err != nil {
+		return nil, fmt.Errorf("closing connection file descriptor: %w", err)
+	}
 
 	return conn, nil
 }
@@ -216,7 +224,9 @@ func sendEvaluate(wsConn *websocket.Conn, exp string, id int) error {
 
 func (i *NodeInjector) injectFileWS(wsConn *websocket.Conn) error {
 	defer func() {
-		_ = sendEvaluate(wsConn, "process._debugEnd();", 2)
+		if err := sendEvaluate(wsConn, "process._debugEnd();", 2); err != nil {
+			i.log.Debug("failed to end debug session", "error", err)
+		}
 	}()
 
 	script := string(_extractorBytes)
@@ -240,15 +250,22 @@ func (i *NodeInjector) injectFile() error {
 
 	wsURL, err := i.requestDebuggerURL(conn)
 	if err != nil {
-		_ = conn.Close()
+		if closeErr := conn.Close(); closeErr != nil {
+			i.log.Debug("failed to close inspector socket", "error", closeErr)
+		}
 		return err
 	}
 
 	i.log.Debug("found debugger url", "url", wsURL)
 
-	wsConn, _, err := upgradeConn(conn, wsURL)
+	wsConn, resp, err := upgradeConn(conn, wsURL)
+	if resp != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
 	if err != nil {
-		_ = conn.Close()
+		if closeErr := conn.Close(); closeErr != nil {
+			i.log.Debug("failed to close inspector socket after websocket upgrade failure", "error", closeErr)
+		}
 		return fmt.Errorf("failed to connect to inspector WebSocket: %w", err)
 	}
 
