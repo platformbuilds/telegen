@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -186,11 +187,16 @@ func (e *Exporter) Handler() http.Handler {
 func (e *Exporter) Collect() ([]*prometheus.Metric, error) {
 	ch := make(chan prometheus.Metric)
 	var metrics []*prometheus.Metric
+	var metricsMu sync.Mutex
+	done := make(chan struct{})
 
 	go func() {
+		defer close(done)
 		for metric := range ch {
 			m := metric
+			metricsMu.Lock()
 			metrics = append(metrics, &m)
+			metricsMu.Unlock()
 		}
 	}()
 
@@ -202,6 +208,7 @@ func (e *Exporter) Collect() ([]*prometheus.Metric, error) {
 		}
 	}
 	close(ch)
+	<-done
 
 	return metrics, nil
 }

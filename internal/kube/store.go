@@ -11,9 +11,13 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"text/template"
 	"time"
 
+	"github.com/hashicorp/golang-lru/v2/expirable"
+
+	"github.com/mirastacklabs-ai/telegen/internal/correlation"
 	"github.com/mirastacklabs-ai/telegen/internal/helpers/container"
 	"github.com/mirastacklabs-ai/telegen/internal/helpers/maps"
 	"github.com/mirastacklabs-ai/telegen/internal/kube/kubecache/informer"
@@ -107,7 +111,8 @@ type Store struct {
 	// and remove them from objectMetaByIP on update or deletion
 	objectMetaByQName map[qualifiedName]*kube.CachedObjMeta
 	// todo: can be probably removed as objectMetaByIP already caches the service name/namespace
-	otelServiceInfoByIP map[string]otelServiceNamePair
+	otelServiceInfoByIP   *expirable.LRU[string, otelServiceNamePair]
+	otelServiceInfoByIPMu sync.RWMutex
 
 	// Instead of subscribing to the informer directly, the rest of components
 	// will subscribe to this store, to make sure that any "new object" notification
@@ -119,7 +124,7 @@ type Store struct {
 	// A go template that, if set, is used to create the service name
 	serviceNameTemplate *template.Template
 
-	cacheSynced bool
+	cacheSynced atomic.Bool
 	metrics     imetrics.Reporter
 }
 
@@ -140,7 +145,7 @@ func NewStore(
 		objectMetaByIP:      map[string]*kube.CachedObjMeta{},
 		objectMetaByQName:   map[qualifiedName]*kube.CachedObjMeta{},
 		containersByOwner:   maps.Map2[string, string, *informer.ContainerInfo]{},
-		otelServiceInfoByIP: map[string]otelServiceNamePair{},
+		otelServiceInfoByIP: expirable.NewLRU[string, otelServiceNamePair](8192, nil, 10*time.Minute),
 		metadataNotifier:    kubeMetadata,
 		BaseNotifier:        meta.NewBaseNotifier(log),
 		resourceLabels:      resourceLabels,
@@ -212,7 +217,7 @@ func (s *Store) On(event *informer.Event) error {
 	defer s.Notify(event)
 
 	if event.Type == informer.EventType_SYNC_FINISHED {
-		s.cacheSynced = true
+		s.cacheSynced.Store(true)
 		return nil
 	}
 
@@ -222,7 +227,7 @@ func (s *Store) On(event *informer.Event) error {
 
 	// During cache startup, it is expected that the informer receives metadata from old events,
 	// so we don't measure lag until all the cache has been synced
-	if s.cacheSynced {
+	if s.cacheSynced.Load() {
 		lag := time.Since(time.Unix(event.Resource.StatusTimeEpoch, 0))
 		s.metrics.InformerLag(lag.Seconds())
 	}
@@ -300,7 +305,7 @@ func (s *Store) unlockedAddObjectMeta(meta *informer.ObjectMeta) {
 		s.objectMetaByIP[ip] = cmeta
 	}
 
-	s.otelServiceInfoByIP = map[string]otelServiceNamePair{}
+	s.clearServiceInfoCache()
 
 	if meta.Pod != nil {
 		oID := fetchOwnerID(meta)
@@ -325,7 +330,7 @@ func (s *Store) deleteObjectMeta(meta *informer.ObjectMeta) {
 	defer s.access.Unlock()
 	// clean up the IP to service cache, we have to clean everything since
 	// Otel variables on specific pods can change the outcome.
-	s.otelServiceInfoByIP = map[string]otelServiceNamePair{}
+	s.clearServiceInfoCache()
 
 	// cleanup both the objectMeta information from the received event
 	// as well as from any previous snapshot in the system whose IPs and/or
@@ -347,6 +352,7 @@ func (s *Store) unlockedDeleteObjectMeta(meta *informer.ObjectMeta) {
 		s.log.Debug("deleting pod from store",
 			"ips", meta.Ips, "pod", meta.Name, "namespace", meta.Namespace, "containers", meta.Pod.Containers)
 		for _, c := range meta.Pod.Containers {
+			correlation.GetGlobalSignalCorrelator().UnregisterResourceByContainerID(c.Id)
 			infos, ok := s.containerIDs[c.Id]
 			if ok {
 				s.containerIDs.DeleteAll(c.Id)
@@ -359,6 +365,7 @@ func (s *Store) unlockedDeleteObjectMeta(meta *informer.ObjectMeta) {
 			delete(s.podsByContainer, c.Id)
 			s.containersByOwner.Delete(oID, c.Id)
 		}
+		correlation.GetGlobalSignalCorrelator().UnregisterResourceByPod(meta.Namespace, meta.Name)
 	}
 }
 
@@ -433,25 +440,33 @@ func (s *Store) valueFromMetadata(om *informer.ObjectMeta, annotationName string
 // ServiceNameNamespaceForIP returns the service name and namespace for a given IP address
 // This means that, for a given Pod, we will not return the Pod Name, but the Pod Owner Name
 func (s *Store) ServiceNameNamespaceForIP(ip string) (string, string, string) {
-	s.access.RLock()
-	if serviceInfo, ok := s.otelServiceInfoByIP[ip]; ok {
-		s.access.RUnlock()
+	s.otelServiceInfoByIPMu.RLock()
+	if serviceInfo, ok := s.otelServiceInfoByIP.Get(ip); ok {
+		s.otelServiceInfoByIPMu.RUnlock()
 		return serviceInfo.Name, serviceInfo.Namespace, serviceInfo.K8SNamespace
 	}
-	s.access.RUnlock()
+	s.otelServiceInfoByIPMu.RUnlock()
 
-	s.access.Lock()
-	defer s.access.Unlock()
+	s.access.RLock()
 
 	name, namespace, k8sNamespace := "", "", ""
 	if om, ok := s.objectMetaByIP[ip]; ok {
 		name, namespace = s.serviceNameNamespaceOwnerID(om.Meta, "")
 		k8sNamespace = om.Meta.Namespace
 	}
+	s.access.RUnlock()
 
-	s.otelServiceInfoByIP[ip] = otelServiceNamePair{Name: name, Namespace: namespace, K8SNamespace: k8sNamespace}
+	s.otelServiceInfoByIPMu.Lock()
+	s.otelServiceInfoByIP.Add(ip, otelServiceNamePair{Name: name, Namespace: namespace, K8SNamespace: k8sNamespace})
+	s.otelServiceInfoByIPMu.Unlock()
 
 	return name, namespace, k8sNamespace
+}
+
+func (s *Store) clearServiceInfoCache() {
+	s.otelServiceInfoByIPMu.Lock()
+	defer s.otelServiceInfoByIPMu.Unlock()
+	s.otelServiceInfoByIP.Purge()
 }
 
 // serviceNameNamespaceOwnerID takes service name and namespace from diverse sources according to the
@@ -582,9 +597,18 @@ func ownerID(namespace, name string) string {
 // containing the whole metadata store
 func (s *Store) Subscribe(observer meta.Observer) {
 	s.access.RLock()
-	defer s.access.RUnlock()
-	s.BaseNotifier.Subscribe(observer)
+	pods := make([]*kube.CachedObjMeta, 0, len(s.podsByContainer))
 	for _, pod := range s.podsByContainer {
+		pods = append(pods, pod)
+	}
+	ipObjects := make([]*kube.CachedObjMeta, 0, len(s.objectMetaByIP))
+	for _, ips := range s.objectMetaByIP {
+		ipObjects = append(ipObjects, ips)
+	}
+	s.access.RUnlock()
+
+	s.BaseNotifier.Subscribe(observer)
+	for _, pod := range pods {
 		if err := observer.On(&informer.Event{Type: informer.EventType_CREATED, Resource: pod.Meta}); err != nil {
 			s.log.Debug("observer failed sending Pod info. Unsubscribing it", "observer", observer.ID(), "error", err)
 			s.Unsubscribe(observer)
@@ -594,7 +618,7 @@ func (s *Store) Subscribe(observer meta.Observer) {
 	// the IPInfos could contain IPInfo data from Pods already sent in the previous loop
 	// is the subscriber the one that should decide whether to ignore such duplicates or
 	// incomplete info
-	for _, ips := range s.objectMetaByIP {
+	for _, ips := range ipObjects {
 		if err := observer.On(&informer.Event{Type: informer.EventType_CREATED, Resource: ips.Meta}); err != nil {
 			s.log.Debug("observer failed sending Object Meta. Unsubscribing it", "observer", observer.ID(), "error", err)
 			s.Unsubscribe(observer)

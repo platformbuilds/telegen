@@ -217,6 +217,7 @@ type Receiver struct {
 	mu      sync.RWMutex
 	running bool
 	stopCh  chan struct{}
+	runCtx  context.Context
 	wg      sync.WaitGroup
 	metrics chan []Metric
 }
@@ -298,6 +299,8 @@ func (r *Receiver) Start(ctx context.Context) error {
 	}
 
 	r.log.Info("starting SNMP receiver")
+	r.stopCh = make(chan struct{})
+	r.runCtx = ctx
 
 	// Load MIBs
 	if err := r.mibResolver.LoadMIBs(r.config.MIBs.SearchPaths); err != nil {
@@ -408,9 +411,8 @@ func (r *Receiver) Stop(ctx context.Context) error {
 		r.log.Warn("context cancelled while waiting for goroutines")
 	}
 
-	close(r.metrics)
-
 	r.running = false
+	r.runCtx = nil
 	r.log.Info("SNMP receiver stopped")
 	return nil
 }
@@ -514,11 +516,15 @@ func (r *Receiver) AddTarget(target Target) {
 	r.config.Targets = append(r.config.Targets, target)
 
 	if r.running && r.poller != nil {
+		runCtx := r.runCtx
+		if runCtx == nil {
+			r.log.Warn("skipping target add: receiver context is not initialized", "target", target.Name)
+			return
+		}
 		r.wg.Add(1)
 		go func() {
 			defer r.wg.Done()
-			ctx := context.Background()
-			r.pollTarget(ctx, target)
+			r.pollTarget(runCtx, target)
 		}()
 	}
 }

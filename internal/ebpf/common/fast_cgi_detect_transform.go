@@ -131,7 +131,10 @@ func parseHeader(b []byte) ([]byte, error) {
 			b = b[fastCGIRequestHeaderLen:]
 			break
 		}
-		payloadOffset := int(fastCGIRequestHeaderLen + hdr.ContentLength + uint16(hdr.PaddingLength))
+		payloadOffset := fastCGIRequestHeaderLen + int(hdr.ContentLength) + int(hdr.PaddingLength)
+		if payloadOffset <= 0 {
+			return nil, errors.New("invalid payload offset")
+		}
 		if len(b) <= payloadOffset {
 			return nil, errors.New("payload too short")
 		}

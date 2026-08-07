@@ -20,8 +20,9 @@ import (
 func TestTCPLargeBuffers(t *testing.T) {
 	pctx := NewEBPFParseContext(nil, nil, nil)
 	verifyLargeBuffer := func(traceID [16]uint8, packetType, direction uint8, connInfo BpfConnectionInfoT, expectedBuf string) {
-		buf, ok := extractTCPLargeBuffer(pctx, traceID, packetType, direction, connInfo)
+		buf, truncated, ok := extractTCPLargeBuffer(pctx, traceID, packetType, direction, connInfo)
 		require.True(t, ok, "Expected to find large buffer")
+		require.False(t, truncated, "Expected buffer to fit without truncation")
 		require.Equal(t, expectedBuf, unix.ByteSliceToString(buf), "Buffer content mismatch")
 	}
 
@@ -55,7 +56,7 @@ func TestTCPLargeBuffers(t *testing.T) {
 	verifyLargeBuffer(firstEvent.Tp.TraceId, firstEvent.PacketType, firstEvent.Direction, firstEvent.ConnInfo, secondBuf)
 
 	// Verify second read error
-	_, ok := extractTCPLargeBuffer(pctx, firstEvent.Tp.TraceId, firstEvent.PacketType, firstEvent.Direction, firstEvent.ConnInfo)
+	_, _, ok := extractTCPLargeBuffer(pctx, firstEvent.Tp.TraceId, firstEvent.PacketType, firstEvent.Direction, firstEvent.ConnInfo)
 	require.False(t, ok, "Expected to not find large buffer after first read")
 
 	firstEvent.Len = uint32(len(firstBuf))
@@ -63,9 +64,9 @@ func TestTCPLargeBuffers(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify no buffer read happens for different traceID/packet_type
-	_, ok = extractTCPLargeBuffer(pctx, [16]uint8{99}, firstEvent.PacketType, firstEvent.Direction, firstEvent.ConnInfo)
+	_, _, ok = extractTCPLargeBuffer(pctx, [16]uint8{99}, firstEvent.PacketType, firstEvent.Direction, firstEvent.ConnInfo)
 	require.False(t, ok, "Expected to not find large buffer for this traceID")
-	_, ok = extractTCPLargeBuffer(pctx, firstEvent.Tp.TraceId, 3, firstEvent.Direction, firstEvent.ConnInfo)
+	_, _, ok = extractTCPLargeBuffer(pctx, firstEvent.Tp.TraceId, 3, firstEvent.Direction, firstEvent.ConnInfo)
 	require.False(t, ok, "Expected to not find large buffer for this packet_type")
 	verifyLargeBuffer(firstEvent.Tp.TraceId, firstEvent.PacketType, firstEvent.Direction, firstEvent.ConnInfo, firstBuf)
 
@@ -137,9 +138,42 @@ func TestTCPLargeBuffersStreamReassemblyLargePayload(t *testing.T) {
 	_, _, err = appendTCPLargeBuffer(pctx, toRingbufRecord(t, appendEvent, appendChunk2))
 	require.NoError(t, err)
 
-	got, ok := extractTCPLargeBuffer(pctx, traceID, initEvent.PacketType, initEvent.Direction, conn)
+	got, truncated, ok := extractTCPLargeBuffer(pctx, traceID, initEvent.PacketType, initEvent.Direction, conn)
 	require.True(t, ok)
+	require.False(t, truncated)
 	require.Equal(t, expected, string(got))
+}
+
+func TestTCPLargeBuffersTruncateAtOneMiB(t *testing.T) {
+	pctx := NewEBPFParseContext(nil, nil, nil)
+	traceID := [16]uint8{'T', 'R', 'U', 'N', 'C'}
+	conn := BpfConnectionInfoT{D_port: 443}
+
+	initChunk := strings.Repeat("a", 700*1024)
+	appendChunk := strings.Repeat("b", 700*1024)
+
+	initEvent := TCPLargeBufferHeader{
+		Type:       12,
+		PacketType: 1,
+		Direction:  0,
+		Len:        uint32(len(initChunk)),
+	}
+	initEvent.Tp.TraceId = traceID
+	initEvent.ConnInfo = conn
+
+	_, _, err := appendTCPLargeBuffer(pctx, toRingbufRecord(t, initEvent, initChunk))
+	require.NoError(t, err)
+
+	appendEvent := initEvent
+	appendEvent.Action = largeBufferActionAppend
+	appendEvent.Len = uint32(len(appendChunk))
+	_, _, err = appendTCPLargeBuffer(pctx, toRingbufRecord(t, appendEvent, appendChunk))
+	require.NoError(t, err)
+
+	got, truncated, ok := extractTCPLargeBuffer(pctx, traceID, initEvent.PacketType, initEvent.Direction, conn)
+	require.True(t, ok)
+	require.True(t, truncated, "expected truncation when payload exceeds one MiB cap")
+	require.Equal(t, 1<<20, len(got), "expected truncated payload at one MiB cap")
 }
 
 func toRingbufRecord(t *testing.T, event TCPLargeBufferHeader, buf string) *ringbuf.Record {

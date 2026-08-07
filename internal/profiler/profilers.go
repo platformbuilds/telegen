@@ -58,6 +58,16 @@ func bpfTimeToWallClock(bpfNs uint64) time.Time {
 	return time.Now().Add(-time.Duration(ageNs))
 }
 
+func safeCloseSignal(ch chan struct{}) {
+	if ch == nil {
+		return
+	}
+	defer func() {
+		_ = recover()
+	}()
+	close(ch)
+}
+
 // CPUProfiler handles CPU profiling using eBPF perf events
 type CPUProfiler struct {
 	config Config
@@ -109,6 +119,7 @@ func (p *CPUProfiler) Start(ctx context.Context) error {
 	if p.running {
 		return nil
 	}
+	p.stopCh = make(chan struct{})
 
 	p.log.Info("starting CPU profiler", "sample_rate", p.config.SampleRate)
 
@@ -158,7 +169,7 @@ func (p *CPUProfiler) Stop() error {
 
 	p.log.Info("stopping CPU profiler")
 
-	close(p.stopCh)
+	safeCloseSignal(p.stopCh)
 
 	// Close ring buffer reader (Read() will return ErrClosed)
 	if p.ringReader != nil {
@@ -639,6 +650,7 @@ func (p *OffCPUProfiler) Start(ctx context.Context) error {
 	if p.running {
 		return nil
 	}
+	p.stopCh = make(chan struct{})
 
 	p.log.Info("starting off-CPU profiler",
 		"min_block_time_ns", p.config.MinBlockTimeNs)
@@ -686,7 +698,7 @@ func (p *OffCPUProfiler) Stop() error {
 	}
 
 	p.log.Info("stopping off-CPU profiler")
-	close(p.stopCh)
+	safeCloseSignal(p.stopCh)
 
 	if p.ringReader != nil {
 		_ = p.ringReader.Close()
@@ -1086,6 +1098,7 @@ func (p *WallProfiler) Start(ctx context.Context) error {
 	if p.running {
 		return nil
 	}
+	p.stopCh = make(chan struct{})
 
 	sampleRate := p.config.WallSampleRate
 	if sampleRate <= 0 {
@@ -1139,7 +1152,7 @@ func (p *WallProfiler) Stop() error {
 
 	p.log.Info("stopping wall clock profiler")
 
-	close(p.stopCh)
+	safeCloseSignal(p.stopCh)
 
 	// Close ring buffer reader
 	if p.ringReader != nil {
@@ -1452,6 +1465,9 @@ func (p *WallProfiler) processRingBuffer(ctx context.Context) {
 	var sampleCount uint64
 	var emptyReads uint64
 	lastStatsLog := time.Now()
+	const readErrorBudget = 1000
+	consecutiveErrs := 0
+	lastErrLog := time.Now().Add(-time.Hour)
 
 	for {
 		select {
@@ -1470,8 +1486,27 @@ func (p *WallProfiler) processRingBuffer(ctx context.Context) {
 				return
 			}
 			emptyReads++
+			consecutiveErrs++
+			if consecutiveErrs >= readErrorBudget {
+				p.log.Error("wall ring buffer reader exceeded error budget; stopping loop",
+					"consecutive_errors", consecutiveErrs,
+					"error_budget", readErrorBudget,
+					"last_error", err,
+				)
+				return
+			}
+			if time.Since(lastErrLog) > 10*time.Second {
+				p.log.Debug("wall ring buffer read error", "error", err, "consecutive_errors", consecutiveErrs)
+				lastErrLog = time.Now()
+			}
+			backoff := time.Duration(1<<min(consecutiveErrs, 8)) * time.Millisecond
+			if backoff > 250*time.Millisecond {
+				backoff = 250 * time.Millisecond
+			}
+			time.Sleep(backoff)
 			continue
 		}
+		consecutiveErrs = 0
 
 		if len(record.RawSample) > 0 {
 			sampleCount++
@@ -1543,6 +1578,7 @@ func (p *MemoryProfiler) Start(ctx context.Context) error {
 	if p.running {
 		return nil
 	}
+	p.stopCh = make(chan struct{})
 
 	p.log.Info("starting memory profiler",
 		"min_alloc_size", p.config.MinAllocSize)
@@ -1590,7 +1626,7 @@ func (p *MemoryProfiler) Stop() error {
 	}
 
 	p.log.Info("stopping memory profiler")
-	close(p.stopCh)
+	safeCloseSignal(p.stopCh)
 
 	if p.ringReader != nil {
 		_ = p.ringReader.Close()
@@ -2198,6 +2234,7 @@ func (p *MutexProfiler) Start(ctx context.Context) error {
 	if p.running {
 		return nil
 	}
+	p.stopCh = make(chan struct{})
 
 	p.log.Info("starting mutex profiler",
 		"threshold_ns", p.config.ContentionThresholdNs)
@@ -2245,7 +2282,7 @@ func (p *MutexProfiler) Stop() error {
 	}
 
 	p.log.Info("stopping mutex profiler")
-	close(p.stopCh)
+	safeCloseSignal(p.stopCh)
 
 	if p.ringReader != nil {
 		_ = p.ringReader.Close()

@@ -42,10 +42,10 @@ const parseWindowSize = 20
 // Thread-safe via a mutex; connections are typically processed by a single goroutine
 // but the map of stats is shared across the parse context.
 type connParseStats struct {
-	mu      sync.Mutex
-	window  [parseWindowSize]bool // true = success, false = failure
-	head    int
-	total   int
+	mu       sync.Mutex
+	window   [parseWindowSize]bool // true = success, false = failure
+	head     int
+	total    int
 	failures int32 // atomic counter for logging
 }
 
@@ -103,14 +103,15 @@ func connKeyFromInfo(info BpfConnectionInfoT) connStatsKey {
 // recordParseOutcome records the outcome for the given connection in parseCtx.
 // Returns true if the connection should be suppressed due to high failure rate.
 func recordParseOutcome(parseCtx *EBPFParseContext, connInfo BpfConnectionInfoT, outcome ParseOutcome) bool {
+	if parseCtx == nil || parseCtx.parseStats == nil {
+		return false
+	}
 	key := connKeyFromInfo(connInfo)
-	parseCtx.parseStatsMu.Lock()
-	stats, ok := parseCtx.parseStats[key]
+	stats, ok := parseCtx.parseStats.Get(key)
 	if !ok {
 		stats = &connParseStats{}
-		parseCtx.parseStats[key] = stats
+		parseCtx.parseStats.Add(key, stats)
 	}
-	parseCtx.parseStatsMu.Unlock()
 
 	suppress := stats.record(outcome)
 	if suppress {
@@ -125,8 +126,9 @@ func recordParseOutcome(parseCtx *EBPFParseContext, connInfo BpfConnectionInfoT,
 
 // evictConnParseStats removes the stats entry for a connection (called on connection close).
 func evictConnParseStats(parseCtx *EBPFParseContext, connInfo BpfConnectionInfoT) {
+	if parseCtx == nil || parseCtx.parseStats == nil {
+		return
+	}
 	key := connKeyFromInfo(connInfo)
-	parseCtx.parseStatsMu.Lock()
-	delete(parseCtx.parseStats, key)
-	parseCtx.parseStatsMu.Unlock()
+	parseCtx.parseStats.Remove(key)
 }

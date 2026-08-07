@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/mirastacklabs-ai/telegen/internal/helpers"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/pdata/ptrace"
@@ -83,9 +84,10 @@ type MultiEndpointExporter struct {
 	sem       chan struct{}
 
 	// Global stats
-	totalExported atomic.Int64
-	totalFailed   atomic.Int64
-	totalDropped  atomic.Int64
+	totalExported       atomic.Int64
+	totalFailed         atomic.Int64
+	totalDropped        atomic.Int64
+	lastFailoverWarnLog atomic.Int64
 
 	mu       sync.RWMutex
 	shutdown bool
@@ -260,9 +262,11 @@ func (me *MultiEndpointExporter) exportFailover(ctx context.Context, signalType 
 
 		ep.circuitBreaker.RecordFailure()
 		lastErr = err
-		me.logger.Warn("export failed, trying next endpoint",
-			"endpoint", ep.config.Name,
-			"error", err)
+		if helpers.ShouldLogEvery(&me.lastFailoverWarnLog, 10*time.Second) {
+			me.logger.Warn("export failed, trying next endpoint",
+				"endpoint", ep.config.Name,
+				"error", err)
+		}
 	}
 
 	// All endpoints failed - CRITICAL FAILURE
@@ -347,14 +351,7 @@ func (me *MultiEndpointExporter) exportWithRetry(ctx context.Context, ep *endpoi
 }
 
 func (me *MultiEndpointExporter) calculateBackoff(attempt int, cfg RetryConfig) time.Duration {
-	backoff := cfg.InitialInterval
-	for i := 1; i < attempt; i++ {
-		backoff = time.Duration(float64(backoff) * cfg.Multiplier)
-		if backoff > cfg.MaxInterval {
-			return cfg.MaxInterval
-		}
-	}
-	return backoff
+	return helpers.JitteredExponentialBackoff(attempt, cfg.InitialInterval, cfg.MaxInterval, cfg.Multiplier)
 }
 
 // handleCriticalFailure handles complete export failure (data loss).
@@ -400,13 +397,13 @@ func (me *MultiEndpointExporter) Stats() MultiEndpointStats {
 	for i, ep := range me.endpoints {
 		cbStats := ep.circuitBreaker.Stats()
 		stats.Endpoints[i] = EndpointStats{
-			Name:           ep.config.Name,
-			URL:            ep.config.URL,
-			Healthy:        ep.healthy.Load(),
-			CircuitState:   cbStats.State.String(),
-			TotalSuccess:   cbStats.TotalSuccess,
-			TotalFailure:   cbStats.TotalFailure,
-			TotalRejected:  cbStats.TotalRejected,
+			Name:          ep.config.Name,
+			URL:           ep.config.URL,
+			Healthy:       ep.healthy.Load(),
+			CircuitState:  cbStats.State.String(),
+			TotalSuccess:  cbStats.TotalSuccess,
+			TotalFailure:  cbStats.TotalFailure,
+			TotalRejected: cbStats.TotalRejected,
 		}
 	}
 

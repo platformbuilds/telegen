@@ -14,8 +14,9 @@ import (
 
 // AttributeLimiter enforces limits on attribute counts and sizes.
 type AttributeLimiter struct {
-	config AttributeLimiterConfig
-	log    *slog.Logger
+	config        AttributeLimiterConfig
+	log           *slog.Logger
+	protectedKeys map[string]struct{}
 
 	// Stats
 	attributesTruncated atomic.Int64
@@ -88,8 +89,9 @@ func NewAttributeLimiter(config AttributeLimiterConfig, log *slog.Logger) *Attri
 	}
 
 	return &AttributeLimiter{
-		config: config,
-		log:    log.With("component", "attribute-limiter"),
+		config:        config,
+		log:           log.With("component", "attribute-limiter"),
+		protectedKeys: toProtectedSet(config.ProtectedAttributes),
 	}
 }
 
@@ -268,13 +270,17 @@ func (al *AttributeLimiter) limitAttributeValues(attrs pcommon.Map, depth int) {
 		return
 	}
 
-	keysToTruncate := make(map[string]string)
+	type keyRename struct {
+		oldKey string
+		newKey string
+	}
+	var keysToTruncate []keyRename
 
 	attrs.Range(func(k string, v pcommon.Value) bool {
 		// Check key length
 		if len(k) > al.config.MaxAttributeKeyLength {
-			truncatedKey := k[:al.config.MaxAttributeKeyLength-len(al.config.TruncationSuffix)] + al.config.TruncationSuffix
-			keysToTruncate[k] = truncatedKey
+			truncatedKey := truncateWithSuffix(k, al.config.MaxAttributeKeyLength, al.config.TruncationSuffix)
+			keysToTruncate = append(keysToTruncate, keyRename{oldKey: k, newKey: truncatedKey})
 			al.attributesTruncated.Add(1)
 		}
 
@@ -284,17 +290,16 @@ func (al *AttributeLimiter) limitAttributeValues(attrs pcommon.Map, depth int) {
 	})
 
 	// Apply key truncations (need to copy values)
-	for oldKey, newKey := range keysToTruncate {
+	for _, keyRename := range keysToTruncate {
+		oldKey, newKey := keyRename.oldKey, keyRename.newKey
+		if oldKey == newKey {
+			continue
+		}
 		if val, ok := attrs.Get(oldKey); ok {
 			newVal := pcommon.NewValueEmpty()
 			val.CopyTo(newVal)
 			attrs.Remove(oldKey)
-			attrs.PutEmpty(newKey).SetEmptyMap() // placeholder
-			if newVal.Type() == pcommon.ValueTypeStr {
-				attrs.PutStr(newKey, newVal.Str())
-			} else {
-				newVal.CopyTo(attrs.PutEmpty(newKey))
-			}
+			newVal.CopyTo(attrs.PutEmpty(newKey))
 		}
 	}
 }
@@ -305,7 +310,7 @@ func (al *AttributeLimiter) limitValue(v pcommon.Value, depth int) {
 	case pcommon.ValueTypeStr:
 		str := v.Str()
 		if len(str) > al.config.MaxAttributeValueLength {
-			truncated := str[:al.config.MaxAttributeValueLength-len(al.config.TruncationSuffix)] + al.config.TruncationSuffix
+			truncated := truncateWithSuffix(str, al.config.MaxAttributeValueLength, al.config.TruncationSuffix)
 			v.SetStr(truncated)
 			al.valuesTruncated.Add(1)
 		}
@@ -313,12 +318,13 @@ func (al *AttributeLimiter) limitValue(v pcommon.Value, depth int) {
 	case pcommon.ValueTypeSlice:
 		slice := v.Slice()
 		if slice.Len() > al.config.MaxArrayLength {
-			// Truncate array
-			for i := slice.Len() - 1; i >= al.config.MaxArrayLength; i-- {
-				slice.RemoveIf(func(_ pcommon.Value) bool {
-					return slice.Len() > al.config.MaxArrayLength
-				})
-			}
+			trimFrom := al.config.MaxArrayLength
+			idx := 0
+			slice.RemoveIf(func(_ pcommon.Value) bool {
+				drop := idx >= trimFrom
+				idx++
+				return drop
+			})
 			al.valuesTruncated.Add(1)
 		}
 
@@ -334,12 +340,11 @@ func (al *AttributeLimiter) limitValue(v pcommon.Value, depth int) {
 
 // isProtected checks if an attribute key is protected.
 func (al *AttributeLimiter) isProtected(key string) bool {
-	for _, protected := range al.config.ProtectedAttributes {
-		if key == protected {
-			return true
-		}
+	if len(al.protectedKeys) == 0 {
+		return false
 	}
-	return false
+	_, exists := al.protectedKeys[key]
+	return exists
 }
 
 // Stats returns attribute limiter statistics.
@@ -356,4 +361,28 @@ type AttributeLimiterStats struct {
 	AttributesTruncated int64 `json:"attributes_truncated"`
 	AttributesDropped   int64 `json:"attributes_dropped"`
 	ValuesTruncated     int64 `json:"values_truncated"`
+}
+
+func toProtectedSet(keys []string) map[string]struct{} {
+	if len(keys) == 0 {
+		return nil
+	}
+	set := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		set[key] = struct{}{}
+	}
+	return set
+}
+
+func truncateWithSuffix(s string, maxLen int, suffix string) string {
+	if maxLen <= 0 {
+		return ""
+	}
+	if len(s) <= maxLen {
+		return s
+	}
+	if len(suffix) >= maxLen {
+		return suffix[:maxLen]
+	}
+	return s[:maxLen-len(suffix)] + suffix
 }

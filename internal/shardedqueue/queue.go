@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"hash/fnv"
+	"sync"
+	"sync/atomic"
 )
 
 var ErrQueueClosed = errors.New("queue closed")
@@ -14,7 +16,9 @@ var ErrQueueClosed = errors.New("queue closed")
 type ShardedQueue[T any] struct {
 	queues []chan T
 	hash   func(T) string
-	done   bool
+	done   atomic.Bool
+	mu     sync.RWMutex
+	wg     sync.WaitGroup
 }
 
 // NewShardedQueue creates a sharded, bounded worker queue.
@@ -29,6 +33,9 @@ func NewShardedQueue[T any](
 	hash func(T) string,
 	worker func(workerID int, ch <-chan T),
 ) *ShardedQueue[T] {
+	if nWorkers <= 0 {
+		nWorkers = 1
+	}
 	q := &ShardedQueue[T]{
 		queues: make([]chan T, nWorkers),
 		hash:   hash,
@@ -37,7 +44,11 @@ func NewShardedQueue[T any](
 	for i := range nWorkers {
 		ch := make(chan T, qLen)
 		q.queues[i] = ch
-		go worker(i, ch)
+		q.wg.Add(1)
+		go func(workerID int, workerCh <-chan T) {
+			defer q.wg.Done()
+			worker(workerID, workerCh)
+		}(i, ch)
 	}
 
 	return q
@@ -46,7 +57,12 @@ func NewShardedQueue[T any](
 // Enqueue adds an item to the appropriate shard.
 // Blocks if the shard queue is full.
 func (q *ShardedQueue[T]) Enqueue(ctx context.Context, item T) error {
-	if q.done {
+	if q.done.Load() {
+		return ErrQueueClosed
+	}
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	if q.done.Load() {
 		return ErrQueueClosed
 	}
 
@@ -63,12 +79,13 @@ func (q *ShardedQueue[T]) Enqueue(ctx context.Context, item T) error {
 }
 
 func (q *ShardedQueue[T]) Close() {
-	if q.done {
+	if !q.done.CompareAndSwap(false, true) {
 		return
 	}
-	q.done = true
-
+	q.mu.Lock()
 	for _, ch := range q.queues {
 		close(ch)
 	}
+	q.mu.Unlock()
+	q.wg.Wait()
 }

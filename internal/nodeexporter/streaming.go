@@ -7,6 +7,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -47,10 +48,10 @@ type StreamingExporter struct {
 	doneCh  chan struct{}
 
 	// Performance stats
-	collectCount    int64
-	collectDuration time.Duration
-	exportCount     int64
-	exportDuration  time.Duration
+	collectCount         atomic.Int64
+	collectDurationNanos atomic.Int64
+	exportCount          atomic.Int64
+	exportDurationNanos  atomic.Int64
 }
 
 // NewStreamingExporter creates a new streaming exporter.
@@ -60,7 +61,7 @@ func NewStreamingExporter(
 	env *DetectedEnvironment,
 	logger *slog.Logger,
 ) *StreamingExporter {
-	if cfg.Interval == 0 {
+	if cfg.Interval <= 0 {
 		cfg.Interval = 15 * time.Second
 	}
 	if cfg.BatchSize == 0 {
@@ -192,8 +193,8 @@ func (s *StreamingExporter) collectAndSend(ctx context.Context) {
 	}
 
 	collectDuration := time.Since(collectStart)
-	s.collectCount++
-	s.collectDuration += collectDuration
+	s.collectCount.Add(1)
+	s.collectDurationNanos.Add(collectDuration.Nanoseconds())
 
 	if err != nil {
 		s.logger.Error("failed to gather metrics", "error", err)
@@ -221,8 +222,8 @@ func (s *StreamingExporter) collectAndSend(ctx context.Context) {
 	err = receiver.ReceiveMetrics(sendCtx, batch)
 	exportDuration := time.Since(exportStart)
 
-	s.exportCount++
-	s.exportDuration += exportDuration
+	s.exportCount.Add(1)
+	s.exportDurationNanos.Add(exportDuration.Nanoseconds())
 
 	// Record latency for adaptive batching
 	if s.adaptiveBatcher != nil {
@@ -296,18 +297,23 @@ type StreamingStats struct {
 
 // Stats returns performance statistics for the streaming exporter.
 func (s *StreamingExporter) Stats() StreamingStats {
+	collectCount := s.collectCount.Load()
+	collectDuration := time.Duration(s.collectDurationNanos.Load())
+	exportCount := s.exportCount.Load()
+	exportDuration := time.Duration(s.exportDurationNanos.Load())
+
 	stats := StreamingStats{
-		CollectCount:    s.collectCount,
-		CollectDuration: s.collectDuration,
-		ExportCount:     s.exportCount,
-		ExportDuration:  s.exportDuration,
+		CollectCount:    collectCount,
+		CollectDuration: collectDuration,
+		ExportCount:     exportCount,
+		ExportDuration:  exportDuration,
 	}
 
-	if s.collectCount > 0 {
-		stats.AvgCollectDuration = s.collectDuration / time.Duration(s.collectCount)
+	if collectCount > 0 {
+		stats.AvgCollectDuration = collectDuration / time.Duration(collectCount)
 	}
-	if s.exportCount > 0 {
-		stats.AvgExportDuration = s.exportDuration / time.Duration(s.exportCount)
+	if exportCount > 0 {
+		stats.AvgExportDuration = exportDuration / time.Duration(exportCount)
 	}
 	if s.cache != nil {
 		stats.CacheHitRate = s.cache.HitRate()

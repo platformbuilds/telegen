@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/hashicorp/golang-lru/v2/expirable"
 )
 
 // LogFormat represents a detected log format.
@@ -472,25 +474,29 @@ func parseTimestamp(v interface{}) time.Time {
 type MultiFormatEnricher struct {
 	enricher *LogEnricher
 	detector *LogFormatDetector
-	formats  map[string]LogFormat // Cache format per source
+	formats  *expirable.LRU[string, LogFormat] // Cache format per source
 }
 
 // NewMultiFormatEnricher creates a new multi-format enricher.
 func NewMultiFormatEnricher() *MultiFormatEnricher {
+	const (
+		formatCacheSize = 1024
+		formatCacheTTL  = time.Hour
+	)
 	return &MultiFormatEnricher{
 		enricher: NewLogEnricher(),
 		detector: NewLogFormatDetector(),
-		formats:  make(map[string]LogFormat),
+		formats:  expirable.NewLRU[string, LogFormat](formatCacheSize, nil, formatCacheTTL),
 	}
 }
 
 // EnrichWithSource enriches a log line, caching format detection per source.
 func (m *MultiFormatEnricher) EnrichWithSource(source, logLine string, tc *TraceContext) *EnrichedLog {
 	// Use cached format if available
-	format, ok := m.formats[source]
+	format, ok := m.formats.Get(source)
 	if !ok {
 		format = m.detector.Detect(logLine)
-		m.formats[source] = format
+		m.formats.Add(source, format)
 	}
 
 	result := &EnrichedLog{
@@ -528,5 +534,5 @@ func (m *MultiFormatEnricher) EnrichWithSource(source, logLine string, tc *Trace
 
 // ResetFormatCache resets the format cache for a source.
 func (m *MultiFormatEnricher) ResetFormatCache(source string) {
-	delete(m.formats, source)
+	m.formats.Remove(source)
 }

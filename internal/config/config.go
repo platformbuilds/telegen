@@ -1,21 +1,27 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"net"
 	"os"
+	"reflect"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/caarlos0/env/v11"
 	"gopkg.in/yaml.v3"
 
 	"github.com/mirastacklabs-ai/telegen/internal/appolly/services"
-	"github.com/mirastacklabs-ai/telegen/internal/nodeexporter"
 	"github.com/mirastacklabs-ai/telegen/internal/netinfra"
+	"github.com/mirastacklabs-ai/telegen/internal/nodeexporter"
 	obiconfig "github.com/mirastacklabs-ai/telegen/internal/obiconfig"
 	"github.com/mirastacklabs-ai/telegen/internal/profiler"
 	"github.com/mirastacklabs-ai/telegen/internal/storagedef"
 	"github.com/mirastacklabs-ai/telegen/internal/transform"
 	"github.com/mirastacklabs-ai/telegen/internal/vmwaredef"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/prom"
 	"github.com/mirastacklabs-ai/telegen/pkg/filter"
@@ -34,8 +40,13 @@ type Config struct {
 		ServiceName string `yaml:"service_name"`
 	} `yaml:"agent"`
 	SelfTelemetry struct {
-		Listen string `yaml:"listen"`
-		NS     string `yaml:"prometheus_namespace"`
+		Listen       string `yaml:"listen"`
+		HealthListen string `yaml:"health_listen"`
+		NS           string `yaml:"prometheus_namespace"`
+		PprofEnabled bool   `yaml:"pprof_enabled"`
+		// MemoryLimitBytes sets a soft process heap ceiling for Go's runtime.
+		// Keep 0 to leave the memory limit unset.
+		MemoryLimitBytes int64 `yaml:"memory_limit_bytes"`
 	} `yaml:"selfTelemetry"`
 	Cloud struct {
 		AWS AWS `yaml:"aws"`
@@ -57,15 +68,16 @@ type Config struct {
 	} `yaml:"exports"`
 	Pipelines struct {
 		Metrics struct {
-			AlsoExposeProm bool `yaml:"also_expose_prometheus"`
+			AlsoExposeProm   bool `yaml:"also_expose_prometheus"`
+			CardinalityLimit int  `yaml:"cardinality_limit"`
 		} `yaml:"metrics"`
 		Traces struct{ Enabled bool } `yaml:"traces"`
 		Logs   struct {
 			Enabled bool          `yaml:"enabled"`
 			Filelog FilelogConfig `yaml:"filelog"`
 		} `yaml:"logs"`
-		JFR   JFRConfig            `yaml:"jfr"`
-		Kafka KafkaLogsConfig      `yaml:"kafka"`
+		JFR   JFRConfig       `yaml:"jfr"`
+		Kafka KafkaLogsConfig `yaml:"kafka"`
 	} `yaml:"pipelines"`
 
 	// eBPF instrumentation configuration (OBI integration)
@@ -227,6 +239,9 @@ type EBPFConfig struct {
 
 	// Prometheus configures Prometheus metrics endpoint
 	Prometheus prom.PrometheusConfig `yaml:"prometheus_export"`
+
+	// InternalMetrics configures OBI internal metrics reporter export.
+	InternalMetrics imetrics.Config `yaml:"internal_metrics"`
 
 	// NetworkFlows configures network observability
 	NetworkFlows NetworkFlowsConfig `yaml:"network"`
@@ -627,30 +642,30 @@ type KafkaLogsConfig struct {
 
 	// MessageMarking controls offset commit behavior
 	MessageMarking struct {
-		After            bool `yaml:"after"`            // Commit after processing
-		OnError          bool `yaml:"on_error"`         // Commit on transient errors
+		After            bool `yaml:"after"`              // Commit after processing
+		OnError          bool `yaml:"on_error"`           // Commit on transient errors
 		OnPermanentError bool `yaml:"on_permanent_error"` // Commit on permanent errors
 	} `yaml:"message_marking"`
 
 	// Batch configuration
 	Batch struct {
-		Size                int    `yaml:"size"`                   // Max messages per batch
-		Timeout             string `yaml:"timeout"`                // Max batch wait time
-		MaxPartitionBytes   int64  `yaml:"max_partition_bytes"`    // Max bytes per partition
+		Size              int    `yaml:"size"`                // Max messages per batch
+		Timeout           string `yaml:"timeout"`             // Max batch wait time
+		MaxPartitionBytes int64  `yaml:"max_partition_bytes"` // Max bytes per partition
 	} `yaml:"batch"`
 
 	// Parser configuration for log format detection and parsing
 	Parser struct {
-		EnableRuntimeParsing         bool   `yaml:"enable_runtime_parsing"`         // Docker JSON, CRI-O, containerd
-		EnableApplicationParsing     bool   `yaml:"enable_application_parsing"`     // Spring Boot, Log4j, JSON
-		EnableK8sEnrichment          bool   `yaml:"enable_k8s_enrichment"`          // K8s metadata extraction
-		EnableTraceContextEnrichment bool   `yaml:"enable_trace_context_enrichment"` // eBPF trace correlation
-		TraceContextTolerance        string `yaml:"trace_context_tolerance"`        // Timestamp skew window
-		ApplicationParsers           []string `yaml:"application_parsers"`            // Specific parsers to enable
-		DefaultSeverity              string `yaml:"default_severity"`               // Default log level
+		EnableRuntimeParsing         bool     `yaml:"enable_runtime_parsing"`          // Docker JSON, CRI-O, containerd
+		EnableApplicationParsing     bool     `yaml:"enable_application_parsing"`      // Spring Boot, Log4j, JSON
+		EnableK8sEnrichment          bool     `yaml:"enable_k8s_enrichment"`           // K8s metadata extraction
+		EnableTraceContextEnrichment bool     `yaml:"enable_trace_context_enrichment"` // eBPF trace correlation
+		TraceContextTolerance        string   `yaml:"trace_context_tolerance"`         // Timestamp skew window
+		ApplicationParsers           []string `yaml:"application_parsers"`             // Specific parsers to enable
+		DefaultSeverity              string   `yaml:"default_severity"`                // Default log level
 	} `yaml:"parser"`
 
-	// Telemetry configuration  
+	// Telemetry configuration
 	Telemetry struct {
 		KafkaReceiverRecords      bool `yaml:"kafka_receiver_records"`
 		KafkaReceiverOffsetLag    bool `yaml:"kafka_receiver_offset_lag"`
@@ -804,7 +819,16 @@ func Load(path string) (*Config, error) {
 	// Expand environment variables in config (e.g., ${OTLP_ENDPOINT})
 	expanded := os.ExpandEnv(string(b))
 	var c Config
-	if err := yaml.Unmarshal([]byte(expanded), &c); err != nil {
+	c.Profiling = profiler.DefaultRunnerConfig()
+	c.SelfTelemetry.Listen = ":19090"
+	c.SelfTelemetry.HealthListen = ":8080"
+	c.Pipelines.Metrics.CardinalityLimit = 2000
+	c.EBPF.InternalMetrics.Exporter = imetrics.InternalMetricsExporterPrometheus
+	c.EBPF.InternalMetrics.Prometheus.Path = "/metrics"
+
+	dec := yaml.NewDecoder(strings.NewReader(expanded))
+	dec.KnownFields(true)
+	if err := dec.Decode(&c); err != nil {
 		return nil, err
 	}
 	// Parse environment variables from struct tags (e.g., env:"OTEL_EBPF_KUBE_CLUSTER_NAME")
@@ -815,7 +839,154 @@ func Load(path string) (*Config, error) {
 	if c.SelfTelemetry.Listen == "" {
 		c.SelfTelemetry.Listen = ":19090"
 	}
+	if c.SelfTelemetry.HealthListen == "" {
+		c.SelfTelemetry.HealthListen = ":8080"
+	}
+	if c.Pipelines.Metrics.CardinalityLimit <= 0 {
+		c.Pipelines.Metrics.CardinalityLimit = 2000
+	}
+	applyInternalMetricsDefaults(&c)
+	if err := c.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
 	return &c, nil
+}
+
+func applyInternalMetricsDefaults(c *Config) {
+	if c == nil {
+		return
+	}
+	if c.EBPF.InternalMetrics.Exporter == "" {
+		c.EBPF.InternalMetrics.Exporter = imetrics.InternalMetricsExporterPrometheus
+	}
+	if c.EBPF.InternalMetrics.Exporter != imetrics.InternalMetricsExporterPrometheus {
+		return
+	}
+	if c.EBPF.InternalMetrics.Prometheus.Path == "" {
+		c.EBPF.InternalMetrics.Prometheus.Path = "/metrics"
+	}
+	if c.EBPF.InternalMetrics.Prometheus.Port != 0 {
+		return
+	}
+	if _, port, err := net.SplitHostPort(c.SelfTelemetry.Listen); err == nil {
+		if parsedPort, convErr := strconv.Atoi(port); convErr == nil && parsedPort > 0 {
+			c.EBPF.InternalMetrics.Prometheus.Port = parsedPort
+			return
+		}
+	}
+	c.EBPF.InternalMetrics.Prometheus.Port = 19090
+}
+
+func (c *Config) Validate() error {
+	if c == nil {
+		return errors.New("config is nil")
+	}
+
+	var errs []error
+	validateConfigValue(reflect.ValueOf(c).Elem(), "config", &errs)
+
+	validateListen := func(fieldName, addr string) {
+		if addr == "" {
+			errs = append(errs, fmt.Errorf("%s must not be empty", fieldName))
+			return
+		}
+		if _, _, err := net.SplitHostPort(addr); err != nil {
+			errs = append(errs, fmt.Errorf("%s is not host:port parseable: %w", fieldName, err))
+		}
+	}
+
+	validateListen("selfTelemetry.listen", c.SelfTelemetry.Listen)
+	validateListen("selfTelemetry.health_listen", c.SelfTelemetry.HealthListen)
+	if c.SelfTelemetry.MemoryLimitBytes < 0 {
+		errs = append(errs, fmt.Errorf("selfTelemetry.memory_limit_bytes must be >= 0"))
+	}
+
+	if len(errs) == 0 {
+		return nil
+	}
+	return errors.Join(errs...)
+}
+
+func validateConfigValue(v reflect.Value, fieldPath string, errs *[]error) {
+	if !v.IsValid() {
+		return
+	}
+
+	durationType := reflect.TypeOf(time.Duration(0))
+	switch v.Kind() {
+	case reflect.Pointer:
+		if v.IsNil() {
+			return
+		}
+		validateConfigValue(v.Elem(), fieldPath, errs)
+		return
+	case reflect.Struct:
+		if v.Type() == durationType {
+			if v.Int() < 0 {
+				*errs = append(*errs, fmt.Errorf("%s must be >= 0", fieldPath))
+			}
+			return
+		}
+
+		t := v.Type()
+		for i := 0; i < v.NumField(); i++ {
+			sf := t.Field(i)
+			if sf.PkgPath != "" {
+				continue
+			}
+
+			fv := v.Field(i)
+			nextPath := fieldPath + "." + sf.Name
+			if fieldPath == "" {
+				nextPath = sf.Name
+			}
+
+			if sf.Type == durationType {
+				if fv.Int() < 0 {
+					*errs = append(*errs, fmt.Errorf("%s must be >= 0", nextPath))
+				}
+				continue
+			}
+
+			if shouldValidateQueueBatchBufferSize(sf, nextPath) && isSignedIntKind(fv.Kind()) && fv.Int() < 0 {
+				*errs = append(*errs, fmt.Errorf("%s must be >= 0", nextPath))
+			}
+
+			validateConfigValue(fv, nextPath, errs)
+		}
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < v.Len(); i++ {
+			validateConfigValue(v.Index(i), fmt.Sprintf("%s[%d]", fieldPath, i), errs)
+		}
+	case reflect.Map:
+		iter := v.MapRange()
+		for iter.Next() {
+			validateConfigValue(iter.Value(), fmt.Sprintf("%s[%v]", fieldPath, iter.Key().Interface()), errs)
+		}
+	}
+}
+
+func shouldValidateQueueBatchBufferSize(sf reflect.StructField, fieldPath string) bool {
+	kind := sf.Type.Kind()
+	if !isSignedIntKind(kind) {
+		return false
+	}
+
+	name := strings.ToLower(sf.Name)
+	tag := strings.ToLower(sf.Tag.Get("yaml"))
+	path := strings.ToLower(fieldPath)
+	joined := name + " " + tag + " " + path
+	return strings.Contains(joined, "queue") ||
+		strings.Contains(joined, "batch") ||
+		strings.Contains(joined, "buffer")
+}
+
+func isSignedIntKind(kind reflect.Kind) bool {
+	return kind == reflect.Int ||
+		kind == reflect.Int8 ||
+		kind == reflect.Int16 ||
+		kind == reflect.Int32 ||
+		kind == reflect.Int64
 }
 
 type AWS struct {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -33,9 +34,9 @@ type Processor struct {
 	escapeChan  chan *EscapeEvent
 
 	// Metrics
-	eventsProcessed uint64
-	eventsDropped   uint64
-	alertsSent      uint64
+	eventsProcessed atomic.Uint64
+	eventsDropped   atomic.Uint64
+	alertsSent      atomic.Uint64
 
 	// Lifecycle
 	ctx    context.Context
@@ -105,9 +106,9 @@ func (p *Processor) Start() error {
 // Stop stops the processor
 func (p *Processor) Stop() error {
 	p.logger.Info("stopping security event processor",
-		"events_processed", p.eventsProcessed,
-		"events_dropped", p.eventsDropped,
-		"alerts_sent", p.alertsSent)
+		"events_processed", p.eventsProcessed.Load(),
+		"events_dropped", p.eventsDropped.Load(),
+		"alerts_sent", p.alertsSent.Load())
 
 	p.cancel()
 	p.wg.Wait()
@@ -119,7 +120,7 @@ func (p *Processor) ProcessSyscall(event *SyscallEvent) {
 	select {
 	case p.syscallChan <- event:
 	default:
-		p.eventsDropped++
+		p.eventsDropped.Add(1)
 	}
 }
 
@@ -128,7 +129,7 @@ func (p *Processor) ProcessExecve(event *ExecveEvent) {
 	select {
 	case p.execveChan <- event:
 	default:
-		p.eventsDropped++
+		p.eventsDropped.Add(1)
 	}
 }
 
@@ -137,7 +138,7 @@ func (p *Processor) ProcessFile(event *FileEvent) {
 	select {
 	case p.fileChan <- event:
 	default:
-		p.eventsDropped++
+		p.eventsDropped.Add(1)
 	}
 }
 
@@ -146,7 +147,7 @@ func (p *Processor) ProcessEscape(event *EscapeEvent) {
 	select {
 	case p.escapeChan <- event:
 	default:
-		p.eventsDropped++
+		p.eventsDropped.Add(1)
 	}
 }
 
@@ -346,7 +347,7 @@ func (p *Processor) flushSyscallBatch(batch []*SyscallEvent) {
 	for _, event := range batch {
 		lr := sl.LogRecords().AppendEmpty()
 		p.syscallToLogRecord(event, lr)
-		p.eventsProcessed++
+		p.eventsProcessed.Add(1)
 	}
 
 	if err := p.exporter.Export(p.ctx, logs); err != nil {
@@ -367,7 +368,7 @@ func (p *Processor) flushExecveBatch(batch []*ExecveEvent) {
 	for _, event := range batch {
 		lr := sl.LogRecords().AppendEmpty()
 		p.execveToLogRecord(event, lr)
-		p.eventsProcessed++
+		p.eventsProcessed.Add(1)
 	}
 
 	if err := p.exporter.Export(p.ctx, logs); err != nil {
@@ -388,7 +389,7 @@ func (p *Processor) flushFileBatch(batch []*FileEvent) {
 	for _, event := range batch {
 		lr := sl.LogRecords().AppendEmpty()
 		p.fileToLogRecord(event, lr)
-		p.eventsProcessed++
+		p.eventsProcessed.Add(1)
 	}
 
 	if err := p.exporter.Export(p.ctx, logs); err != nil {
@@ -409,7 +410,7 @@ func (p *Processor) flushEscapeBatch(batch []*EscapeEvent) {
 	for _, event := range batch {
 		lr := sl.LogRecords().AppendEmpty()
 		p.escapeToLogRecord(event, lr)
-		p.eventsProcessed++
+		p.eventsProcessed.Add(1)
 	}
 
 	if err := p.exporter.Export(p.ctx, logs); err != nil {
@@ -580,7 +581,7 @@ func (p *Processor) sendAlerts(alerts []*Alert) {
 		if err := p.alerter.Send(p.ctx, alert); err != nil {
 			p.logger.Error("failed to send alert", "error", err, "alert_id", alert.ID)
 		} else {
-			p.alertsSent++
+			p.alertsSent.Add(1)
 		}
 	}
 }

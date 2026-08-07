@@ -133,7 +133,7 @@ func TestContainerInfoWithTemplate(t *testing.T) {
 	assert.True(t, ok)
 	assert.Len(t, replicaSetContainers, 2)
 
-	assert.Empty(t, store.otelServiceInfoByIP)
+	assert.Equal(t, 0, store.otelServiceInfoByIP.Len())
 
 	t.Run("test with service attributes set", func(t *testing.T) {
 		for _, ip := range []string{"169.0.0.1", "1.1.1.1"} {
@@ -172,13 +172,13 @@ func TestContainerInfoWithTemplate(t *testing.T) {
 		})
 	})
 
-	assert.Len(t, store.otelServiceInfoByIP, 3)
+	assert.Equal(t, 3, store.otelServiceInfoByIP.Len())
 	// Delete the pod which had good definition for the OTel variables.
 	// We expect much different service names now
 	_ = store.On(&informer.Event{Type: informer.EventType_DELETED, Resource: &podMetaA})
 	// We cleaned up the cache for service IPs. We must clean all of it
 	// otherwise there will be stale data left
-	assert.Empty(t, store.otelServiceInfoByIP)
+	assert.Equal(t, 0, store.otelServiceInfoByIP.Len())
 
 	serviceKey = ownerID(podMetaA.Namespace, service.Name)
 	serviceContainers, ok = store.containersByOwner[serviceKey]
@@ -204,7 +204,7 @@ func TestContainerInfoWithTemplate(t *testing.T) {
 	})
 
 	// 3 again, because we cache that we can't see the IP in our info
-	assert.Len(t, store.otelServiceInfoByIP, 3)
+	assert.Equal(t, 3, store.otelServiceInfoByIP.Len())
 
 	t.Run("test with only namespace attributes set", func(tt *testing.T) {
 		// We removed the pod that defined the env variables
@@ -219,12 +219,12 @@ func TestContainerInfoWithTemplate(t *testing.T) {
 		assert.Equal(tt, "namespaceB", k8sNamespace)
 	})
 
-	assert.Len(t, store.otelServiceInfoByIP, 5)
+	assert.Equal(t, 5, store.otelServiceInfoByIP.Len())
 
 	_ = store.On(&informer.Event{Type: informer.EventType_DELETED, Resource: &podMetaA1})
 	_ = store.On(&informer.Event{Type: informer.EventType_DELETED, Resource: &podMetaB})
 
-	assert.Empty(t, store.otelServiceInfoByIP)
+	assert.Equal(t, 0, store.otelServiceInfoByIP.Len())
 
 	// No containers left
 	replicaSetKey = ownerID(podMetaB.Namespace, replicaSet.Name)
@@ -365,7 +365,7 @@ func TestContainerInfo(t *testing.T) {
 	assert.True(t, ok)
 	assert.Len(t, replicaSetContainers, 2)
 
-	assert.Empty(t, store.otelServiceInfoByIP)
+	assert.Equal(t, 0, store.otelServiceInfoByIP.Len())
 
 	t.Run("test with service attributes set", func(t *testing.T) {
 		for _, ip := range []string{"169.0.0.1", "1.1.1.1"} {
@@ -386,13 +386,13 @@ func TestContainerInfo(t *testing.T) {
 		})
 	})
 
-	assert.Len(t, store.otelServiceInfoByIP, 3)
+	assert.Equal(t, 3, store.otelServiceInfoByIP.Len())
 	// Delete the pod which had good definition for the OTel variables.
 	// We expect much different service names now
 	_ = store.On(&informer.Event{Type: informer.EventType_DELETED, Resource: &podMetaA})
 	// We cleaned up the cache for service IPs. We must clean all of it
 	// otherwise there will be stale data left
-	assert.Empty(t, store.otelServiceInfoByIP)
+	assert.Equal(t, 0, store.otelServiceInfoByIP.Len())
 
 	serviceKey = ownerID(podMetaA.Namespace, service.Name)
 	serviceContainers, ok = store.containersByOwner[serviceKey]
@@ -417,7 +417,7 @@ func TestContainerInfo(t *testing.T) {
 	})
 
 	// 3 again, because we cache that we can't see the IP in our info
-	assert.Len(t, store.otelServiceInfoByIP, 3)
+	assert.Equal(t, 3, store.otelServiceInfoByIP.Len())
 
 	t.Run("test with only namespace attributes set", func(t *testing.T) {
 		// We removed the pod that defined the env variables
@@ -431,12 +431,12 @@ func TestContainerInfo(t *testing.T) {
 		}
 	})
 
-	assert.Len(t, store.otelServiceInfoByIP, 5)
+	assert.Equal(t, 5, store.otelServiceInfoByIP.Len())
 
 	_ = store.On(&informer.Event{Type: informer.EventType_DELETED, Resource: &podMetaA1})
 	_ = store.On(&informer.Event{Type: informer.EventType_DELETED, Resource: &podMetaB})
 
-	assert.Empty(t, store.otelServiceInfoByIP)
+	assert.Equal(t, 0, store.otelServiceInfoByIP.Len())
 
 	// No containers left
 	replicaSetKey = ownerID(podMetaB.Namespace, replicaSet.Name)
@@ -550,7 +550,7 @@ func TestMemoryCleanedUp(t *testing.T) {
 	assert.Empty(t, store.podsByContainer)
 	assert.Empty(t, store.containersByOwner)
 	assert.Empty(t, store.objectMetaByIP)
-	assert.Empty(t, store.otelServiceInfoByIP)
+	assert.Equal(t, 0, store.otelServiceInfoByIP.Len())
 }
 
 // Fixes a memory leak in the store where the objectMetaByIP map was not cleaned up

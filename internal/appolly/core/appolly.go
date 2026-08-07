@@ -97,7 +97,7 @@ func New(ctx context.Context, ctxInfo *global.ContextInfo, config *obi.Config) (
 		processEventInput: processEventsInput,
 		bp:                bp,
 		peGraphBuilder:    swi,
-		ebpfEventContext:  ebpfcommon.NewEBPFEventContext(),
+		ebpfEventContext:  ebpfcommon.NewEBPFEventContext(config.EBPF.MapsConfig),
 	}, nil
 }
 

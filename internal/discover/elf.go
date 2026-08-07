@@ -44,6 +44,13 @@ func findExecElf(p *services.ProcessInfo, svcID svc.Attrs) (*exec.FileInfo, erro
 	if file.ELF, err = elf.Open(file.ProExeLinkPath); err != nil {
 		return nil, fmt.Errorf("can't open ELF file in %s: %w", file.ProExeLinkPath, err)
 	}
+	closeELFOnErr := true
+	defer func() {
+		if closeELFOnErr && file.ELF != nil {
+			_ = file.ELF.Close()
+			file.ELF = nil
+		}
+	}()
 
 	info, err := os.Stat(file.ProExeLinkPath)
 	if err == nil {
@@ -63,6 +70,7 @@ func findExecElf(p *services.ProcessInfo, svcID svc.Attrs) (*exec.FileInfo, erro
 
 	file.Service = setServiceEnvVariables(file.Service, envVars)
 
+	closeELFOnErr = false
 	return &file, nil
 }
 

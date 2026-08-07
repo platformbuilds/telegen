@@ -70,7 +70,7 @@ type Tracer struct {
 	closers          []io.Closer
 	log              *slog.Logger
 	instrumentedLibs ebpfcommon.InstrumentedLibsT
-	libsMux          sync.Mutex
+	libsMux          sync.RWMutex
 	pidMap           map[pidKey]uint64
 	symbolsMap       map[uint64]moduleOffsets
 	baseMap          map[pidKey][]modInfo
@@ -85,7 +85,7 @@ func New(pidFilter ebpfcommon.ServiceFilter, cfg *obi.Config, metrics imetrics.R
 		metrics:          metrics,
 		pidsFilter:       pidFilter,
 		instrumentedLibs: make(ebpfcommon.InstrumentedLibsT),
-		libsMux:          sync.Mutex{},
+		libsMux:          sync.RWMutex{},
 		pidMap:           map[pidKey]uint64{},
 		symbolsMap:       map[uint64]moduleOffsets{},
 		baseMap:          map[pidKey][]modInfo{},
@@ -217,8 +217,8 @@ func (p *Tracer) UnlinkInstrumentedLib(id uint64) {
 }
 
 func (p *Tracer) AlreadyInstrumentedLib(id uint64) bool {
-	p.libsMux.Lock()
-	defer p.libsMux.Unlock()
+	p.libsMux.RLock()
+	defer p.libsMux.RUnlock()
 
 	module := p.instrumentedLibs.Find(id)
 
@@ -401,7 +401,10 @@ func (p *Tracer) processCudaFileInfo(info *exec.FileInfo) {
 	p.log.Info("Processing CUDA symbols for", "pid", info.Pid, "ns", info.Ns)
 
 	disovered := []*procfs.ProcMap{}
-	symModules, ok := p.symbolsMap[info.Ino]
+	p.libsMux.RLock()
+	existingModules, ok := p.symbolsMap[info.Ino]
+	p.libsMux.RUnlock()
+	symModules := cloneModuleOffsets(existingModules)
 	if !ok {
 		symModules = moduleOffsets{}
 	}
@@ -436,7 +439,9 @@ func (p *Tracer) processCudaFileInfo(info *exec.FileInfo) {
 
 	p.log.Debug("Sym modules have", "count", len(symModules))
 
+	p.libsMux.Lock()
 	p.symbolsMap[info.Ino] = symModules
+	p.libsMux.Unlock()
 	if len(disovered) > 0 {
 		p.establishCudaPID(uint32(info.Pid), info, disovered)
 	}
@@ -462,16 +467,20 @@ func (p *Tracer) establishCudaPID(pid uint32, fi *exec.FileInfo, mods []*procfs.
 			continue
 		}
 		k := pidKey{Pid: int32(nsPid), Ns: fi.Ns}
+		p.libsMux.Lock()
 		p.baseMap[k] = bases
 		p.pidMap[k] = fi.Ino
+		p.libsMux.Unlock()
 		p.log.Debug("Setting pid map", "pid", pid, "bases", bases)
 	}
 }
 
 func (p *Tracer) removeCudaPID(pid uint32, ns uint32) {
 	k := pidKey{Pid: int32(pid), Ns: ns}
+	p.libsMux.Lock()
 	delete(p.baseMap, k)
 	delete(p.pidMap, k)
+	p.libsMux.Unlock()
 }
 
 func (p *Tracer) symToName(sym string) string {
@@ -505,22 +514,28 @@ func (p *Tracer) modulesAddressInfos(pid uint32, mods []*procfs.ProcMap) ([]modI
 func (p *Tracer) symForAddr(pid int32, ns uint32, off uint64) (string, bool) {
 	k := pidKey{Pid: pid, Ns: ns}
 
+	p.libsMux.RLock()
 	fInfo, ok := p.pidMap[k]
 	if !ok {
+		p.libsMux.RUnlock()
 		p.log.Warn("Can't find pid info for cuda", "pid", pid, "ns", ns)
 		return "", false
 	}
 	syms, ok := p.symbolsMap[fInfo]
 	if !ok {
+		p.libsMux.RUnlock()
 		p.log.Warn("Can't find symbols for ino", "ino", fInfo)
 		return "", false
 	}
 
 	base, ok := p.baseMap[k]
 	if !ok {
+		p.libsMux.RUnlock()
 		p.log.Warn("Can't find basemap")
 		return "", false
 	}
+	base = append([]modInfo(nil), base...)
+	p.libsMux.RUnlock()
 
 	for i := range base {
 		m := &base[i]
@@ -539,6 +554,17 @@ func (p *Tracer) symForAddr(pid int32, ns uint32, off uint64) (string, bool) {
 	}
 
 	return "", false
+}
+
+func cloneModuleOffsets(src moduleOffsets) moduleOffsets {
+	if len(src) == 0 {
+		return moduleOffsets{}
+	}
+	dst := make(moduleOffsets, len(src))
+	for ino, symbols := range src {
+		dst[ino] = symbols
+	}
+	return dst
 }
 
 func (p *Tracer) collectSymbols(f *elf.File, syms []elf.Symbol, tree *SymbolTree) {

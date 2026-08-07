@@ -155,31 +155,31 @@ type StatusReporter func(status ComponentStatus, err error)
 //
 // Receiver implements kgo.Hook interface for telemetry hooks.
 type Receiver struct {
-	config           Config
-	clusterName      string // Cluster identifier for multi-cluster support
-	logger           *slog.Logger
-	serviceName      string
-	parserPipeline   *parsers.Pipeline
-	loggerProvider   *sdklog.LoggerProvider
+	config         Config
+	clusterName    string // Cluster identifier for multi-cluster support
+	logger         *slog.Logger
+	serviceName    string
+	parserPipeline *parsers.Pipeline
+	loggerProvider *sdklog.LoggerProvider
 
-	mu          sync.RWMutex
-	client      *kgo.Client
-	started     chan struct{}
-	closing     chan struct{}
-	wg          sync.WaitGroup
-	
+	mu      sync.RWMutex
+	client  *kgo.Client
+	started chan struct{}
+	closing chan struct{}
+	wg      sync.WaitGroup
+
 	// Per-partition state management (following OTEL pattern)
 	assignments map[topicPartition]*partitionConsumer
-	
+
 	// Topic exclusion patterns (compiled regexes)
 	excludePatterns []*regexp.Regexp
-	
+
 	// Header keys to extract (empty = extract all when enabled)
 	headerKeys map[string]struct{}
-	
+
 	// Metrics collection enabled flags
 	metricsEnabled bool
-	
+
 	// Component status reporting
 	status         ComponentStatus
 	statusReporter StatusReporter
@@ -252,7 +252,7 @@ func (r *Receiver) OnFetchBatchRead(meta kgo.BrokerMetadata, topic string, parti
 	if r.metricsEnabled && r.config.Telemetry.KafkaFetchBatchMetrics {
 		partitionStr := fmt.Sprintf("%d", partition)
 		compression := compressionCodecToString(metrics.CompressionType)
-		
+
 		kafkaFetchBatchRecords.WithLabelValues(topic, partitionStr, compression).Add(float64(metrics.NumRecords))
 		kafkaFetchBatchBytes.WithLabelValues(topic, partitionStr).Add(float64(metrics.CompressedBytes))
 		kafkaFetchBatchBytesUncompressed.WithLabelValues(topic, partitionStr).Add(float64(metrics.UncompressedBytes))
@@ -284,13 +284,13 @@ type topicPartition struct {
 
 // partitionConsumer tracks per-partition state and in-flight message processing
 type partitionConsumer struct {
-	logger        *slog.Logger
-	ctx           context.Context
-	cancel        context.CancelCauseFunc
-	mu            sync.RWMutex
-	wg            sync.WaitGroup // Tracks in-flight message processing goroutines
-	backoff       *backoff.ExponentialBackOff
-	lastOffset    atomic.Int64   // Last successfully processed offset
+	logger     *slog.Logger
+	ctx        context.Context
+	cancel     context.CancelCauseFunc
+	mu         sync.RWMutex
+	wg         sync.WaitGroup // Tracks in-flight message processing goroutines
+	backoff    *backoff.ExponentialBackOff
+	lastOffset atomic.Int64 // Last successfully processed offset
 }
 
 // isPermanentError checks if an error should not be retried
@@ -428,12 +428,12 @@ func NewReceiver(
 		metricsEnabled:  metricsEnabled,
 		status:          StatusStopped,
 	}
-	
+
 	// Apply functional options
 	for _, opt := range opts {
 		opt(receiver)
 	}
-	
+
 	return receiver, nil
 }
 
@@ -503,7 +503,7 @@ func (r *Receiver) Start(ctx context.Context) error {
 
 	// TLS configuration
 	if r.config.TLS.Enable {
-		tlsCfg := &struct{
+		tlsCfg := &struct {
 			Enable             bool
 			CAFile             string
 			CertFile           string
@@ -629,9 +629,9 @@ func (r *Receiver) Start(ctx context.Context) error {
 func (r *Receiver) Stop(ctx context.Context) error {
 	// Report stopping status
 	r.reportStatus(StatusStopping, nil)
-	
+
 	r.mu.Lock()
-	
+
 	select {
 	case <-r.closing:
 		r.mu.Unlock()
@@ -670,7 +670,7 @@ func (r *Receiver) reportStatus(status ComponentStatus, err error) {
 	if r.statusReporter != nil {
 		r.statusReporter(status, err)
 	}
-	
+
 	// Also log status changes
 	if err != nil {
 		r.logger.Error("kafka receiver status change",
@@ -755,7 +755,9 @@ func (r *Receiver) onPartitionsLost(ctx context.Context, client *kgo.Client, los
 				} else {
 					pc.cancel(errors.New("partition revoked"))
 				}
+				pc.mu.Lock()
 				pc.wg.Wait() // Wait for in-flight messages to finish
+				pc.mu.Unlock()
 				delete(r.assignments, tp)
 				r.logger.Info("partition removed", slog.String("topic", topic), slog.Int64("partition", int64(partition)))
 			}
@@ -870,14 +872,14 @@ func (r *Receiver) consumeLoop(ctx context.Context) {
 			}
 
 			// Try to add this message processing to partition consumer's wait group
-			pc.mu.RLock()
+			pc.mu.Lock()
 			select {
 			case <-pc.ctx.Done():
-				pc.mu.RUnlock()
+				pc.mu.Unlock()
 				return // Partition is being lost, skip
 			default:
 				pc.wg.Add(1)
-				pc.mu.RUnlock()
+				pc.mu.Unlock()
 			}
 
 			wg.Add(1)
@@ -1475,8 +1477,8 @@ type MultiReceiver struct {
 	started        bool
 	statusReporter StatusReporter
 	// Fields needed for dynamic receiver creation
-	serviceName    string
-	lp             *sdklog.LoggerProvider
+	serviceName string
+	lp          *sdklog.LoggerProvider
 }
 
 // MultiReceiverConfig holds configs for multiple Kafka clusters
@@ -1635,7 +1637,7 @@ func (mr *MultiReceiver) Stop(ctx context.Context) error {
 func (mr *MultiReceiver) Receivers() []*Receiver {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
-	
+
 	// Return a copy to prevent external modification
 	result := make([]*Receiver, len(mr.receivers))
 	copy(result, mr.receivers)
@@ -1646,7 +1648,7 @@ func (mr *MultiReceiver) Receivers() []*Receiver {
 func (mr *MultiReceiver) ClusterNames() []string {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
-	
+
 	names := make([]string, len(mr.receivers))
 	for i, r := range mr.receivers {
 		names[i] = r.ClusterName()
@@ -1658,7 +1660,7 @@ func (mr *MultiReceiver) ClusterNames() []string {
 func (mr *MultiReceiver) GetReceiver(clusterName string) *Receiver {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
-	
+
 	for _, r := range mr.receivers {
 		if r.ClusterName() == clusterName {
 			return r

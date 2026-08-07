@@ -23,8 +23,10 @@ type Batcher struct {
 	batches  map[SignalType]*batch
 	exportFn ExportFunc
 
-	stopCh chan struct{}
-	wg     sync.WaitGroup
+	stopCh   chan struct{}
+	stopOnce sync.Once
+	wg       sync.WaitGroup
+	queueSem chan struct{}
 }
 
 // batch holds a single batch of data.
@@ -37,11 +39,16 @@ type batch struct {
 
 // NewBatcher creates a new batcher.
 func NewBatcher(cfg BatchConfig, log *slog.Logger) *Batcher {
+	maxQueueSize := cfg.MaxQueueSize
+	if maxQueueSize <= 0 {
+		maxQueueSize = 1
+	}
 	return &Batcher{
-		cfg:     cfg,
-		log:     log.With("component", "batcher"),
-		batches: make(map[SignalType]*batch),
-		stopCh:  make(chan struct{}),
+		cfg:      cfg,
+		log:      log.With("component", "batcher"),
+		batches:  make(map[SignalType]*batch),
+		stopCh:   make(chan struct{}),
+		queueSem: make(chan struct{}, maxQueueSize),
 	}
 }
 
@@ -50,6 +57,8 @@ func (b *Batcher) Start(ctx context.Context, exportFn ExportFunc) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	b.stopCh = make(chan struct{})
+	b.stopOnce = sync.Once{}
 	b.exportFn = exportFn
 	b.log.Info("batcher started",
 		"max_batch_size", b.cfg.MaxBatchSize,
@@ -60,15 +69,24 @@ func (b *Batcher) Start(ctx context.Context, exportFn ExportFunc) {
 
 // Stop stops the batcher and flushes remaining batches.
 func (b *Batcher) Stop(ctx context.Context) error {
-	close(b.stopCh)
+	b.stopOnce.Do(func() { close(b.stopCh) })
 
 	// Flush all pending batches
 	if err := b.Flush(ctx); err != nil {
 		b.log.Warn("error flushing batches during shutdown", "error", err)
 	}
 
-	b.wg.Wait()
-	return nil
+	done := make(chan struct{})
+	go func() {
+		b.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Add adds data to the batch for the specified signal.
@@ -184,10 +202,17 @@ func (b *Batcher) exportLocked(ctx context.Context, signal SignalType, data [][]
 		return fmt.Errorf("export function not set")
 	}
 
+	select {
+	case b.queueSem <- struct{}{}:
+	default:
+		return fmt.Errorf("batch export queue full (max_queue_size=%d)", cap(b.queueSem))
+	}
+
 	// Export in background to not block Add
 	b.wg.Add(1)
 	go func() {
 		defer b.wg.Done()
+		defer func() { <-b.queueSem }()
 		if err := b.exportFn(ctx, signal, combined); err != nil {
 			b.log.Warn("batch export failed", "signal", signal, "error", err)
 		}
