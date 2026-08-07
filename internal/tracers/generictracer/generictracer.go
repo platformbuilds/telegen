@@ -41,6 +41,7 @@ type Tracer struct {
 	metrics          imetrics.Reporter
 	bpfObjects       BpfObjects
 	closers          []io.Closer
+	closersMu        sync.RWMutex
 	log              *slog.Logger
 	qdiscs           map[ifaces.Interface]*netlink.GenericQdisc
 	egressFilters    map[ifaces.Interface]*netlink.BpfFilter
@@ -303,6 +304,8 @@ func (p *Tracer) BpfObjects() any {
 }
 
 func (p *Tracer) AddCloser(c ...io.Closer) {
+	p.closersMu.Lock()
+	defer p.closersMu.Unlock()
 	p.closers = append(p.closers, c...)
 }
 
@@ -603,6 +606,10 @@ func (p *Tracer) Run(ctx context.Context, ebpfEventContext *ebpfcommon.EBPFEvent
 	}
 
 	p.log.Info("Launching p.Tracer")
+	p.closersMu.RLock()
+	closers := append([]io.Closer(nil), p.closers...)
+	p.closersMu.RUnlock()
+	closers = append(closers, &p.bpfObjects)
 
 	ebpfcommon.SharedRingbuf(
 		ebpfEventContext,
@@ -611,7 +618,7 @@ func (p *Tracer) Run(ctx context.Context, ebpfEventContext *ebpfcommon.EBPFEvent
 		p.pidsFilter,
 		p.bpfObjects.Events,
 		p.metrics,
-	)(ctx, append(p.closers, &p.bpfObjects), eventsChan)
+	)(ctx, closers, eventsChan)
 }
 
 func kernelTime(ktime uint64) time.Time {

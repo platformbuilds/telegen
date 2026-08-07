@@ -165,7 +165,12 @@ discovery:
 				AsyncWriterWorkers:    8,
 				AsyncWriterChannelLen: 500,
 			},
-			BPFFSPath:      "/sys/fs/bpf/",
+			BPFFSPath: "/sys/fs/bpf/",
+			MapsConfig: config.MapsConfig{
+				DNSRingBufferSizeBytes:    1 * 1024 * 1024,
+				MySQLRingBufferSizeBytes:  1 * 1024 * 1024,
+				OracleRingBufferSizeBytes: 1 * 1024 * 1024,
+			},
 			InstrumentCuda: config.CudaModeAuto,
 		},
 		NetworkFlows: nc,
@@ -268,7 +273,7 @@ discovery:
 		},
 		NameResolver: &transform.NameResolverConfig{
 			Sources:  []transform.Source{transform.SourceK8s, transform.SourceDNS},
-			CacheLen: 1024,
+			CacheLen: 4096,
 			CacheTTL: 5 * time.Minute,
 		},
 		Discovery: services.DiscoveryConfig{

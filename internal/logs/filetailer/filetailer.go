@@ -31,6 +31,8 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 )
 
+const trackedPathSweepInterval = time.Minute
+
 // Options configures the file tailer
 type Options struct {
 	// Globs are the file patterns to watch
@@ -194,6 +196,7 @@ func (t *Tailer) Run(stop <-chan struct{}) error {
 	}
 	tick := time.NewTicker(t.pollInterval)
 	defer tick.Stop()
+	lastSweep := time.Now()
 	for {
 		select {
 		case <-tick.C:
@@ -203,19 +206,57 @@ func (t *Tailer) Run(stop <-chan struct{}) error {
 			if t.k8sDiscovery != nil {
 				allGlobs = append(allGlobs, t.k8sDiscovery.DiscoveredPaths()...)
 			}
+			discoveredPaths := make(map[string]struct{})
 			for _, g := range allGlobs {
 				matches, _ := filepath.Glob(g)
 				for _, p := range matches {
 					if t.isExcluded(p) {
 						continue
 					}
+					discoveredPaths[p] = struct{}{}
 					t.tailOnce(p)
 				}
+			}
+			t.pruneTrackedPaths(discoveredPaths)
+			if time.Since(lastSweep) >= trackedPathSweepInterval {
+				t.sweepMissingTrackedPaths()
+				lastSweep = time.Now()
 			}
 		case <-stop:
 			return nil
 		}
 	}
+}
+
+func (t *Tailer) pruneTrackedPaths(discoveredPaths map[string]struct{}) {
+	t.filePositions.Range(func(key, _ any) bool {
+		path, ok := key.(string)
+		if !ok {
+			return true
+		}
+		if _, exists := discoveredPaths[path]; !exists {
+			t.deleteTrackedPath(path)
+		}
+		return true
+	})
+}
+
+func (t *Tailer) sweepMissingTrackedPaths() {
+	t.filePositions.Range(func(key, _ any) bool {
+		path, ok := key.(string)
+		if !ok {
+			return true
+		}
+		if _, err := os.Stat(path); err != nil && os.IsNotExist(err) {
+			t.deleteTrackedPath(path)
+		}
+		return true
+	})
+}
+
+func (t *Tailer) deleteTrackedPath(path string) {
+	t.filePositions.Delete(path)
+	t.initializedFiles.Delete(path)
 }
 
 // isExcluded returns true if the path matches any of the configured exclude patterns.

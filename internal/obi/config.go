@@ -146,7 +146,12 @@ var DefaultConfig = Config{
 		KafkaTopicUUIDCacheSize:             1024,
 		AMQPLastDestinationCacheSize:        1024,
 		CouchbaseDBCacheSize:                1024,
-		OverrideBPFLoopEnabled:              false,
+		MapsConfig: config.MapsConfig{
+			DNSRingBufferSizeBytes:    1 * 1024 * 1024,
+			MySQLRingBufferSizeBytes:  1 * 1024 * 1024,
+			OracleRingBufferSizeBytes: 1 * 1024 * 1024,
+		},
+		OverrideBPFLoopEnabled: false,
 		PayloadExtraction: config.PayloadExtraction{
 			HTTP: config.HTTPConfig{
 				GraphQL: config.GraphQLConfig{
@@ -227,7 +232,7 @@ var DefaultConfig = Config{
 	},
 	NameResolver: &transform.NameResolverConfig{
 		Sources:  []transform.Source{transform.SourceK8s},
-		CacheLen: 1024,
+		CacheLen: 4096,
 		CacheTTL: 5 * time.Minute,
 	},
 	Metrics: perapp.MetricsConfig{

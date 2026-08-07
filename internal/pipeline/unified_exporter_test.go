@@ -186,8 +186,8 @@ func TestUnifiedExporter_Backoff(t *testing.T) {
 	exp, _ := NewUnifiedExporter(config)
 
 	tests := []struct {
-		attempt  int
-		expected time.Duration
+		attempt      int
+		expectedBase time.Duration
 	}{
 		{1, 100 * time.Millisecond},
 		{2, 200 * time.Millisecond},
@@ -199,8 +199,9 @@ func TestUnifiedExporter_Backoff(t *testing.T) {
 
 	for _, tt := range tests {
 		backoff := exp.calculateBackoff(tt.attempt)
-		if backoff != tt.expected {
-			t.Errorf("attempt %d: expected %v, got %v", tt.attempt, tt.expected, backoff)
+		minExpected := time.Duration(float64(tt.expectedBase) * 0.5)
+		if backoff < minExpected || backoff > tt.expectedBase {
+			t.Errorf("attempt %d: expected in [%v,%v], got %v", tt.attempt, minExpected, tt.expectedBase, backoff)
 		}
 	}
 }

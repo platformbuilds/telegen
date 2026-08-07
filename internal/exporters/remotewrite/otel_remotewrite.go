@@ -49,6 +49,9 @@ type OTelCollectorConfig struct {
 	// BatchSize is the maximum number of samples per write request
 	BatchSize int
 
+	// MaxBufferedSamples is the maximum number of buffered samples before dropping oldest.
+	MaxBufferedSamples int
+
 	// FlushInterval is how often to flush buffered samples
 	FlushInterval time.Duration
 
@@ -89,6 +92,7 @@ func DefaultOTelCollectorConfig() OTelCollectorConfig {
 		Compression:           "snappy", // Prometheus standard
 		Timeout:               30 * time.Second,
 		BatchSize:             1000,
+		MaxBufferedSamples:    500000,
 		FlushInterval:         15 * time.Second,
 		MaxRetries:            3,
 		RetryBackoff:          1 * time.Second,
@@ -206,6 +210,12 @@ func (w *OTelRemoteWriter) WriteWithMetadata(wr *prompb.WriteRequest, metadata *
 	w.bufferMu.Lock()
 	defer w.bufferMu.Unlock()
 
+	maxBuffered := w.cfg.MaxBufferedSamples
+	if maxBuffered <= 0 {
+		maxBuffered = 500000
+	}
+	dropped := 0
+
 	for _, ts := range wr.Timeseries {
 		// Clone the timeseries
 		cloned := prompb.TimeSeries{
@@ -226,10 +236,23 @@ func (w *OTelRemoteWriter) WriteWithMetadata(wr *prompb.WriteRequest, metadata *
 			}
 		}
 
+		if w.bufferSize >= maxBuffered {
+			if len(w.buffer) > 0 {
+				w.buffer = w.buffer[1:]
+				w.bufferSize--
+				dropped++
+			}
+		}
 		w.buffer = append(w.buffer, &cloned)
+		w.bufferSize++
 	}
 
-	w.bufferSize += len(wr.Timeseries)
+	if dropped > 0 {
+		w.log.Warn("remote write buffer full, dropping oldest samples",
+			"dropped", dropped,
+			"max_buffered_samples", maxBuffered,
+		)
+	}
 
 	// Trigger flush if batch size reached
 	if w.bufferSize >= w.cfg.BatchSize {

@@ -23,31 +23,31 @@ var ErrNeedsMoreData = errors.New("memcached: needs more data")
 type CommandType int
 
 const (
-	CmdUnknown CommandType = iota
-	CmdGet                 // get <key>*
-	CmdGets                // gets <key>* (with CAS token)
-	CmdGetAndTouch         // gat <exptime> <key>*
-	CmdSet                 // set <key> <flags> <exptime> <bytes> [noreply]
-	CmdAdd                 // add <key> <flags> <exptime> <bytes> [noreply]
-	CmdReplace             // replace <key> <flags> <exptime> <bytes> [noreply]
-	CmdAppend              // append <key> <flags> <exptime> <bytes> [noreply]
-	CmdPrepend             // prepend <key> <flags> <exptime> <bytes> [noreply]
-	CmdCAS                 // cas <key> <flags> <exptime> <bytes> <cas> [noreply]
-	CmdDelete              // delete <key> [noreply]
-	CmdIncr                // incr <key> <value> [noreply]
-	CmdDecr                // decr <key> <value> [noreply]
-	CmdTouch               // touch <key> <exptime> [noreply]
-	CmdStats               // stats [args]
-	CmdFlushAll            // flush_all [exptime] [noreply]
-	CmdVersion             // version
-	CmdQuit                // quit
+	CmdUnknown     CommandType = iota
+	CmdGet                     // get <key>*
+	CmdGets                    // gets <key>* (with CAS token)
+	CmdGetAndTouch             // gat <exptime> <key>*
+	CmdSet                     // set <key> <flags> <exptime> <bytes> [noreply]
+	CmdAdd                     // add <key> <flags> <exptime> <bytes> [noreply]
+	CmdReplace                 // replace <key> <flags> <exptime> <bytes> [noreply]
+	CmdAppend                  // append <key> <flags> <exptime> <bytes> [noreply]
+	CmdPrepend                 // prepend <key> <flags> <exptime> <bytes> [noreply]
+	CmdCAS                     // cas <key> <flags> <exptime> <bytes> <cas> [noreply]
+	CmdDelete                  // delete <key> [noreply]
+	CmdIncr                    // incr <key> <value> [noreply]
+	CmdDecr                    // decr <key> <value> [noreply]
+	CmdTouch                   // touch <key> <exptime> [noreply]
+	CmdStats                   // stats [args]
+	CmdFlushAll                // flush_all [exptime] [noreply]
+	CmdVersion                 // version
+	CmdQuit                    // quit
 )
 
 // Direction represents whether this is a request or response message.
 type Direction int
 
 const (
-	DirectionRequest  Direction = iota
+	DirectionRequest Direction = iota
 	DirectionResponse
 )
 
@@ -66,8 +66,11 @@ func statusFromResponse(resp string) int {
 		return 1
 	}
 	// Numeric response for incr/decr is a success
-	if _, err := strconv.ParseUint(strings.Fields(resp)[0], 10, 64); err == nil {
-		return 0
+	fields := strings.Fields(resp)
+	if len(fields) > 0 {
+		if _, err := strconv.ParseUint(fields[0], 10, 64); err == nil {
+			return 0
+		}
 	}
 	return 0 // unknown — treat as success
 }
@@ -212,7 +215,10 @@ func DecodeRequest(buf []byte) (Message, int, error) {
 		msg.Flags = uint32(f)
 		exp, _ := strconv.ParseInt(fields[3], 10, 64)
 		msg.Exptime = exp
-		bc, _ := strconv.Atoi(fields[4])
+		bc, err := strconv.Atoi(fields[4])
+		if err != nil || bc < 0 {
+			return Message{}, consumed, fmt.Errorf("memcached: invalid byte count: %q", fields[4])
+		}
 		msg.ByteCount = bc
 		if len(fields) >= 6 && fields[5] == "noreply" {
 			msg.NoReply = true
@@ -234,7 +240,10 @@ func DecodeRequest(buf []byte) (Message, int, error) {
 		msg.Flags = uint32(f)
 		exp, _ := strconv.ParseInt(fields[3], 10, 64)
 		msg.Exptime = exp
-		bc, _ := strconv.Atoi(fields[4])
+		bc, err := strconv.Atoi(fields[4])
+		if err != nil || bc < 0 {
+			return Message{}, consumed, fmt.Errorf("memcached: invalid byte count: %q", fields[4])
+		}
 		msg.ByteCount = bc
 		cas, _ := strconv.ParseUint(fields[5], 10, 64)
 		msg.CASToken = cas
@@ -358,6 +367,9 @@ func ParseRequest(buf []byte) ([]Message, int, error) {
 		if err != nil {
 			return msgs, consumed, err
 		}
+		if n <= 0 || n > len(buf) {
+			break
+		}
 		msgs = append(msgs, msg)
 		buf = buf[n:]
 		consumed += n
@@ -379,6 +391,9 @@ func ParseResponse(buf []byte) ([]Message, int, error) {
 		}
 		if err != nil {
 			return msgs, consumed, err
+		}
+		if n <= 0 || n > len(buf) {
+			break
 		}
 		msgs = append(msgs, msg)
 		buf = buf[n:]

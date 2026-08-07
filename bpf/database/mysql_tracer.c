@@ -94,6 +94,11 @@
 #define MYSQL_USER_MAX_LEN     64
 #define MYSQL_SQL_STATE_LEN    6
 #define MYSQL_ERROR_MSG_MAX_LEN 256
+#define MYSQL_EVENTS_RINGBUF_SIZE (1 * 1024 * 1024)  // 1MB default
+
+#ifndef E2BIG
+#define E2BIG 7
+#endif
 
 // ============================================================================
 // Event Type for Ring Buffer
@@ -168,42 +173,34 @@ struct mysql_query_state {
 };
 
 // ============================================================================
-// Prepared Statement Cache
-// ============================================================================
-
-struct mysql_stmt_info {
-    u32 stmt_id;
-    u8  query_type;
-    u8  _pad[3];
-    u32 query_len;
-    char query[MYSQL_QUERY_MAX_LEN];
-};
-
-// ============================================================================
 // BPF Maps
 // ============================================================================
 
 // Track active queries by pid_tgid
 struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
     __uint(key_size, sizeof(u64));
     __uint(value_size, sizeof(struct mysql_query_state));
     __uint(max_entries, 10000);
 } mysql_queries SEC(".maps");
 
-// Cache prepared statements by (pid_tgid << 32 | stmt_id)
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(key_size, sizeof(u64));
-    __uint(value_size, sizeof(struct mysql_stmt_info));
-    __uint(max_entries, 50000);
-} mysql_stmts SEC(".maps");
-
 // Ring buffer for events
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
-    __uint(max_entries, 64 * 1024 * 1024);  // 64MB
+    __uint(max_entries, MYSQL_EVENTS_RINGBUF_SIZE);
 } mysql_events SEC(".maps");
+
+struct mysql_stats {
+    u64 query_update_errors;
+    u64 query_update_e2big;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(key_size, sizeof(u32));
+    __uint(value_size, sizeof(struct mysql_stats));
+    __uint(max_entries, 1);
+} mysql_stats SEC(".maps");
 
 // ============================================================================
 // Helper Functions
@@ -237,6 +234,23 @@ static __always_inline u8 mysql_classify_query(const char *query) {
     if (c1 == 'u' && c2 == 's' && c3 == 'e') return QUERY_TYPE_OTHER;  // USE
     
     return QUERY_TYPE_OTHER;
+}
+
+static __always_inline void mysql_record_query_update_result(long ret) {
+    if (ret == 0) {
+        return;
+    }
+
+    u32 zero = 0;
+    struct mysql_stats *stats = bpf_map_lookup_elem(&mysql_stats, &zero);
+    if (!stats) {
+        return;
+    }
+
+    stats->query_update_errors++;
+    if (ret == -E2BIG) {
+        stats->query_update_e2big++;
+    }
 }
 
 // Emit a MySQL event to the ring buffer
@@ -306,7 +320,8 @@ int trace_mysql_real_query(struct pt_regs *ctx) {
     state.query_len = copy_len;
     state.query_type = mysql_classify_query(state.query);
     
-    bpf_map_update_elem(&mysql_queries, &pid_tgid, &state, BPF_ANY);
+    long update_ret = bpf_map_update_elem(&mysql_queries, &pid_tgid, &state, BPF_ANY);
+    mysql_record_query_update_result(update_ret);
     return 0;
 }
 
@@ -346,7 +361,8 @@ int trace_mysql_query(struct pt_regs *ctx) {
     }
     state.query_type = mysql_classify_query(state.query);
     
-    bpf_map_update_elem(&mysql_queries, &pid_tgid, &state, BPF_ANY);
+    long update_ret = bpf_map_update_elem(&mysql_queries, &pid_tgid, &state, BPF_ANY);
+    mysql_record_query_update_result(update_ret);
     return 0;
 }
 
@@ -390,7 +406,8 @@ int trace_mysql_stmt_prepare(struct pt_regs *ctx) {
     state.query_len = copy_len;
     state.query_type = mysql_classify_query(state.query);
     
-    bpf_map_update_elem(&mysql_queries, &pid_tgid, &state, BPF_ANY);
+    long update_ret = bpf_map_update_elem(&mysql_queries, &pid_tgid, &state, BPF_ANY);
+    mysql_record_query_update_result(update_ret);
     return 0;
 }
 
@@ -405,9 +422,6 @@ int trace_mysql_stmt_prepare_ret(struct pt_regs *ctx) {
     
     // Emit prepare event
     mysql_emit_event(state, (ret != 0), 0);
-    
-    // Cache statement for later execute calls
-    // Note: In real implementation, we'd extract stmt_id from MYSQL_STMT structure
     
     bpf_map_delete_elem(&mysql_queries, &pid_tgid);
     return 0;
@@ -431,7 +445,8 @@ int trace_mysql_stmt_execute(struct pt_regs *ctx) {
     // The offset varies by MySQL version, this is approximate
     // bpf_probe_read_user(&state.stmt_id, sizeof(state.stmt_id), stmt + 0x10);
     
-    bpf_map_update_elem(&mysql_queries, &pid_tgid, &state, BPF_ANY);
+    long update_ret = bpf_map_update_elem(&mysql_queries, &pid_tgid, &state, BPF_ANY);
+    mysql_record_query_update_result(update_ret);
     return 0;
 }
 
@@ -444,28 +459,9 @@ int trace_mysql_stmt_execute_ret(struct pt_regs *ctx) {
     struct mysql_query_state *state = bpf_map_lookup_elem(&mysql_queries, &pid_tgid);
     if (!state) return 0;
     
-    // Look up cached statement to get query text
-    // u64 stmt_key = (pid_tgid & 0xFFFFFFFF00000000) | state->stmt_id;
-    // struct mysql_stmt_info *stmt_info = bpf_map_lookup_elem(&mysql_stmts, &stmt_key);
-    // if (stmt_info) {
-    //     state->query_type = stmt_info->query_type;
-    //     __builtin_memcpy(state->query, stmt_info->query, sizeof(state->query));
-    //     state->query_len = stmt_info->query_len;
-    // }
-    
     mysql_emit_event(state, (ret != 0), 0);
     
     bpf_map_delete_elem(&mysql_queries, &pid_tgid);
-    return 0;
-}
-
-// mysql_stmt_close - Close a prepared statement
-SEC("uprobe/mysql_stmt_close")
-int trace_mysql_stmt_close(struct pt_regs *ctx) {
-    // Clean up cached statement
-    // void *stmt = (void *)PT_REGS_PARM1(ctx);
-    // u64 pid_tgid = bpf_get_current_pid_tgid();
-    // Read stmt_id and delete from cache
     return 0;
 }
 
@@ -494,7 +490,8 @@ int trace_mysql_send_query(struct pt_regs *ctx) {
     state.query_len = copy_len;
     state.query_type = mysql_classify_query(state.query);
     
-    bpf_map_update_elem(&mysql_queries, &pid_tgid, &state, BPF_ANY);
+    long update_ret = bpf_map_update_elem(&mysql_queries, &pid_tgid, &state, BPF_ANY);
+    mysql_record_query_update_result(update_ret);
     return 0;
 }
 

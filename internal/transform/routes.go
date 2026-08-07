@@ -33,6 +33,9 @@ const (
 	// it also has a second level Trie based cache to cap the max cardinality
 	UnmatchLowCardinality = UnmatchType("low-cardinality")
 
+	// Keep heuristic as the default for backward compatibility with existing
+	// dashboards. Note: unlike low-cardinality mode, heuristic does not apply
+	// PathTrie-based route capping and can increase metric cardinality.
 	UnmatchDefault = UnmatchHeuristic
 )
 

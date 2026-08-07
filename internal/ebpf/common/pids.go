@@ -4,6 +4,7 @@
 package ebpfcommon // import "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
 
 import (
+	"context"
 	"log/slog"
 	"sync"
 
@@ -122,9 +123,8 @@ func (pf *PIDsFilter) normalizeTraceContext(span *request.Span) {
 func (pf *PIDsFilter) Filter(inputSpans []request.Span) []request.Span {
 	pf.mux.RLock()
 	defer pf.mux.RUnlock()
-	// todo: adaptive presizing as a function of the historical percentage
-	// of filtered spans
-	outputSpans := make([]request.Span, 0, len(inputSpans))
+	// Compact in place to avoid per-batch allocations in this hot path.
+	outputSpans := inputSpans[:0]
 	for i := range inputSpans {
 		span := &inputSpans[i]
 
@@ -152,10 +152,14 @@ func (pf *PIDsFilter) Filter(inputSpans []request.Span) []request.Span {
 	}
 
 	if len(outputSpans) != len(inputSpans) {
-		pf.log.Debug("filtered spans from processes that did not match discovery",
-			"function", "PIDsFilter.Filter", "inLen", len(inputSpans), "outLen", len(outputSpans),
-			"pids", pf.current, "spans", inputSpans,
-		)
+		if pf.log.Enabled(context.Background(), slog.LevelDebug) {
+			pf.log.Debug("filtered spans from processes that did not match discovery",
+				"function", "PIDsFilter.Filter",
+				"inLen", len(inputSpans),
+				"outLen", len(outputSpans),
+				"filtered", len(inputSpans)-len(outputSpans),
+			)
+		}
 	}
 	return outputSpans
 }

@@ -106,6 +106,8 @@ type RuleAction struct {
 
 	// Transform applies a value transformation.
 	Transform *TransformAction `yaml:"transform,omitempty" json:"transform,omitempty"`
+
+	compiledDeletePattern *regexp.Regexp
 }
 
 // ActionType defines the type of action.
@@ -157,14 +159,13 @@ type TransformAction struct {
 
 // compiledRule is a pre-compiled transformation rule.
 type compiledRule struct {
-	name             string
-	metricPatterns   []*regexp.Regexp
-	spanPatterns     []*regexp.Regexp
-	logPatterns      []*regexp.Regexp
-	resourceMatch    map[string]string
-	signalTypes      map[string]bool
-	actions          []RuleAction
-	deletePatterns   []*regexp.Regexp
+	name           string
+	metricPatterns []*regexp.Regexp
+	spanPatterns   []*regexp.Regexp
+	logPatterns    []*regexp.Regexp
+	resourceMatch  map[string]string
+	signalTypes    map[string]bool
+	actions        []RuleAction
 }
 
 // DefaultTransformConfig returns sensible defaults.
@@ -260,13 +261,14 @@ func (e *TransformEngine) compileRules() error {
 		}
 
 		// Compile delete patterns
-		for _, action := range rule.Actions {
+		for i := range compiled.actions {
+			action := &compiled.actions[i]
 			if action.DeleteAttribute != nil && action.DeleteAttribute.Pattern != "" {
 				re, err := regexp.Compile(action.DeleteAttribute.Pattern)
 				if err != nil {
 					return fmt.Errorf("invalid delete pattern %q: %w", action.DeleteAttribute.Pattern, err)
 				}
-				compiled.deletePatterns = append(compiled.deletePatterns, re)
+				action.compiledDeletePattern = re
 			}
 		}
 
@@ -663,19 +665,16 @@ func (e *TransformEngine) applyActions(attrs pcommon.Map, actions []RuleAction) 
 				if action.DeleteAttribute.Key != "" {
 					attrs.Remove(action.DeleteAttribute.Key)
 				}
-				if action.DeleteAttribute.Pattern != "" {
-					re, err := regexp.Compile(action.DeleteAttribute.Pattern)
-					if err == nil {
-						keysToDelete := make([]string, 0)
-						attrs.Range(func(k string, _ pcommon.Value) bool {
-							if re.MatchString(k) {
-								keysToDelete = append(keysToDelete, k)
-							}
-							return true
-						})
-						for _, k := range keysToDelete {
-							attrs.Remove(k)
+				if action.compiledDeletePattern != nil {
+					keysToDelete := make([]string, 0)
+					attrs.Range(func(k string, _ pcommon.Value) bool {
+						if action.compiledDeletePattern.MatchString(k) {
+							keysToDelete = append(keysToDelete, k)
 						}
+						return true
+					})
+					for _, k := range keysToDelete {
+						attrs.Remove(k)
 					}
 				}
 			}

@@ -7,6 +7,7 @@ package sigdef
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -86,15 +87,23 @@ func DisabledMetadataFieldsConfig() MetadataFieldsConfig {
 
 // Global metadata config with thread-safe access
 var (
-	globalMetadataConfig   = DefaultMetadataFieldsConfig()
-	globalMetadataConfigMu sync.RWMutex
+	globalMetadataConfig        = DefaultMetadataFieldsConfig()
+	globalMetadataConfigMu      sync.RWMutex
+	globalMetadataConfigVersion atomic.Uint64
+	signalAttrsCache            sync.Map // *SignalMetadata -> cachedSignalAttrs
 )
+
+type cachedSignalAttrs struct {
+	version uint64
+	attrs   []attribute.KeyValue
+}
 
 // SetGlobalMetadataConfig sets the global metadata fields configuration
 func SetGlobalMetadataConfig(cfg MetadataFieldsConfig) {
 	globalMetadataConfigMu.Lock()
 	defer globalMetadataConfigMu.Unlock()
 	globalMetadataConfig = cfg
+	globalMetadataConfigVersion.Add(1)
 }
 
 // GetGlobalMetadataConfig returns the current global metadata fields configuration
@@ -145,6 +154,22 @@ type SignalMetadata struct {
 // Respects the global MetadataFieldsConfig to control which fields are exported.
 func (m *SignalMetadata) ToAttributes() []attribute.KeyValue {
 	return m.ToAttributesWithConfig(GetGlobalMetadataConfig())
+}
+
+// CachedAttributes returns metadata attributes cached for the current global config version.
+// The returned slice must be treated as immutable.
+func (m *SignalMetadata) CachedAttributes() []attribute.KeyValue {
+	version := globalMetadataConfigVersion.Load()
+	if cached, ok := signalAttrsCache.Load(m); ok {
+		cacheEntry := cached.(cachedSignalAttrs)
+		if cacheEntry.version == version {
+			return cacheEntry.attrs
+		}
+	}
+
+	attrs := m.ToAttributesWithConfig(GetGlobalMetadataConfig())
+	signalAttrsCache.Store(m, cachedSignalAttrs{version: version, attrs: attrs})
+	return attrs
 }
 
 // ToAttributesWithConfig converts SignalMetadata to OTel attributes using the provided config.

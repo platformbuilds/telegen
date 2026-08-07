@@ -10,11 +10,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"sync/atomic"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/cilium/ebpf"
+	"github.com/mirastacklabs-ai/telegen/internal/helpers"
 	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
 )
 
@@ -23,17 +26,17 @@ import (
 //
 //nolint:unused
 type connCloseEvent struct {
-	Timestamp    uint64
-	Saddr        uint32
-	Daddr        uint32
-	Sport        uint16
-	Dport        uint16
-	IPVersion    uint8
-	Pad          [3]uint8
-	BytesSent    uint64
-	BytesRecv    uint64
-	Pid          uint32
-	Pad2         uint32
+	Timestamp uint64
+	Saddr     uint32
+	Daddr     uint32
+	Sport     uint16
+	Dport     uint16
+	IPVersion uint8
+	Pad       [3]uint8
+	BytesSent uint64
+	BytesRecv uint64
+	Pid       uint32
+	Pad2      uint32
 }
 
 const connCloseEventSize = 8 + 4 + 4 + 2 + 2 + 1 + 3 + 8 + 8 + 4 + 4 // 48 bytes
@@ -49,6 +52,8 @@ type ConnStatsConsumer struct {
 
 	bytesSentCounter metric.Int64Counter
 	bytesRecvCounter metric.Int64Counter
+
+	lastReadErrorLog atomic.Int64
 }
 
 // NewConnStatsConsumer creates and starts a ConnStatsConsumer attached to the
@@ -99,6 +104,8 @@ func NewConnStatsConsumer(
 // Call this in a dedicated goroutine.
 func (c *ConnStatsConsumer) Run(ctx context.Context) {
 	c.log.Debug("starting conn_stats consumer")
+	const readErrorBudget = 1000
+	consecutiveErrs := 0
 	for {
 		record, err := c.reader.Read()
 		if err != nil {
@@ -111,9 +118,26 @@ func (c *ConnStatsConsumer) Run(ctx context.Context) {
 				return
 			default:
 			}
-			c.log.Warn("conn_stats ring buffer read error", "error", err)
+			consecutiveErrs++
+			if consecutiveErrs >= readErrorBudget {
+				c.log.Error("conn_stats reader exceeded error budget; stopping loop",
+					"consecutive_errors", consecutiveErrs,
+					"error_budget", readErrorBudget,
+					"last_error", err,
+				)
+				return
+			}
+			if helpers.ShouldLogEvery(&c.lastReadErrorLog, 10*time.Second) {
+				c.log.Warn("conn_stats ring buffer read error", "error", err, "consecutive_errors", consecutiveErrs)
+			}
+			backoff := time.Duration(1<<min(consecutiveErrs, 8)) * time.Millisecond
+			if backoff > 250*time.Millisecond {
+				backoff = 250 * time.Millisecond
+			}
+			time.Sleep(backoff)
 			continue
 		}
+		consecutiveErrs = 0
 
 		select {
 		case <-ctx.Done():

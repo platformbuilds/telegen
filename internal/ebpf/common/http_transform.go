@@ -9,9 +9,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
@@ -226,21 +224,24 @@ func HTTPInfoEventToSpan(parseCtx *EBPFParseContext, event *BPFHTTPInfo) (reques
 	var (
 		requestBuffer, responseBuffer []byte
 		hasResponse                   bool
+		payloadTruncated              bool
 		isClient                      = isClientEvent(event.Type)
 	)
 
 	if event.HasLargeBuffers == 1 {
-		b, ok := extractTCPLargeBuffer(parseCtx, event.Tp.TraceId, packetTypeRequest, directionByPacketType(packetTypeRequest, isClient), event.ConnInfo)
+		b, requestTruncated, ok := extractTCPLargeBuffer(parseCtx, event.Tp.TraceId, packetTypeRequest, directionByPacketType(packetTypeRequest, isClient), event.ConnInfo)
 		if ok {
 			requestBuffer = b
+			payloadTruncated = payloadTruncated || requestTruncated
 		} else {
 			slog.Debug("missing large buffer for HTTP request", "traceID", event.Tp.TraceId, "conn", event.ConnInfo, "packetType", packetTypeRequest)
 		}
 
-		b, ok = extractTCPLargeBuffer(parseCtx, event.Tp.TraceId, packetTypeResponse, directionByPacketType(packetTypeResponse, isClient), event.ConnInfo)
+		b, responseTruncated, ok := extractTCPLargeBuffer(parseCtx, event.Tp.TraceId, packetTypeResponse, directionByPacketType(packetTypeResponse, isClient), event.ConnInfo)
 		if ok {
 			responseBuffer = b
 			hasResponse = true
+			payloadTruncated = payloadTruncated || responseTruncated
 		} else {
 			slog.Debug("missing large buffer for HTTP response", "traceID", event.Tp.TraceId, "conn", event.ConnInfo, "packetType", packetTypeResponse)
 		}
@@ -251,22 +252,38 @@ func HTTPInfoEventToSpan(parseCtx *EBPFParseContext, event *BPFHTTPInfo) (reques
 	if parseCtx != nil && !parseCtx.payloadExtraction.Enabled() {
 		// There's no need to parse HTTP headers/body,
 		// create the span directly.
-		return httpRequestToSpan(event, requestBuffer), false, nil
+		span := httpRequestToSpan(event, requestBuffer)
+		if payloadTruncated {
+			request.SetPayloadTruncated(&span)
+		}
+		return span, false, nil
 	}
 
 	if !hasResponse {
 		// Large buffers disabled
-		return httpRequestToSpan(event, requestBuffer), false, nil
+		span := httpRequestToSpan(event, requestBuffer)
+		if payloadTruncated {
+			request.SetPayloadTruncated(&span)
+		}
+		return span, false, nil
 	}
 
 	req, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(requestBuffer)))
 	resp, err2 := httpSafeParseResponse(responseBuffer, req)
 	if err != nil || err2 != nil {
 		slog.Debug("error while parsing http request or response, falling back to manual HTTP info parsing", "reqErr", err, "respErr", err2)
-		return httpRequestToSpan(event, requestBuffer), false, nil
+		span := httpRequestToSpan(event, requestBuffer)
+		if payloadTruncated {
+			request.SetPayloadTruncated(&span)
+		}
+		return span, false, nil
 	}
 
-	return httpRequestResponseToSpan(parseCtx, event, req, resp), false, nil
+	span := httpRequestResponseToSpan(parseCtx, event, req, resp)
+	if payloadTruncated {
+		request.SetPayloadTruncated(&span)
+	}
+	return span, false, nil
 }
 
 // HTTP response buffers might have been sent incomplete, before the full body.
@@ -320,67 +337,147 @@ func httpRequestToSpan(event *BPFHTTPInfo, requestBuffer []byte) request.Span {
 }
 
 func httpURLFromBuf(req []byte) string {
-	buf := string(req)
-	space := strings.Index(buf, " ")
+	bufEnd := requestBufEnd(req)
+	if bufEnd == 0 {
+		return ""
+	}
+
+	space := bytes.IndexByte(req[:bufEnd], ' ')
 	if space < 0 {
 		return ""
 	}
-
-	bufEnd := bytes.IndexByte(req, 0) // We assume the buffer was zero initialized in eBPF
-	if bufEnd < 0 {
-		bufEnd = len(buf)
-	}
-
-	if space+1 > bufEnd {
+	start := space + 1
+	if start >= bufEnd {
 		return ""
 	}
 
-	nextSpace := strings.IndexAny(buf[space+1:bufEnd], " \r\n")
-	if nextSpace < 0 {
-		return buf[space+1 : bufEnd]
+	end := start
+	for end < bufEnd {
+		switch req[end] {
+		case ' ', '\r', '\n':
+			return string(req[start:end])
+		}
+		end++
 	}
-
-	end := min(nextSpace+space+1, bufEnd)
-
-	return buf[space+1 : end]
+	return string(req[start:bufEnd])
 }
 
 func httpMethodFromBuf(req []byte) string {
-	buf := string(req)
-	space := strings.Index(buf, " ")
+	bufEnd := requestBufEnd(req)
+	space := bytes.IndexByte(req[:bufEnd], ' ')
 	if space < 0 {
 		return ""
 	}
 
-	return buf[:space]
+	return string(req[:space])
 }
 
 func httpHostFromBuf(req []byte) (string, int) {
-	buf := cstr(req)
-
-	host := "Host: "
-	idx := strings.Index(buf, host)
-
-	if idx < 0 {
+	bufEnd := requestBufEnd(req)
+	if bufEnd == 0 {
 		return "", -1
 	}
 
-	buf = buf[idx+len(host):]
-
-	rIdx := strings.Index(buf, "\r")
-
-	// only parse full host information, partial may
-	// get the wrong name or wrong port
-	if rIdx < 0 {
+	// Start after the request line.
+	lineStart := bytes.IndexByte(req[:bufEnd], '\n')
+	if lineStart < 0 {
 		return "", -1
 	}
+	lineStart++
 
-	host, portStr, err := net.SplitHostPort(buf[:rIdx])
-	if err != nil {
-		return buf[:rIdx], -1
+	for lineStart < bufEnd {
+		lineEndRel := bytes.IndexByte(req[lineStart:bufEnd], '\n')
+		lineEndedByCR := false
+		if lineEndRel < 0 {
+			lineEndRel = bytes.IndexByte(req[lineStart:bufEnd], '\r')
+			if lineEndRel < 0 {
+				// only parse full host information, partial may
+				// get the wrong name or wrong port
+				return "", -1
+			}
+			lineEndedByCR = true
+		}
+		lineEnd := lineStart + lineEndRel
+		line := req[lineStart:lineEnd]
+		if !lineEndedByCR && len(line) > 0 && line[len(line)-1] == '\r' {
+			line = line[:len(line)-1]
+		}
+		if len(line) == 0 {
+			break
+		}
+
+		if len(line) >= len("Host:") && bytes.Equal(line[:len("Host:")], []byte("Host:")) {
+			value := bytes.TrimLeft(line[len("Host:"):], " ")
+			if len(value) == 0 {
+				return "", -1
+			}
+			host, port := splitHostPortBytes(value)
+			return string(host), port
+		}
+
+		lineStart = lineEnd + 1
 	}
 
-	port, _ := strconv.Atoi(portStr)
+	return "", -1
+}
 
-	return host, port
+func requestBufEnd(req []byte) int {
+	bufEnd := bytes.IndexByte(req, 0)
+	if bufEnd < 0 {
+		return len(req)
+	}
+	return bufEnd
+}
+
+func splitHostPortBytes(value []byte) ([]byte, int) {
+	if len(value) == 0 {
+		return value, -1
+	}
+
+	// Bracketed IPv6 host form: [::1]:8080
+	if value[0] == '[' {
+		closing := bytes.IndexByte(value, ']')
+		if closing < 0 {
+			return value, -1
+		}
+		host := value[1:closing]
+		if closing+2 > len(value) || value[closing+1] != ':' {
+			return host, -1
+		}
+		if port, ok := parsePositivePort(value[closing+2:]); ok {
+			return host, port
+		}
+		return host, -1
+	}
+
+	colon := bytes.LastIndexByte(value, ':')
+	if colon <= 0 {
+		return value, -1
+	}
+	// Unbracketed IPv6 should not be interpreted as host:port.
+	if bytes.IndexByte(value[:colon], ':') >= 0 {
+		return value, -1
+	}
+
+	if port, ok := parsePositivePort(value[colon+1:]); ok {
+		return value[:colon], port
+	}
+	return value, -1
+}
+
+func parsePositivePort(portBuf []byte) (int, bool) {
+	if len(portBuf) == 0 {
+		return 0, false
+	}
+	port := 0
+	for _, b := range portBuf {
+		if b < '0' || b > '9' {
+			return 0, false
+		}
+		port = port*10 + int(b-'0')
+		if port > 65535 {
+			return 0, false
+		}
+	}
+	return port, true
 }

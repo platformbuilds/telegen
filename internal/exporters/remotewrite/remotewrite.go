@@ -82,7 +82,17 @@ func (c *Client) Send(ctx context.Context, wr *prompb.WriteRequest, ep Endpoint)
 	} else {
 		body = raw
 	}
-	req, _ := http.NewRequestWithContext(ctx, "POST", ep.URL, bytes.NewReader(body))
+	reqTimeout := ep.Timeout
+	if reqTimeout <= 0 {
+		reqTimeout = 30 * time.Second
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, reqTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, "POST", ep.URL, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("X-Prometheus-Remote-Write-Version", "0.1.0")
 	if ep.Compression == "gzip" {
@@ -94,7 +104,6 @@ func (c *Client) Send(ctx context.Context, wr *prompb.WriteRequest, ep Endpoint)
 	for k, v := range ep.Headers {
 		req.Header.Set(k, v)
 	}
-	c.httpc.Timeout = ep.Timeout
 	resp, err := c.httpc.Do(req)
 	if err != nil {
 		return err

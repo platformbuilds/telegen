@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+const defaultStatsSampleSize = 100
+
 // QueryStats holds aggregated statistics for database queries.
 type QueryStats struct {
 	TotalQueries  uint64
@@ -93,6 +95,9 @@ type StatsAggregator struct {
 
 // NewStatsAggregator creates a new stats aggregator.
 func NewStatsAggregator(config StatsAggregatorConfig) *StatsAggregator {
+	if config.SampleSize <= 0 {
+		config.SampleSize = defaultStatsSampleSize
+	}
 	return &StatsAggregator{
 		config:   config,
 		patterns: make(map[uint64]*QueryPatternStats),
@@ -153,7 +158,7 @@ func (sa *StatsAggregator) Record(event *DatabaseEvent) {
 
 	// Reservoir sampling for percentiles
 	stats.sampleCount++
-	if len(stats.samples) < sa.config.SampleSize {
+	if sa.config.SampleSize <= 0 || len(stats.samples) < sa.config.SampleSize {
 		stats.samples = append(stats.samples, event.Latency)
 	} else {
 		// Replace with probability SampleSize/sampleCount

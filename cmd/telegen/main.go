@@ -2,31 +2,40 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
+	httppprof "net/http/pprof"
 	"os"
 	"os/signal"
+	"reflect"
 	"runtime"
+	"runtime/debug"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/mirastacklabs-ai/telegen/internal/config"
+	exportotlp "github.com/mirastacklabs-ai/telegen/internal/exporters/otlp"
 	"github.com/mirastacklabs-ai/telegen/internal/kafka"
 	"github.com/mirastacklabs-ai/telegen/internal/kube"
 	"github.com/mirastacklabs-ai/telegen/internal/kubemetrics"
 	"github.com/mirastacklabs-ai/telegen/internal/logs/parsers"
 	"github.com/mirastacklabs-ai/telegen/internal/netinfra"
 	"github.com/mirastacklabs-ai/telegen/internal/nodeexporter"
+	"github.com/mirastacklabs-ai/telegen/internal/obi"
 	"github.com/mirastacklabs-ai/telegen/internal/pipeline"
 	"github.com/mirastacklabs-ai/telegen/internal/profiler"
 	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
 	storage "github.com/mirastacklabs-ai/telegen/internal/storage"
 	"github.com/mirastacklabs-ai/telegen/internal/version"
 	"github.com/mirastacklabs-ai/telegen/internal/vmware"
+	otelmetric "github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.uber.org/automaxprocs/maxprocs"
 	"go.uber.org/zap"
 )
 
@@ -45,12 +54,29 @@ func main() {
 	cfgPath := flag.String("config", "/etc/telegen/config.yaml", "path to config yaml")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	modeFlag := flag.String("mode", "", "operation mode: agent, collector, unified (overrides config)")
+	dumpConfig := flag.Bool("dump-config", false, "print effective config with secrets redacted and exit")
+	skipPreflight := flag.Bool("skip-preflight", false, "skip kernel/capability preflight checks")
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf(`{"level":"INFO","msg":"version","version":"%s","os":"%s","arch":"%s"}`+"\n",
-			version.Version(), runtime.GOOS, runtime.GOARCH)
+		fmt.Printf(
+			`{"level":"INFO","msg":"version","version":"%s","commit":"%s","build_date":"%s","os":"%s","arch":"%s"}`+"\n",
+			version.Version(),
+			version.Commit(),
+			version.BuildDate(),
+			runtime.GOOS,
+			runtime.GOARCH,
+		)
 		os.Exit(0)
+	}
+	if *modeFlag != "" {
+		switch *modeFlag {
+		case "agent", "collector", "unified":
+			// valid
+		default:
+			logger.Error("invalid --mode value", "mode", *modeFlag, "allowed", "agent|collector|unified")
+			os.Exit(1)
+		}
 	}
 
 	cfg, err := config.Load(*cfgPath)
@@ -58,10 +84,50 @@ func main() {
 		logger.Error("failed to load config", "error", err)
 		os.Exit(1)
 	}
+	if *dumpConfig {
+		out, dumpErr := redactedConfigSnapshot(cfg)
+		if dumpErr != nil {
+			logger.Error("failed to render redacted config", "error", dumpErr)
+			os.Exit(1)
+		}
+		fmt.Println(string(out))
+		return
+	}
+	if !*skipPreflight {
+		if err := runPreflightChecks(cfg); err != nil {
+			logger.Error("startup preflight failed", "error", err)
+			os.Exit(1)
+		}
+	} else {
+		logger.Warn("startup preflight checks are disabled by --skip-preflight")
+	}
+	releaseInstanceLock, err := acquireInstanceLock("/var/run/telegen.pid")
+	if err != nil {
+		logger.Error("failed to acquire singleton instance lock", "error", err)
+		os.Exit(1)
+	}
+	defer releaseInstanceLock()
+
+	otelmetric.SetDefaultCardinalityLimit(cfg.Pipelines.Metrics.CardinalityLimit)
+	if _, err := maxprocs.Set(maxprocs.Logger(func(format string, args ...interface{}) {
+		logger.Info("automaxprocs", "message", fmt.Sprintf(format, args...))
+	})); err != nil {
+		logger.Warn("failed to set GOMAXPROCS from cgroup", "error", err)
+	}
+
+	if cfg.SelfTelemetry.MemoryLimitBytes > 0 {
+		previousLimit := debug.SetMemoryLimit(cfg.SelfTelemetry.MemoryLimitBytes)
+		logger.Info("configured Go memory limit",
+			"memory_limit_bytes", cfg.SelfTelemetry.MemoryLimitBytes,
+			"previous_limit_bytes", previousLimit,
+		)
+	}
 
 	// Log startup info
 	logger.Info("telegen starting",
 		"version", version.Version(),
+		"commit", version.Commit(),
+		"build_date", version.BuildDate(),
 		"mode", func() string {
 			if *modeFlag != "" {
 				return *modeFlag
@@ -80,17 +146,45 @@ func main() {
 	// Create zap logger for internal use (some components may require it)
 	zapLogger, _ := zap.NewProduction()
 	defer func() { _ = zapLogger.Sync() }()
+	collectorMeterProvider := sdkmetric.NewMeterProvider(
+		sdkmetric.WithReader(sdkmetric.NewManualReader()),
+	)
+	defer func() { _ = collectorMeterProvider.Shutdown(context.Background()) }()
+	exportotlp.SetCollectorTelemetry(zapLogger, collectorMeterProvider)
 
 	mux := http.NewServeMux()
-	_ = selftelemetry.InstallHandlers(mux, cfg.SelfTelemetry.Listen)
+	registry := selftelemetry.InstallHandlers(mux, cfg.SelfTelemetry.Listen)
+	if cfg.SelfTelemetry.PprofEnabled {
+		installPprofHandlers(mux)
+		installDebugConfigHandler(mux, cfg)
+		logger.Warn("pprof endpoints enabled on self-telemetry listener",
+			"endpoint", fmt.Sprintf("http://localhost%s/debug/pprof/", cfg.SelfTelemetry.Listen),
+		)
+	}
 	srv := &http.Server{Addr: cfg.SelfTelemetry.Listen, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		logger.Info("HTTP server started", "address", cfg.SelfTelemetry.Listen)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("HTTP server failed", "error", err)
-			os.Exit(1)
+			return
 		}
 	}()
+	healthMux := http.NewServeMux()
+	if cfg.SelfTelemetry.HealthListen == cfg.SelfTelemetry.Listen {
+		logger.Warn("health listener matches self-telemetry listener; probes share the same HTTP server",
+			"address", cfg.SelfTelemetry.Listen)
+	} else {
+		selftelemetry.InstallProbeHandlers(healthMux, cfg.SelfTelemetry.HealthListen, registry)
+	}
+	healthSrv := &http.Server{Addr: cfg.SelfTelemetry.HealthListen, Handler: healthMux, ReadHeaderTimeout: 5 * time.Second}
+	if cfg.SelfTelemetry.HealthListen != cfg.SelfTelemetry.Listen {
+		go func() {
+			logger.Info("health probe server started", "address", cfg.SelfTelemetry.HealthListen)
+			if err := healthSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				logger.Error("health probe server failed", "error", err)
+			}
+		}()
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -102,14 +196,14 @@ func main() {
 	plCfg := buildUnifiedPipelineConfig(cfg)
 	pl, err := pipeline.NewUnifiedPipeline(plCfg)
 	if err != nil {
-		logger.Warn("unified pipeline failed to initialize, continuing with other signals",
-			"error", err,
-			"status", "degraded")
+		logger.Error("unified pipeline failed to initialize; export path is required",
+			"error", err)
+		os.Exit(1)
 	} else {
 		if err := pl.Start(ctx); err != nil {
-			logger.Warn("unified pipeline failed to start, continuing with other signals",
-				"error", err,
-				"status", "degraded")
+			logger.Error("unified pipeline failed to start; export path is required",
+				"error", err)
+			os.Exit(1)
 		} else {
 			signalsStarted++
 		}
@@ -311,6 +405,7 @@ func main() {
 		logger.Error("no signals could be started, cannot operate without at least one data source")
 		os.Exit(1)
 	}
+	registry.SetReady(true)
 	logger.Info("telegen ready", "signals_started", signalsStarted)
 
 	// Start Kafka logs receiver if enabled
@@ -506,7 +601,172 @@ func main() {
 		_ = kubeMetricsProvider.Stop(context.Background())
 	}
 	_ = srv.Shutdown(context.Background())
+	if cfg.SelfTelemetry.HealthListen != cfg.SelfTelemetry.Listen {
+		_ = healthSrv.Shutdown(context.Background())
+	}
 	logger.Info("telegen shutdown complete")
+}
+
+func installPprofHandlers(mux *http.ServeMux) {
+	mux.HandleFunc("/debug/pprof/", httppprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", httppprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", httppprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", httppprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", httppprof.Trace)
+}
+
+func installDebugConfigHandler(mux *http.ServeMux, cfg *config.Config) {
+	mux.HandleFunc("/debug/config", func(w http.ResponseWriter, _ *http.Request) {
+		out, err := redactedConfigSnapshot(cfg)
+		if err != nil {
+			http.Error(w, "failed to render config", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(out)
+	})
+}
+
+func redactedConfigSnapshot(cfg *config.Config) ([]byte, error) {
+	if cfg == nil {
+		return json.Marshal(map[string]string{"error": "config is nil"})
+	}
+	redacted := sanitizeConfigValue(reflect.ValueOf(cfg), "")
+	return json.MarshalIndent(redacted, "", "  ")
+}
+
+func sanitizeConfigValue(v reflect.Value, parentKey string) interface{} {
+	if !v.IsValid() {
+		return nil
+	}
+	switch v.Kind() {
+	case reflect.Pointer:
+		if v.IsNil() {
+			return nil
+		}
+		return sanitizeConfigValue(v.Elem(), parentKey)
+	case reflect.Interface:
+		if v.IsNil() {
+			return nil
+		}
+		return sanitizeConfigValue(v.Elem(), parentKey)
+	case reflect.Struct:
+		out := make(map[string]interface{}, v.NumField())
+		vt := v.Type()
+		for i := 0; i < v.NumField(); i++ {
+			field := vt.Field(i)
+			if field.PkgPath != "" { // unexported
+				continue
+			}
+			key := field.Name
+			if tag := field.Tag.Get("yaml"); tag != "" {
+				if tag == "-" {
+					continue
+				}
+				key = strings.Split(tag, ",")[0]
+			}
+			if key == "" {
+				key = field.Name
+			}
+			if isSensitiveConfigKey(key) {
+				out[key] = "<redacted>"
+				continue
+			}
+			out[key] = sanitizeConfigValue(v.Field(i), key)
+		}
+		return out
+	case reflect.Map:
+		out := map[string]interface{}{}
+		iter := v.MapRange()
+		for iter.Next() {
+			k := fmt.Sprint(iter.Key().Interface())
+			if isSensitiveConfigKey(k) {
+				out[k] = "<redacted>"
+				continue
+			}
+			out[k] = sanitizeConfigValue(iter.Value(), k)
+		}
+		return out
+	case reflect.Slice, reflect.Array:
+		out := make([]interface{}, v.Len())
+		for i := 0; i < v.Len(); i++ {
+			out[i] = sanitizeConfigValue(v.Index(i), parentKey)
+		}
+		return out
+	default:
+		if isSensitiveConfigKey(parentKey) {
+			return "<redacted>"
+		}
+		switch v.Kind() {
+		case reflect.Bool:
+			return v.Bool()
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			return v.Int()
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+			return v.Uint()
+		case reflect.Float32, reflect.Float64:
+			return v.Float()
+		case reflect.String:
+			return v.String()
+		}
+		return fmt.Sprint(v.Interface())
+	}
+}
+
+func isSensitiveConfigKey(key string) bool {
+	k := strings.ToLower(key)
+	sensitiveTokens := []string{
+		"password",
+		"passwd",
+		"secret",
+		"token",
+		"apikey",
+		"api_key",
+		"private",
+		"authorization",
+		"auth",
+		"credential",
+	}
+	for _, token := range sensitiveTokens {
+		if strings.Contains(k, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func runPreflightChecks(cfg *config.Config) error {
+	if err := obi.CheckOSSupport(); err != nil {
+		return fmt.Errorf("os support check failed: %w", err)
+	}
+	obiCfg, err := pipeline.BuildOBIConfigForPreflight(cfg)
+	if err != nil {
+		return fmt.Errorf("build preflight obi config: %w", err)
+	}
+	if err := obi.CheckOSCapabilities(obiCfg); err != nil {
+		return fmt.Errorf("os capability check failed: %w", err)
+	}
+	return nil
+}
+
+func acquireInstanceLock(path string) (func(), error) {
+	lockFile, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, fmt.Errorf("open lock file: %w", err)
+	}
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		_ = lockFile.Close()
+		return nil, fmt.Errorf("lock file %s is already held: %w", path, err)
+	}
+	if err := lockFile.Truncate(0); err == nil {
+		_, _ = fmt.Fprintf(lockFile, "%d\n", os.Getpid())
+	}
+	release := func() {
+		_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+		_ = lockFile.Close()
+		_ = os.Remove(path)
+	}
+	return release, nil
 }
 
 func buildUnifiedPipelineConfig(cfg *config.Config) pipeline.UnifiedPipelineConfig {

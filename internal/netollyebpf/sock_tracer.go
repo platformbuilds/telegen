@@ -34,6 +34,7 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 	"golang.org/x/sys/unix"
 
+	ebpfcommon "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
 	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
 	convenience "github.com/mirastacklabs-ai/telegen/internal/tracers/convenience"
 )
@@ -49,6 +50,7 @@ type SockFlowFetcher struct {
 	log           *slog.Logger
 	objects       *NetSkObjects
 	ringbufReader *ringbuf.Reader
+	packetFilter  *ebpfcommon.Filter
 	cacheMaxSize  int
 }
 
@@ -99,24 +101,30 @@ func NewSockFlowFetcher(
 	}
 
 	fd, err := unix.Socket(unix.AF_PACKET, unix.SOCK_RAW, int(htons(unix.ETH_P_ALL)))
-	if err == nil {
-		ssoErr := syscall.SetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_ATTACH_BPF, objects.ObiSocketFilter.FD())
-		if ssoErr != nil {
-			return nil, fmt.Errorf("loading and assigning BPF objects: %w", ssoErr)
-		}
-	} else {
+	if err != nil {
+		objects.Close()
 		return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
+	}
+	packetFilter := &ebpfcommon.Filter{Fd: fd}
+	ssoErr := syscall.SetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_ATTACH_BPF, objects.ObiSocketFilter.FD())
+	if ssoErr != nil {
+		_ = packetFilter.Close()
+		objects.Close()
+		return nil, fmt.Errorf("loading and assigning BPF objects: %w", ssoErr)
 	}
 
 	// read events from socket filter ringbuffer
 	flows, err := ringbuf.NewReader(objects.DirectFlows)
 	if err != nil {
+		_ = packetFilter.Close()
+		objects.Close()
 		return nil, fmt.Errorf("accessing to ringbuffer: %w", err)
 	}
 	return &SockFlowFetcher{
 		log:           tlog,
 		objects:       &objects,
 		ringbufReader: flows,
+		packetFilter:  packetFilter,
 		cacheMaxSize:  cacheMaxSize,
 	}, nil
 }
@@ -157,6 +165,12 @@ func (m *SockFlowFetcher) Close() error {
 
 func (m *SockFlowFetcher) closeObjects() []error {
 	var errs []error
+	if m.packetFilter != nil {
+		if err := m.packetFilter.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		m.packetFilter = nil
+	}
 	if err := m.objects.ObiSocketFilter.Close(); err != nil {
 		errs = append(errs, err)
 	}

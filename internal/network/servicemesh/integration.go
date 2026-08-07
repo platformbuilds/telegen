@@ -440,6 +440,13 @@ type Manager struct {
 	wg     sync.WaitGroup
 }
 
+type refreshState struct {
+	services  map[string]struct{}
+	endpoints map[string]struct{}
+	policies  map[string]struct{}
+	sidecars  map[string]struct{}
+}
+
 // NewManager creates a new service mesh manager
 func NewManager(config Config) (*Manager, error) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -510,18 +517,30 @@ func (m *Manager) refreshLoop() {
 
 // refresh updates mesh data from control plane
 func (m *Manager) refresh() {
+	state := refreshState{
+		services:  make(map[string]struct{}),
+		endpoints: make(map[string]struct{}),
+		policies:  make(map[string]struct{}),
+		sidecars:  make(map[string]struct{}),
+	}
+
 	switch m.meshType {
 	case MeshTypeIstio:
-		m.refreshIstio()
+		m.refreshIstio(state.services)
 	case MeshTypeLinkerd:
-		m.refreshLinkerd()
+		m.refreshLinkerd(state.services)
 	case MeshTypeCilium:
-		m.refreshCilium()
+		m.refreshCilium(state.services)
 	}
+
+	m.deleteMissingEntries(&m.services, state.services)
+	m.deleteMissingEntries(&m.endpoints, state.endpoints)
+	m.deleteMissingEntries(&m.policies, state.policies)
+	m.deleteMissingEntries(&m.sidecars, state.sidecars)
 }
 
 // refreshIstio refreshes Istio data
-func (m *Manager) refreshIstio() {
+func (m *Manager) refreshIstio(services map[string]struct{}) {
 	if m.istioClient == nil {
 		return
 	}
@@ -531,6 +550,7 @@ func (m *Manager) refreshIstio() {
 	if err == nil {
 		for _, vs := range vss {
 			key := fmt.Sprintf("%s/%s", vs.Namespace, vs.Name)
+			services[key] = struct{}{}
 			service := &MeshService{
 				Name:           vs.Name,
 				Namespace:      vs.Namespace,
@@ -542,19 +562,35 @@ func (m *Manager) refreshIstio() {
 }
 
 // refreshLinkerd refreshes Linkerd data
-func (m *Manager) refreshLinkerd() {
+func (m *Manager) refreshLinkerd(services map[string]struct{}) {
 	if m.linkerdClient == nil {
 		return
 	}
 	// Implementation for Linkerd refresh
+	_ = services
 }
 
 // refreshCilium refreshes Cilium data
-func (m *Manager) refreshCilium() {
+func (m *Manager) refreshCilium(services map[string]struct{}) {
 	if m.ciliumClient == nil {
 		return
 	}
 	// Implementation for Cilium refresh
+	_ = services
+}
+
+func (m *Manager) deleteMissingEntries(target *sync.Map, seen map[string]struct{}) {
+	target.Range(func(key, _ interface{}) bool {
+		keyStr, ok := key.(string)
+		if !ok {
+			target.Delete(key)
+			return true
+		}
+		if _, exists := seen[keyStr]; !exists {
+			target.Delete(keyStr)
+		}
+		return true
+	})
 }
 
 // detectMeshType auto-detects the service mesh

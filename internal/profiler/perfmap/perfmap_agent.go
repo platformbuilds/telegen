@@ -119,6 +119,7 @@ func (i *Injector) InjectForPID(ctx context.Context, pid uint32, containerID str
 
 	i.log.Info("injecting perf-map-agent", "pid", pid, "container", containerID)
 
+	parentCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, i.cfg.Timeout)
 	defer cancel()
 
@@ -140,7 +141,7 @@ func (i *Injector) InjectForPID(ctx context.Context, pid uint32, containerID str
 	}
 
 	if i.cfg.RefreshInterval > 0 {
-		refreshCtx, refreshCancel := context.WithCancel(context.Background())
+		refreshCtx, refreshCancel := context.WithCancel(parentCtx)
 		proc.refreshCancel = refreshCancel
 		go i.refreshLoop(refreshCtx, pid, containerID)
 	}
@@ -203,7 +204,7 @@ func (i *Injector) refreshLoop(ctx context.Context, pid uint32, containerID stri
 			}
 
 			i.log.Debug("refreshing perf-map", "pid", pid)
-			refreshCtx, cancel := context.WithTimeout(context.Background(), i.cfg.Timeout)
+			refreshCtx, cancel := context.WithTimeout(ctx, i.cfg.Timeout)
 			var err error
 			if containerID != "" {
 				err = i.injectInContainer(refreshCtx, pid, containerID)

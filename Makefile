@@ -102,6 +102,10 @@ run:
 
 .PHONY: test
 test:
+	go test -race ./...
+
+.PHONY: test-fast
+test-fast:
 	go test ./...
 
 .PHONY: netapp-parity
@@ -238,6 +242,7 @@ help:
 	@echo "  docker-generate    Generate eBPF code via docker"
 	@echo "  run                Run telegen with example config"
 	@echo "  test               Run tests"
+	@echo "  test-fast          Run tests without race detector"
 	@echo "  lint               Run linter"
 	@echo "  clean              Remove build artifacts"
 	@echo "  dev                Development build (generate + build)"

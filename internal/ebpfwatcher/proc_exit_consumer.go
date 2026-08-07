@@ -17,11 +17,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/cilium/ebpf"
+	"github.com/mirastacklabs-ai/telegen/internal/helpers"
 	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
 )
 
@@ -59,6 +62,8 @@ type ProcExitConsumer struct {
 	// Optional callback for callers that want to act on each event (e.g. drain
 	// detection, connection cleanup).
 	OnExit func(ev ProcExitEvent)
+
+	lastReadErrorLog atomic.Int64
 }
 
 // NewProcExitConsumer creates a ProcExitConsumer attached to the provided
@@ -109,6 +114,8 @@ func NewProcExitConsumer(
 // Call this in a dedicated goroutine.
 func (c *ProcExitConsumer) Run(ctx context.Context) {
 	c.log.Debug("starting proc_exit consumer")
+	const readErrorBudget = 1000
+	consecutiveErrs := 0
 	for {
 		record, err := c.reader.Read()
 		if err != nil {
@@ -121,9 +128,28 @@ func (c *ProcExitConsumer) Run(ctx context.Context) {
 				return
 			default:
 			}
-			c.log.Warn("proc_exit ring buffer read error", "error", err)
+			consecutiveErrs++
+			if consecutiveErrs >= readErrorBudget {
+				c.log.Error("proc_exit reader exceeded error budget; stopping loop",
+					"consecutive_errors", consecutiveErrs,
+					"error_budget", readErrorBudget,
+					"last_error", err,
+				)
+				return
+			}
+			if helpers.ShouldLogEvery(&c.lastReadErrorLog, 10*time.Second) {
+				c.log.Warn("proc_exit ring buffer read error", "error", err, "consecutive_errors", consecutiveErrs)
+			}
+			backoff := time.Duration(1<<min(consecutiveErrs, 8)) * time.Millisecond
+			if backoff > 250*time.Millisecond {
+				backoff = 250 * time.Millisecond
+			}
+			if !helpers.SleepWithContext(ctx, backoff) {
+				return
+			}
 			continue
 		}
+		consecutiveErrs = 0
 
 		select {
 		case <-ctx.Done():

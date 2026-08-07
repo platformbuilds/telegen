@@ -52,7 +52,6 @@ func (i *instrumenter) goprobes(p Tracer) error {
 	}
 
 	i.closables = append(i.closables, closers...)
-	p.AddCloser(i.closables...)
 
 	return nil
 }
@@ -114,7 +113,6 @@ func (i *instrumenter) kprobes(p KprobesTracer) error {
 
 			log.Debug("error instrumenting kprobe", "function", kfunc, "error", err)
 		}
-		p.AddCloser(i.closables...)
 	}
 
 	return nil
@@ -257,6 +255,7 @@ func (i *instrumenter) uprobes(pid int32, p Tracer) error {
 			continue
 		}
 
+		moduleClosers := make([]io.Closer, 0)
 		for j := range m.probes {
 			if err := gatherOffsets(m.instrPath, m.probes[j], log); err != nil {
 				log.Debug("error gathering offsets", "error", err)
@@ -269,10 +268,12 @@ func (i *instrumenter) uprobes(pid int32, p Tracer) error {
 				continue
 			}
 
+			moduleClosers = append(moduleClosers, closers...)
+		}
+		if len(moduleClosers) > 0 {
 			log.Debug("adding module for instrumenter and incrementing reference count", "path", m.instrPath, "ino", instrumentedIno)
-
-			// We bump the count of uses of the underlying shared library with a new executable
-			p.RecordInstrumentedLib(instrumentedIno, closers)
+			// We bump the count of uses of the underlying shared library with a new executable once per module.
+			p.RecordInstrumentedLib(instrumentedIno, moduleClosers)
 			i.addModule(instrumentedIno)
 		}
 	}
@@ -333,7 +334,7 @@ func (i *instrumenter) sockfilters(p Tracer) error {
 			return fmt.Errorf("attaching socket filter: %w", i.handleSockFilterErr(err, filter))
 		}
 
-		p.AddCloser(&ebpfcommon.Filter{Fd: fd})
+		i.closables = append(i.closables, &ebpfcommon.Filter{Fd: fd})
 	}
 
 	return nil
@@ -368,7 +369,9 @@ func attachSocketFilter(filter *ebpf.Program) (int, error) {
 }
 
 func (i *instrumenter) sockmsgs(p Tracer) error {
-	for _, sockmsg := range p.SockMsgs() {
+	sockMsgs := p.SockMsgs()
+	for idx := range sockMsgs {
+		sockmsg := sockMsgs[idx]
 		slog.Info("Attaching sock msgs")
 		err := link.RawAttachProgram(link.RawAttachProgramOptions{
 			Target:  sockmsg.MapFD,
@@ -382,14 +385,16 @@ func (i *instrumenter) sockmsgs(p Tracer) error {
 			return fmt.Errorf("attaching sock_msg program: %w", err)
 		}
 
-		p.AddCloser(&sockmsg)
+		i.closables = append(i.closables, &sockmsg)
 	}
 
 	return nil
 }
 
 func (i *instrumenter) sockops(p Tracer) error {
-	for _, sockops := range p.SockOps() {
+	sockOps := p.SockOps()
+	for idx := range sockOps {
+		sockops := sockOps[idx]
 		cgroupPath, err := getCgroupPath()
 		if err != nil {
 			if i.metrics != nil {
@@ -414,7 +419,7 @@ func (i *instrumenter) sockops(p Tracer) error {
 			return nil
 		}
 
-		p.AddCloser(&sockops)
+		i.closables = append(i.closables, &sockops)
 	}
 
 	return nil
@@ -430,7 +435,6 @@ func (i *instrumenter) tracepoints(p KprobesTracer) error {
 			}
 			return fmt.Errorf("instrumenting function %q: %w", sfunc, err)
 		}
-		p.AddCloser(i.closables...)
 	}
 
 	return nil
@@ -473,7 +477,7 @@ func (i *instrumenter) iters(p Tracer) error {
 		}
 		iter.Link = lnk
 
-		p.AddCloser(iter.Link)
+		i.closables = append(i.closables, iter.Link)
 	}
 
 	return nil

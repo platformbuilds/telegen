@@ -20,6 +20,7 @@ type Discovery struct {
 	config      DiscoveryConfig
 	log         *slog.Logger
 	mibResolver *MIBResolver
+	staleAfter  time.Duration
 
 	// Discovered devices
 	mu      sync.RWMutex
@@ -60,6 +61,7 @@ func NewDiscovery(cfg DiscoveryConfig, resolver *MIBResolver, log *slog.Logger) 
 		config:      cfg,
 		log:         log,
 		mibResolver: resolver,
+		staleAfter:  staleDeviceTTL(cfg.Interval),
 		devices:     make(map[string]*DiscoveredDevice),
 		stopCh:      make(chan struct{}),
 	}, nil
@@ -75,6 +77,7 @@ func (d *Discovery) Start(ctx context.Context) error {
 	}
 
 	d.log.Info("starting SNMP discovery", "networks", d.config.Networks, "interval", d.config.Interval)
+	d.stopCh = make(chan struct{})
 
 	d.wg.Add(1)
 	go d.discoveryLoop(ctx)
@@ -151,8 +154,32 @@ func (d *Discovery) runDiscovery(ctx context.Context) {
 			d.log.Warn("network scan failed", "network", network, "error", err)
 		}
 	}
+	d.sweepStaleDevices()
 
 	d.log.Info("discovery scan complete", "devices_found", len(d.devices))
+}
+
+func staleDeviceTTL(interval time.Duration) time.Duration {
+	if interval <= 0 {
+		return 15 * time.Minute
+	}
+	ttl := interval * 3
+	if ttl < 5*time.Minute {
+		ttl = 5 * time.Minute
+	}
+	return ttl
+}
+
+func (d *Discovery) sweepStaleDevices() {
+	cutoff := time.Now().Add(-d.staleAfter)
+	d.mu.Lock()
+	for addr, dev := range d.devices {
+		if dev.LastSeenAt.After(cutoff) {
+			continue
+		}
+		delete(d.devices, addr)
+	}
+	d.mu.Unlock()
 }
 
 // scanNetwork scans a single network for SNMP devices

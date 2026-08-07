@@ -5,6 +5,7 @@ package discover // import "github.com/mirastacklabs-ai/telegen/internal/discove
 
 import (
 	"context"
+	"debug/elf"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -179,6 +180,10 @@ func (t *typer) FilterClassify(evs []Event[ProcessMatch]) []Event[ebpf.Instrumen
 			}
 		case EventDeleted:
 			if fInfo, ok := t.currentPids[ev.Obj.Process.Pid]; ok {
+				if fInfo.ELF != nil {
+					_ = fInfo.ELF.Close()
+					fInfo.ELF = nil
+				}
 				delete(t.currentPids, ev.Obj.Process.Pid)
 				out = append(out, Event[ebpf.Instrumentable]{
 					Type: EventDeleted,
@@ -190,6 +195,16 @@ func (t *typer) FilterClassify(evs []Event[ProcessMatch]) []Event[ebpf.Instrumen
 
 	for i := range elfs {
 		inst := t.asInstrumentable(elfs[i])
+		cloned, err := cloneFileInfoForEvent(inst.FileInfo)
+		if err != nil {
+			t.log.Warn("failed to clone executable file info for event delivery",
+				"pid", inst.FileInfo.Pid,
+				"path", inst.FileInfo.ProExeLinkPath,
+				"error", err,
+			)
+		} else {
+			inst.FileInfo = cloned
+		}
 		t.log.Debug(
 			"found an instrumentable process",
 			"UID", inst.FileInfo.Service.UID,
@@ -198,6 +213,22 @@ func (t *typer) FilterClassify(evs []Event[ProcessMatch]) []Event[ebpf.Instrumen
 		out = append(out, Event[ebpf.Instrumentable]{Type: EventCreated, Obj: inst})
 	}
 	return out
+}
+
+func cloneFileInfoForEvent(src *exec.FileInfo) (*exec.FileInfo, error) {
+	if src == nil {
+		return nil, fmt.Errorf("nil source file info")
+	}
+	cloned := *src
+	if src.ELF == nil {
+		return &cloned, nil
+	}
+	reopened, err := elf.Open(src.ProExeLinkPath)
+	if err != nil {
+		return nil, fmt.Errorf("reopen ELF %s: %w", src.ProExeLinkPath, err)
+	}
+	cloned.ELF = reopened
+	return &cloned, nil
 }
 
 // asInstrumentable classifies the type of executable (Go, generic...) and,

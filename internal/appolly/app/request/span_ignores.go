@@ -6,8 +6,9 @@ package request // import "github.com/mirastacklabs-ai/telegen/internal/appolly/
 type ignoreMode uint8
 
 const (
-	ignoreMetrics ignoreMode = 0x1
-	ignoreTraces  ignoreMode = 0x2
+	ignoreMetrics    ignoreMode = 0x1
+	ignoreTraces     ignoreMode = 0x2
+	payloadTruncated ignoreMode = 0x4
 )
 
 func setIgnoreFlag(s *Span, flag ignoreMode) {
@@ -32,4 +33,12 @@ func IgnoreMetrics(s *Span) bool {
 
 func IgnoreTraces(s *Span) bool {
 	return isIgnored(s, ignoreTraces)
+}
+
+func SetPayloadTruncated(s *Span) {
+	setIgnoreFlag(s, payloadTruncated)
+}
+
+func PayloadTruncated(s *Span) bool {
+	return isIgnored(s, payloadTruncated)
 }

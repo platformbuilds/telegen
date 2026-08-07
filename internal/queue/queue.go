@@ -26,20 +26,27 @@ type Ring[T any] struct {
 	lastDrop time.Time
 	dropped  uint64
 	onDrop   func(n uint64, reason DropReason)
+	wakeup   chan struct{}
 }
 
 func NewRing[T any](cap int, onDrop func(n uint64, reason DropReason)) *Ring[T] {
 	if cap < 1 {
 		cap = 1
 	}
-	return &Ring[T]{buf: make([]Item[T], cap), cap: cap, onDrop: onDrop}
+	return &Ring[T]{buf: make([]Item[T], cap), cap: cap, onDrop: onDrop, wakeup: make(chan struct{}, 1)}
 }
 
 func (q *Ring[T]) Len() int { q.mu.Lock(); defer q.mu.Unlock(); return q.sz }
 
 func (q *Ring[T]) Push(x T) {
+	q.PushWithEnqueueTime(x, time.Now())
+}
+
+func (q *Ring[T]) PushWithEnqueueTime(x T, enqueue time.Time) {
+	if enqueue.IsZero() {
+		enqueue = time.Now()
+	}
 	q.mu.Lock()
-	defer q.mu.Unlock()
 	if q.sz == q.cap {
 		q.head = (q.head + 1) % q.cap
 		q.dropped++
@@ -48,7 +55,12 @@ func (q *Ring[T]) Push(x T) {
 		q.sz++
 	}
 	tail := (q.head + q.sz - 1) % q.cap
-	q.buf[tail] = Item[T]{V: x, Enqueue: time.Now()}
+	q.buf[tail] = Item[T]{V: x, Enqueue: enqueue}
+	q.mu.Unlock()
+	select {
+	case q.wakeup <- struct{}{}:
+	default:
+	}
 }
 
 func (q *Ring[T]) PopBatch(maxN int, maxWait time.Duration) []Item[T] {
@@ -73,7 +85,15 @@ func (q *Ring[T]) PopBatch(maxN int, maxWait time.Duration) []Item[T] {
 		if time.Now().After(deadline) {
 			return nil
 		}
-		time.Sleep(5 * time.Millisecond)
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return nil
+		}
+		select {
+		case <-q.wakeup:
+		case <-time.After(remaining):
+			return nil
+		}
 	}
 }
 

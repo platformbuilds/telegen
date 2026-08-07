@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
@@ -61,7 +62,7 @@ type NameResolverConfig struct {
 	// Sources for name resolving. Accepted values: dns, k8s, rdns
 	Sources []Source `yaml:"sources" env:"OTEL_EBPF_NAME_RESOLVER_SOURCES" envSeparator:"," envDefault:"k8s"`
 	// CacheLen specifies the max size of the LRU cache that is checked before
-	// performing the name lookup. Default: 256
+	// performing the name lookup. Default: 4096
 	CacheLen int `yaml:"cache_len" env:"OTEL_EBPF_NAME_RESOLVER_CACHE_LEN"`
 	// CacheTTL specifies the time-to-live of a cached IP->hostname entry. After the
 	// cached entry becomes older than this time, the IP->hostname entry will be looked
@@ -70,11 +71,14 @@ type NameResolverConfig struct {
 }
 
 type NameResolver struct {
-	cache  *expirable.LRU[string, string]
-	cfg    *NameResolverConfig
-	db     *kube.Store
-	dnsDB  *store.InMemory
-	logger *slog.Logger
+	cache             *expirable.LRU[string, string]
+	cfg               *NameResolverConfig
+	db                *kube.Store
+	dnsDB             *store.InMemory
+	logger            *slog.Logger
+	lookupCtx         context.Context
+	resolver          *net.Resolver
+	dnsLookupInFlight sync.Map
 
 	sources maps.Bits
 }
@@ -115,12 +119,14 @@ func nameResolver(ctx context.Context, ctxInfo *global.ContextInfo, cfg *NameRes
 	}
 
 	nr := NameResolver{
-		cfg:     cfg,
-		db:      kubeStore,
-		dnsDB:   dnsDB,
-		cache:   expirable.NewLRU[string, string](cfg.CacheLen, nil, cfg.CacheTTL),
-		sources: sources,
-		logger:  logger,
+		cfg:       cfg,
+		db:        kubeStore,
+		dnsDB:     dnsDB,
+		cache:     expirable.NewLRU[string, string](cfg.CacheLen, nil, cfg.CacheTTL),
+		sources:   sources,
+		logger:    logger,
+		lookupCtx: ctx,
+		resolver:  net.DefaultResolver,
 	}
 
 	in := input.Subscribe(msg.SubscriberName("transform.NameResolver"))
@@ -295,26 +301,38 @@ func (nr *NameResolver) resolveIP(ip string) string {
 	if host, ok := nr.cache.Get(ip); ok {
 		return host
 	}
-
-	var r *net.Resolver
-	addr, err := r.LookupAddr(context.Background(), ip)
-	if err != nil {
-		nr.cache.Add(ip, ip)
-		return ip
-	}
-
-	for _, a := range addr {
-		nr.cache.Add(ip, a)
-		return a
-	}
-
-	nr.cache.Add(ip, ip)
+	nr.resolveIPAsync(ip)
 	return ip
+}
+
+func (nr *NameResolver) resolveIPAsync(ip string) {
+	if _, loaded := nr.dnsLookupInFlight.LoadOrStore(ip, struct{}{}); loaded {
+		return
+	}
+	go func() {
+		defer nr.dnsLookupInFlight.Delete(ip)
+		lookupCtx, cancel := context.WithTimeout(nr.baseContext(), 2*time.Second)
+		defer cancel()
+		addr, err := nr.resolver.LookupAddr(lookupCtx, ip)
+		if err != nil || len(addr) == 0 {
+			nr.cache.Add(ip, ip)
+			return
+		}
+
+		for _, a := range addr {
+			nr.cache.Add(ip, a)
+			return
+		}
+
+		nr.cache.Add(ip, ip)
+	}()
 }
 
 func (nr *NameResolver) handleRDNS(span *request.Span) {
 	if span.Statement != "" {
-		nr.logger.Debug("storing reverse DNS record in cache", "ips", span.Statement, "name", span.Path)
+		if nr.logger.Enabled(nr.baseContext(), slog.LevelDebug) {
+			nr.logger.Debug("storing reverse DNS record in cache", "ips", span.Statement, "name", span.Path)
+		}
 		ips := strings.Split(span.Statement, ",")
 		for _, ip := range ips {
 			if isValidRDNS(ip) {
@@ -326,12 +344,20 @@ func (nr *NameResolver) handleRDNS(span *request.Span) {
 
 func (nr *NameResolver) resolveRDNS(ip string) string {
 	names, err := nr.dnsDB.GetHostnames(ip)
-
-	nr.logger.Debug("reverse DNS lookup", "ip", ip, "names", names)
+	if nr.logger.Enabled(nr.baseContext(), slog.LevelDebug) {
+		nr.logger.Debug("reverse DNS lookup", "ip", ip, "names", names)
+	}
 
 	if err != nil || len(names) == 0 {
 		return ""
 	}
 
 	return names[0]
+}
+
+func (nr *NameResolver) baseContext() context.Context {
+	if nr.lookupCtx != nil {
+		return nr.lookupCtx
+	}
+	return context.TODO()
 }
