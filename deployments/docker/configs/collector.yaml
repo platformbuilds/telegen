@@ -12,7 +12,7 @@ agent:
   mode: collector
   log_level: INFO
   log_format: json
-  log_config: ""
+#   log_config: ""
   shutdown_timeout: 10s
   enforce_sys_caps: false
 
@@ -29,12 +29,12 @@ selfTelemetry:
 # -----------------------------------------------------------------------------
 # Internal Metrics Configuration
 # -----------------------------------------------------------------------------
-internal_metrics:
-  exporter: disabled
-  prometheus:
-    port: 0
-    path: "/internal/metrics"
-  bpf_metric_scrape_interval: 15s
+# internal_metrics:
+#   exporter: disabled
+#   prometheus:
+#     port: 0
+#     path: "/internal/metrics"
+#   bpf_metric_scrape_interval: 15s
 
 # -----------------------------------------------------------------------------
 # Queues Configuration
@@ -311,14 +311,14 @@ cloud:
 # -----------------------------------------------------------------------------
 exports:
   # Signal metadata for indexing (can be disabled to reduce storage costs)
-  include_signal_metadata: true
-  metadata_fields:
-    enable_category: true
-    enable_subcategory: true
-    enable_source_module: true
-    enable_bpf_component: true
-    enable_description: false  # Disabled by default (verbose)
-    enable_collector_type: true
+#   include_signal_metadata: true
+#   metadata_fields:
+#     enable_category: true
+#     enable_subcategory: true
+#     enable_source_module: true
+#     enable_bpf_component: true
+#     enable_description: false  # Disabled by default (verbose)
+#     enable_collector_type: true
 
   remoteWrite:
     mode: active
@@ -357,30 +357,30 @@ exports:
 # -----------------------------------------------------------------------------
 # Prometheus Export Configuration
 # -----------------------------------------------------------------------------
-prometheus_export:
-  enabled: true
-  path: /metrics
-  port: 0
-  buckets:
-    duration_histogram_buckets:
-      - 0.005
-      - 0.01
-      - 0.025
-      - 0.05
-      - 0.1
-      - 0.25
-      - 0.5
-      - 1
-      - 2.5
-      - 5
-      - 10
-  instrumentations:
-    - all
-  ttl: 5m
-  span_metrics_service_cache_size: 10000
+# prometheus_export:
+#   enabled: true
+#   path: /metrics
+#   port: 0
+#   buckets:
+#     duration_histogram_buckets:
+#       - 0.005
+#       - 0.01
+#       - 0.025
+#       - 0.05
+#       - 0.1
+#       - 0.25
+#       - 0.5
+#       - 1
+#       - 2.5
+#       - 5
+#       - 10
+#   instrumentations:
+#     - all
+#   ttl: 5m
+#   span_metrics_service_cache_size: 10000
 
 # -----------------------------------------------------------------------------
 # Debug Configuration
 # -----------------------------------------------------------------------------
-trace_printer: disabled
-profile_port: 0
+# trace_printer: disabled
+# profile_port: 0

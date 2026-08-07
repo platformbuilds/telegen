@@ -17,6 +17,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mirastacklabs-ai/telegen/internal/cloud/unified"
+	cloudproviders "github.com/mirastacklabs-ai/telegen/internal/cloud/unified/providers"
 	"github.com/mirastacklabs-ai/telegen/internal/config"
 	exportotlp "github.com/mirastacklabs-ai/telegen/internal/exporters/otlp"
 	"github.com/mirastacklabs-ai/telegen/internal/kafka"
@@ -29,6 +31,7 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/pipeline"
 	"github.com/mirastacklabs-ai/telegen/internal/profiler"
 	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
+	"github.com/mirastacklabs-ai/telegen/internal/snmp"
 	storage "github.com/mirastacklabs-ai/telegen/internal/storage"
 	"github.com/mirastacklabs-ai/telegen/internal/version"
 	"github.com/mirastacklabs-ai/telegen/internal/vmware"
@@ -41,11 +44,13 @@ import (
 
 // Global JSON logger - all telegen logs are structured JSON
 var logger *slog.Logger
+var logLevelVar slog.LevelVar
 
 func init() {
 	// Initialize JSON logger as the default for all telegen output
+	logLevelVar.Set(slog.LevelInfo)
 	logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+		Level: &logLevelVar,
 	}))
 	slog.SetDefault(logger)
 }
@@ -84,6 +89,13 @@ func main() {
 		logger.Error("failed to load config", "error", err)
 		os.Exit(1)
 	}
+	configureRuntimeLogger(cfg.Agent.LogLevel, cfg.Agent.LogFormat)
+
+	effectiveMode, err := resolveMode(*modeFlag, cfg.Agent.Mode)
+	if err != nil {
+		logger.Error("invalid mode", "error", err, "allowed", "agent|collector|unified")
+		os.Exit(1)
+	}
 	if *dumpConfig {
 		out, dumpErr := redactedConfigSnapshot(cfg)
 		if dumpErr != nil {
@@ -94,7 +106,7 @@ func main() {
 		return
 	}
 	if !*skipPreflight {
-		if err := runPreflightChecks(cfg); err != nil {
+		if err := runPreflightChecks(cfg, cfg.Agent.EnforceSysCaps); err != nil {
 			logger.Error("startup preflight failed", "error", err)
 			os.Exit(1)
 		}
@@ -128,12 +140,8 @@ func main() {
 		"version", version.Version(),
 		"commit", version.Commit(),
 		"build_date", version.BuildDate(),
-		"mode", func() string {
-			if *modeFlag != "" {
-				return *modeFlag
-			}
-			return "agent"
-		}(),
+		"mode", effectiveMode,
+		"instance_id", cfg.Agent.InstanceID,
 		"ebpf_enabled", cfg.EBPF.Enabled,
 		"profiling_enabled", cfg.Profiling.Enabled,
 		"jfr_enabled", cfg.Pipelines.JFR.Enabled,
@@ -165,12 +173,30 @@ func main() {
 
 	mux := http.NewServeMux()
 	registry := selftelemetry.InstallHandlers(mux, cfg.SelfTelemetry.Listen)
+	var pprofSrv *http.Server
 	if cfg.SelfTelemetry.PprofEnabled {
-		installPprofHandlers(mux)
-		installDebugConfigHandler(mux, cfg)
-		logger.Warn("pprof endpoints enabled on self-telemetry listener",
-			"endpoint", fmt.Sprintf("http://localhost%s/debug/pprof/", cfg.SelfTelemetry.Listen),
-		)
+		if cfg.SelfTelemetry.PprofPort > 0 {
+			pprofAddr := fmt.Sprintf(":%d", cfg.SelfTelemetry.PprofPort)
+			pprofMux := http.NewServeMux()
+			installPprofHandlers(pprofMux)
+			installDebugConfigHandler(pprofMux, cfg)
+			pprofSrv = &http.Server{Addr: pprofAddr, Handler: pprofMux, ReadHeaderTimeout: 5 * time.Second}
+			go func() {
+				logger.Info("pprof server started", "address", pprofAddr)
+				if err := pprofSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+					logger.Error("pprof server failed", "error", err)
+				}
+			}()
+			logger.Warn("pprof endpoints enabled on dedicated listener",
+				"endpoint", fmt.Sprintf("http://localhost%s/debug/pprof/", pprofAddr),
+			)
+		} else {
+			installPprofHandlers(mux)
+			installDebugConfigHandler(mux, cfg)
+			logger.Warn("pprof endpoints enabled on self-telemetry listener",
+				"endpoint", fmt.Sprintf("http://localhost%s/debug/pprof/", cfg.SelfTelemetry.Listen),
+			)
+		}
 	}
 	srv := &http.Server{Addr: cfg.SelfTelemetry.Listen, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
@@ -231,7 +257,7 @@ func main() {
 	// Start storage manager if storage collection is enabled (collector / unified mode, or explicit config).
 	// --mode collector also forces storage on even if storage.enabled is not set in config.
 	var storageMgr *storage.Manager
-	storageEnabled := cfg.Storage.Enabled || *modeFlag == "collector" || *modeFlag == "unified"
+	storageEnabled := cfg.Storage.Enabled || effectiveMode == "collector" || effectiveMode == "unified"
 	if storageEnabled && (len(cfg.Storage.PureFlashArray) > 0 ||
 		len(cfg.Storage.DellPowerStore) > 0 ||
 		len(cfg.Storage.HPEPrimera) > 0 ||
@@ -267,7 +293,7 @@ func main() {
 	// Start VMware vSphere collection (collector / unified mode, or explicit config).
 	// Metrics flow via the shared metrics exporter; logs via the shared logger provider.
 	var vmwareMgr *vmware.Manager
-	vmwareEnabled := cfg.VMware.Enabled || *modeFlag == "collector" || *modeFlag == "unified"
+	vmwareEnabled := cfg.VMware.Enabled || effectiveMode == "collector" || effectiveMode == "unified"
 	if vmwareEnabled && len(cfg.VMware.Targets) > 0 {
 		cfg.VMware.Enabled = true // ensure manager sees it as enabled
 		var err error
@@ -297,7 +323,7 @@ func main() {
 	// Start network infrastructure collection (collector / unified mode, or explicit config).
 	// Metrics are exported via the shared metrics exporter from the pipeline.
 	var netinfraMgr *netinfra.Manager
-	netinfraEnabled := cfg.NetInfra.Enabled || *modeFlag == "collector" || *modeFlag == "unified"
+	netinfraEnabled := cfg.NetInfra.Enabled || effectiveMode == "collector" || effectiveMode == "unified"
 	if netinfraEnabled && (len(cfg.NetInfra.CloudVision) > 0 ||
 		len(cfg.NetInfra.ACI) > 0 ||
 		len(cfg.NetInfra.PaloAlto) > 0 ||
@@ -323,6 +349,57 @@ func main() {
 				"paloalto_targets", len(cfg.NetInfra.PaloAlto),
 				"fortigate_targets", len(cfg.NetInfra.FortiGate),
 			)
+		}
+	}
+
+	// Start unified cloud manager when auto-detection is enabled.
+	var cloudMgr *unified.CloudManager
+	if cfg.Cloud.AutoDetect {
+		cloudCfg := buildCloudManagerConfig(cfg)
+		cloudMgr = unified.NewCloudManager(cloudCfg, logger)
+		if cloudCfg.AWS != nil {
+			cloudMgr.RegisterProvider(cloudproviders.NewAWSProvider(cloudCfg.AWS))
+		}
+		if cloudCfg.GCP != nil {
+			cloudMgr.RegisterProvider(cloudproviders.NewGCPProvider(cloudCfg.GCP))
+		}
+		if cloudCfg.Azure != nil {
+			cloudMgr.RegisterProvider(cloudproviders.NewAzureProvider(cloudCfg.Azure))
+		}
+		cloudMgr.RegisterProvider(cloudproviders.NewOnPremProvider())
+		if err := cloudMgr.Start(ctx); err != nil {
+			logger.Warn("cloud manager failed to start, continuing without cloud enrichment",
+				"error", err,
+				"status", "degraded")
+			cloudMgr = nil
+		} else {
+			logger.Info("cloud manager started",
+				"collect_metrics", cloudCfg.CollectMetrics,
+				"discover_resources", cloudCfg.DiscoverResources)
+		}
+	}
+
+	// Start SNMP receiver in collector/unified mode when explicitly enabled.
+	var snmpReceiver *snmp.Receiver
+	snmpModeEnabled := effectiveMode == "collector" || effectiveMode == "unified"
+	if snmpModeEnabled && cfg.SNMPReceiver.Enabled {
+		snmpReceiver, err = snmp.NewReceiver(cfg.SNMPReceiver, logger)
+		if err != nil {
+			logger.Warn("snmp receiver failed to initialize, continuing without snmp metrics",
+				"error", err,
+				"status", "degraded")
+			snmpReceiver = nil
+		} else if err := snmpReceiver.Start(ctx); err != nil {
+			logger.Warn("snmp receiver failed to start, continuing without snmp metrics",
+				"error", err,
+				"status", "degraded")
+			snmpReceiver = nil
+		} else {
+			signalsStarted++
+			logger.Info("snmp receiver started",
+				"targets", len(cfg.SNMPReceiver.Targets),
+				"polling_enabled", cfg.SNMPReceiver.Polling.Enabled,
+				"trap_enabled", cfg.SNMPReceiver.TrapReceiver.Enabled)
 		}
 	}
 
@@ -383,6 +460,9 @@ func main() {
 		// Inject service name from agent config
 		profCfg := cfg.Profiling
 		profCfg.ServiceName = cfg.Agent.ServiceName
+		if cfg.Agent.InstanceID != "" {
+			profCfg.HostName = cfg.Agent.InstanceID
+		}
 
 		profilerRunner, err = profiler.NewRunner(profCfg, logger, kubeStore)
 		if err != nil {
@@ -584,18 +664,24 @@ func main() {
 	<-sig
 	logger.Info("telegen shutting down")
 	cancel()
+	shutdownTimeout := cfg.Agent.ShutdownTimeout
+	if shutdownTimeout <= 0 {
+		shutdownTimeout = 10 * time.Second
+	}
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer shutdownCancel()
 	if pl != nil {
-		if err := pl.Stop(context.Background()); err != nil {
+		if err := pl.Stop(shutdownCtx); err != nil {
 			logger.Warn("failed to stop pipeline", "error", err)
 		}
 	}
 	if storageMgr != nil {
-		if err := storageMgr.Stop(context.Background()); err != nil {
+		if err := storageMgr.Stop(shutdownCtx); err != nil {
 			logger.Warn("failed to stop storage manager", "error", err)
 		}
 	}
 	if vmwareMgr != nil {
-		if err := vmwareMgr.Stop(context.Background()); err != nil {
+		if err := vmwareMgr.Stop(shutdownCtx); err != nil {
 			logger.Warn("failed to stop vmware manager", "error", err)
 		}
 	}
@@ -604,35 +690,48 @@ func main() {
 			logger.Warn("failed to stop netinfra manager", "error", err)
 		}
 	}
+	if cloudMgr != nil {
+		cloudMgr.Stop()
+	}
 	if kafkaAutoDiscovery != nil {
 		kafkaAutoDiscovery.Stop()
 	}
 	if kafkaMultiReceiver != nil {
-		if err := kafkaMultiReceiver.Stop(context.Background()); err != nil {
+		if err := kafkaMultiReceiver.Stop(shutdownCtx); err != nil {
 			logger.Warn("failed to stop kafka receiver", "error", err)
 		}
 	}
 	if profilerRunner != nil {
-		if err := profilerRunner.Stop(context.Background()); err != nil {
+		if err := profilerRunner.Stop(shutdownCtx); err != nil {
 			logger.Warn("failed to stop profiler runner", "error", err)
 		}
 	}
+	if snmpReceiver != nil {
+		if err := snmpReceiver.Stop(shutdownCtx); err != nil {
+			logger.Warn("failed to stop snmp receiver", "error", err)
+		}
+	}
 	if nodeExp != nil {
-		if err := nodeExp.Shutdown(context.Background()); err != nil {
+		if err := nodeExp.Shutdown(shutdownCtx); err != nil {
 			logger.Warn("failed to shut down node exporter", "error", err)
 		}
 	}
 	if kubeMetricsProvider != nil {
-		if err := kubeMetricsProvider.Stop(context.Background()); err != nil {
+		if err := kubeMetricsProvider.Stop(shutdownCtx); err != nil {
 			logger.Warn("failed to stop kubemetrics provider", "error", err)
 		}
 	}
-	if err := srv.Shutdown(context.Background()); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Warn("self-telemetry shutdown returned error", "error", err)
 	}
 	if cfg.SelfTelemetry.HealthListen != cfg.SelfTelemetry.Listen {
-		if err := healthSrv.Shutdown(context.Background()); err != nil {
+		if err := healthSrv.Shutdown(shutdownCtx); err != nil {
 			logger.Warn("health listener shutdown returned error", "error", err)
+		}
+	}
+	if pprofSrv != nil {
+		if err := pprofSrv.Shutdown(shutdownCtx); err != nil {
+			logger.Warn("pprof listener shutdown returned error", "error", err)
 		}
 	}
 	logger.Info("telegen shutdown complete")
@@ -768,7 +867,7 @@ func isSensitiveConfigKey(key string) bool {
 	return false
 }
 
-func runPreflightChecks(cfg *config.Config) error {
+func runPreflightChecks(cfg *config.Config, enforceSysCaps bool) error {
 	if err := obi.CheckOSSupport(); err != nil {
 		return fmt.Errorf("os support check failed: %w", err)
 	}
@@ -777,9 +876,70 @@ func runPreflightChecks(cfg *config.Config) error {
 		return fmt.Errorf("build preflight obi config: %w", err)
 	}
 	if err := obi.CheckOSCapabilities(obiCfg); err != nil {
+		if !enforceSysCaps {
+			logger.Warn("os capability check failed; continuing because agent.enforce_sys_caps=false", "error", err)
+			return nil
+		}
 		return fmt.Errorf("os capability check failed: %w", err)
 	}
 	return nil
+}
+
+func resolveMode(flagMode, cfgMode string) (string, error) {
+	candidate := strings.TrimSpace(flagMode)
+	if candidate == "" {
+		candidate = strings.TrimSpace(cfgMode)
+	}
+	if candidate == "" {
+		return "agent", nil
+	}
+	switch candidate {
+	case "agent", "collector", "unified":
+		return candidate, nil
+	default:
+		return "", fmt.Errorf("unsupported mode %q", candidate)
+	}
+}
+
+func configureRuntimeLogger(levelRaw, formatRaw string) {
+	level := slog.LevelInfo
+	if levelRaw != "" {
+		parsed, err := parseSlogLevel(levelRaw)
+		if err != nil {
+			logger.Warn("invalid agent.log_level; using INFO", "value", levelRaw, "error", err)
+		} else {
+			level = parsed
+		}
+	}
+	logLevelVar.Set(level)
+
+	format := strings.ToLower(strings.TrimSpace(formatRaw))
+	handlerOpts := &slog.HandlerOptions{Level: &logLevelVar}
+	switch format {
+	case "", "json":
+		logger = slog.New(slog.NewJSONHandler(os.Stdout, handlerOpts))
+	case "text":
+		logger = slog.New(slog.NewTextHandler(os.Stdout, handlerOpts))
+	default:
+		logger.Warn("invalid agent.log_format; using json", "value", formatRaw)
+		logger = slog.New(slog.NewJSONHandler(os.Stdout, handlerOpts))
+	}
+	slog.SetDefault(logger)
+}
+
+func parseSlogLevel(raw string) (slog.Level, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "debug":
+		return slog.LevelDebug, nil
+	case "info":
+		return slog.LevelInfo, nil
+	case "warn", "warning":
+		return slog.LevelWarn, nil
+	case "error":
+		return slog.LevelError, nil
+	default:
+		return slog.LevelInfo, fmt.Errorf("unsupported level %q", raw)
+	}
 }
 
 func acquireInstanceLock(path string) (func(), error) {
@@ -841,6 +1001,43 @@ func buildUnifiedPipelineConfig(cfg *config.Config) pipeline.UnifiedPipelineConf
 		}
 	}
 	return pc
+}
+
+func buildCloudManagerConfig(cfg *config.Config) unified.Config {
+	cloudCfg := unified.DefaultConfig()
+	cloudCfg.AutoDetect = cfg.Cloud.AutoDetect
+	cloudCfg.DetectionTimeout = cfg.Cloud.DetectionTimeout
+	cloudCfg.DetectionInterval = cfg.Cloud.DetectionInterval
+	cloudCfg.CollectMetrics = cfg.Cloud.CollectMetrics
+	cloudCfg.MetricsInterval = cfg.Cloud.MetricsInterval
+	cloudCfg.DiscoverResources = cfg.Cloud.DiscoverResources
+	cloudCfg.ResourceInterval = cfg.Cloud.ResourceInterval
+
+	if cfg.Cloud.AWS.Enabled {
+		cloudCfg.AWS = &unified.AWSConfig{
+			Region:       cfg.Cloud.AWS.Region,
+			IMDSv2Only:   cfg.Cloud.AWS.IMDSv2Only,
+			IMDSEndpoint: cfg.Cloud.AWS.IMDSEndpoint,
+			IMDSTimeout:  cfg.Cloud.AWS.IMDSTimeout,
+		}
+	}
+	if cfg.Cloud.GCP.Enabled {
+		cloudCfg.GCP = &unified.GCPConfig{
+			Project:          cfg.Cloud.GCP.Project,
+			Zone:             cfg.Cloud.GCP.Zone,
+			MetadataEndpoint: cfg.Cloud.GCP.MetadataEndpoint,
+			MetadataTimeout:  cfg.Cloud.GCP.MetadataTimeout,
+		}
+	}
+	if cfg.Cloud.Azure.Enabled {
+		cloudCfg.Azure = &unified.AzureConfig{
+			SubscriptionID: cfg.Cloud.Azure.SubscriptionID,
+			ResourceGroup:  cfg.Cloud.Azure.ResourceGroup,
+			IMDSEndpoint:   cfg.Cloud.Azure.IMDSEndpoint,
+			IMDSTimeout:    cfg.Cloud.Azure.IMDSTimeout,
+		}
+	}
+	return cloudCfg
 }
 
 // startKubeMetrics initializes and starts the kubemetrics provider if enabled or auto-detected.

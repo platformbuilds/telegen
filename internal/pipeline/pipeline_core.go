@@ -1123,12 +1123,27 @@ func (p *UnifiedPipeline) initSharedOTLPClients(ctx context.Context) error {
 
 	// Best-effort HTTP fallback when endpoint is URL-formatted.
 	if strings.HasPrefix(p.config.Exporter.Endpoint, "http://") || strings.HasPrefix(p.config.Exporter.Endpoint, "https://") {
+		httpTracesPath := "/v1/traces"
+		httpLogsPath := "/v1/logs"
+		httpMetricsPath := "/v1/metrics"
+		if p.config.RuntimeConfig != nil {
+			if strings.TrimSpace(p.config.RuntimeConfig.Exports.OTLP.HTTP.TracesPath) != "" {
+				httpTracesPath = strings.TrimSpace(p.config.RuntimeConfig.Exports.OTLP.HTTP.TracesPath)
+			}
+			if strings.TrimSpace(p.config.RuntimeConfig.Exports.OTLP.HTTP.LogsPath) != "" {
+				httpLogsPath = strings.TrimSpace(p.config.RuntimeConfig.Exports.OTLP.HTTP.LogsPath)
+			}
+			if strings.TrimSpace(p.config.RuntimeConfig.Exports.OTLP.HTTP.MetricsPath) != "" {
+				httpMetricsPath = strings.TrimSpace(p.config.RuntimeConfig.Exports.OTLP.HTTP.MetricsPath)
+			}
+		}
 		opts.GRPC.Enabled = false
 		opts.HTTP.Enabled = true
 		opts.HTTP.Endpoint = strings.TrimPrefix(strings.TrimPrefix(p.config.Exporter.Endpoint, "http://"), "https://")
 		opts.HTTP.Insecure = p.config.Exporter.Insecure
-		opts.HTTP.TracesURL = "/v1/traces"
-		opts.HTTP.LogsURL = "/v1/logs"
+		opts.HTTP.TracesURL = httpTracesPath
+		opts.HTTP.LogsURL = httpLogsPath
+		opts.HTTP.MetricsURL = httpMetricsPath
 		opts.HTTP.Headers = p.config.Exporter.Headers
 		opts.HTTP.Gzip = true
 		opts.HTTP.Timeout = p.config.Exporter.Timeout
@@ -1162,6 +1177,14 @@ func (p *UnifiedPipeline) startRuntimeSources(ctx context.Context) error {
 		aopts.TagAllowlist = rcfg.Cloud.AWS.TagAllowlist
 		aopts.BaseURL = rcfg.Cloud.AWS.IMDSBaseURL
 		aopts.DisableProbe = rcfg.Cloud.AWS.DisableProbe
+		aopts.Region = rcfg.Cloud.AWS.Region
+		aopts.IMDSv2Only = rcfg.Cloud.AWS.IMDSv2Only
+		if rcfg.Cloud.AWS.IMDSTimeout > 0 {
+			aopts.IMDSTimeout = rcfg.Cloud.AWS.IMDSTimeout
+		}
+		if strings.TrimSpace(rcfg.Cloud.AWS.IMDSEndpoint) != "" {
+			aopts.IMDSEndpoint = strings.TrimSpace(rcfg.Cloud.AWS.IMDSEndpoint)
+		}
 		prov := awsm.New(aopts)
 		if meta, err := prov.Fetch(ctx); err == nil {
 			p.awsLabels = meta.Labels()

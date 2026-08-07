@@ -18,6 +18,7 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/nodeexporter"
 	obiconfig "github.com/mirastacklabs-ai/telegen/internal/obiconfig"
 	"github.com/mirastacklabs-ai/telegen/internal/profiler"
+	"github.com/mirastacklabs-ai/telegen/internal/snmp"
 	"github.com/mirastacklabs-ai/telegen/internal/storagedef"
 	"github.com/mirastacklabs-ai/telegen/internal/transform"
 	"github.com/mirastacklabs-ai/telegen/internal/vmwaredef"
@@ -37,19 +38,35 @@ type TLS struct {
 
 type Config struct {
 	Agent struct {
-		ServiceName string `yaml:"service_name"`
+		ServiceName     string        `yaml:"service_name"`
+		InstanceID      string        `yaml:"instance_id"`
+		Mode            string        `yaml:"mode"`
+		LogLevel        string        `yaml:"log_level"`
+		LogFormat       string        `yaml:"log_format"`
+		ShutdownTimeout time.Duration `yaml:"shutdown_timeout"`
+		EnforceSysCaps  bool          `yaml:"enforce_sys_caps"`
 	} `yaml:"agent"`
 	SelfTelemetry struct {
 		Listen       string `yaml:"listen"`
 		HealthListen string `yaml:"health_listen"`
 		NS           string `yaml:"prometheus_namespace"`
 		PprofEnabled bool   `yaml:"pprof_enabled"`
+		PprofPort    int    `yaml:"pprof_port"`
 		// MemoryLimitBytes sets a soft process heap ceiling for Go's runtime.
 		// Keep 0 to leave the memory limit unset.
 		MemoryLimitBytes int64 `yaml:"memory_limit_bytes"`
 	} `yaml:"selfTelemetry"`
 	Cloud struct {
-		AWS AWS `yaml:"aws"`
+		AutoDetect        bool          `yaml:"auto_detect"`
+		DetectionTimeout  time.Duration `yaml:"detection_timeout"`
+		DetectionInterval time.Duration `yaml:"detection_interval"`
+		CollectMetrics    bool          `yaml:"collect_metrics"`
+		MetricsInterval   time.Duration `yaml:"metrics_interval"`
+		DiscoverResources bool          `yaml:"discover_resources"`
+		ResourceInterval  time.Duration `yaml:"resource_interval"`
+		AWS               AWS           `yaml:"aws"`
+		GCP               GCP           `yaml:"gcp"`
+		Azure             Azure         `yaml:"azure"`
 	} `yaml:"cloud"`
 	Queues struct {
 		Metrics Q `yaml:"metrics"`
@@ -107,6 +124,9 @@ type Config struct {
 	// NetInfra configures network infrastructure metric collection
 	// (Cisco ACI, Arista CloudVision, Palo Alto, FortiGate).
 	NetInfra netinfra.Config `yaml:"netinfra"`
+
+	// SNMPReceiver configures SNMP polling/traps collection.
+	SNMPReceiver snmp.Config `yaml:"snmp_receiver"`
 }
 
 // FilelogConfig configures the file-based log collection pipeline.
@@ -808,14 +828,15 @@ type OTLP struct {
 		Timeout  string            `yaml:"timeout"`
 	} `yaml:"grpc"`
 	HTTP struct {
-		Enabled    bool              `yaml:"enabled"`
-		Endpoint   string            `yaml:"endpoint"`
-		Insecure   bool              `yaml:"insecure"`
-		TracesPath string            `yaml:"traces_path"`
-		LogsPath   string            `yaml:"logs_path"`
-		Headers    map[string]string `yaml:"headers"`
-		Gzip       bool              `yaml:"gzip"`
-		Timeout    string            `yaml:"timeout"`
+		Enabled     bool              `yaml:"enabled"`
+		Endpoint    string            `yaml:"endpoint"`
+		Insecure    bool              `yaml:"insecure"`
+		TracesPath  string            `yaml:"traces_path"`
+		LogsPath    string            `yaml:"logs_path"`
+		MetricsPath string            `yaml:"metrics_path"`
+		Headers     map[string]string `yaml:"headers"`
+		Gzip        bool              `yaml:"gzip"`
+		Timeout     string            `yaml:"timeout"`
 	} `yaml:"http"`
 }
 
@@ -998,11 +1019,31 @@ func isSignedIntKind(kind reflect.Kind) bool {
 }
 
 type AWS struct {
-	Enabled         bool     `yaml:"enabled"`
-	Timeout         string   `yaml:"timeout"`
-	RefreshInterval string   `yaml:"refresh_interval"`
-	CollectTags     bool     `yaml:"collect_tags"`
-	TagAllowlist    []string `yaml:"tag_allowlist"`
-	IMDSBaseURL     string   `yaml:"imds_base_url"`
-	DisableProbe    bool     `yaml:"disable_probe"`
+	Enabled         bool          `yaml:"enabled"`
+	Timeout         string        `yaml:"timeout"`
+	RefreshInterval string        `yaml:"refresh_interval"`
+	CollectTags     bool          `yaml:"collect_tags"`
+	TagAllowlist    []string      `yaml:"tag_allowlist"`
+	IMDSBaseURL     string        `yaml:"imds_base_url"`
+	DisableProbe    bool          `yaml:"disable_probe"`
+	Region          string        `yaml:"region"`
+	IMDSv2Only      bool          `yaml:"imdsv2_only"`
+	IMDSEndpoint    string        `yaml:"imds_endpoint"`
+	IMDSTimeout     time.Duration `yaml:"imds_timeout"`
+}
+
+type GCP struct {
+	Enabled          bool          `yaml:"enabled"`
+	Project          string        `yaml:"project"`
+	Zone             string        `yaml:"zone"`
+	MetadataEndpoint string        `yaml:"metadata_endpoint"`
+	MetadataTimeout  time.Duration `yaml:"metadata_timeout"`
+}
+
+type Azure struct {
+	Enabled        bool          `yaml:"enabled"`
+	SubscriptionID string        `yaml:"subscription_id"`
+	ResourceGroup  string        `yaml:"resource_group"`
+	IMDSEndpoint   string        `yaml:"imds_endpoint"`
+	IMDSTimeout    time.Duration `yaml:"imds_timeout"`
 }

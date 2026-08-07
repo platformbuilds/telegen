@@ -98,6 +98,9 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           args: --timeout=10m
 
+      - name: Validate shipped configs
+        run: make validate-configs PRIVATE_CHART_DIR=""
+
   test:
     name: Test
     runs-on: ubuntu-latest
