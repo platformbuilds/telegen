@@ -2141,3 +2141,38 @@ ok  	github.com/mirastacklabs-ai/telegen/internal/route/harvest	1.510s
 +- checked symbol resolution errors in `internal/profiler/symbols.go` stack resolution loop and continued safely on per-frame resolve failures.
 +- reformatted touched files, reran full lint, and validated race test coverage (`./internal/profiler/...`, `./...`, and targeted `TestHarvestRoutes_MultipleTimeouts`).
 ```
+
+### complete-race-audit (COMPLETED: internal/ifaces goleak follow-up)
+
+#### PRE output
+
+```text
+$ gh run view 31163537595 --log-failed 2>&1 | grep -n "internal/ifaces" | head -20
+2122:Test	Run tests	2026-08-07T08:57:12.4594411Z [Goroutine 5 in state chan send, with github.com/mirastacklabs-ai/telegen/internal/ifaces.TestWatcher.func2.1 on top of the stack:
+2123:Test	Run tests	2026-08-07T08:57:12.4595380Z github.com/mirastacklabs-ai/telegen/internal/ifaces.TestWatcher.func2.1()
+2124:Test	Run tests	2026-08-07T08:57:12.4596161Z 	/home/runner/work/telegen/telegen/internal/ifaces/watcher_test.go:49 +0xb6
+2125:Test	Run tests	2026-08-07T08:57:12.4597145Z created by github.com/mirastacklabs-ai/telegen/internal/ifaces.TestWatcher.func2 in goroutine 4
+2126:Test	Run tests	2026-08-07T08:57:12.4599889Z 	/home/runner/work/telegen/telegen/internal/ifaces/watcher_test.go:47 +0xda
+2127:Test	Run tests	2026-08-07T08:57:12.4600985Z  Goroutine 2 in state chan receive, with github.com/mirastacklabs-ai/telegen/internal/ifaces.TestRegisterer.func2.1 on top of the stack:
+2128:Test	Run tests	2026-08-07T08:57:12.4602011Z github.com/mirastacklabs-ai/telegen/internal/ifaces.TestRegisterer.func2.1()
+2129:Test	Run tests	2026-08-07T08:57:12.4602838Z 	/home/runner/work/telegen/telegen/internal/ifaces/registerer_test.go:46 +0xc5
+2130:Test	Run tests	2026-08-07T08:57:12.4603711Z created by github.com/mirastacklabs-ai/telegen/internal/ifaces.TestRegisterer.func2 in goroutine 40
+2131:Test	Run tests	2026-08-07T08:57:12.4604831Z 	/home/runner/work/telegen/telegen/internal/ifaces/registerer_test.go:45 +0xda
+2133:Test	Run tests	2026-08-07T08:57:12.4605741Z FAIL	github.com/mirastacklabs-ai/telegen/internal/ifaces	0.479s
+```
+
+#### POST output
+
+```text
+$ GOOS=linux GOARCH=amd64 go vet ./internal/ifaces/... && GOOS=linux golangci-lint run --timeout=10m ./internal/ifaces/...
+0 issues.
+```
+
+#### Diff hunk
+
+```diff
++fixed linux-only goleak failure in `internal/ifaces` tests by making mock netlink subscribers honor cancellation:
++- added shared `mockLinkSubscriber(inputLinks)` in `internal/ifaces/watcher_test.go` that selects on both `done` and input channel receive/send paths.
++- replaced both inline mock subscriber closures in `internal/ifaces/watcher_test.go` and `internal/ifaces/registerer_test.go` with the shared helper.
++- this removes both leaked goroutine modes reported by CI (`chan send` in watcher test and `chan receive` in registerer test).
+```
