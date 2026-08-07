@@ -7,6 +7,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -22,7 +23,10 @@ type MetricCache struct {
 	ttl         time.Duration
 	registry    *prometheus.Registry
 	logger      *slog.Logger
-	stats       CacheStats
+	hits        atomic.Int64
+	misses      atomic.Int64
+	evictions   atomic.Int64
+	lastUpdated atomic.Int64
 }
 
 // CacheStats holds statistics about cache performance.
@@ -59,7 +63,7 @@ func (c *MetricCache) Gather() ([]*dto.MetricFamily, error) {
 	// Try to return cached data first
 	c.mu.RLock()
 	if c.cache != nil && time.Since(c.lastCollect) < c.ttl {
-		c.stats.Hits++
+		c.hits.Add(1)
 		result := c.cache
 		c.mu.RUnlock()
 		return result, nil
@@ -72,13 +76,13 @@ func (c *MetricCache) Gather() ([]*dto.MetricFamily, error) {
 
 	// Double-check after acquiring write lock
 	if c.cache != nil && time.Since(c.lastCollect) < c.ttl {
-		c.stats.Hits++
+		c.hits.Add(1)
 		return c.cache, nil
 	}
 
-	c.stats.Misses++
+	c.misses.Add(1)
 	if c.cache != nil {
-		c.stats.Evictions++
+		c.evictions.Add(1)
 	}
 
 	// Collect fresh metrics
@@ -89,12 +93,12 @@ func (c *MetricCache) Gather() ([]*dto.MetricFamily, error) {
 
 	c.cache = metrics
 	c.lastCollect = time.Now()
-	c.stats.LastUpdate = c.lastCollect
+	c.lastUpdated.Store(c.lastCollect.UnixNano())
 
 	c.logger.Debug("metric cache refreshed",
 		"families", len(metrics),
-		"hits", c.stats.Hits,
-		"misses", c.stats.Misses)
+		"hits", c.hits.Load(),
+		"misses", c.misses.Load())
 
 	return metrics, nil
 }
@@ -104,26 +108,30 @@ func (c *MetricCache) Invalidate() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cache = nil
-	c.stats.Evictions++
+	c.evictions.Add(1)
 }
 
 // Stats returns current cache statistics.
 func (c *MetricCache) Stats() CacheStats {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.stats
+	lastUpdate := time.Time{}
+	if nanos := c.lastUpdated.Load(); nanos > 0 {
+		lastUpdate = time.Unix(0, nanos)
+	}
+	return CacheStats{
+		Hits:       c.hits.Load(),
+		Misses:     c.misses.Load(),
+		Evictions:  c.evictions.Load(),
+		LastUpdate: lastUpdate,
+	}
 }
 
 // HitRate returns the cache hit rate as a percentage.
 func (c *MetricCache) HitRate() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	total := c.stats.Hits + c.stats.Misses
+	total := c.hits.Load() + c.misses.Load()
 	if total == 0 {
 		return 0
 	}
-	return float64(c.stats.Hits) / float64(total) * 100
+	return float64(c.hits.Load()) / float64(total) * 100
 }
 
 // BatchProcessor handles batching of metrics for efficient export.
@@ -191,14 +199,15 @@ func NewBatchProcessor(
 // Add adds metrics to the buffer and flushes if batch size is reached.
 func (b *BatchProcessor) Add(ctx context.Context, families []*dto.MetricFamily) error {
 	b.bufferMu.Lock()
-	defer b.bufferMu.Unlock()
-
 	b.buffer = append(b.buffer, families...)
 
 	// Flush if we've reached batch size
 	if len(b.buffer) >= b.batchSize {
-		return b.flushLocked(ctx)
+		batch := b.swapBufferLocked()
+		b.bufferMu.Unlock()
+		return b.flushBatch(ctx, batch)
 	}
+	b.bufferMu.Unlock()
 
 	return nil
 }
@@ -206,32 +215,45 @@ func (b *BatchProcessor) Add(ctx context.Context, families []*dto.MetricFamily) 
 // Flush forces a flush of the current buffer.
 func (b *BatchProcessor) Flush(ctx context.Context) error {
 	b.bufferMu.Lock()
-	defer b.bufferMu.Unlock()
-	return b.flushLocked(ctx)
+	batch := b.swapBufferLocked()
+	b.bufferMu.Unlock()
+	return b.flushBatch(ctx, batch)
 }
 
-// flushLocked flushes the buffer (caller must hold lock).
-func (b *BatchProcessor) flushLocked(ctx context.Context) error {
+// swapBufferLocked swaps the shared buffer with an empty one (caller must hold lock).
+func (b *BatchProcessor) swapBufferLocked() []*dto.MetricFamily {
 	if len(b.buffer) == 0 {
 		return nil
 	}
 
-	// Send the batch
-	if err := b.flushFn(ctx, b.buffer); err != nil {
-		b.logger.Error("failed to flush batch", "size", len(b.buffer), "err", err)
+	// Hand off a copy so we can release the lock before network I/O.
+	batch := make([]*dto.MetricFamily, len(b.buffer))
+	copy(batch, b.buffer)
+	b.buffer = b.buffer[:0]
+	return batch
+}
+
+func (b *BatchProcessor) flushBatch(ctx context.Context, batch []*dto.MetricFamily) error {
+	if len(batch) == 0 {
+		return nil
+	}
+
+	if err := b.flushFn(ctx, batch); err != nil {
+		b.logger.Error("failed to flush batch", "size", len(batch), "err", err)
 		return err
 	}
 
+	b.bufferMu.Lock()
 	b.batchesSent++
-	b.metricsSent += int64(len(b.buffer))
+	b.metricsSent += int64(len(batch))
+	totalBatches := b.batchesSent
+	totalMetrics := b.metricsSent
+	b.bufferMu.Unlock()
 
 	b.logger.Debug("batch flushed",
-		"size", len(b.buffer),
-		"total_batches", b.batchesSent,
-		"total_metrics", b.metricsSent)
-
-	// Reset buffer
-	b.buffer = make([]*dto.MetricFamily, 0, b.batchSize)
+		"size", len(batch),
+		"total_batches", totalBatches,
+		"total_metrics", totalMetrics)
 
 	return nil
 }

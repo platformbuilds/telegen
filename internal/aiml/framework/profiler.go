@@ -365,6 +365,8 @@ func (p *Profiler) EndSession(id string) *ProfileSession {
 		stats.TotalProfiledNs += session.Metrics.TotalDurationNs
 	}
 
+	delete(p.sessions, id)
+
 	return session
 }
 

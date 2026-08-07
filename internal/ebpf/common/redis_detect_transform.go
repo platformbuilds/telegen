@@ -15,7 +15,6 @@ import (
 
 	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
 	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
-	"github.com/mirastacklabs-ai/telegen/internal/split"
 )
 
 const minRedisFrameLen = 3
@@ -30,6 +29,8 @@ var redisErrorCodes = [...]string{
 	"CLUSTERDOWN ",
 	"READONLY ",
 }
+
+var redisDelim = []byte("\r\n")
 
 func isRedis(buf []uint8) bool {
 	if len(buf) < minRedisFrameLen {
@@ -110,29 +111,23 @@ func isValidRedisChar(c byte) bool {
 		c == '.' || c == ' ' || c == '-' || c == '_'
 }
 
-func parseRedisRequest(buf string) (string, string, bool) {
-	const redisDelim = "\r\n"
+func parseRedisRequest(buf []byte) (string, string, bool) {
+	if len(buf) == 0 {
+		return "", "", false
+	}
 
-	lines := split.NewIterator(buf, redisDelim)
-
-	_, eof := lines.Next()
-
+	line, next, eof := nextRedisLine(buf, 0)
 	if eof {
 		return "", "", false
 	}
 
 	// we need at least 2 lines
-	if _, eof = lines.Next(); eof {
+	_, _, eof = nextRedisLine(buf, next)
+	if eof {
 		return "", "", false
 	}
-
-	// we are good, start over
-	lines.Reset()
-
-	line, _ := lines.Next()
-
 	// It's not a command, something else?
-	if line[0] != '*' {
+	if len(line) == 0 || line[0] != '*' {
 		return "", "", true
 	}
 
@@ -143,43 +138,57 @@ func parseRedisRequest(buf string) (string, string, bool) {
 	read := false
 
 	for {
-		line, eof = lines.Next()
-
+		line, next, eof = nextRedisLine(buf, next)
 		if eof {
 			break
 		}
 
-		if line == redisDelim {
+		if bytes.Equal(line, redisDelim) {
 			continue
 		}
 
 		if !read {
-			if isRedisOp([]uint8(line)) {
+			if isRedisOp(line) {
 				read = true
 			} else {
 				break
 			}
 		} else {
-			if isRedisOp([]uint8(line)) {
+			if isRedisOp(line) {
 				text.WriteString("; ")
 				continue
 			}
-			if !isValidRedisChar(line[0]) {
+			trimmed := bytes.TrimSuffix(line, redisDelim)
+			if len(trimmed) == 0 {
+				break
+			}
+			if !isValidRedisChar(trimmed[0]) {
 				break
 			}
 
-			trimmed := strings.TrimSuffix(line, redisDelim)
-
 			if op == "" {
-				op = trimmed
+				op = string(trimmed)
 			}
-			text.WriteString(trimmed)
+			_, _ = text.Write(trimmed)
 			text.WriteString(" ")
 			read = false
 		}
 	}
 
 	return op, strings.TrimSpace(text.String()), true
+}
+
+func nextRedisLine(buf []byte, start int) ([]byte, int, bool) {
+	if start >= len(buf) {
+		return nil, start, true
+	}
+	idx := bytes.Index(buf[start:], redisDelim)
+	if idx < 0 {
+		line := buf[start:]
+		return line, len(buf), false
+	}
+	end := start + idx + len(redisDelim)
+	return buf[start:end], end, false
 }
 
 func redisStatus(buf []byte) (request.DBError, int) {
@@ -280,7 +289,7 @@ func ReadGoRedisRequestIntoSpan(record *ringbuf.Record) (request.Span, bool, err
 		hostPort = int(event.Conn.D_port)
 	}
 
-	op, text, ok := parseRedisRequest(string(event.Buf[:]))
+	op, text, ok := parseRedisRequest(event.Buf[:])
 
 	if !ok {
 		// We know it's redis request here, it just didn't complete correctly

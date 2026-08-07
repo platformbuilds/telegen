@@ -115,8 +115,8 @@ type V3Metrics struct {
 	EnrichmentLatency *prometheus.HistogramVec
 
 	// Resource metrics.
-	MemoryUsage *prometheus.GaugeVec
-	CPUUsage    *prometheus.GaugeVec
+	MemoryUsage    *prometheus.GaugeVec
+	CPUUsage       *prometheus.GaugeVec
 	GoroutineCount prometheus.Gauge
 }
 
@@ -339,10 +339,14 @@ func (st *SelfTelemetry) setupHandlers() {
 func (st *SelfTelemetry) healthHandler(w http.ResponseWriter, r *http.Request) {
 	if st.healthy.Load() {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"healthy"}`))
+		if _, err := w.Write([]byte(`{"status":"healthy"}`)); err != nil {
+			return
+		}
 	} else {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte(`{"status":"unhealthy"}`))
+		if _, err := w.Write([]byte(`{"status":"unhealthy"}`)); err != nil {
+			return
+		}
 	}
 }
 
@@ -350,10 +354,14 @@ func (st *SelfTelemetry) healthHandler(w http.ResponseWriter, r *http.Request) {
 func (st *SelfTelemetry) readyHandler(w http.ResponseWriter, r *http.Request) {
 	if st.ready.Load() {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ready"}`))
+		if _, err := w.Write([]byte(`{"status":"ready"}`)); err != nil {
+			return
+		}
 	} else {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte(`{"status":"not_ready"}`))
+		if _, err := w.Write([]byte(`{"status":"not_ready"}`)); err != nil {
+			return
+		}
 	}
 }
 
@@ -361,7 +369,9 @@ func (st *SelfTelemetry) readyHandler(w http.ResponseWriter, r *http.Request) {
 func (st *SelfTelemetry) infoHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(`{"version":"3.0.0","mode":"pipeline"}`))
+	if _, err := w.Write([]byte(`{"version":"3.0.0","mode":"pipeline"}`)); err != nil {
+		return
+	}
 }
 
 // Start starts the self-telemetry HTTP server.

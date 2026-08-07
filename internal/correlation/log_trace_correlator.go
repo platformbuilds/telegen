@@ -304,20 +304,33 @@ func (c *LogTraceCorrelator) Stop() {
 }
 
 // Global correlator instance for use across packages
-var globalCorrelator *LogTraceCorrelator
-var globalCorrelatorOnce sync.Once
+var (
+	globalCorrelator   *LogTraceCorrelator
+	globalCorrelatorMu sync.RWMutex
+)
 
 // GetGlobalLogTraceCorrelator returns the global correlator instance.
 // Creates one with default config if not already initialized.
 func GetGlobalLogTraceCorrelator() *LogTraceCorrelator {
-	globalCorrelatorOnce.Do(func() {
+	globalCorrelatorMu.RLock()
+	c := globalCorrelator
+	globalCorrelatorMu.RUnlock()
+	if c != nil {
+		return c
+	}
+
+	globalCorrelatorMu.Lock()
+	defer globalCorrelatorMu.Unlock()
+	if globalCorrelator == nil {
 		globalCorrelator = NewLogTraceCorrelator(DefaultLogTraceCorrelatorConfig())
-	})
+	}
 	return globalCorrelator
 }
 
 // SetGlobalLogTraceCorrelator sets the global correlator instance.
 // Should be called early in application startup.
 func SetGlobalLogTraceCorrelator(c *LogTraceCorrelator) {
+	globalCorrelatorMu.Lock()
+	defer globalCorrelatorMu.Unlock()
 	globalCorrelator = c
 }

@@ -74,7 +74,7 @@ func appendTCPLargeBuffer(parseCtx *EBPFParseContext, record *ringbuf.Record) (r
 	return request.Span{}, true, nil
 }
 
-func extractTCPLargeBuffer(parseCtx *EBPFParseContext, traceID [16]uint8, packetType, direction uint8, connInfo BpfConnectionInfoT) ([]byte, bool) {
+func extractTCPLargeBuffer(parseCtx *EBPFParseContext, traceID [16]uint8, packetType, direction uint8, connInfo BpfConnectionInfoT) ([]byte, bool, bool) {
 	key := largeBufferKey{
 		traceID:    traceID,
 		packetType: packetType,
@@ -85,16 +85,17 @@ func extractTCPLargeBuffer(parseCtx *EBPFParseContext, traceID [16]uint8, packet
 	//nolint:gocritic
 	if lb, ok := parseCtx.largeBuffers.Get(key); ok {
 		out := lb.buf.CloneBytes()
+		truncated := lb.buf.Truncated()
 		if parseCtx.protocolDebug {
 			fmt.Printf("<<< LargeBufferExtract: (packet=%d direction=%d)\n%s\n", key.packetType, key.direction, string(out))
 		}
 		parseCtx.largeBuffers.Remove(key)
-		return out, true
+		return out, truncated, true
 	} else {
 		if parseCtx.protocolDebug {
 			fmt.Printf("<<< LargeBufferExtract: not found!(packet=%d direction=%d)\n", key.packetType, key.direction)
 		}
 	}
 
-	return nil, false
+	return nil, false, false
 }

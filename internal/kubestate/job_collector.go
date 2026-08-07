@@ -161,11 +161,25 @@ func (k *KubeState) buildJobCollector(ctx context.Context) error {
 	}
 
 	informer := cache.NewSharedInformer(lw, &batchv1.Job{}, k.config.GetResyncPeriod())
-	_, _ = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { _ = store.Add(obj) },
-		UpdateFunc: func(_, obj interface{}) { _ = store.Update(obj) },
-		DeleteFunc: func(obj interface{}) { _ = store.Delete(obj) },
-	})
+	if _, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			if err := store.Add(obj); err != nil {
+				return
+			}
+		},
+		UpdateFunc: func(_, obj interface{}) {
+			if err := store.Update(obj); err != nil {
+				return
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+			if err := store.Delete(obj); err != nil {
+				return
+			}
+		},
+	}); err != nil {
+		return err
+	}
 
 	k.informers = append(k.informers, informer)
 	k.logger.Info("job collector built", "generatorCount", len(generators))

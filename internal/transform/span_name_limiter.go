@@ -77,6 +77,7 @@ func (l *spanNameLimiter) doLimit(ctx context.Context) {
 	defer l.out.Close()
 	l.log.Debug("Starting", "ttl", l.ttl, "limit", l.limit)
 	expirer := time.NewTicker(l.ttl)
+	defer expirer.Stop()
 	for {
 		select {
 		case <-ctx.Done():

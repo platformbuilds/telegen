@@ -219,9 +219,17 @@ func (p *PortEnum) UnmarshalText(text []byte) error {
 		e := PortRange{}
 		ports := strings.Split(entry, "-")
 		// don't need to check integer parsing, as we already did it via regular expression
-		e.Start, _ = strconv.Atoi(strings.TrimSpace(ports[0]))
+		start, err := strconv.Atoi(strings.TrimSpace(ports[0]))
+		if err != nil {
+			continue
+		}
+		e.Start = start
 		if len(ports) > 1 {
-			e.End, _ = strconv.Atoi(strings.TrimSpace(ports[1]))
+			end, err := strconv.Atoi(strings.TrimSpace(ports[1]))
+			if err != nil {
+				continue
+			}
+			e.End = end
 		}
 		p.Ranges = append(p.Ranges, e)
 	}

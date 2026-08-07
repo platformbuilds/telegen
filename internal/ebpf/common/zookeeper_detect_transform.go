@@ -26,7 +26,10 @@ func ProcessPossibleZooKeeperEvent(event *TCPRequestInfo, reqBuf, respBuf []byte
 	}
 	allPkts = append(allPkts, reqPkts...)
 
-	respPkts, _, _ := zkparser.ParsePackets(respBuf)
+	respPkts, _, respErr := zkparser.ParsePackets(respBuf)
+	if respErr != nil {
+		respPkts = nil
+	}
 	allPkts = append(allPkts, respPkts...)
 
 	if len(allPkts) == 0 {

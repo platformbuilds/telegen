@@ -143,8 +143,12 @@ func GeminiSpan(baseSpan *request.Span, req *http.Request, resp *http.Response) 
 
 	var in request.GeminiRequest
 	var out request.GeminiResponse
-	_ = json.Unmarshal(reqB, &in)
-	_ = json.Unmarshal(respB, &out)
+	if err := json.Unmarshal(reqB, &in); err != nil {
+		// keep zero-values
+	}
+	if err := json.Unmarshal(respB, &out); err != nil {
+		// keep zero-values
+	}
 
 	model := modelFromGeminiPath(requestPath(req))
 	baseSpan.SubType = request.HTTPSubtypeGemini
@@ -207,8 +211,12 @@ func BedrockSpan(baseSpan *request.Span, req *http.Request, resp *http.Response)
 
 	var in request.BedrockRequest
 	var out request.BedrockResponse
-	_ = json.Unmarshal(reqB, &in)
-	_ = json.Unmarshal(respB, &out)
+	if err := json.Unmarshal(reqB, &in); err != nil {
+		// keep zero-values
+	}
+	if err := json.Unmarshal(respB, &out); err != nil {
+		// keep zero-values
+	}
 
 	out.InputTokens = atoiHeader(resp.Header.Get("x-amzn-bedrock-input-token-count"))
 	out.OutputTokens = atoiHeader(resp.Header.Get("x-amzn-bedrock-output-token-count"))
@@ -297,7 +305,9 @@ func EmbeddingSpan(baseSpan *request.Span, req *http.Request, resp *http.Respons
 	}
 
 	var out request.EmbeddingResponse
-	_ = json.Unmarshal(respB, &out)
+	if err := json.Unmarshal(respB, &out); err != nil {
+		// keep zero-values
+	}
 	in := parseEmbeddingRequest(reqB)
 
 	baseSpan.SubType = request.HTTPSubtypeEmbedding
@@ -332,8 +342,12 @@ func RerankSpan(baseSpan *request.Span, req *http.Request, resp *http.Response) 
 
 	var in request.RerankRequest
 	var out request.RerankResponse
-	_ = json.Unmarshal(reqB, &in)
-	_ = json.Unmarshal(respB, &out)
+	if err := json.Unmarshal(reqB, &in); err != nil {
+		// keep zero-values
+	}
+	if err := json.Unmarshal(respB, &out); err != nil {
+		// keep zero-values
+	}
 
 	baseSpan.SubType = request.HTTPSubtypeRerank
 	baseSpan.GenAI = &request.GenAI{
@@ -366,8 +380,12 @@ func RetrievalSpan(baseSpan *request.Span, req *http.Request, resp *http.Respons
 
 	var in request.RetrievalRequest
 	var out request.RetrievalResponse
-	_ = json.Unmarshal(reqB, &in)
-	_ = json.Unmarshal(respB, &out)
+	if err := json.Unmarshal(reqB, &in); err != nil {
+		// keep zero-values
+	}
+	if err := json.Unmarshal(respB, &out); err != nil {
+		// keep zero-values
+	}
 
 	baseSpan.SubType = request.HTTPSubtypeRetrieval
 	baseSpan.GenAI = &request.GenAI{

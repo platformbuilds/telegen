@@ -4,8 +4,9 @@
 package expire // import "github.com/mirastacklabs-ai/telegen/pkg/export/expire"
 
 import (
-	"strings"
+	"hash/fnv"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -18,13 +19,13 @@ type ExpiryMap[T any] struct {
 	clock   Clock
 	mt      sync.RWMutex
 	ttl     time.Duration
-	entries map[string]*entry[T]
+	entries map[uint64][]*entry[T]
 }
 
 type entry[T any] struct {
-	lastAccess  time.Time
-	labelValues []string
-	val         T
+	lastAccessNanos atomic.Int64
+	labelValues     []string
+	val             T
 }
 
 // NewExpiryMap creates an expiry map given a Clock implementation and a TTL.
@@ -33,7 +34,7 @@ type entry[T any] struct {
 func NewExpiryMap[T any](clock Clock, ttl time.Duration) *ExpiryMap[T] {
 	em := &ExpiryMap[T]{
 		ttl:     ttl,
-		entries: map[string]*entry[T]{},
+		entries: map[uint64][]*entry[T]{},
 		clock:   clock,
 	}
 	return em
@@ -46,24 +47,36 @@ func NewExpiryMap[T any](clock Clock, ttl time.Duration) *ExpiryMap[T] {
 func (ex *ExpiryMap[T]) GetOrCreate(lbls []string, instancer func() T) T {
 	now := ex.clock()
 
-	h := labelsKey(lbls)
+	h := labelsKeyHash(lbls)
 	ex.mt.RLock()
-	e, ok := ex.entries[h]
+	bucket, ok := ex.entries[h]
 	ex.mt.RUnlock()
 	if ok {
-		ex.mt.Lock()
-		e.lastAccess = now
-		ex.mt.Unlock()
-		return e.val
+		for _, e := range bucket {
+			if labelValuesEqual(e.labelValues, lbls) {
+				e.lastAccessNanos.Store(now.UnixNano())
+				return e.val
+			}
+		}
 	}
+
 	ex.mt.Lock()
+	defer ex.mt.Unlock()
+	// Re-check under write lock in case another goroutine created it.
+	bucket = ex.entries[h]
+	for _, e := range bucket {
+		if labelValuesEqual(e.labelValues, lbls) {
+			e.lastAccessNanos.Store(now.UnixNano())
+			return e.val
+		}
+	}
 	instance := instancer()
-	ex.entries[h] = &entry[T]{
-		labelValues: lbls,
-		lastAccess:  now,
+	newEntry := &entry[T]{
+		labelValues: append([]string(nil), lbls...),
 		val:         instance,
 	}
-	ex.mt.Unlock()
+	newEntry.lastAccessNanos.Store(now.UnixNano())
+	ex.entries[h] = append(bucket, newEntry)
 	return instance
 }
 
@@ -74,22 +87,26 @@ func (ex *ExpiryMap[T]) DeleteExpired() []T {
 		return nil
 	}
 
-	var delKeys []string
 	var delEntries []T
-	ex.mt.RLock()
+	ex.mt.Lock()
+	defer ex.mt.Unlock()
 	now := ex.clock()
-	for k, e := range ex.entries {
-		if now.Sub(e.lastAccess) > ex.ttl {
-			delKeys = append(delKeys, k)
-			delEntries = append(delEntries, e.val)
+	for k, bucket := range ex.entries {
+		next := bucket[:0]
+		for _, e := range bucket {
+			lastAccess := time.Unix(0, e.lastAccessNanos.Load())
+			if now.Sub(lastAccess) > ex.ttl {
+				delEntries = append(delEntries, e.val)
+				continue
+			}
+			next = append(next, e)
+		}
+		if len(next) == 0 {
+			delete(ex.entries, k)
+		} else {
+			ex.entries[k] = next
 		}
 	}
-	ex.mt.RUnlock()
-	ex.mt.Lock()
-	for _, k := range delKeys {
-		delete(ex.entries, k)
-	}
-	ex.mt.Unlock()
 	return delEntries
 }
 
@@ -98,8 +115,10 @@ func (ex *ExpiryMap[T]) DeleteAll() []T {
 	ex.mt.Lock()
 	defer ex.mt.Unlock()
 	entries := make([]T, 0, len(ex.entries))
-	for k, e := range ex.entries {
-		entries = append(entries, e.val)
+	for k, bucket := range ex.entries {
+		for _, e := range bucket {
+			entries = append(entries, e.val)
+		}
 		delete(ex.entries, k)
 	}
 	return entries
@@ -111,13 +130,32 @@ func (ex *ExpiryMap[T]) DeleteAll() []T {
 func (ex *ExpiryMap[T]) All() []T {
 	ex.mt.RLock()
 	items := make([]T, 0, len(ex.entries))
-	for _, e := range ex.entries {
-		items = append(items, e.val)
+	for _, bucket := range ex.entries {
+		for _, e := range bucket {
+			items = append(items, e.val)
+		}
 	}
 	ex.mt.RUnlock()
 	return items
 }
 
-func labelsKey(lbls []string) string {
-	return strings.Join(lbls, ":")
+func labelsKeyHash(lbls []string) uint64 {
+	h := fnv.New64a()
+	for i := range lbls {
+		_, _ = h.Write([]byte(lbls[i]))
+		_, _ = h.Write([]byte{0xff})
+	}
+	return h.Sum64()
+}
+
+func labelValuesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

@@ -212,7 +212,9 @@ func (r *fallbackResolver) updateAndGet(queriedFull, queriedShort string, cause 
 
 func (r *fallbackResolver) Long() string {
 	if r.lastFull == "" {
-		_, _, _ = r.Query()
+		if _, _, err := r.Query(); err != nil {
+			logger().Debug("hostname query failed", "error", err)
+		}
 	}
 
 	return r.lastFull

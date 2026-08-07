@@ -320,13 +320,33 @@ func (m *Manager) cleanup() {
 
 	// Cleanup stale nodes
 	m.nodes.Range(func(key, value interface{}) bool {
+		nodeID, ok := key.(string)
+		if !ok {
+			return true
+		}
 		node := value.(*Node)
 		node.mu.RLock()
 		lastSeen := node.LastSeen
+		nodeIPs := make([]net.IP, 0, len(node.IPs)+1)
+		if node.IP != nil {
+			nodeIPs = append(nodeIPs, append(net.IP(nil), node.IP...))
+		}
+		for _, ip := range node.IPs {
+			if ip == nil {
+				continue
+			}
+			nodeIPs = append(nodeIPs, append(net.IP(nil), ip...))
+		}
 		node.mu.RUnlock()
 
 		if now.Sub(lastSeen) > nodeTimeout {
 			m.nodes.Delete(key)
+			for _, ip := range nodeIPs {
+				ipKey := ip.String()
+				if mappedNodeID, exists := m.ipToNode.Load(ipKey); exists && mappedNodeID == nodeID {
+					m.ipToNode.Delete(ipKey)
+				}
+			}
 			atomic.AddInt64(&m.metrics.TotalNodes, -1)
 		}
 		return true

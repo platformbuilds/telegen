@@ -35,7 +35,11 @@ func (i *InclusionLists) includes(name attr.Name) bool {
 	for _, incl := range i.Include {
 		// to ignore user-input format (dots or underscores) we transform the patterns
 		// and the metric names to underscores
-		if ok, _ := path.Match(asProm(incl), name.Prom()); ok {
+		ok, err := path.Match(asProm(incl), name.Prom())
+		if err != nil {
+			continue
+		}
+		if ok {
 			return true
 		}
 	}
@@ -46,7 +50,11 @@ func (i *InclusionLists) excludes(name attr.Name) bool {
 	for _, excl := range i.Exclude {
 		// to ignore user-input format (dots or underscores) we transform the patterns
 		// and the metric names to underscores
-		if ok, _ := path.Match(asProm(excl), name.Prom()); ok {
+		ok, err := path.Match(asProm(excl), name.Prom())
+		if err != nil {
+			continue
+		}
+		if ok {
 			return true
 		}
 	}
@@ -86,7 +94,11 @@ func (incl Selection) Matching(metricName Name) []InclusionLists {
 
 	var matchingMetricGlobs []Section
 	for glob := range incl {
-		if ok, _ := path.Match(string(glob), string(metricName.Section)); ok {
+		ok, err := path.Match(string(glob), string(metricName.Section))
+		if err != nil {
+			continue
+		}
+		if ok {
 			matchingMetricGlobs = append(matchingMetricGlobs, glob)
 		}
 	}

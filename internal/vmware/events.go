@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/vmware/govmomi/event"
@@ -33,7 +34,7 @@ type targetState struct {
 	lastEventKey  int32
 	lastEventTime time.Time
 
-	initialized bool
+	initialized atomic.Bool
 	vmPower     map[string]string // vmmo -> powerState
 	vmSnapCount map[string]int    // vmmo -> root snapshot count
 	hostConn    map[string]string // hostmo -> connectionState
@@ -302,7 +303,7 @@ func collectStateChangesFromData(
 		}
 		curVMSnap[id] = snapCount
 
-		if !st.initialized {
+		if !st.initialized.Load() {
 			continue
 		}
 		if prev, ok := st.vmPower[id]; ok && prev != power {
@@ -323,7 +324,7 @@ func collectStateChangesFromData(
 		conn := string(h.Runtime.ConnectionState)
 		curHostConn[id] = conn
 
-		if !st.initialized {
+		if !st.initialized.Load() {
 			continue
 		}
 		if prev, ok := st.hostConn[id]; ok && prev != conn {
@@ -347,7 +348,7 @@ func collectStateChangesFromData(
 		}
 		curDSHigh[id] = high
 
-		if !st.initialized {
+		if !st.initialized.Load() {
 			continue
 		}
 		if prev := st.dsHigh[id]; high && !prev {
@@ -361,7 +362,7 @@ func collectStateChangesFromData(
 	st.vmSnapCount = curVMSnap
 	st.hostConn = curHostConn
 	st.dsHigh = curDSHigh
-	st.initialized = true
+	st.initialized.Store(true)
 
 	return records
 }

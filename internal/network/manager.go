@@ -226,24 +226,21 @@ type Manager struct {
 	// Metrics
 	metrics NetworkMetrics
 
-	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
-	mu     sync.RWMutex
+	ctx     context.Context
+	cancel  context.CancelFunc
+	wg      sync.WaitGroup
+	mu      sync.RWMutex
+	running bool
 }
 
 // NewManager creates a new network observability manager
 func NewManager(config Config) (*Manager, error) {
-	ctx, cancel := context.WithCancel(context.Background())
-
 	m := &Manager{
 		config:       config,
 		packetEvents: make(chan *PacketEvent, 10000),
 		dnsEvents:    make(chan *DNSEvent, 10000),
 		tcpEvents:    make(chan *TCPMetricsEvent, 10000),
 		tlsEvents:    make(chan *TLSEvent, 10000),
-		ctx:          ctx,
-		cancel:       cancel,
 	}
 
 	// Initialize sub-managers
@@ -263,7 +260,6 @@ func NewManager(config Config) (*Manager, error) {
 		var err error
 		m.serviceMeshMgr, err = servicemesh.NewManager(config.ServiceMesh)
 		if err != nil {
-			cancel()
 			return nil, err
 		}
 	}
@@ -276,28 +272,42 @@ func (m *Manager) Start(ctx context.Context) error {
 	if !m.config.Enabled {
 		return nil
 	}
+	m.mu.Lock()
+	if m.running {
+		m.mu.Unlock()
+		return nil
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	m.ctx = runCtx
+	m.cancel = cancel
+	m.running = true
+	m.mu.Unlock()
 
 	// Start sub-managers
 	if m.multicastManager != nil {
-		if err := m.multicastManager.Start(ctx); err != nil {
+		if err := m.multicastManager.Start(runCtx); err != nil {
+			m.Stop()
 			return err
 		}
 	}
 
 	if m.grpcTracer != nil {
-		if err := m.grpcTracer.Start(ctx); err != nil {
+		if err := m.grpcTracer.Start(runCtx); err != nil {
+			m.Stop()
 			return err
 		}
 	}
 
 	if m.topologyManager != nil {
-		if err := m.topologyManager.Start(ctx); err != nil {
+		if err := m.topologyManager.Start(runCtx); err != nil {
+			m.Stop()
 			return err
 		}
 	}
 
 	if m.serviceMeshMgr != nil {
-		if err := m.serviceMeshMgr.Start(ctx); err != nil {
+		if err := m.serviceMeshMgr.Start(runCtx); err != nil {
+			m.Stop()
 			return err
 		}
 	}
@@ -314,13 +324,17 @@ func (m *Manager) Start(ctx context.Context) error {
 
 // Stop stops all network tracing components
 func (m *Manager) Stop() {
-	m.cancel()
-
-	// Close event channels
-	close(m.packetEvents)
-	close(m.dnsEvents)
-	close(m.tcpEvents)
-	close(m.tlsEvents)
+	m.mu.Lock()
+	if !m.running {
+		m.mu.Unlock()
+		return
+	}
+	m.running = false
+	cancel := m.cancel
+	m.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 
 	// Wait for event processors
 	m.wg.Wait()
@@ -347,8 +361,15 @@ func (m *Manager) Stop() {
 func (m *Manager) processPacketEvents() {
 	defer m.wg.Done()
 
-	for event := range m.packetEvents {
-		m.handlePacketEvent(event)
+	for {
+		select {
+		case <-m.ctx.Done():
+			return
+		case event := <-m.packetEvents:
+			if event != nil {
+				m.handlePacketEvent(event)
+			}
+		}
 	}
 }
 
@@ -393,8 +414,15 @@ func (m *Manager) handlePacketEvent(event *PacketEvent) {
 func (m *Manager) processDNSEvents() {
 	defer m.wg.Done()
 
-	for event := range m.dnsEvents {
-		m.handleDNSEvent(event)
+	for {
+		select {
+		case <-m.ctx.Done():
+			return
+		case event := <-m.dnsEvents:
+			if event != nil {
+				m.handleDNSEvent(event)
+			}
+		}
 	}
 }
 
@@ -411,8 +439,15 @@ func (m *Manager) handleDNSEvent(event *DNSEvent) {
 func (m *Manager) processTCPEvents() {
 	defer m.wg.Done()
 
-	for event := range m.tcpEvents {
-		m.handleTCPEvent(event)
+	for {
+		select {
+		case <-m.ctx.Done():
+			return
+		case event := <-m.tcpEvents:
+			if event != nil {
+				m.handleTCPEvent(event)
+			}
+		}
 	}
 }
 
@@ -429,8 +464,15 @@ func (m *Manager) handleTCPEvent(event *TCPMetricsEvent) {
 func (m *Manager) processTLSEvents() {
 	defer m.wg.Done()
 
-	for event := range m.tlsEvents {
-		m.handleTLSEvent(event)
+	for {
+		select {
+		case <-m.ctx.Done():
+			return
+		case event := <-m.tlsEvents:
+			if event != nil {
+				m.handleTLSEvent(event)
+			}
+		}
 	}
 }
 

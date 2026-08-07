@@ -346,7 +346,10 @@ func (p *AzureProvider) getInstanceMetadata(ctx context.Context) (*azureInstance
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return nil, fmt.Errorf("IMDS returned status %d and body read failed: %w", resp.StatusCode, readErr)
+		}
 		return nil, fmt.Errorf("IMDS returned status %d: %s", resp.StatusCode, string(body))
 	}
 

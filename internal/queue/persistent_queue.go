@@ -9,6 +9,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -39,6 +41,15 @@ type PersistentQueueConfig struct {
 	// Default: 1s
 	FlushInterval time.Duration `yaml:"flush_interval" json:"flush_interval"`
 
+	// MaxReplayAge drops stale WAL segments older than this on startup.
+	// Default: 1h
+	MaxReplayAge time.Duration `yaml:"max_replay_age" json:"max_replay_age"`
+
+	// MaxReplayBytes limits how much WAL data is replayed on startup.
+	// Remaining segments are quarantined and skipped.
+	// Default: 128MB
+	MaxReplayBytes int64 `yaml:"max_replay_bytes" json:"max_replay_bytes"`
+
 	// OnDrop is called when items are dropped.
 	OnDrop func(count int, reason DropReason)
 }
@@ -52,6 +63,8 @@ func DefaultPersistentQueueConfig() PersistentQueueConfig {
 		SegmentSizeBytes: 10 * 1024 * 1024, // 10MB
 		SyncOnWrite:      false,
 		FlushInterval:    time.Second,
+		MaxReplayAge:     time.Hour,
+		MaxReplayBytes:   128 * 1024 * 1024, // 128MB
 	}
 }
 
@@ -75,6 +88,7 @@ type PersistentQueue struct {
 	nextID       atomic.Uint64
 	itemCount    atomic.Int64
 	totalBytes   atomic.Int64
+	segmentCount atomic.Int64
 
 	// Stats
 	totalPushed  atomic.Int64
@@ -114,6 +128,12 @@ func NewPersistentQueue(config PersistentQueueConfig) (*PersistentQueue, error) 
 	if config.FlushInterval == 0 {
 		config.FlushInterval = DefaultPersistentQueueConfig().FlushInterval
 	}
+	if config.MaxReplayAge <= 0 {
+		config.MaxReplayAge = DefaultPersistentQueueConfig().MaxReplayAge
+	}
+	if config.MaxReplayBytes <= 0 {
+		config.MaxReplayBytes = DefaultPersistentQueueConfig().MaxReplayBytes
+	}
 
 	// Create data directory.
 	if err := os.MkdirAll(config.DataDir, 0755); err != nil {
@@ -150,6 +170,7 @@ func (pq *PersistentQueue) loadSegments() error {
 			segmentFiles = append(segmentFiles, filepath.Join(pq.config.DataDir, entry.Name()))
 		}
 	}
+	sort.Strings(segmentFiles)
 
 	if len(segmentFiles) == 0 {
 		// Create initial segment.
@@ -157,15 +178,35 @@ func (pq *PersistentQueue) loadSegments() error {
 	}
 
 	// Load existing segments.
+	replayedBytes := int64(0)
+	now := time.Now()
 	for _, path := range segmentFiles {
+		if pq.config.MaxReplayAge > 0 {
+			if info, statErr := os.Stat(path); statErr == nil && now.Sub(info.ModTime()) > pq.config.MaxReplayAge {
+				pq.quarantineSegmentFile(path, "stale")
+				continue
+			}
+		}
+		if pq.config.MaxReplayBytes > 0 && replayedBytes >= pq.config.MaxReplayBytes {
+			pq.quarantineSegmentFile(path, "replay_budget")
+			continue
+		}
 		seg, err := pq.loadSegment(path)
 		if err != nil {
-			// Log and skip corrupted segments.
+			// Quarantine and skip corrupted segments.
+			pq.quarantineSegmentFile(path, "corrupt")
+			continue
+		}
+		if pq.config.MaxReplayBytes > 0 && replayedBytes+seg.size > pq.config.MaxReplayBytes {
+			_ = seg.file.Close()
+			pq.quarantineSegmentFile(path, "replay_budget")
 			continue
 		}
 		pq.segments = append(pq.segments, seg)
+		pq.segmentCount.Add(1)
 		pq.itemCount.Add(int64(seg.itemCount))
 		pq.totalBytes.Add(seg.size)
+		replayedBytes += seg.size
 	}
 
 	if len(pq.segments) == 0 {
@@ -215,6 +256,15 @@ func (pq *PersistentQueue) loadSegment(path string) (*segment, error) {
 	}
 
 	return seg, nil
+}
+
+func (pq *PersistentQueue) quarantineSegmentFile(path, reason string) {
+	if path == "" {
+		return
+	}
+	base := strings.TrimSuffix(path, ".wal")
+	target := fmt.Sprintf("%s.%s.%d.quarantine", base, reason, time.Now().UnixNano())
+	_ = os.Rename(path, target)
 }
 
 // countItems counts items in a segment file.
@@ -271,6 +321,7 @@ func (pq *PersistentQueue) createNewSegment() error {
 	}
 
 	pq.segments = append(pq.segments, seg)
+	pq.segmentCount.Add(1)
 	pq.writeSegment = len(pq.segments) - 1
 
 	return nil
@@ -436,7 +487,11 @@ func (pq *PersistentQueue) dropOldest(n int) {
 		seg := pq.segments[pq.readSegment]
 
 		// Seek to read position.
-		seg.file.Seek(pq.readOffset, io.SeekStart)
+		if _, err := seg.file.Seek(pq.readOffset, io.SeekStart); err != nil {
+			pq.quarantineSegment(pq.readSegment, "drop_seek_error")
+			pq.readOffset = 0
+			continue
+		}
 
 		// Read and discard.
 		var length uint32
@@ -450,7 +505,9 @@ func (pq *PersistentQueue) dropOldest(n int) {
 				pq.readOffset = 0
 				continue
 			}
-			break
+			pq.quarantineSegment(pq.readSegment, "drop_read_error")
+			pq.readOffset = 0
+			continue
 		}
 
 		// Skip data.
@@ -466,6 +523,35 @@ func (pq *PersistentQueue) dropOldest(n int) {
 	}
 }
 
+func (pq *PersistentQueue) quarantineSegment(idx int, reason string) {
+	if idx < 0 || idx >= len(pq.segments) {
+		return
+	}
+	seg := pq.segments[idx]
+	if seg.file != nil {
+		_ = seg.file.Close()
+	}
+	pq.quarantineSegmentFile(seg.path, reason)
+	pq.segments = append(pq.segments[:idx], pq.segments[idx+1:]...)
+	pq.segmentCount.Add(-1)
+	if len(pq.segments) == 0 {
+		pq.readSegment = 0
+		pq.writeSegment = 0
+		return
+	}
+	if pq.writeSegment > idx {
+		pq.writeSegment--
+	} else if pq.writeSegment >= len(pq.segments) {
+		pq.writeSegment = len(pq.segments) - 1
+	}
+	if pq.readSegment > idx {
+		pq.readSegment--
+	}
+	if pq.readSegment >= len(pq.segments) {
+		pq.readSegment = len(pq.segments) - 1
+	}
+}
+
 // deleteSegment removes a fully-read segment.
 func (pq *PersistentQueue) deleteSegment(idx int) {
 	if idx >= len(pq.segments) {
@@ -478,6 +564,7 @@ func (pq *PersistentQueue) deleteSegment(idx int) {
 
 	// Remove from slice.
 	pq.segments = append(pq.segments[:idx], pq.segments[idx+1:]...)
+	pq.segmentCount.Add(-1)
 
 	// Adjust indices.
 	if pq.writeSegment > idx {
@@ -534,7 +621,7 @@ func (pq *PersistentQueue) Stats() PersistentQueueStats {
 		TotalPushed:  pq.totalPushed.Load(),
 		TotalPopped:  pq.totalPopped.Load(),
 		TotalDropped: pq.totalDropped.Load(),
-		SegmentCount: len(pq.segments),
+		SegmentCount: int(pq.segmentCount.Load()),
 	}
 }
 

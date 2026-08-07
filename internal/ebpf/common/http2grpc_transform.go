@@ -245,11 +245,17 @@ func readRetMetaFrame(parseContext *EBPFParseContext, connID uint64, fr *http2.F
 		switch hf.Name {
 		case ":status":
 			if !grpc { // only set the HTTP status if we didn't find grpc status
-				status, _ = strconv.Atoi(hf.Value)
+				parsed, err := strconv.Atoi(hf.Value)
+				if err == nil {
+					status = parsed
+				}
 			}
 			ok = true
 		case "grpc-status":
-			status, _ = strconv.Atoi(hf.Value)
+			parsed, err := strconv.Atoi(hf.Value)
+			if err == nil {
+				status = parsed
+			}
 			protocolIsGRPC(parseContext.h2c, connID)
 			grpc = true
 			ok = true
@@ -349,6 +355,9 @@ func http2FromBuffers(parseContext *EBPFParseContext, event *BPFHTTP2Info) (requ
 	bLen := len(event.Data)
 	if event.Len < int32(bLen) {
 		bLen = int(event.Len)
+	}
+	if bLen < 0 {
+		return request.Span{}, true, nil
 	}
 
 	framer := byteFramer(event.Data[:bLen])

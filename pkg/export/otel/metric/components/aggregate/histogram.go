@@ -55,7 +55,13 @@ type histValues[N int64 | float64] struct {
 	valuesMu sync.Mutex
 }
 
-func newHistValues[N int64 | float64](bounds []float64, noSum bool, limit int, r func() exemplar.FilteredReservoir[N]) *histValues[N] {
+func newHistValues[N int64 | float64](
+	bounds []float64,
+	noSum bool,
+	limit int,
+	onOverflow func(),
+	r func() exemplar.FilteredReservoir[N],
+) *histValues[N] {
 	// The responsibility of keeping all buckets correctly associated with the
 	// passed boundaries is ultimately this type's responsibility. Make a copy
 	// here so we can always guarantee this. Or, in the case of failure, have
@@ -66,7 +72,7 @@ func newHistValues[N int64 | float64](bounds []float64, noSum bool, limit int, r
 		noSum:  noSum,
 		bounds: b,
 		newRes: r,
-		limit:  newLimiter[*buckets[N]](limit),
+		limit:  newLimiter[*buckets[N]](limit, onOverflow),
 		values: make(map[attribute.Distinct]*buckets[N]),
 	}
 }
@@ -119,9 +125,15 @@ func (s *histValues[N]) remove(_ context.Context, fltrAttr attribute.Set) {
 
 // newHistogram returns an Aggregator that summarizes a set of measurements as
 // an histogram.
-func newHistogram[N int64 | float64](boundaries []float64, noMinMax, noSum bool, limit int, r func() exemplar.FilteredReservoir[N]) *histogram[N] {
+func newHistogram[N int64 | float64](
+	boundaries []float64,
+	noMinMax, noSum bool,
+	limit int,
+	onOverflow func(),
+	r func() exemplar.FilteredReservoir[N],
+) *histogram[N] {
 	return &histogram[N]{
-		histValues: newHistValues[N](boundaries, noSum, limit, r),
+		histValues: newHistValues[N](boundaries, noSum, limit, onOverflow, r),
 		noMinMax:   noMinMax,
 		start:      now(),
 	}

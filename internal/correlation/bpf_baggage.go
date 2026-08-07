@@ -80,8 +80,7 @@ func (h *HTTPHeaderInjector) ExtractAndCacheBaggage(data []byte, tc *TraceContex
 	}
 
 	// Find baggage header
-	baggageRegex := regexp.MustCompile(`(?i)baggage:\s*([^\r\n]+)\r?\n`)
-	match := baggageRegex.FindSubmatch(data)
+	match := baggageHeaderRegex.FindSubmatch(data)
 	if len(match) < 2 {
 		return
 	}
@@ -284,6 +283,7 @@ func (h *TCPOptionBaggageHandler) LookupBaggage(traceID TraceID) (*Baggage, bool
 var (
 	globalBPFBaggageIntegration     *BPFBaggageIntegration
 	globalBPFBaggageIntegrationOnce sync.Once
+	baggageHeaderRegex              = regexp.MustCompile(`(?i)baggage:\s*([^\r\n]+)\r?\n`)
 )
 
 // GetGlobalBPFBaggageIntegration returns the global BPF baggage integration.

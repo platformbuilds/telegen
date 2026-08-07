@@ -361,8 +361,17 @@ func parseUptimeSeconds(uptime string) float64 {
 	if len(hms) != 3 {
 		return float64(days * 86400)
 	}
-	h, _ := strconv.Atoi(hms[0])
-	m, _ := strconv.Atoi(hms[1])
-	s, _ := strconv.Atoi(hms[2])
+	h, err := strconv.Atoi(hms[0])
+	if err != nil {
+		return float64(days * 86400)
+	}
+	m, err := strconv.Atoi(hms[1])
+	if err != nil {
+		return float64(days*86400 + h*3600)
+	}
+	s, err := strconv.Atoi(hms[2])
+	if err != nil {
+		return float64(days*86400 + h*3600 + m*60)
+	}
 	return float64(days*86400 + h*3600 + m*60 + s)
 }

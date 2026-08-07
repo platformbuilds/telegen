@@ -127,18 +127,43 @@ func (n *NodeCollector) Collect(ch chan<- prometheus.Metric) {
 func (n *NodeCollector) execute(name string, c Collector, ch chan<- prometheus.Metric) {
 	begin := time.Now()
 
-	// Create a channel for the result
+	// Collect into an intermediate channel so timed-out collectors never write
+	// to the registry channel after Collect() returns.
+	metricsCh := make(chan prometheus.Metric, 1024)
 	done := make(chan error, 1)
 	go func() {
-		done <- c.Update(ch)
+		defer close(metricsCh)
+		done <- c.Update(metricsCh)
 	}()
 
 	var err error
+	forwardDone := make(chan struct{})
+	stopForward := make(chan struct{})
+	go func() {
+		defer close(forwardDone)
+		drop := false
+		for metric := range metricsCh {
+			if drop {
+				continue
+			}
+			select {
+			case <-stopForward:
+				// Keep draining until metricsCh is closed so the collector
+				// goroutine does not block on a full intermediate channel.
+				drop = true
+			case ch <- metric:
+			}
+		}
+	}()
+
+	timeout := time.NewTimer(n.collectorTimeout)
+	defer timeout.Stop()
 	select {
 	case err = <-done:
-		// Collector completed
-	case <-time.After(n.collectorTimeout):
+		<-forwardDone
+	case <-timeout.C:
 		err = fmt.Errorf("collector timeout after %s", n.collectorTimeout)
+		close(stopForward)
 	}
 
 	duration := time.Since(begin)

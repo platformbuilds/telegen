@@ -95,13 +95,14 @@ func DefaultManagerConfig() ManagerConfig {
 
 // Manager coordinates all database tracers.
 type Manager struct {
-	config  ManagerConfig
-	tracers map[DatabaseType]Tracer
-	events  chan *DatabaseEvent
-	mu      sync.RWMutex
-	running bool
-	done    chan struct{}
-	wg      sync.WaitGroup
+	config   ManagerConfig
+	tracers  map[DatabaseType]Tracer
+	events   chan *DatabaseEvent
+	mu       sync.RWMutex
+	running  bool
+	done     chan struct{}
+	stopOnce sync.Once
+	wg       sync.WaitGroup
 }
 
 // NewManager creates a new database tracing manager.
@@ -141,6 +142,9 @@ func (m *Manager) Start(ctx context.Context) error {
 		m.mu.Unlock()
 		return fmt.Errorf("manager already running")
 	}
+	m.done = make(chan struct{})
+	m.events = make(chan *DatabaseEvent, m.config.EventBufferSize)
+	m.stopOnce = sync.Once{}
 	m.running = true
 	m.mu.Unlock()
 
@@ -200,9 +204,10 @@ func (m *Manager) Stop() error {
 		return nil
 	}
 	m.running = false
+	events := m.events
 	m.mu.Unlock()
 
-	close(m.done)
+	m.stopOnce.Do(func() { close(m.done) })
 
 	var errs []error
 	for dbType, tracer := range m.tracers {
@@ -212,7 +217,7 @@ func (m *Manager) Stop() error {
 	}
 
 	m.wg.Wait()
-	close(m.events)
+	close(events)
 
 	if len(errs) > 0 {
 		return fmt.Errorf("errors stopping tracers: %v", errs)
@@ -290,7 +295,10 @@ func FindLibrary(name string, paths []string) (string, bool) {
 			return path, true
 		}
 		// Also check with version suffixes
-		matches, _ := filepath.Glob(path + ".*")
+		matches, err := filepath.Glob(path + ".*")
+		if err != nil {
+			continue
+		}
 		if len(matches) > 0 {
 			return matches[0], true
 		}

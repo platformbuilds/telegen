@@ -137,19 +137,27 @@ func (d *ProcessDetector) parseStatusFile(basePath string, proc *ProcessInfo) {
 		case "Uid":
 			fields := strings.Fields(value)
 			if len(fields) > 0 {
-				proc.UID, _ = strconv.Atoi(fields[0])
+				if uid, err := strconv.Atoi(fields[0]); err == nil {
+					proc.UID = uid
+				}
 			}
 		case "Gid":
 			fields := strings.Fields(value)
 			if len(fields) > 0 {
-				proc.GID, _ = strconv.Atoi(fields[0])
+				if gid, err := strconv.Atoi(fields[0]); err == nil {
+					proc.GID = gid
+				}
 			}
 		case "PPid":
-			proc.PPID, _ = strconv.Atoi(value)
+			if ppid, err := strconv.Atoi(value); err == nil {
+				proc.PPID = ppid
+			}
 		case "State":
 			proc.State = strings.Fields(value)[0]
 		case "Threads":
-			proc.Threads, _ = strconv.Atoi(value)
+			if threads, err := strconv.Atoi(value); err == nil {
+				proc.Threads = threads
+			}
 		case "VmSize":
 			// Virtual memory size in kB
 			vmSize := strings.TrimSuffix(value, " kB")
@@ -190,19 +198,35 @@ func (d *ProcessDetector) parseStatFile(basePath string, proc *ProcessInfo) {
 	}
 
 	// utime (index 11 from after comm, 13 total) - CPU time spent in user mode
-	utime, _ := strconv.ParseInt(fields[11], 10, 64)
+	utime, err := strconv.ParseInt(fields[11], 10, 64)
+	if err != nil {
+		return
+	}
 	// stime (index 12 from after comm, 14 total) - CPU time spent in kernel mode
-	stime, _ := strconv.ParseInt(fields[12], 10, 64)
+	stime, err := strconv.ParseInt(fields[12], 10, 64)
+	if err != nil {
+		return
+	}
 
 	// Get clock ticks per second (usually 100)
 	proc.CPUTime = float64(utime+stime) / 100.0 // Convert to seconds
 
 	// starttime (index 19 from after comm, 21 total)
 	if len(fields) > 19 {
-		starttime, _ := strconv.ParseInt(fields[19], 10, 64)
+		starttime, err := strconv.ParseInt(fields[19], 10, 64)
+		if err != nil {
+			return
+		}
 		// Get system boot time
 		if uptime, err := os.ReadFile("/proc/uptime"); err == nil {
-			uptimeSeconds, _ := strconv.ParseFloat(strings.Fields(string(uptime))[0], 64)
+			uptimeFields := strings.Fields(string(uptime))
+			if len(uptimeFields) == 0 {
+				return
+			}
+			uptimeSeconds, err := strconv.ParseFloat(uptimeFields[0], 64)
+			if err != nil {
+				return
+			}
 			bootTime := time.Now().Add(-time.Duration(uptimeSeconds * float64(time.Second)))
 			startSeconds := float64(starttime) / 100.0 // Convert ticks to seconds
 			proc.StartTime = bootTime.Add(time.Duration(startSeconds * float64(time.Second)))

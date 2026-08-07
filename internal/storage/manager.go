@@ -24,16 +24,17 @@ import (
 
 // Manager coordinates all storage collectors and exports metrics
 type Manager struct {
-	config           storagedef.Config
-	collectors       map[string]storagedef.StorageCollector
-	exporter         storagedef.MetricExporter // legacy private OTLP
-	sharedMetrics    sdkmetric.Exporter
-	sharedLogs       *sdklog.LoggerProvider
-	log              *slog.Logger
+	config        storagedef.Config
+	collectors    map[string]storagedef.StorageCollector
+	exporter      storagedef.MetricExporter // legacy private OTLP
+	sharedMetrics sdkmetric.Exporter
+	sharedLogs    *sdklog.LoggerProvider
+	log           *slog.Logger
 
 	mu       sync.RWMutex
 	running  bool
 	stopCh   chan struct{}
+	stopOnce sync.Once
 	wg       sync.WaitGroup
 	lastRun  time.Time
 	health   map[string]*storagedef.CollectorHealth
@@ -81,6 +82,9 @@ func (m *Manager) Start(ctx context.Context) error {
 		m.log.Info("storage metrics manager is disabled")
 		return nil
 	}
+	m.stopCh = make(chan struct{})
+	m.stopOnce = sync.Once{}
+	m.collectors = make(map[string]storagedef.StorageCollector)
 
 	// Legacy exporter only when shared pipeline exporter is absent
 	if m.sharedMetrics == nil {
@@ -170,14 +174,20 @@ func (m *Manager) Start(ctx context.Context) error {
 // Stop gracefully shuts down the manager and all collectors
 func (m *Manager) Stop(ctx context.Context) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	if !m.running {
+		m.mu.Unlock()
 		return nil
 	}
+	m.running = false
+	m.stopOnce.Do(func() { close(m.stopCh) })
+	collectors := make(map[string]storagedef.StorageCollector, len(m.collectors))
+	for name, collector := range m.collectors {
+		collectors[name] = collector
+	}
+	exporter := m.exporter
+	m.mu.Unlock()
 
 	m.log.Info("stopping storage metrics manager")
-	close(m.stopCh)
 
 	done := make(chan struct{})
 	go func() {
@@ -191,19 +201,18 @@ func (m *Manager) Stop(ctx context.Context) error {
 		return ctx.Err()
 	}
 
-	for name, collector := range m.collectors {
+	for name, collector := range collectors {
 		if err := collector.Stop(ctx); err != nil {
 			m.log.Warn("error stopping collector", "name", name, "error", err)
 		}
 	}
 
-	if m.exporter != nil {
-		if err := m.exporter.Stop(ctx); err != nil {
+	if exporter != nil {
+		if err := exporter.Stop(ctx); err != nil {
 			m.log.Warn("error stopping exporter", "error", err)
 		}
 	}
 
-	m.running = false
 	m.log.Info("storage metrics manager stopped")
 	return nil
 }

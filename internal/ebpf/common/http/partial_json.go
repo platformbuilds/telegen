@@ -27,7 +27,9 @@ func readHTTPRequestBody(component string, req *http.Request, baseSpan *request.
 		return nil, false
 	}
 	body, err := io.ReadAll(req.Body)
-	_ = req.Body.Close()
+	if closeErr := req.Body.Close(); closeErr != nil {
+		return nil, false
+	}
 	if err != nil {
 		slog.Debug(component+": failed reading request body", "err", err, "path", baseSpan.Path)
 		return nil, false
@@ -51,30 +53,40 @@ func readHTTPResponseBody(component string, resp *http.Response, baseSpan *reque
 
 func parseOpenAIInput(body []byte) request.OpenAIInput {
 	var parsed request.OpenAIInput
-	_ = json.Unmarshal(body, &parsed)
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		// keep zero-values
+	}
 	return parsed
 }
 
 func parseVendorOpenAI(body []byte) request.VendorOpenAI {
 	var parsed request.VendorOpenAI
-	_ = json.Unmarshal(body, &parsed)
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		// keep zero-values
+	}
 	return parsed
 }
 
 func parseAnthropicRequest(body []byte) request.AnthropicRequest {
 	var parsed request.AnthropicRequest
-	_ = json.Unmarshal(body, &parsed)
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		// keep zero-values
+	}
 	return parsed
 }
 
 func parseAnthropicResponse(body []byte) request.AnthropicResponse {
 	var parsed request.AnthropicResponse
-	_ = json.Unmarshal(body, &parsed)
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		// keep zero-values
+	}
 	return parsed
 }
 
 func parseEmbeddingRequest(body []byte) request.EmbeddingRequest {
 	var parsed request.EmbeddingRequest
-	_ = json.Unmarshal(body, &parsed)
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		// keep zero-values
+	}
 	return parsed
 }

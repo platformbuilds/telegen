@@ -268,7 +268,9 @@ func (r *CgroupReader) readCPUStatsV1(cgroupPath string, stats *CPUStats) (*CPUS
 	if err != nil {
 		return nil, fmt.Errorf("failed to read cpuacct.usage: %w", err)
 	}
-	stats.UsageNanoseconds, _ = strconv.ParseUint(strings.TrimSpace(string(usageData)), 10, 64)
+	if parsed, parseErr := strconv.ParseUint(strings.TrimSpace(string(usageData)), 10, 64); parseErr == nil {
+		stats.UsageNanoseconds = parsed
+	}
 
 	// Read cpuacct.stat
 	statPath := filepath.Join(r.root, "cpuacct", cgroupPath, "cpuacct.stat")
@@ -312,7 +314,9 @@ func (r *CgroupReader) readMemoryStatsV2(cgroupPath string, stats *MemoryStats) 
 	// Read memory.current
 	currentPath := filepath.Join(basePath, "memory.current")
 	if data, err := os.ReadFile(currentPath); err == nil {
-		stats.UsageBytes, _ = strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64)
+		if parsed, parseErr := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); parseErr == nil {
+			stats.UsageBytes = parsed
+		}
 	}
 
 	// Read memory.max
@@ -320,20 +324,26 @@ func (r *CgroupReader) readMemoryStatsV2(cgroupPath string, stats *MemoryStats) 
 	if data, err := os.ReadFile(maxPath); err == nil {
 		val := strings.TrimSpace(string(data))
 		if val != "max" {
-			stats.LimitBytes, _ = strconv.ParseUint(val, 10, 64)
+			if parsed, parseErr := strconv.ParseUint(val, 10, 64); parseErr == nil {
+				stats.LimitBytes = parsed
+			}
 		}
 	}
 
 	// Read memory.peak (max usage)
 	peakPath := filepath.Join(basePath, "memory.peak")
 	if data, err := os.ReadFile(peakPath); err == nil {
-		stats.MaxUsageBytes, _ = strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64)
+		if parsed, parseErr := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); parseErr == nil {
+			stats.MaxUsageBytes = parsed
+		}
 	}
 
 	// Read memory.swap.current
 	swapPath := filepath.Join(basePath, "memory.swap.current")
 	if data, err := os.ReadFile(swapPath); err == nil {
-		stats.SwapBytes, _ = strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64)
+		if parsed, parseErr := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); parseErr == nil {
+			stats.SwapBytes = parsed
+		}
 	}
 
 	// Read memory.stat for detailed stats
@@ -368,19 +378,25 @@ func (r *CgroupReader) readMemoryStatsV1(cgroupPath string, stats *MemoryStats) 
 	// Read memory.usage_in_bytes
 	usagePath := filepath.Join(basePath, "memory.usage_in_bytes")
 	if data, err := os.ReadFile(usagePath); err == nil {
-		stats.UsageBytes, _ = strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64)
+		if parsed, parseErr := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); parseErr == nil {
+			stats.UsageBytes = parsed
+		}
 	}
 
 	// Read memory.limit_in_bytes
 	limitPath := filepath.Join(basePath, "memory.limit_in_bytes")
 	if data, err := os.ReadFile(limitPath); err == nil {
-		stats.LimitBytes, _ = strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64)
+		if parsed, parseErr := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); parseErr == nil {
+			stats.LimitBytes = parsed
+		}
 	}
 
 	// Read memory.max_usage_in_bytes
 	maxUsagePath := filepath.Join(basePath, "memory.max_usage_in_bytes")
 	if data, err := os.ReadFile(maxUsagePath); err == nil {
-		stats.MaxUsageBytes, _ = strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64)
+		if parsed, parseErr := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); parseErr == nil {
+			stats.MaxUsageBytes = parsed
+		}
 	}
 
 	// Read memory.stat
@@ -402,9 +418,10 @@ func (r *CgroupReader) readMemoryStatsV1(cgroupPath string, stats *MemoryStats) 
 	// Read swap
 	swapPath := filepath.Join(basePath, "memory.memsw.usage_in_bytes")
 	if data, err := os.ReadFile(swapPath); err == nil {
-		swapPlusMem, _ := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64)
-		if swapPlusMem > stats.UsageBytes {
-			stats.SwapBytes = swapPlusMem - stats.UsageBytes
+		if swapPlusMem, parseErr := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); parseErr == nil {
+			if swapPlusMem > stats.UsageBytes {
+				stats.SwapBytes = swapPlusMem - stats.UsageBytes
+			}
 		}
 	}
 
@@ -447,8 +464,12 @@ func (r *CgroupReader) readDiskIOStatsV2(cgroupPath string, stats *DiskIOStats) 
 		// Parse major:minor
 		parts := strings.Split(deviceID, ":")
 		if len(parts) == 2 {
-			deviceStats.DeviceMajor, _ = strconv.ParseUint(parts[0], 10, 64)
-			deviceStats.DeviceMinor, _ = strconv.ParseUint(parts[1], 10, 64)
+			if parsed, parseErr := strconv.ParseUint(parts[0], 10, 64); parseErr == nil {
+				deviceStats.DeviceMajor = parsed
+			}
+			if parsed, parseErr := strconv.ParseUint(parts[1], 10, 64); parseErr == nil {
+				deviceStats.DeviceMinor = parsed
+			}
 		}
 
 		for _, field := range fields[1:] {
@@ -456,7 +477,10 @@ func (r *CgroupReader) readDiskIOStatsV2(cgroupPath string, stats *DiskIOStats) 
 			if len(kv) != 2 {
 				continue
 			}
-			val, _ := strconv.ParseUint(kv[1], 10, 64)
+			val, parseErr := strconv.ParseUint(kv[1], 10, 64)
+			if parseErr != nil {
+				continue
+			}
 			switch kv[0] {
 			case "rbytes":
 				deviceStats.ReadBytes = val
@@ -492,7 +516,10 @@ func (r *CgroupReader) readDiskIOStatsV1(cgroupPath string, stats *DiskIOStats) 
 			if len(fields) < 3 {
 				continue
 			}
-			val, _ := strconv.ParseUint(fields[2], 10, 64)
+			val, parseErr := strconv.ParseUint(fields[2], 10, 64)
+			if parseErr != nil {
+				continue
+			}
 			switch fields[1] {
 			case "Read":
 				stats.ReadBytes += val
@@ -512,7 +539,10 @@ func (r *CgroupReader) readDiskIOStatsV1(cgroupPath string, stats *DiskIOStats) 
 			if len(fields) < 3 {
 				continue
 			}
-			val, _ := strconv.ParseUint(fields[2], 10, 64)
+			val, parseErr := strconv.ParseUint(fields[2], 10, 64)
+			if parseErr != nil {
+				continue
+			}
 			switch fields[1] {
 			case "Read":
 				stats.ReadOps += val
@@ -538,7 +568,10 @@ func (r *CgroupReader) readKeyValueFile(path string) (map[string]uint64, error) 
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
 		if len(fields) >= 2 {
-			val, _ := strconv.ParseUint(fields[1], 10, 64)
+			val, parseErr := strconv.ParseUint(fields[1], 10, 64)
+			if parseErr != nil {
+				continue
+			}
 			result[fields[0]] = val
 		}
 	}
@@ -572,7 +605,10 @@ func (r *CgroupReader) ListContainerCgroups() ([]ContainerCgroup, error) {
 		}
 
 		// Look for container directories
-		relPath, _ := filepath.Rel(searchPath, path)
+		relPath, err := filepath.Rel(searchPath, path)
+		if err != nil {
+			return nil
+		}
 		containerID := extractContainerID(relPath)
 		if containerID == "" {
 			return nil

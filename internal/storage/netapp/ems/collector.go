@@ -42,18 +42,18 @@ type bookendState struct {
 }
 
 type eventFilter struct {
-	Message      string
-	Matches      map[string]string
-	Bookend      bool
-	ResolveWhen  string
+	Message     string
+	Matches     map[string]string
+	Bookend     bool
+	ResolveWhen string
 }
 
 type emsTemplate struct {
 	Events []struct {
-		Message         string            `yaml:"message"`
-		Matches         map[string]string `yaml:"matches"`
-		ResolveWhenEms  string            `yaml:"resolve_when_ems"`
-		Exports         any               `yaml:"exports"`
+		Message        string            `yaml:"message"`
+		Matches        map[string]string `yaml:"matches"`
+		ResolveWhenEms string            `yaml:"resolve_when_ems"`
+		Exports        any               `yaml:"exports"`
 	} `yaml:"events"`
 }
 
@@ -128,11 +128,11 @@ func (c *Collector) Collect(ctx context.Context) ([]storagedef.LogRecord, []stor
 			continue
 		}
 		attrs := map[string]string{
-			"message":  msg,
-			"severity": sev,
-			"node":     node,
+			"message":   msg,
+			"severity":  sev,
+			"node":      node,
 			"node_uuid": nodeUUID,
-			"index":    idx,
+			"index":     idx,
 		}
 		for k, v := range c.GlobalLabels {
 			attrs[k] = v
@@ -235,13 +235,23 @@ func (c *Collector) parseEMSYAML(data []byte) error {
 		return err
 	}
 	c.filters = nil
-	events, _ := root["events"].([]any)
+	eventsAny, ok := root["events"]
+	if !ok {
+		return nil
+	}
+	events, ok := eventsAny.([]any)
+	if !ok {
+		return nil
+	}
 	for _, e := range events {
 		em, ok := e.(map[string]any)
 		if !ok {
 			continue
 		}
-		msg, _ := em["message"].(string)
+		msg, ok := em["message"].(string)
+		if !ok {
+			msg = ""
+		}
 		if msg == "" {
 			// sometimes key is the message
 			for k, v := range em {
@@ -276,7 +286,14 @@ func extractParams(rec json.RawMessage, attrs map[string]string) {
 	if err := json.Unmarshal(rec, &top); err != nil {
 		return
 	}
-	params, _ := top["parameters"].([]any)
+	paramsAny, ok := top["parameters"]
+	if !ok {
+		return
+	}
+	params, ok := paramsAny.([]any)
+	if !ok {
+		return
+	}
 	for _, p := range params {
 		pm, ok := p.(map[string]any)
 		if !ok {

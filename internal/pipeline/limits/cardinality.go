@@ -5,8 +5,10 @@ package limits
 import (
 	"context"
 	"fmt"
+	"hash"
 	"hash/fnv"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -23,11 +25,14 @@ type CardinalityLimiter struct {
 	log    *slog.Logger
 
 	// State
-	mu      sync.RWMutex
-	metrics map[string]*metricCardinality // metric name -> cardinality state
-	running bool
-	ctx     context.Context
-	cancel  context.CancelFunc
+	mu              sync.RWMutex
+	metrics         map[string]*metricCardinality // metric name -> cardinality state
+	running         bool
+	ctx             context.Context
+	cancel          context.CancelFunc
+	globalSeries    atomic.Int64
+	limitedAttrSet  map[string]struct{}
+	excludedAttrSet map[string]struct{}
 
 	// Stats
 	droppedSeries  atomic.Int64
@@ -104,9 +109,11 @@ func NewCardinalityLimiter(config CardinalityConfig, log *slog.Logger) *Cardinal
 	}
 
 	return &CardinalityLimiter{
-		config:  config,
-		log:     log.With("component", "cardinality-limiter"),
-		metrics: make(map[string]*metricCardinality),
+		config:          config,
+		log:             log.With("component", "cardinality-limiter"),
+		metrics:         make(map[string]*metricCardinality),
+		limitedAttrSet:  toAttrSet(config.LimitedAttributes),
+		excludedAttrSet: toAttrSet(config.ExcludedAttributes),
 	}
 }
 
@@ -234,83 +241,130 @@ func (l *CardinalityLimiter) getOrCreateMetricCardinality(name string) *metricCa
 
 // filterDataPoints filters number data points based on cardinality.
 func (l *CardinalityLimiter) filterDataPoints(mc *metricCardinality, dps pmetric.NumberDataPointSlice) {
+	if dps.Len() == 0 {
+		return
+	}
 	now := time.Now().UnixNano()
-
-	for i := dps.Len() - 1; i >= 0; i-- {
+	allowedByHash := make(map[uint64]bool, dps.Len())
+	keep := make([]bool, dps.Len())
+	for i := 0; i < dps.Len(); i++ {
 		dp := dps.At(i)
 		hash := l.hashAttributes(dp.Attributes())
-
-		if !l.allowSeries(mc, hash, now) {
-			// Remove the data point
-			dps.RemoveIf(func(p pmetric.NumberDataPoint) bool {
-				return l.hashAttributes(p.Attributes()) == hash
-			})
+		allowed, known := allowedByHash[hash]
+		if !known {
+			allowed = l.allowSeries(mc, hash, now)
+			allowedByHash[hash] = allowed
+		}
+		keep[i] = allowed
+		if !allowed {
 			l.droppedSeries.Add(1)
 			l.limitedMetrics.Store(mc.name, struct{}{})
 		} else {
 			l.totalSeries.Add(1)
 		}
 	}
+	idx := 0
+	dps.RemoveIf(func(_ pmetric.NumberDataPoint) bool {
+		drop := !keep[idx]
+		idx++
+		return drop
+	})
 }
 
 // filterHistogramDataPoints filters histogram data points.
 func (l *CardinalityLimiter) filterHistogramDataPoints(mc *metricCardinality, dps pmetric.HistogramDataPointSlice) {
+	if dps.Len() == 0 {
+		return
+	}
 	now := time.Now().UnixNano()
-
-	for i := dps.Len() - 1; i >= 0; i-- {
+	allowedByHash := make(map[uint64]bool, dps.Len())
+	keep := make([]bool, dps.Len())
+	for i := 0; i < dps.Len(); i++ {
 		dp := dps.At(i)
 		hash := l.hashAttributes(dp.Attributes())
-
-		if !l.allowSeries(mc, hash, now) {
-			dps.RemoveIf(func(p pmetric.HistogramDataPoint) bool {
-				return l.hashAttributes(p.Attributes()) == hash
-			})
+		allowed, known := allowedByHash[hash]
+		if !known {
+			allowed = l.allowSeries(mc, hash, now)
+			allowedByHash[hash] = allowed
+		}
+		keep[i] = allowed
+		if !allowed {
 			l.droppedSeries.Add(1)
 			l.limitedMetrics.Store(mc.name, struct{}{})
 		} else {
 			l.totalSeries.Add(1)
 		}
 	}
+	idx := 0
+	dps.RemoveIf(func(_ pmetric.HistogramDataPoint) bool {
+		drop := !keep[idx]
+		idx++
+		return drop
+	})
 }
 
 // filterSummaryDataPoints filters summary data points.
 func (l *CardinalityLimiter) filterSummaryDataPoints(mc *metricCardinality, dps pmetric.SummaryDataPointSlice) {
+	if dps.Len() == 0 {
+		return
+	}
 	now := time.Now().UnixNano()
-
-	for i := dps.Len() - 1; i >= 0; i-- {
+	allowedByHash := make(map[uint64]bool, dps.Len())
+	keep := make([]bool, dps.Len())
+	for i := 0; i < dps.Len(); i++ {
 		dp := dps.At(i)
 		hash := l.hashAttributes(dp.Attributes())
-
-		if !l.allowSeries(mc, hash, now) {
-			dps.RemoveIf(func(p pmetric.SummaryDataPoint) bool {
-				return l.hashAttributes(p.Attributes()) == hash
-			})
+		allowed, known := allowedByHash[hash]
+		if !known {
+			allowed = l.allowSeries(mc, hash, now)
+			allowedByHash[hash] = allowed
+		}
+		keep[i] = allowed
+		if !allowed {
 			l.droppedSeries.Add(1)
 			l.limitedMetrics.Store(mc.name, struct{}{})
 		} else {
 			l.totalSeries.Add(1)
 		}
 	}
+	idx := 0
+	dps.RemoveIf(func(_ pmetric.SummaryDataPoint) bool {
+		drop := !keep[idx]
+		idx++
+		return drop
+	})
 }
 
 // filterExponentialHistogramDataPoints filters exponential histogram data points.
 func (l *CardinalityLimiter) filterExponentialHistogramDataPoints(mc *metricCardinality, dps pmetric.ExponentialHistogramDataPointSlice) {
+	if dps.Len() == 0 {
+		return
+	}
 	now := time.Now().UnixNano()
-
-	for i := dps.Len() - 1; i >= 0; i-- {
+	allowedByHash := make(map[uint64]bool, dps.Len())
+	keep := make([]bool, dps.Len())
+	for i := 0; i < dps.Len(); i++ {
 		dp := dps.At(i)
 		hash := l.hashAttributes(dp.Attributes())
-
-		if !l.allowSeries(mc, hash, now) {
-			dps.RemoveIf(func(p pmetric.ExponentialHistogramDataPoint) bool {
-				return l.hashAttributes(p.Attributes()) == hash
-			})
+		allowed, known := allowedByHash[hash]
+		if !known {
+			allowed = l.allowSeries(mc, hash, now)
+			allowedByHash[hash] = allowed
+		}
+		keep[i] = allowed
+		if !allowed {
 			l.droppedSeries.Add(1)
 			l.limitedMetrics.Store(mc.name, struct{}{})
 		} else {
 			l.totalSeries.Add(1)
 		}
 	}
+	idx := 0
+	dps.RemoveIf(func(_ pmetric.ExponentialHistogramDataPoint) bool {
+		drop := !keep[idx]
+		idx++
+		return drop
+	})
 }
 
 // allowSeries checks if a series is allowed based on cardinality limits.
@@ -330,21 +384,8 @@ func (l *CardinalityLimiter) allowSeries(mc *metricCardinality, hash uint64, now
 		return false
 	}
 
-	// Check global limit - count series in other metrics only
-	// (we already counted this metric's series above)
-	totalSeries := len(mc.series)
-	l.mu.RLock()
-	for name, m := range l.metrics {
-		if name == mc.name {
-			continue // Skip current metric to avoid deadlock
-		}
-		m.mu.RLock()
-		totalSeries += len(m.series)
-		m.mu.RUnlock()
-	}
-	l.mu.RUnlock()
-
-	if totalSeries >= l.config.GlobalLimit {
+	// Reserve one slot in the global cardinality budget.
+	if !l.reserveGlobalSeriesSlot() {
 		mc.dropped++
 		return false
 	}
@@ -357,44 +398,18 @@ func (l *CardinalityLimiter) allowSeries(mc *metricCardinality, hash uint64, now
 // hashAttributes creates a hash of selected attributes.
 func (l *CardinalityLimiter) hashAttributes(attrs pcommon.Map) uint64 {
 	h := fnv.New64a()
-
-	// Build sorted key list
-	keys := make([]string, 0, attrs.Len())
-	attrs.Range(func(k string, _ pcommon.Value) bool {
-		// Check if attribute should be excluded
-		for _, excluded := range l.config.ExcludedAttributes {
-			if k == excluded {
-				return true
-			}
+	attrs.Range(func(k string, v pcommon.Value) bool {
+		if !l.shouldHashAttribute(k) {
+			return true
 		}
-
-		// Check if we're limiting to specific attributes
-		if len(l.config.LimitedAttributes) > 0 {
-			included := false
-			for _, limited := range l.config.LimitedAttributes {
-				if k == limited {
-					included = true
-					break
-				}
-			}
-			if !included {
-				return true
-			}
+		if _, err := h.Write([]byte(k)); err != nil {
+			return false
 		}
-
-		keys = append(keys, k)
+		_, _ = h.Write([]byte{'='})
+		hashAttributeValue(h, v)
+		_, _ = h.Write([]byte{','})
 		return true
 	})
-
-	// Sort and hash
-	for _, k := range keys {
-		v, _ := attrs.Get(k)
-		h.Write([]byte(k))
-		h.Write([]byte("="))
-		h.Write([]byte(v.AsString()))
-		h.Write([]byte(","))
-	}
-
 	return h.Sum64()
 }
 
@@ -430,12 +445,17 @@ func (l *CardinalityLimiter) cleanupStaleSeries() {
 
 	for _, mc := range metrics {
 		mc.mu.Lock()
+		removed := int64(0)
 		for hash, lastSeen := range mc.series {
 			if lastSeen < cutoff {
 				delete(mc.series, hash)
+				removed++
 			}
 		}
 		mc.mu.Unlock()
+		if removed > 0 {
+			l.globalSeries.Add(-removed)
+		}
 	}
 }
 
@@ -508,4 +528,84 @@ type MetricCardinalityStats struct {
 	Series  int    `json:"series"`
 	Limit   int    `json:"limit"`
 	Dropped int64  `json:"dropped"`
+}
+
+func toAttrSet(keys []string) map[string]struct{} {
+	if len(keys) == 0 {
+		return nil
+	}
+	set := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		set[key] = struct{}{}
+	}
+	return set
+}
+
+func (l *CardinalityLimiter) shouldHashAttribute(key string) bool {
+	if len(l.excludedAttrSet) > 0 {
+		if _, excluded := l.excludedAttrSet[key]; excluded {
+			return false
+		}
+	}
+	if len(l.limitedAttrSet) == 0 {
+		return true
+	}
+	_, included := l.limitedAttrSet[key]
+	return included
+}
+
+func (l *CardinalityLimiter) reserveGlobalSeriesSlot() bool {
+	if l.config.GlobalLimit <= 0 {
+		return true
+	}
+	limit := int64(l.config.GlobalLimit)
+	for {
+		current := l.globalSeries.Load()
+		if current >= limit {
+			return false
+		}
+		if l.globalSeries.CompareAndSwap(current, current+1) {
+			return true
+		}
+	}
+}
+
+func hashAttributeValue(h hash.Hash64, v pcommon.Value) {
+	var buf [32]byte
+	switch v.Type() {
+	case pcommon.ValueTypeStr:
+		if _, err := h.Write([]byte(v.Str())); err != nil {
+			return
+		}
+	case pcommon.ValueTypeInt:
+		b := strconv.AppendInt(buf[:0], v.Int(), 10)
+		_, _ = h.Write(b)
+	case pcommon.ValueTypeDouble:
+		b := strconv.AppendFloat(buf[:0], v.Double(), 'g', -1, 64)
+		_, _ = h.Write(b)
+	case pcommon.ValueTypeBool:
+		if v.Bool() {
+			_, _ = h.Write([]byte("true"))
+		} else {
+			_, _ = h.Write([]byte("false"))
+		}
+	case pcommon.ValueTypeMap:
+		v.Map().Range(func(k string, nested pcommon.Value) bool {
+			if _, err := h.Write([]byte(k)); err != nil {
+				return false
+			}
+			_, _ = h.Write([]byte{':'})
+			hashAttributeValue(h, nested)
+			_, _ = h.Write([]byte{';'})
+			return true
+		})
+	case pcommon.ValueTypeSlice:
+		slice := v.Slice()
+		for i := 0; i < slice.Len(); i++ {
+			hashAttributeValue(h, slice.At(i))
+			_, _ = h.Write([]byte{'|'})
+		}
+	default:
+		_, _ = h.Write([]byte(v.AsString()))
+	}
 }

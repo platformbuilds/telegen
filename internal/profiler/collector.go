@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+const maxRetainedProfilesPerType = 3
+
 // Collector collects and aggregates profile data
 type Collector struct {
 	config         Config
@@ -79,6 +81,9 @@ func (c *Collector) Collect(profile *Profile) {
 	defer c.mu.Unlock()
 
 	c.profiles[profile.Type] = append(c.profiles[profile.Type], profile)
+	if len(c.profiles[profile.Type]) > maxRetainedProfilesPerType {
+		c.profiles[profile.Type] = c.profiles[profile.Type][len(c.profiles[profile.Type])-maxRetainedProfilesPerType:]
+	}
 	c.latest[profile.Type] = profile
 }
 
@@ -93,7 +98,13 @@ func (c *Collector) GetLatest(profileType ProfileType) *Profile {
 func (c *Collector) GetProfiles(profileType ProfileType) []*Profile {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.profiles[profileType]
+	profiles := c.profiles[profileType]
+	if len(profiles) == 0 {
+		return nil
+	}
+	copied := make([]*Profile, len(profiles))
+	copy(copied, profiles)
+	return copied
 }
 
 // Aggregate aggregates all profiles for a type

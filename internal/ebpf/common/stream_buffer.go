@@ -3,7 +3,10 @@
 
 package ebpfcommon // import "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 // StreamBuffer is a byte-position-indexed rolling buffer for TCP stream reassembly.
 // It handles out-of-order eBPF events by slotting data at the exact logical stream
@@ -12,24 +15,36 @@ import "sync"
 // Design mirrors Pixie's DataStreamBuffer (protocols/common/data_stream_buffer.h),
 // using the simpler "always contiguous" implementation.
 type StreamBuffer struct {
-	mu       sync.Mutex
-	buf      []byte
-	basePos  uint64 // stream-absolute offset of buf[0]
-	valid    uint64 // number of valid (filled) bytes starting at buf[0]
-	gapMap   map[uint64][]byte // pending out-of-order chunks keyed by stream offset
-	maxCap   uint64
-	maxGap   uint64
+	mu        sync.Mutex
+	buf       []byte
+	basePos   uint64              // stream-absolute offset of buf[0]
+	gapMap    map[uint64]gapEntry // pending out-of-order chunks keyed by stream offset
+	maxCap    uint64
+	maxGap    uint64
+	maxGaps   int
+	maxGapAge time.Duration
+}
+
+type gapEntry struct {
+	chunk   []byte
+	addedAt time.Time
 }
 
 // NewStreamBuffer creates a new StreamBuffer.
 // maxCap is the maximum bytes held before old data is dropped.
 // maxGap is the maximum allowed gap size; gaps larger than this cause the head to advance.
 func NewStreamBuffer(maxCap, maxGap uint64) *StreamBuffer {
+	const (
+		defaultMaxGaps   = 64
+		defaultMaxGapAge = 30 * time.Second
+	)
 	return &StreamBuffer{
-		buf:    make([]byte, 0, maxCap),
-		gapMap: make(map[uint64][]byte),
-		maxCap: maxCap,
-		maxGap: maxGap,
+		buf:       make([]byte, 0, maxCap),
+		gapMap:    make(map[uint64]gapEntry),
+		maxCap:    maxCap,
+		maxGap:    maxGap,
+		maxGaps:   defaultMaxGaps,
+		maxGapAge: defaultMaxGapAge,
 	}
 }
 
@@ -60,10 +75,7 @@ func (s *StreamBuffer) Add(pos uint64, data []byte) {
 		// Try to apply any pending out-of-order chunks.
 		s.mergePending()
 	} else {
-		// Out-of-order: stash for later.
-		chunk := make([]byte, len(data))
-		copy(chunk, data)
-		s.gapMap[pos] = chunk
+		s.storeGapLocked(pos, data)
 	}
 
 	// If the buffer has grown beyond capacity, drop the oldest bytes.
@@ -78,12 +90,54 @@ func (s *StreamBuffer) Add(pos uint64, data []byte) {
 func (s *StreamBuffer) mergePending() {
 	for {
 		next := s.basePos + uint64(len(s.buf))
-		chunk, ok := s.gapMap[next]
+		entry, ok := s.gapMap[next]
 		if !ok {
 			break
 		}
-		s.buf = append(s.buf, chunk...)
+		s.buf = append(s.buf, entry.chunk...)
 		delete(s.gapMap, next)
+	}
+}
+
+func (s *StreamBuffer) storeGapLocked(pos uint64, data []byte) {
+	s.evictStaleGapsLocked(time.Now())
+	for len(s.gapMap) >= s.maxGaps {
+		s.evictOldestGapLocked()
+	}
+	chunk := make([]byte, len(data))
+	copy(chunk, data)
+	s.gapMap[pos] = gapEntry{
+		chunk:   chunk,
+		addedAt: time.Now(),
+	}
+}
+
+func (s *StreamBuffer) evictStaleGapsLocked(now time.Time) {
+	if s.maxGapAge <= 0 {
+		return
+	}
+	for pos, entry := range s.gapMap {
+		if now.Sub(entry.addedAt) > s.maxGapAge {
+			delete(s.gapMap, pos)
+		}
+	}
+}
+
+func (s *StreamBuffer) evictOldestGapLocked() {
+	var (
+		oldestPos  uint64
+		oldestTime time.Time
+		found      bool
+	)
+	for pos, entry := range s.gapMap {
+		if !found || entry.addedAt.Before(oldestTime) {
+			oldestPos = pos
+			oldestTime = entry.addedAt
+			found = true
+		}
+	}
+	if found {
+		delete(s.gapMap, oldestPos)
 	}
 }
 
@@ -128,7 +182,7 @@ func (s *StreamBuffer) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.buf = s.buf[:0]
-	s.gapMap = make(map[uint64][]byte)
+	s.gapMap = make(map[uint64]gapEntry)
 	s.basePos = 0
 }
 

@@ -33,6 +33,9 @@ func roundTripExample() {
 
 	resp, err := tr.RoundTrip(req)
 	checkErr(err, "during roundtrip")
+	if resp != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
 
 	if err == nil {
 		fmt.Printf("RoundTrip Proto: %d\n", resp.ProtoMajor)
@@ -41,7 +44,9 @@ func roundTripExample() {
 
 func main() {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = fmt.Fprintf(w, "Hello, %v, http: %v\n", r.URL.Path, r.TLS == nil)
+		if _, err := fmt.Fprintf(w, "Hello, %v, http: %v\n", r.URL.Path, r.TLS == nil); err != nil {
+			checkErr(err, "while writing response")
+		}
 	})
 
 	server := &http.Server{

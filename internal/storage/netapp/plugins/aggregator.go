@@ -208,7 +208,9 @@ func aggregateOne(src *matrix.Matrix, rule aggRule, takeMax bool) *matrix.Matrix
 		}
 		inst.Labels = b.labels
 		for name, sum := range b.vals {
-			_ = out.SetValue(name, key, sum)
+			if err := out.SetValue(name, key, sum); err != nil {
+				continue
+			}
 		}
 	}
 	if len(out.Instances) == 0 {

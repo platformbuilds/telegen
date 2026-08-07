@@ -149,7 +149,9 @@ func (p *Tracer) Run(ctx context.Context, _ *ebpfcommon.EBPFEventContext, _ *msg
 
 	<-ctx.Done()
 
-	_ = p.bpfObjects.Close()
+	if err := p.bpfObjects.Close(); err != nil {
+		p.log.Debug("failed closing tpinjector BPF objects", "error", err)
+	}
 
 	p.log.Debug("tpinjector terminated")
 }

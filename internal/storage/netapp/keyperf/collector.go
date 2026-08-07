@@ -121,16 +121,22 @@ func (c *Collector) CollectObject(ctx context.Context, now time.Time) ([]storage
 				inst.Labels[l.Display] = s
 			}
 		}
-		_ = mat.SetValue(matrix.TimestampMetricName, key, ts)
+		if err := mat.SetValue(matrix.TimestampMetricName, key, ts); err != nil {
+			continue
+		}
 		for _, m := range metrics {
 			// KeyPerf counters often under statistics.iops_raw.read etc.
 			if f, ok := jsonpath.GetFloat(rec, m.APIName); ok {
-				_ = mat.SetValue(m.APIName, key, f)
+				if err := mat.SetValue(m.APIName, key, f); err != nil {
+					continue
+				}
 				continue
 			}
 			// try statistics. prefix variants
 			if f, ok := jsonpath.GetFloat(rec, "statistics."+m.APIName); ok {
-				_ = mat.SetValue(m.APIName, key, f)
+				if err := mat.SetValue(m.APIName, key, f); err != nil {
+					continue
+				}
 			}
 		}
 		// harvest raw statistics blocks
@@ -167,7 +173,9 @@ func (c *Collector) CollectObject(ctx context.Context, now time.Time) ([]storage
 			}
 			for _, m := range epMetrics {
 				if f, ok := jsonpath.GetFloat(rec, m.APIName); ok {
-					_ = mat.SetValue(m.APIName, key, f)
+					if err := mat.SetValue(m.APIName, key, f); err != nil {
+						continue
+					}
 				}
 			}
 		}
@@ -246,7 +254,9 @@ func mapStatistics(rec json.RawMessage, key string, mat *matrix.Matrix) {
 				if mat.GetMetric(name) == nil {
 					mat.NewMetric(name, strings.ReplaceAll(name, ".", "_"), "counter")
 				}
-				_ = mat.SetValue(name, key, f)
+				if err := mat.SetValue(name, key, f); err != nil {
+					continue
+				}
 			}
 		}
 	}

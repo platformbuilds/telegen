@@ -140,7 +140,10 @@ func processCouchbaseEvent(connInfo BpfConnectionInfoT, requestBuf []byte, respo
 		return nil, true, nil
 	}
 
-	respPackets, _ := couchbasekv.ParsePackets(responseBuf)
+	respPackets, err := couchbasekv.ParsePackets(responseBuf)
+	if err != nil {
+		respPackets = nil
+	}
 
 	// Build a map of response packets by Opaque for matching
 	respByOpaque := make(map[uint32]*couchbasekv.Packet)

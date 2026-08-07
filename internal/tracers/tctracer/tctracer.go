@@ -154,7 +154,9 @@ func (p *Tracer) Run(ctx context.Context, _ *ebpfcommon.EBPFEventContext, _ *msg
 	}
 
 	p.stopTC()
-	_ = p.bpfObjects.Close()
+	if err := p.bpfObjects.Close(); err != nil {
+		p.log.Debug("failed closing tc tracer BPF objects", "error", err)
+	}
 }
 
 func (p *Tracer) stopTC() {

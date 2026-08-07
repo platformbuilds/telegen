@@ -310,6 +310,7 @@ func (t *Tracer) Stop() {
 	t.cancel()
 	close(t.eventChan)
 	t.wg.Wait()
+	t.clearActiveStreams()
 }
 
 // processEvents handles incoming gRPC events
@@ -439,6 +440,15 @@ func (t *Tracer) GetActiveStreams() int {
 		return true
 	})
 	return count
+}
+
+// clearActiveStreams provides a guaranteed cleanup path for stream state.
+// If stream tracking is fully wired in later, Stop() will still evict all keys.
+func (t *Tracer) clearActiveStreams() {
+	t.activeStreams.Range(func(key, _ interface{}) bool {
+		t.activeStreams.Delete(key)
+		return true
+	})
 }
 
 // Helper function to convert null-terminated byte array to string

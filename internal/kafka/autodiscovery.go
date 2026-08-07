@@ -51,12 +51,12 @@ type AutoDiscovery struct {
 	clientset     kubernetes.Interface
 	restConfig    *rest.Config
 
-	mu             sync.RWMutex
-	clusters       map[string]*AutoDiscoveredCluster
-	handler        func(event AutoDiscoveryEvent)
-	stopCh         chan struct{}
-	wg             sync.WaitGroup
-	started        bool
+	mu       sync.RWMutex
+	clusters map[string]*AutoDiscoveredCluster
+	handler  func(event AutoDiscoveryEvent)
+	stopCh   chan struct{}
+	wg       sync.WaitGroup
+	started  bool
 }
 
 // AutoDiscoveredCluster contains all the information needed to connect to a discovered Kafka cluster
@@ -422,7 +422,12 @@ func (a *AutoDiscovery) processStrimziKafka(ctx context.Context, obj *unstructur
 	}
 
 	// Get status to extract bootstrap servers
-	status, found, _ := unstructured.NestedMap(obj.Object, "status")
+	status, found, err := unstructured.NestedMap(obj.Object, "status")
+	if err != nil {
+		cluster.Error = "invalid cluster status"
+		a.storeCluster(key, cluster)
+		return
+	}
 	if !found {
 		a.logger.Warn("cluster not ready (no status)",
 			slog.String("phase", "discovery"),
@@ -433,7 +438,12 @@ func (a *AutoDiscovery) processStrimziKafka(ctx context.Context, obj *unstructur
 		return
 	}
 
-	listeners, found, _ := unstructured.NestedSlice(status, "listeners")
+	listeners, found, err := unstructured.NestedSlice(status, "listeners")
+	if err != nil {
+		cluster.Error = "invalid cluster listeners"
+		a.storeCluster(key, cluster)
+		return
+	}
 	if !found || len(listeners) == 0 {
 		a.logger.Warn("no listeners available yet",
 			slog.String("phase", "discovery"),
@@ -453,7 +463,10 @@ func (a *AutoDiscovery) processStrimziKafka(ctx context.Context, obj *unstructur
 			if !ok {
 				continue
 			}
-			lName, _, _ := unstructured.NestedString(lMap, "name")
+			lName, _, err := unstructured.NestedString(lMap, "name")
+			if err != nil {
+				continue
+			}
 			if lName == preferred {
 				selectedListener = lMap
 				listenerName = lName
@@ -469,7 +482,10 @@ func (a *AutoDiscovery) processStrimziKafka(ctx context.Context, obj *unstructur
 	if selectedListener == nil {
 		if first, ok := listeners[0].(map[string]interface{}); ok {
 			selectedListener = first
-			listenerName, _, _ = unstructured.NestedString(first, "name")
+			listenerName, _, err = unstructured.NestedString(first, "name")
+			if err != nil {
+				listenerName = ""
+			}
 		}
 	}
 
@@ -489,19 +505,31 @@ func (a *AutoDiscovery) processStrimziKafka(ctx context.Context, obj *unstructur
 	)
 
 	// Get bootstrap servers
-	bootstrapServers, _, _ := unstructured.NestedString(selectedListener, "bootstrapServers")
+	bootstrapServers, _, err := unstructured.NestedString(selectedListener, "bootstrapServers")
+	if err != nil {
+		bootstrapServers = ""
+	}
 	if bootstrapServers != "" {
 		cluster.Brokers = strings.Split(bootstrapServers, ",")
 	} else {
 		// Fallback to addresses
-		addresses, _, _ := unstructured.NestedSlice(selectedListener, "addresses")
+		addresses, _, err := unstructured.NestedSlice(selectedListener, "addresses")
+		if err != nil {
+			addresses = nil
+		}
 		for _, addr := range addresses {
 			addrMap, ok := addr.(map[string]interface{})
 			if !ok {
 				continue
 			}
-			host, _, _ := unstructured.NestedString(addrMap, "host")
-			port, _, _ := unstructured.NestedInt64(addrMap, "port")
+			host, _, err := unstructured.NestedString(addrMap, "host")
+			if err != nil {
+				continue
+			}
+			port, _, err := unstructured.NestedInt64(addrMap, "port")
+			if err != nil {
+				continue
+			}
 			if host != "" && port > 0 {
 				cluster.Brokers = append(cluster.Brokers, fmt.Sprintf("%s:%d", host, port))
 			}
@@ -514,30 +542,51 @@ func (a *AutoDiscovery) processStrimziKafka(ctx context.Context, obj *unstructur
 	}
 
 	// Check spec for TLS and auth
-	spec, _, _ := unstructured.NestedMap(obj.Object, "spec")
-	kafkaSpec, _, _ := unstructured.NestedMap(spec, "kafka")
-	specListeners, _, _ := unstructured.NestedSlice(kafkaSpec, "listeners")
+	spec, _, err := unstructured.NestedMap(obj.Object, "spec")
+	if err != nil {
+		spec = nil
+	}
+	kafkaSpec, _, err := unstructured.NestedMap(spec, "kafka")
+	if err != nil {
+		kafkaSpec = nil
+	}
+	specListeners, _, err := unstructured.NestedSlice(kafkaSpec, "listeners")
+	if err != nil {
+		specListeners = nil
+	}
 
 	for _, l := range specListeners {
 		lMap, ok := l.(map[string]interface{})
 		if !ok {
 			continue
 		}
-		lName, _, _ := unstructured.NestedString(lMap, "name")
+		lName, _, err := unstructured.NestedString(lMap, "name")
+		if err != nil {
+			continue
+		}
 		if lName != listenerName {
 			continue
 		}
 
 		// TLS
-		tlsEnabled, found, _ := unstructured.NestedBool(lMap, "tls")
+		tlsEnabled, found, err := unstructured.NestedBool(lMap, "tls")
+		if err != nil {
+			found = false
+		}
 		if found && tlsEnabled {
 			cluster.TLSEnabled = true
 		}
 
 		// Authentication
-		auth, found, _ := unstructured.NestedMap(lMap, "authentication")
+		auth, found, err := unstructured.NestedMap(lMap, "authentication")
+		if err != nil {
+			found = false
+		}
 		if found {
-			authType, _, _ := unstructured.NestedString(auth, "type")
+			authType, _, err := unstructured.NestedString(auth, "type")
+			if err != nil {
+				authType = ""
+			}
 			cluster.AuthType = authType
 		}
 		break
@@ -701,8 +750,14 @@ func (a *AutoDiscovery) processConfluentKafka(ctx context.Context, obj *unstruct
 	}
 
 	// Check status
-	status, found, _ := unstructured.NestedMap(obj.Object, "status")
-	clusterID, _, _ := unstructured.NestedString(status, "kafkaClusterID")
+	status, found, err := unstructured.NestedMap(obj.Object, "status")
+	if err != nil {
+		status = nil
+	}
+	clusterID, _, err := unstructured.NestedString(status, "kafkaClusterID")
+	if err != nil {
+		clusterID = ""
+	}
 	if !found || clusterID == "" {
 		a.logger.Warn("cluster not ready (no kafkaClusterID)",
 			slog.String("phase", "discovery"),
@@ -722,12 +777,21 @@ func (a *AutoDiscovery) processConfluentKafka(ctx context.Context, obj *unstruct
 	cluster.Brokers = []string{fmt.Sprintf("%s.%s.svc.cluster.local:9071", name, namespace)}
 
 	// Check spec for TLS and auth
-	spec, _, _ := unstructured.NestedMap(obj.Object, "spec")
+	spec, _, err := unstructured.NestedMap(obj.Object, "spec")
+	if err != nil {
+		spec = nil
+	}
 
 	// TLS config
-	tls, found, _ := unstructured.NestedMap(spec, "tls")
+	tls, found, err := unstructured.NestedMap(spec, "tls")
+	if err != nil {
+		found = false
+	}
 	if found {
-		secretRef, _, _ := unstructured.NestedString(tls, "secretRef")
+		secretRef, _, err := unstructured.NestedString(tls, "secretRef")
+		if err != nil {
+			secretRef = ""
+		}
 		if secretRef != "" {
 			cluster.TLSEnabled = true
 			cluster.TLSSecretName = secretRef
@@ -736,26 +800,50 @@ func (a *AutoDiscovery) processConfluentKafka(ctx context.Context, obj *unstruct
 	}
 
 	// Check listener TLS
-	listeners, _, _ := unstructured.NestedMap(spec, "listeners")
-	internal, _, _ := unstructured.NestedMap(listeners, "internal")
+	listeners, _, err := unstructured.NestedMap(spec, "listeners")
+	if err != nil {
+		listeners = nil
+	}
+	internal, _, err := unstructured.NestedMap(listeners, "internal")
+	if err != nil {
+		internal = nil
+	}
 	if internal != nil {
-		internalTLS, _, _ := unstructured.NestedMap(internal, "tls")
+		internalTLS, _, err := unstructured.NestedMap(internal, "tls")
+		if err != nil {
+			internalTLS = nil
+		}
 		if internalTLS != nil {
-			enabled, _, _ := unstructured.NestedBool(internalTLS, "enabled")
+			enabled, _, err := unstructured.NestedBool(internalTLS, "enabled")
+			if err != nil {
+				enabled = false
+			}
 			if enabled {
 				cluster.TLSEnabled = true
 			}
 		}
 
 		// Auth
-		auth, found, _ := unstructured.NestedMap(internal, "authentication")
+		auth, found, err := unstructured.NestedMap(internal, "authentication")
+		if err != nil {
+			found = false
+		}
 		if found {
-			authType, _, _ := unstructured.NestedString(auth, "type")
+			authType, _, err := unstructured.NestedString(auth, "type")
+			if err != nil {
+				authType = ""
+			}
 			cluster.AuthType = authType
 
 			// Fetch credentials from JAAS secret
-			jaas, _, _ := unstructured.NestedMap(auth, "jaasConfig")
-			secretRef, _, _ := unstructured.NestedString(jaas, "secretRef")
+			jaas, _, err := unstructured.NestedMap(auth, "jaasConfig")
+			if err != nil {
+				jaas = nil
+			}
+			secretRef, _, err := unstructured.NestedString(jaas, "secretRef")
+			if err != nil {
+				secretRef = ""
+			}
 			if secretRef != "" {
 				a.fetchConfluentCredentials(ctx, cluster, namespace, secretRef)
 			}

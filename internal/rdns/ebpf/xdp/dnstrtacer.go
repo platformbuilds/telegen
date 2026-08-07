@@ -25,22 +25,23 @@ type tracer struct {
 }
 
 func (t *tracer) Close() error {
+	var closeErr error
 	if t.bpfObjects != nil {
-		_ = t.bpfObjects.Close()
+		closeErr = errors.Join(closeErr, t.bpfObjects.Close())
 		t.bpfObjects = nil
 	}
 
 	for _, link := range t.links {
-		_ = (*link).Close()
+		closeErr = errors.Join(closeErr, (*link).Close())
 	}
 
 	t.links = nil
 
 	if t.ringbuf != nil {
-		_ = t.ringbuf.Close()
+		closeErr = errors.Join(closeErr, t.ringbuf.Close())
 	}
 
-	return nil
+	return closeErr
 }
 
 // newTracer creates and initializes a new DNS response tracer.
@@ -98,13 +99,17 @@ func newTracer() (*tracer, error) {
 	}
 
 	if len(tracer.links) == 0 {
-		_ = tracer.Close()
+		if err := tracer.Close(); err != nil {
+			log.Debug("failed to close tracer after attach miss", "error", err)
+		}
 		return nil, errors.New("no interfaces found")
 	}
 
 	tracer.ringbuf, err = ringbuf.NewReader(tracer.bpfObjects.RingBuffer)
 	if err != nil {
-		_ = tracer.Close()
+		if closeErr := tracer.Close(); closeErr != nil {
+			log.Debug("failed to close tracer after ringbuf init error", "error", closeErr)
+		}
 		return nil, fmt.Errorf("creating ringbuffer reader: %w", err)
 	}
 	return &tracer, nil

@@ -32,7 +32,12 @@ func NewNativeParser(opts Options) *NativeParser {
 		opts.SampleIntervalMs = 10
 	}
 	if opts.Logger == nil {
-		opts.Logger, _ = zap.NewProduction()
+		logger, err := zap.NewProduction()
+		if err != nil {
+			opts.Logger = zap.NewNop()
+		} else {
+			opts.Logger = logger
+		}
 	}
 	return &NativeParser{
 		opts:   opts,

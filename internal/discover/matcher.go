@@ -33,7 +33,10 @@ func criteriaMatcherProvider(
 	input *msg.Queue[[]Event[ProcessAttrs]],
 	output *msg.Queue[[]Event[ProcessMatch]],
 ) swarm.InstanceFunc {
-	beylaNamespace, _ := namespaceFetcherFunc(int32(osPidFunc()))
+	beylaNamespace, err := namespaceFetcherFunc(int32(osPidFunc()))
+	if err != nil {
+		beylaNamespace = ""
+	}
 	m := &Matcher{
 		Log:                 slog.With("component", "discover.CriteriaMatcher"),
 		Criteria:            FindingCriteria(cfg),
@@ -223,7 +226,10 @@ func (m *Matcher) matchProcess(obj *ProcessAttrs, p *services.ProcessInfo, a ser
 		return false
 	}
 	if a.IsContainersOnly() {
-		ns, _ := namespaceFetcherFunc(p.Pid)
+		ns, err := namespaceFetcherFunc(p.Pid)
+		if err != nil {
+			ns = ""
+		}
 		if ns == m.Namespace && m.HasHostPidAccess {
 			log.Debug("not in a container", "namespace", ns)
 			return false
@@ -459,7 +465,10 @@ var processInfo = func(pp ProcessAttrs) (*services.ProcessInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("can't read process: %w", err)
 	}
-	ppid, _ := proc.Ppid()
+	ppid, err := proc.Ppid()
+	if err != nil {
+		ppid = 0
+	}
 	exePath, err := proc.Exe()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

@@ -21,10 +21,14 @@ type datapoint[N int64 | float64] struct {
 	res   exemplar.FilteredReservoir[N]
 }
 
-func newLastValue[N int64 | float64](limit int, r func() exemplar.FilteredReservoir[N]) *lastValue[N] {
+func newLastValue[N int64 | float64](
+	limit int,
+	onOverflow func(),
+	r func() exemplar.FilteredReservoir[N],
+) *lastValue[N] {
 	return &lastValue[N]{
 		newRes: r,
-		limit:  newLimiter[datapoint[N]](limit),
+		limit:  newLimiter[datapoint[N]](limit, onOverflow),
 		values: make(map[attribute.Distinct]datapoint[N]),
 		start:  now(),
 	}
@@ -126,8 +130,12 @@ func (s *lastValue[N]) copyDpts(dest *[]sdkmetricdata.DataPoint[N], t time.Time)
 
 // newPrecomputedLastValue returns an aggregator that summarizes a set of
 // observations as the last one made.
-func newPrecomputedLastValue[N int64 | float64](limit int, r func() exemplar.FilteredReservoir[N]) *precomputedLastValue[N] {
-	return &precomputedLastValue[N]{lastValue: newLastValue[N](limit, r)}
+func newPrecomputedLastValue[N int64 | float64](
+	limit int,
+	onOverflow func(),
+	r func() exemplar.FilteredReservoir[N],
+) *precomputedLastValue[N] {
+	return &precomputedLastValue[N]{lastValue: newLastValue[N](limit, onOverflow, r)}
 }
 
 // precomputedLastValue summarizes a set of observations as the last one made.

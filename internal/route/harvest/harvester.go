@@ -26,6 +26,7 @@ type RouteHarvester struct {
 	cfg      *services.RouteHarvestingConfig
 	timeout  time.Duration
 	mux      *sync.Mutex
+	inFlight chan struct{}
 
 	// testing related
 	javaExtractRoutes func(pid int32) (*RouteHarvesterResult, error)
@@ -71,6 +72,7 @@ func NewRouteHarvester(cfg *services.RouteHarvestingConfig, disabled []string, t
 		timeout:  timeout,
 		cfg:      cfg,
 		mux:      &sync.Mutex{},
+		inFlight: make(chan struct{}, 1),
 	}
 
 	h.javaExtractRoutes = h.java.ExtractRoutes
@@ -95,13 +97,20 @@ func (h *RouteHarvester) HarvestRoutes(fileInfo *exec.FileInfo) (*RouteHarvester
 		return nil, nil
 	}
 
-	// Ensure we harvest one by one
+	// Serialize setup/teardown and worker creation across calls.
 	h.mux.Lock()
 	defer h.mux.Unlock()
 
 	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), h.timeout)
 	defer cancel()
+
+	// Keep only one harvesting worker active even after timeout returns.
+	// This prevents concurrent access to shared attacher internals.
+	if !h.acquireWorker(ctx) {
+		h.log.Warn("route harvesting timed out", "timeout", h.timeout, "pid", fileInfo.Pid)
+		return nil, &HarvestError{Message: "route harvesting timed out"}
+	}
 
 	// Channel to receive the result
 	type result struct {
@@ -110,40 +119,45 @@ func (h *RouteHarvester) HarvestRoutes(fileInfo *exec.FileInfo) (*RouteHarvester
 	}
 
 	resultChan := make(chan result, 1)
-
-	// We need to fix this in the downstream library and then we can remove this code
-	if fileInfo.Service.SDKLanguage == svc.InstrumentableJava {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-		h.java.Attacher.Init()
-		defer h.java.Attacher.Cleanup()
+	sendResult := func(res result) {
+		select {
+		case resultChan <- res:
+		case <-ctx.Done():
+		}
 	}
 
 	// Run the harvesting in a goroutine
 	go func() {
+		defer h.releaseWorker()
 		defer func() {
 			if r := recover(); r != nil {
 				h.log.Error("route harvesting failed", "error", r)
-				resultChan <- result{err: &HarvestError{Message: "harvesting failed"}}
+				sendResult(result{err: &HarvestError{Message: "harvesting failed"}})
 			}
 		}()
 
 		switch fileInfo.Service.SDKLanguage {
 		case svc.InstrumentableJava:
+			// Keep attach initialization and cleanup in the worker lifecycle.
+			runtime.LockOSThread()
+			defer runtime.UnlockOSThread()
+			h.java.Attacher.Init()
+			defer h.java.Attacher.Cleanup()
+
 			r, err := h.javaExtractRoutes(fileInfo.Pid)
 			if err != nil {
-				resultChan <- result{err: err}
+				sendResult(result{err: err})
 				return
 			}
-			resultChan <- result{r: r}
+			sendResult(result{r: r})
 		case svc.InstrumentableNodejs:
 			r, err := h.nodeExtractRoutes(fileInfo.Pid)
 			if err != nil {
-				resultChan <- result{err: err}
+				sendResult(result{err: err})
 				return
 			}
 			h.log.Debug("found node js application routes", "routes", r.Routes)
-			resultChan <- result{r: r}
+			sendResult(result{r: r})
 		}
 	}()
 
@@ -154,6 +168,22 @@ func (h *RouteHarvester) HarvestRoutes(fileInfo *exec.FileInfo) (*RouteHarvester
 	case <-ctx.Done():
 		h.log.Warn("route harvesting timed out", "timeout", h.timeout, "pid", fileInfo.Pid)
 		return nil, &HarvestError{Message: "route harvesting timed out"}
+	}
+}
+
+func (h *RouteHarvester) acquireWorker(ctx context.Context) bool {
+	select {
+	case h.inFlight <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func (h *RouteHarvester) releaseWorker() {
+	select {
+	case <-h.inFlight:
+	default:
 	}
 }
 

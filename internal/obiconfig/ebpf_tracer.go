@@ -24,6 +24,13 @@ type MapsConfig struct {
 	//   < 0: shrinks size (1/2 per step)
 	//   = 0: no change
 	GlobalScaleFactor int `yaml:"global_scale_factor" validate:"gte=-3,lte=3"`
+
+	// DNSRingBufferSizeBytes overrides bpf/network/dns_tracer.c dns_events max_entries.
+	DNSRingBufferSizeBytes uint32 `yaml:"dns_ring_buffer_size_bytes" env:"OTEL_EBPF_BPF_DNS_RING_BUFFER_SIZE_BYTES" validate:"gte=4096"`
+	// MySQLRingBufferSizeBytes overrides bpf/database/mysql_tracer.c mysql_events max_entries.
+	MySQLRingBufferSizeBytes uint32 `yaml:"mysql_ring_buffer_size_bytes" env:"OTEL_EBPF_BPF_MYSQL_RING_BUFFER_SIZE_BYTES" validate:"gte=4096"`
+	// OracleRingBufferSizeBytes overrides bpf/database/oracle_tracer.c oracle_events max_entries.
+	OracleRingBufferSizeBytes uint32 `yaml:"oracle_ring_buffer_size_bytes" env:"OTEL_EBPF_BPF_ORACLE_RING_BUFFER_SIZE_BYTES" validate:"gte=4096"`
 }
 
 const (

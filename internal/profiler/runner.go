@@ -25,15 +25,16 @@ type Runner struct {
 	config RunnerConfig
 	log    *slog.Logger
 
-	manager         *Manager
-	collector       *Collector
-	logExporter     *LogExporter
-	metricsExporter *MetricsExporter
-	resolver        *SymbolResolver // Shared across all profilers
-	processFilter   *ProcessFilter  // Filters which processes to profile
-	perfMapReader   *perfmap.PerfMapReader
-	javaInjector    *perfmap.Injector
-	kubeStore       *kube.Store // Kubernetes metadata store
+	manager          *Manager
+	collector        *Collector
+	logExporter      *LogExporter
+	metricsExporter  *MetricsExporter
+	metadataResolver *ProcessMetadataResolver
+	resolver         *SymbolResolver // Shared across all profilers
+	processFilter    *ProcessFilter  // Filters which processes to profile
+	perfMapReader    *perfmap.PerfMapReader
+	javaInjector     *perfmap.Injector
+	kubeStore        *kube.Store // Kubernetes metadata store
 
 	mu      sync.RWMutex
 	running bool
@@ -74,6 +75,7 @@ func (r *Runner) Start(ctx context.Context) error {
 		r.log.Info("profiling is disabled")
 		return nil
 	}
+	r.ctx, r.cancel = context.WithCancel(ctx)
 
 	r.log.Info("starting eBPF profiling",
 		"cpu_enabled", r.config.CPU.Enabled,
@@ -144,6 +146,7 @@ func (r *Runner) Start(ctx context.Context) error {
 
 	// Create shared process metadata resolver for consistent app.name across exporters
 	metadataResolver := NewProcessMetadataResolver(r.log)
+	r.metadataResolver = metadataResolver
 
 	// Create Java perf-map reader
 	r.perfMapReader = perfmap.NewPerfMapReader()
@@ -293,51 +296,67 @@ func (r *Runner) Start(ctx context.Context) error {
 // Stop gracefully stops all profiling components
 func (r *Runner) Stop(ctx context.Context) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	if !r.running {
+		r.mu.Unlock()
 		return nil
 	}
+	r.running = false
+	cancel := r.cancel
+	manager := r.manager
+	javaInjector := r.javaInjector
+	logExporter := r.logExporter
+	metricsExporter := r.metricsExporter
+	r.mu.Unlock()
 
 	r.log.Info("stopping eBPF profiling")
-	r.cancel()
+	cancel()
 
-	// Wait for export loop to finish
-	r.wg.Wait()
+	// Wait for export loop to finish (bounded by shutdown context).
+	done := make(chan struct{})
+	go func() {
+		r.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 
 	// Close Java injector
-	if r.javaInjector != nil {
-		_ = r.javaInjector.Close()
+	if javaInjector != nil {
+		if err := javaInjector.Close(); err != nil {
+			r.log.Warn("error closing Java perfmap injector", "error", err)
+		}
 	}
 
 	// Stop manager (stops all profilers)
-	if r.manager != nil {
-		if err := r.manager.Stop(); err != nil {
+	if manager != nil {
+		if err := manager.Stop(); err != nil {
 			r.log.Warn("error stopping profiler manager", "error", err)
 		}
 	}
 
 	// Flush and close log exporter
-	if r.logExporter != nil {
-		if err := r.logExporter.Flush(ctx); err != nil {
+	if logExporter != nil {
+		if err := logExporter.Flush(ctx); err != nil {
 			r.log.Warn("error flushing log exporter", "error", err)
 		}
-		if err := r.logExporter.Close(); err != nil {
+		if err := logExporter.Close(); err != nil {
 			r.log.Warn("error closing log exporter", "error", err)
 		}
 	}
 
 	// Flush and close metrics exporter
-	if r.metricsExporter != nil {
-		if err := r.metricsExporter.Flush(ctx); err != nil {
+	if metricsExporter != nil {
+		if err := metricsExporter.Flush(ctx); err != nil {
 			r.log.Warn("error flushing metrics exporter", "error", err)
 		}
-		if err := r.metricsExporter.Close(); err != nil {
+		if err := metricsExporter.Close(); err != nil {
 			r.log.Warn("error closing metrics exporter", "error", err)
 		}
 	}
 
-	r.running = false
 	r.log.Info("eBPF profiling stopped")
 	return nil
 }
@@ -519,6 +538,12 @@ func (r *Runner) removeBPFPids(pids []uint32) {
 				}
 			}
 		}
+		if r.metadataResolver != nil {
+			r.metadataResolver.RemovePID(pid)
+		}
+		if r.logExporter != nil {
+			r.logExporter.RemoveUnresolvedPID(pid)
+		}
 	}
 }
 
@@ -551,7 +576,12 @@ func (r *Runner) updateBPFPidMaps(pids []uint32) {
 func (r *Runner) exportLoop() {
 	defer r.wg.Done()
 
-	ticker := time.NewTicker(r.config.UploadInterval)
+	uploadInterval := r.config.UploadInterval
+	if uploadInterval <= 0 {
+		uploadInterval = 60 * time.Second
+		r.log.Warn("invalid profiling upload interval; using default", "field", "profiling.upload_interval", "default", uploadInterval)
+	}
+	ticker := time.NewTicker(uploadInterval)
 	defer ticker.Stop()
 
 	for {

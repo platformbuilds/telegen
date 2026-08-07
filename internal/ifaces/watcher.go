@@ -61,6 +61,7 @@ func (w *Watcher) Subscribe(ctx context.Context) (<-chan Event, error) {
 
 func (w *Watcher) sendUpdates(ctx context.Context, out chan Event) {
 	log := slog.With("component", "ifaces.Watcher")
+	defer close(out)
 
 	// subscribe for interface events
 	links := make(chan netlink.LinkUpdate)
@@ -76,34 +77,54 @@ func (w *Watcher) sendUpdates(ctx context.Context, out chan Event) {
 	} else {
 		for _, name := range names {
 			w.current[name] = struct{}{}
-			out <- Event{Type: EventAdded, Interface: name}
+			select {
+			case out <- Event{Type: EventAdded, Interface: name}:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}
 
-	for link := range links {
-		attrs := link.Attrs()
-		if attrs == nil {
-			log.Debug("received link update without attributes. Ignoring", "link", link)
-			continue
-		}
-		iface := Interface{Name: attrs.Name, Index: attrs.Index}
-		if link.Flags&(syscall.IFF_UP|syscall.IFF_RUNNING) != 0 {
-			log.Debug("Interface up and running",
-				"operstate", attrs.OperState,
-				"flags", attrs.Flags,
-				"name", attrs.Name)
-			if _, ok := w.current[iface]; !ok {
-				w.current[iface] = struct{}{}
-				out <- Event{Type: EventAdded, Interface: iface}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case link, ok := <-links:
+			if !ok {
+				return
 			}
-		} else {
-			log.Debug("Interface down or not running",
-				"operstate", attrs.OperState,
-				"flags", attrs.Flags,
-				"name", attrs.Name)
-			if _, ok := w.current[iface]; ok {
-				delete(w.current, iface)
-				out <- Event{Type: EventDeleted, Interface: iface}
+			attrs := link.Attrs()
+			if attrs == nil {
+				log.Debug("received link update without attributes. Ignoring", "link", link)
+				continue
+			}
+			iface := Interface{Name: attrs.Name, Index: attrs.Index}
+			if link.Flags&(syscall.IFF_UP|syscall.IFF_RUNNING) != 0 {
+				log.Debug("Interface up and running",
+					"operstate", attrs.OperState,
+					"flags", attrs.Flags,
+					"name", attrs.Name)
+				if _, ok := w.current[iface]; !ok {
+					w.current[iface] = struct{}{}
+					select {
+					case out <- Event{Type: EventAdded, Interface: iface}:
+					case <-ctx.Done():
+						return
+					}
+				}
+			} else {
+				log.Debug("Interface down or not running",
+					"operstate", attrs.OperState,
+					"flags", attrs.Flags,
+					"name", attrs.Name)
+				if _, ok := w.current[iface]; ok {
+					delete(w.current, iface)
+					select {
+					case out <- Event{Type: EventDeleted, Interface: iface}:
+					case <-ctx.Done():
+						return
+					}
+				}
 			}
 		}
 	}

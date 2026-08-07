@@ -31,7 +31,7 @@ type Collector struct {
 	Log          *slog.Logger
 	GlobalLabels map[string]string
 	BatchSize    string
-	prev         map[string]*matrix.Matrix // object -> previous poll
+	prev         map[string]*matrix.Matrix    // object -> previous poll
 	schemaTypes  map[string]map[string]string // object -> counter -> type
 }
 
@@ -187,7 +187,9 @@ func (c *Collector) pollObject(ctx context.Context, objectName, fileName string,
 			}
 		}
 		extractProperties(rec, inst)
-		_ = mat.SetValue(matrix.TimestampMetricName, key, ts)
+		if err := mat.SetValue(matrix.TimestampMetricName, key, ts); err != nil {
+			continue
+		}
 
 		// counters array: [{name,value},...]
 		extractCounters(rec, key, mat, metrics)
@@ -343,14 +345,25 @@ func extractCounters(rec json.RawMessage, key string, mat *matrix.Matrix, metric
 		}
 		switch v := cm["value"].(type) {
 		case float64:
-			_ = mat.SetValue(name, key, v)
+			if err := mat.SetValue(name, key, v); err != nil {
+				continue
+			}
 		case string:
 			var f float64
-			_, _ = fmt.Sscanf(v, "%f", &f)
-			_ = mat.SetValue(name, key, f)
+			if _, err := fmt.Sscanf(v, "%f", &f); err != nil {
+				continue
+			}
+			if err := mat.SetValue(name, key, f); err != nil {
+				continue
+			}
 		case json.Number:
-			f, _ := v.Float64()
-			_ = mat.SetValue(name, key, f)
+			f, err := v.Float64()
+			if err != nil {
+				continue
+			}
+			if err := mat.SetValue(name, key, f); err != nil {
+				continue
+			}
 		}
 	}
 }

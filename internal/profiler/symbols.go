@@ -387,7 +387,10 @@ func (r *SymbolResolver) ResolveStack(pid uint32, addresses []uint64) []Resolved
 		if addr == 0 {
 			break
 		}
-		frame, _ := r.Resolve(pid, addr)
+		frame, err := r.Resolve(pid, addr)
+		if err != nil {
+			continue
+		}
 		if frame != nil {
 			frames = append(frames, *frame)
 		}
@@ -558,7 +561,10 @@ func (r *SymbolResolver) parseProcMaps(pid uint32) ([]MemoryMapping, error) {
 			continue
 		}
 
-		offset, _ := strconv.ParseUint(fields[2], 16, 64)
+		offset, err := strconv.ParseUint(fields[2], 16, 64)
+		if err != nil {
+			continue
+		}
 
 		inode := uint64(0)
 		if len(fields) >= 5 {
@@ -637,7 +643,7 @@ func (r *SymbolResolver) loadPerfMap(pid uint32) (*V8PerfMap, error) {
 				if root == "" {
 					root = "/"
 				}
-				_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+				if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 					if err != nil {
 						return nil
 					}
@@ -646,11 +652,17 @@ func (r *SymbolResolver) loadPerfMap(pid uint32) (*V8PerfMap, error) {
 					}
 					// match by converting ** -> * for filepath.Match
 					matchPat := strings.ReplaceAll(pattern, "**", "*")
-					if ok, _ := filepath.Match(matchPat, path); ok {
+					ok, matchErr := filepath.Match(matchPat, path)
+					if matchErr != nil {
+						return nil
+					}
+					if ok {
 						perfMapPaths = append(perfMapPaths, path)
 					}
 					return nil
-				})
+				}); err != nil {
+					r.debugLog("error while walking perf map path", "root", root, "error", err)
+				}
 				continue
 			}
 
@@ -837,7 +849,9 @@ func parseV8FunctionName(name string) (shortName, scriptName string, lineNumber 
 
 		if colonIdx := strings.LastIndex(location, ":"); colonIdx != -1 {
 			scriptName = location[:colonIdx]
-			lineNumber, _ = strconv.Atoi(location[colonIdx+1:])
+			if parsed, err := strconv.Atoi(location[colonIdx+1:]); err == nil {
+				lineNumber = parsed
+			}
 		} else {
 			scriptName = location
 		}
@@ -1229,7 +1243,7 @@ func (r *SymbolResolver) WatchPerfMapDirs() error {
 		}
 
 		if r.config.PerfMapRecursive {
-			_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			if err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 				if err != nil {
 					return nil
 				}
@@ -1242,7 +1256,9 @@ func (r *SymbolResolver) WatchPerfMapDirs() error {
 					}
 				}
 				return nil
-			})
+			}); err != nil {
+				r.log.Debug("failed walking perf map watch directory", "dir", dir, "error", err)
+			}
 		} else {
 			if _, ok := seen[dir]; !ok {
 				if err := watcher.Add(dir); err == nil {
@@ -1257,7 +1273,9 @@ func (r *SymbolResolver) WatchPerfMapDirs() error {
 		for {
 			select {
 			case <-r.ctx.Done():
-				_ = watcher.Close()
+				if err := watcher.Close(); err != nil {
+					r.log.Debug("failed closing perf map watcher", "error", err)
+				}
 				return
 			case ev, ok := <-watcher.Events:
 				if !ok {

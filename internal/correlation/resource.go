@@ -13,6 +13,11 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
+const (
+	resourceEntryTTL      = 24 * time.Hour
+	resourceSweepInterval = 5 * time.Minute
+)
+
 // Resource represents a resource with attributes for signal correlation.
 type Resource struct {
 	// SchemaURL is the schema URL for the resource.
@@ -151,13 +156,22 @@ type ResourceCorrelator struct {
 	mu        sync.RWMutex
 	resources map[string]*Resource
 	identity  map[string]*ResourceIdentity
-	log       *slog.Logger
+	lastSeen  map[string]time.Time
+	// Secondary indexes to avoid linear scans.
+	serviceIndex     map[string]map[string]struct{} // namespace+service -> resource keys
+	serviceNameIndex map[string]map[string]struct{} // service -> resource keys
+	containerIndex   map[string]string              // container ID -> resource key
+	podIndex         map[string]map[string]struct{} // namespace+pod -> resource keys
+	log              *slog.Logger
 
 	// Default resource to use when none found
 	defaultResource *Resource
 
 	// Resource discovery callbacks
 	onDiscover []func(*ResourceIdentity, *Resource)
+	entryTTL   time.Duration
+	sweepEvery time.Duration
+	lastSweep  time.Time
 }
 
 // NewResourceCorrelator creates a new resource correlator.
@@ -167,11 +181,19 @@ func NewResourceCorrelator(log *slog.Logger) *ResourceCorrelator {
 	}
 
 	return &ResourceCorrelator{
-		resources:       make(map[string]*Resource),
-		identity:        make(map[string]*ResourceIdentity),
-		log:             log.With("component", "resource_correlator"),
-		defaultResource: NewResource(),
-		onDiscover:      make([]func(*ResourceIdentity, *Resource), 0),
+		resources:        make(map[string]*Resource),
+		identity:         make(map[string]*ResourceIdentity),
+		lastSeen:         make(map[string]time.Time),
+		serviceIndex:     make(map[string]map[string]struct{}),
+		serviceNameIndex: make(map[string]map[string]struct{}),
+		containerIndex:   make(map[string]string),
+		podIndex:         make(map[string]map[string]struct{}),
+		log:              log.With("component", "resource_correlator"),
+		defaultResource:  NewResource(),
+		onDiscover:       make([]func(*ResourceIdentity, *Resource), 0),
+		entryTTL:         resourceEntryTTL,
+		sweepEvery:       resourceSweepInterval,
+		lastSweep:        time.Now(),
 	}
 }
 
@@ -200,8 +222,12 @@ func (rc *ResourceCorrelator) Register(identity *ResourceIdentity, resource *Res
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
+	rc.sweepExpiredLocked(time.Now())
+	rc.unregisterLocked(key)
 	rc.resources[key] = resource
 	rc.identity[key] = identity
+	rc.lastSeen[key] = time.Now()
+	rc.addIndexesLocked(key, identity)
 
 	// Notify callbacks
 	for _, fn := range rc.onDiscover {
@@ -215,8 +241,42 @@ func (rc *ResourceCorrelator) Register(identity *ResourceIdentity, resource *Res
 	)
 }
 
+// Unregister removes a resource and identity by key.
+func (rc *ResourceCorrelator) Unregister(key string) {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+	rc.unregisterLocked(key)
+}
+
+// UnregisterByContainerID removes a resource entry by container ID.
+func (rc *ResourceCorrelator) UnregisterByContainerID(containerID string) {
+	if containerID == "" {
+		return
+	}
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+	if key, ok := rc.containerIndex[containerID]; ok {
+		rc.unregisterLocked(key)
+	}
+}
+
+// UnregisterByPod removes all resource entries for a pod.
+func (rc *ResourceCorrelator) UnregisterByPod(namespace, podName string) {
+	if namespace == "" || podName == "" {
+		return
+	}
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+	podKey := podIndexKey(namespace, podName)
+	keys := rc.podIndex[podKey]
+	for key := range keys {
+		rc.unregisterLocked(key)
+	}
+}
+
 // Get retrieves a resource by identity key.
 func (rc *ResourceCorrelator) Get(key string) (*Resource, bool) {
+	rc.maybeSweep()
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
 
@@ -226,54 +286,161 @@ func (rc *ResourceCorrelator) Get(key string) (*Resource, bool) {
 
 // GetByService retrieves a resource by service name.
 func (rc *ResourceCorrelator) GetByService(serviceName, namespace string) (*Resource, bool) {
+	rc.maybeSweep()
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
 
-	// Try with namespace prefix first
 	if namespace != "" {
-		for key, id := range rc.identity {
-			if id.ServiceName == serviceName && id.ServiceNamespace == namespace {
-				return rc.resources[key], true
+		if set, ok := rc.serviceIndex[serviceIndexKey(namespace, serviceName)]; ok {
+			if key, ok := firstSetKey(set); ok {
+				if resource, exists := rc.resources[key]; exists {
+					return resource, true
+				}
 			}
 		}
 	}
-
-	// Fall back to service name only
-	for key, id := range rc.identity {
-		if id.ServiceName == serviceName {
-			return rc.resources[key], true
+	if set, ok := rc.serviceNameIndex[serviceName]; ok {
+		if key, ok := firstSetKey(set); ok {
+			if resource, exists := rc.resources[key]; exists {
+				return resource, true
+			}
 		}
 	}
-
 	return nil, false
 }
 
 // GetByContainerID retrieves a resource by container ID.
 func (rc *ResourceCorrelator) GetByContainerID(containerID string) (*Resource, bool) {
+	rc.maybeSweep()
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
-
-	for key, id := range rc.identity {
-		if id.ContainerID == containerID {
-			return rc.resources[key], true
-		}
+	key, ok := rc.containerIndex[containerID]
+	if !ok {
+		return nil, false
 	}
-
-	return nil, false
+	resource, exists := rc.resources[key]
+	return resource, exists
 }
 
 // GetByPod retrieves a resource by pod information.
 func (rc *ResourceCorrelator) GetByPod(namespace, podName string) (*Resource, bool) {
+	rc.maybeSweep()
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
-
-	for key, id := range rc.identity {
-		if id.K8sNamespace == namespace && id.PodName == podName {
-			return rc.resources[key], true
+	keys, ok := rc.podIndex[podIndexKey(namespace, podName)]
+	if !ok {
+		return nil, false
+	}
+	if key, ok := firstSetKey(keys); ok {
+		if resource, exists := rc.resources[key]; exists {
+			return resource, true
 		}
 	}
-
 	return nil, false
+}
+
+func (rc *ResourceCorrelator) maybeSweep() {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+	if rc.sweepEvery <= 0 {
+		rc.sweepExpiredLocked(time.Now())
+		return
+	}
+	now := time.Now()
+	if now.Sub(rc.lastSweep) < rc.sweepEvery {
+		return
+	}
+	rc.sweepExpiredLocked(now)
+}
+
+func (rc *ResourceCorrelator) sweepExpiredLocked(now time.Time) {
+	rc.lastSweep = now
+	if rc.entryTTL <= 0 {
+		return
+	}
+	for key, seenAt := range rc.lastSeen {
+		if now.Sub(seenAt) > rc.entryTTL {
+			rc.unregisterLocked(key)
+		}
+	}
+}
+
+func (rc *ResourceCorrelator) unregisterLocked(key string) {
+	id, ok := rc.identity[key]
+	if ok {
+		rc.removeIndexesLocked(key, id)
+	}
+	delete(rc.resources, key)
+	delete(rc.identity, key)
+	delete(rc.lastSeen, key)
+}
+
+func (rc *ResourceCorrelator) addIndexesLocked(key string, id *ResourceIdentity) {
+	if id == nil {
+		return
+	}
+	if id.ServiceName != "" {
+		addSetMember(rc.serviceNameIndex, id.ServiceName, key)
+		if id.ServiceNamespace != "" {
+			addSetMember(rc.serviceIndex, serviceIndexKey(id.ServiceNamespace, id.ServiceName), key)
+		}
+	}
+	if id.ContainerID != "" {
+		rc.containerIndex[id.ContainerID] = key
+	}
+	if id.K8sNamespace != "" && id.PodName != "" {
+		addSetMember(rc.podIndex, podIndexKey(id.K8sNamespace, id.PodName), key)
+	}
+}
+
+func (rc *ResourceCorrelator) removeIndexesLocked(key string, id *ResourceIdentity) {
+	if id == nil {
+		return
+	}
+	if id.ServiceName != "" {
+		removeSetMember(rc.serviceNameIndex, id.ServiceName, key)
+		if id.ServiceNamespace != "" {
+			removeSetMember(rc.serviceIndex, serviceIndexKey(id.ServiceNamespace, id.ServiceName), key)
+		}
+	}
+	if id.ContainerID != "" {
+		if existing, ok := rc.containerIndex[id.ContainerID]; ok && existing == key {
+			delete(rc.containerIndex, id.ContainerID)
+		}
+	}
+	if id.K8sNamespace != "" && id.PodName != "" {
+		removeSetMember(rc.podIndex, podIndexKey(id.K8sNamespace, id.PodName), key)
+	}
+}
+
+func serviceIndexKey(namespace, service string) string { return namespace + "/" + service }
+func podIndexKey(namespace, pod string) string         { return namespace + "/" + pod }
+
+func addSetMember(index map[string]map[string]struct{}, idxKey, key string) {
+	set, ok := index[idxKey]
+	if !ok {
+		set = make(map[string]struct{})
+		index[idxKey] = set
+	}
+	set[key] = struct{}{}
+}
+
+func removeSetMember(index map[string]map[string]struct{}, idxKey, key string) {
+	set, ok := index[idxKey]
+	if !ok {
+		return
+	}
+	delete(set, key)
+	if len(set) == 0 {
+		delete(index, idxKey)
+	}
+}
+
+func firstSetKey(set map[string]struct{}) (string, bool) {
+	for key := range set {
+		return key, true
+	}
+	return "", false
 }
 
 // GetDefault returns the default resource.
@@ -421,7 +588,10 @@ func (sc *SignalCorrelator) CorrelateLog(containerID string, timestamp time.Time
 	if found {
 		traceID, err := ParseTraceID(traceIDStr)
 		if err == nil {
-			spanID, _ := ParseSpanID(spanIDStr)
+			spanID, spanErr := ParseSpanID(spanIDStr)
+			if spanErr != nil {
+				spanID = SpanID{}
+			}
 			tc := &TraceContext{
 				TraceID: traceID,
 				SpanID:  spanID,
@@ -475,6 +645,21 @@ func (sc *SignalCorrelator) CorrelateMetric(metricName string, serviceName, name
 // RegisterResource registers a resource for correlation.
 func (sc *SignalCorrelator) RegisterResource(identity *ResourceIdentity, resource *Resource) {
 	sc.resourceCorrelator.Register(identity, resource)
+}
+
+// UnregisterResource removes a resource by identity key.
+func (sc *SignalCorrelator) UnregisterResource(key string) {
+	sc.resourceCorrelator.Unregister(key)
+}
+
+// UnregisterResourceByContainerID removes a resource entry by container ID.
+func (sc *SignalCorrelator) UnregisterResourceByContainerID(containerID string) {
+	sc.resourceCorrelator.UnregisterByContainerID(containerID)
+}
+
+// UnregisterResourceByPod removes resource entries for a pod.
+func (sc *SignalCorrelator) UnregisterResourceByPod(namespace, podName string) {
+	sc.resourceCorrelator.UnregisterByPod(namespace, podName)
 }
 
 // CacheBaggage caches baggage for a trace.

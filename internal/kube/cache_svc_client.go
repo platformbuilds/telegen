@@ -7,8 +7,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/mirastacklabs-ai/telegen/internal/helpers"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -28,13 +31,14 @@ type cacheSvcClient struct {
 	address string
 	log     *slog.Logger
 
-	lastEventTSEpoch       int64
-	ctx                    context.Context
-	syncTimeout            time.Duration
-	waitForSubscription    chan struct{}
-	waitForSynchronization chan struct{}
-	waitForSyncClosed      bool
-	reconnectTime          time.Duration
+	ctx                     context.Context
+	syncTimeout             time.Duration
+	waitForSubscription     chan struct{}
+	waitForSynchronization  chan struct{}
+	waitForSubscriptionOnce sync.Once
+	waitForSyncOnce         sync.Once
+	lastEventTS             atomic.Int64
+	reconnectTime           time.Duration
 }
 
 func (sc *cacheSvcClient) ID() string {
@@ -45,7 +49,7 @@ func (sc *cacheSvcClient) On(event *informer.Event) error {
 	// we can safely assume that server-side events are ordered
 	// by timestamp
 	if event.GetType() != informer.EventType_SYNC_FINISHED && event.Resource != nil {
-		sc.lastEventTSEpoch = event.Resource.StatusTimeEpoch
+		sc.lastEventTS.Store(event.Resource.StatusTimeEpoch)
 	}
 	return nil
 }
@@ -54,6 +58,8 @@ func (sc *cacheSvcClient) Start(ctx context.Context) {
 	sc.log = cslog()
 	sc.waitForSubscription = make(chan struct{})
 	sc.waitForSynchronization = make(chan struct{})
+	sc.waitForSubscriptionOnce = sync.Once{}
+	sc.waitForSyncOnce = sync.Once{}
 	sc.ctx = ctx
 	if sc.reconnectTime == 0 {
 		sc.reconnectTime = defaultReconnectTime
@@ -70,6 +76,7 @@ func (sc *cacheSvcClient) Start(ctx context.Context) {
 			sc.log.Debug("subscriptor attached, start connection to K8s cache service")
 		}
 
+		reconnectAttempts := 0
 		for {
 			select {
 			case <-ctx.Done():
@@ -80,9 +87,16 @@ func (sc *cacheSvcClient) Start(ctx context.Context) {
 				// with the last received event, to avoid unnecessarily
 				// receiving the whole metadata snapshot on each reconnection
 				err := sc.connect(ctx)
+				if err == nil {
+					reconnectAttempts = 0
+					continue
+				}
 				sc.log.Info("K8s cache service connection lost. Reconnecting...", "error", err)
-				// TODO: exponential backoff
-				time.Sleep(sc.reconnectTime)
+				reconnectAttempts++
+				backoff := helpers.JitteredExponentialBackoff(reconnectAttempts, sc.reconnectTime, 30*time.Second, 2.0)
+				if !helpers.SleepWithContext(ctx, backoff) {
+					return
+				}
 			}
 		}
 	}()
@@ -102,7 +116,7 @@ func (sc *cacheSvcClient) connect(ctx context.Context) error {
 
 	// Subscribe to the event stream.
 	stream, err := client.Subscribe(ctx, &informer.SubscribeMessage{
-		FromTimestampEpoch: sc.lastEventTSEpoch,
+		FromTimestampEpoch: sc.lastEventTS.Load(),
 	})
 	if err != nil {
 		return fmt.Errorf("could not subscribe: %w", err)
@@ -116,9 +130,10 @@ func (sc *cacheSvcClient) connect(ctx context.Context) error {
 		}
 		// send a notification about the client being synced with the K8s metadata service
 		// so Beyla can start processing/decorating the received flows and traces
-		if event.GetType() == informer.EventType_SYNC_FINISHED && !sc.waitForSyncClosed {
-			close(sc.waitForSynchronization)
-			sc.waitForSyncClosed = true
+		if event.GetType() == informer.EventType_SYNC_FINISHED {
+			sc.waitForSyncOnce.Do(func() {
+				close(sc.waitForSynchronization)
+			})
 		}
 		sc.Notify(event)
 	}
@@ -127,7 +142,9 @@ func (sc *cacheSvcClient) connect(ctx context.Context) error {
 func (sc *cacheSvcClient) Subscribe(observer meta.Observer) {
 	sc.BaseNotifier.Subscribe(observer)
 
-	close(sc.waitForSubscription)
+	sc.waitForSubscriptionOnce.Do(func() {
+		close(sc.waitForSubscription)
+	})
 
 	// after the subscription is done, we temporarily pause the execution until the
 	// cache is fully loaded

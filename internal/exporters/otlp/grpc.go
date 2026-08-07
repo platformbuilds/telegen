@@ -13,6 +13,9 @@ import (
 	"sync"
 	"time"
 
+	collogspb "go.opentelemetry.io/proto/otlp/collector/logs/v1"
+	colmetricspb "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
+	coltracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -21,9 +24,6 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	collogspb "go.opentelemetry.io/proto/otlp/collector/logs/v1"
-	colmetricspb "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
-	coltracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -81,9 +81,6 @@ func (t *GRPCTransport) Connect(ctx context.Context) error {
 // buildDialOptions builds the gRPC dial options.
 func (t *GRPCTransport) buildDialOptions() ([]grpc.DialOption, error) {
 	var opts []grpc.DialOption
-
-	// Set block dial to ensure connection is established
-	opts = append(opts, grpc.WithBlock()) //nolint:staticcheck // SA1019: grpc.WithBlock still supported in 1.x
 
 	// Configure TLS
 	if t.cfg.TLS.Enabled {

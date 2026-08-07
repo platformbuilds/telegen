@@ -336,6 +336,7 @@ func (tc *TokenCollector) handleRequestComplete(event TokenEvent, m *TokenMetric
 		req.CompletionTokens = event.CompletionTokens
 		req.Status = RequestStatusCompleted
 		req.FinishReason = event.FinishReason
+		delete(tc.requests, event.RequestID)
 	}
 }
 
@@ -350,6 +351,7 @@ func (tc *TokenCollector) handleRequestError(event TokenEvent, m *TokenMetrics) 
 		req.EndTime = event.Timestamp
 		req.Status = event.Status
 		req.ErrorMessage = event.ErrorMessage
+		delete(tc.requests, event.RequestID)
 	}
 }
 

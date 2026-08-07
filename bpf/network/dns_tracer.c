@@ -37,6 +37,11 @@
 // Maximum domain name length
 #define DNS_MAX_DOMAIN_LEN 256
 #define DNS_MAX_ANSWERS    8
+#define DNS_EVENTS_RINGBUF_SIZE (1 * 1024 * 1024)  // 1MB default
+
+#ifndef E2BIG
+#define E2BIG 7
+#endif
 
 // DNS event structure (NET-011)
 struct dns_event {
@@ -84,7 +89,7 @@ struct dns_query {
 
 // Map to track in-flight DNS queries
 struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
     __uint(key_size, sizeof(__u64));   // pid_tgid
     __uint(value_size, sizeof(struct dns_query));
     __uint(max_entries, 10000);
@@ -93,7 +98,7 @@ struct {
 // Ring buffer for DNS events
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
-    __uint(max_entries, 16 * 1024 * 1024);  // 16MB
+    __uint(max_entries, DNS_EVENTS_RINGBUF_SIZE);
 } dns_events SEC(".maps");
 
 // Per-CPU buffer for event construction
@@ -112,6 +117,18 @@ struct {
     __uint(max_entries, 4);
 } dns_config SEC(".maps");
 
+struct dns_stats {
+    __u64 query_update_errors;
+    __u64 query_update_e2big;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(key_size, sizeof(__u32));
+    __uint(value_size, sizeof(struct dns_stats));
+    __uint(max_entries, 1);
+} dns_stats SEC(".maps");
+
 #define DNS_CONFIG_ENABLED        0
 #define DNS_CONFIG_CAPTURE_CNAME  1
 #define DNS_CONFIG_MIN_LATENCY_US 2
@@ -125,6 +142,23 @@ static __always_inline __u16 get_query_type(int ai_family) {
             return DNS_TYPE_AAAA;
         default:  // AF_UNSPEC or others
             return DNS_TYPE_ANY;
+    }
+}
+
+static __always_inline void dns_record_query_update_result(long ret) {
+    if (ret == 0) {
+        return;
+    }
+
+    __u32 zero = 0;
+    struct dns_stats *stats = bpf_map_lookup_elem(&dns_stats, &zero);
+    if (!stats) {
+        return;
+    }
+
+    stats->query_update_errors++;
+    if (ret == -E2BIG) {
+        stats->query_update_e2big++;
     }
 }
 
@@ -163,7 +197,8 @@ int trace_getaddrinfo(struct pt_regs *ctx) {
         query.query_type = DNS_TYPE_ANY;
     }
     
-    bpf_map_update_elem(&dns_queries, &pid_tgid, &query, BPF_ANY);
+    long update_ret = bpf_map_update_elem(&dns_queries, &pid_tgid, &query, BPF_ANY);
+    dns_record_query_update_result(update_ret);
     
     return 0;
 }
@@ -251,7 +286,8 @@ int trace_gethostbyname(struct pt_regs *ctx) {
     
     bpf_probe_read_user_str(&query.domain, sizeof(query.domain), name);
     
-    bpf_map_update_elem(&dns_queries, &pid_tgid, &query, BPF_ANY);
+    long update_ret = bpf_map_update_elem(&dns_queries, &pid_tgid, &query, BPF_ANY);
+    dns_record_query_update_result(update_ret);
     
     return 0;
 }
@@ -324,7 +360,8 @@ int trace_gethostbyname2(struct pt_regs *ctx) {
     
     bpf_probe_read_user_str(&query.domain, sizeof(query.domain), name);
     
-    bpf_map_update_elem(&dns_queries, &pid_tgid, &query, BPF_ANY);
+    long update_ret = bpf_map_update_elem(&dns_queries, &pid_tgid, &query, BPF_ANY);
+    dns_record_query_update_result(update_ret);
     
     return 0;
 }
@@ -391,7 +428,8 @@ int trace_res_query(struct pt_regs *ctx) {
     
     bpf_probe_read_user_str(&query.domain, sizeof(query.domain), dname);
     
-    bpf_map_update_elem(&dns_queries, &pid_tgid, &query, BPF_ANY);
+    long update_ret = bpf_map_update_elem(&dns_queries, &pid_tgid, &query, BPF_ANY);
+    dns_record_query_update_result(update_ret);
     
     return 0;
 }

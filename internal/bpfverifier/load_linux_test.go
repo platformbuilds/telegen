@@ -15,6 +15,7 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/rlimit"
 
+	"github.com/mirastacklabs-ai/telegen/internal/testutil/fdassert"
 	"github.com/mirastacklabs-ai/telegen/internal/tracers/cudatracer"
 	"github.com/mirastacklabs-ai/telegen/internal/tracers/generictracer"
 	"github.com/mirastacklabs-ai/telegen/internal/tracers/gotracer"
@@ -44,6 +45,8 @@ func TestLoadAllTracerBpfObjects(t *testing.T) {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		t.Fatalf("failed to remove memlock limit: %v", err)
 	}
+	// Object load/close verifier checks should not leak descriptor handles.
+	fdassert.Track(t, 8)
 
 	// Hard-fail only generictracer: bare LoadBpfObjects matches how CI previously
 	// caught MQ/AMQP kernel classifier regressions. Other tracers either need the
@@ -61,7 +64,6 @@ func TestLoadAllTracerBpfObjects(t *testing.T) {
 	}
 
 	for _, tc := range loadCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			loaded, err := tc.load()
 			if err != nil {

@@ -17,9 +17,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/mirastacklabs-ai/telegen/internal/exporters/otlp/logs"
 	"github.com/mirastacklabs-ai/telegen/internal/helpers/container"
 	"github.com/mirastacklabs-ai/telegen/internal/profiler/perfmap"
@@ -43,6 +43,11 @@ const (
 // 99 Hz is used to avoid lockstep sampling with common timer frequencies.
 const defaultCPUSampleRateHz = 99
 
+const (
+	unresolvedPIDLogCacheSize = 4096
+	unresolvedPIDLogTTL       = time.Hour
+)
+
 // samplePeriodFromHz calculates the nanoseconds per sample for a given sample rate.
 // Uses float64 arithmetic to avoid integer division truncation.
 func samplePeriodFromHz(hz int) int64 {
@@ -63,7 +68,7 @@ type LogExporter struct {
 	metadataResolver *ProcessMetadataResolver // Shared resolver for consistent app.name
 
 	// Track unresolved PIDs to avoid log spam
-	unresolvedPIDsLogged sync.Map // pid -> bool
+	unresolvedPIDsLogged *expirable.LRU[uint32, struct{}]
 }
 
 // LogExporterConfig holds configuration for the profile log exporter
@@ -183,6 +188,11 @@ func NewLogExporter(cfg LogExporterConfig, log *slog.Logger, resolver *SymbolRes
 		perfMapReader:    perfmap.NewPerfMapReader(),
 		symbolResolver:   resolver,
 		metadataResolver: metadataResolver,
+		unresolvedPIDsLogged: expirable.NewLRU[uint32, struct{}](
+			unresolvedPIDLogCacheSize,
+			nil,
+			unresolvedPIDLogTTL,
+		),
 	}, nil
 }
 
@@ -371,7 +381,8 @@ func (e *LogExporter) sampleToEvent(sample StackSample, profileType ProfileType,
 	// Log warning if symbols are unresolved (stripped binaries) - once per PID
 	if event.ResolutionStatus == "unresolved" && len(sample.Frames) > 0 {
 		pidKey := sample.PID
-		if _, alreadyLogged := e.unresolvedPIDsLogged.LoadOrStore(pidKey, true); !alreadyLogged {
+		if _, alreadyLogged := e.unresolvedPIDsLogged.Get(pidKey); !alreadyLogged {
+			e.unresolvedPIDsLogged.Add(pidKey, struct{}{})
 			e.log.Warn("profiling stripped binary without debug symbols",
 				"pid", sample.PID, "comm", sample.Comm,
 				"hint", "rebuild with debug symbols or see docs/profiling-stripped-binaries.md")
@@ -379,6 +390,14 @@ func (e *LogExporter) sampleToEvent(sample StackSample, profileType ProfileType,
 	}
 
 	return event
+}
+
+// RemoveUnresolvedPID clears unresolved-PID log suppression state for a PID.
+func (e *LogExporter) RemoveUnresolvedPID(pid uint32) {
+	if e == nil || e.unresolvedPIDsLogged == nil {
+		return
+	}
+	e.unresolvedPIDsLogged.Remove(pid)
 }
 
 // convertFrames converts ResolvedFrame slice to logs.StackFrame slice

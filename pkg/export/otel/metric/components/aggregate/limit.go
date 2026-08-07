@@ -19,11 +19,13 @@ type limiter[V any] struct {
 	// into an "overflow" metric stream. That stream will only contain the
 	// "otel.metric.overflow"=true attribute.
 	aggLimit int
+	// onOverflow is called whenever a measurement is routed into overflowSet.
+	onOverflow func()
 }
 
 // newLimiter returns a new Limiter with the provided aggregation limit.
-func newLimiter[V any](aggregation int) limiter[V] {
-	return limiter[V]{aggLimit: aggregation}
+func newLimiter[V any](aggregation int, onOverflow func()) limiter[V] {
+	return limiter[V]{aggLimit: aggregation, onOverflow: onOverflow}
 }
 
 // Attributes checks if adding a measurement for attrs will exceed the
@@ -34,6 +36,9 @@ func (l limiter[V]) Attributes(attrs attribute.Set, measurements map[attribute.D
 	if l.aggLimit > 0 {
 		_, exists := measurements[attrs.Equivalent()]
 		if !exists && len(measurements) >= l.aggLimit-1 {
+			if l.onOverflow != nil {
+				l.onOverflow()
+			}
 			return overflowSet
 		}
 	}

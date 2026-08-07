@@ -121,7 +121,7 @@ func TestEventsAndStateChangesAgainstSimulator(t *testing.T) {
 		if recs := collectStateChanges(s, st, log); len(recs) != 0 {
 			t.Errorf("expected no state-change logs on baseline pass, got %d", len(recs))
 		}
-		if !st.initialized {
+		if !st.initialized.Load() {
 			t.Fatal("state baseline not initialized")
 		}
 		if len(st.vmPower) == 0 {

@@ -58,7 +58,10 @@ func (c *VMwareCollector) Authenticate(ctx context.Context) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("authentication failed: %s (body read failed: %w)", resp.Status, readErr)
+		}
 		return fmt.Errorf("authentication failed: %s - %s", resp.Status, string(body))
 	}
 
@@ -714,7 +717,10 @@ func (c *VMwareCollector) doRequest(ctx context.Context, path string) ([]byte, e
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return nil, fmt.Errorf("request failed: %s (body read failed: %w)", resp.Status, readErr)
+		}
 		return nil, fmt.Errorf("request failed: %s - %s", resp.Status, string(body))
 	}
 

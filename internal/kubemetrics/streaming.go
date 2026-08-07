@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -72,12 +73,12 @@ type StreamingExporter struct {
 	doneCh  chan struct{}
 
 	// Stats
-	collectCount    int64
-	collectDuration time.Duration
-	exportCount     int64
-	exportDuration  time.Duration
-	lastExportTime  time.Time
-	lastError       error
+	collectCount         atomic.Int64
+	collectDurationNanos atomic.Int64
+	exportCount          atomic.Int64
+	exportDurationNanos  atomic.Int64
+	lastExportTimeNanos  atomic.Int64
+	lastError            error
 }
 
 // NewStreamingExporter creates a new streaming exporter for kubemetrics
@@ -87,7 +88,7 @@ func NewStreamingExporter(
 	exporter sdkmetric.Exporter,
 	logger *slog.Logger,
 ) (*StreamingExporter, error) {
-	if cfg.Interval == 0 {
+	if cfg.Interval <= 0 {
 		cfg.Interval = 15 * time.Second
 	}
 	if cfg.BatchSize == 0 {
@@ -214,8 +215,8 @@ func (s *StreamingExporter) collectAndExport(ctx context.Context) {
 	}
 
 	collectDuration := time.Since(collectStart)
-	s.collectCount++
-	s.collectDuration += collectDuration
+	s.collectCount.Add(1)
+	s.collectDurationNanos.Add(collectDuration.Nanoseconds())
 
 	// Export with timeout
 	exportCtx, cancel := context.WithTimeout(ctx, s.config.FlushTimeout)
@@ -225,18 +226,22 @@ func (s *StreamingExporter) collectAndExport(ctx context.Context) {
 	err := s.exporter.Export(exportCtx, rm)
 	exportDuration := time.Since(exportStart)
 
-	s.exportCount++
-	s.exportDuration += exportDuration
-	s.lastExportTime = time.Now()
+	s.exportCount.Add(1)
+	s.exportDurationNanos.Add(exportDuration.Nanoseconds())
+	s.lastExportTimeNanos.Store(time.Now().UnixNano())
 
 	if err != nil {
+		s.mu.Lock()
 		s.lastError = err
+		s.mu.Unlock()
 		s.logger.Error("failed to export kubemetrics",
 			"error", err,
 			"collect_ms", collectDuration.Milliseconds(),
 			"export_ms", exportDuration.Milliseconds())
 	} else {
+		s.mu.Lock()
 		s.lastError = nil
+		s.mu.Unlock()
 		metricCount := countMetrics(rm)
 		s.logger.Debug("kubemetrics exported",
 			"metrics", metricCount,
@@ -419,16 +424,8 @@ func (s *StreamingExporter) collectCadvisorMetrics() []metricdata.Metrics {
 
 		// Memory metrics
 		if stat.Memory != nil {
-			// Memory values are uint64 but OTLP uses int64. Cap at MaxInt64
-			// (>9 exabytes, practically impossible for container memory)
-			usageBytes := stat.Memory.UsageBytes
-			if usageBytes > uint64(math.MaxInt64) {
-				usageBytes = uint64(math.MaxInt64)
-			}
-			workingSetBytes := stat.Memory.WorkingSetBytes
-			if workingSetBytes > uint64(math.MaxInt64) {
-				workingSetBytes = uint64(math.MaxInt64)
-			}
+			usageBytes := clampUint64ToInt64(stat.Memory.UsageBytes)
+			workingSetBytes := clampUint64ToInt64(stat.Memory.WorkingSetBytes)
 			metrics = append(metrics, metricdata.Metrics{
 				Name:        "container_memory_usage_bytes",
 				Description: "Current memory usage in bytes",
@@ -437,7 +434,7 @@ func (s *StreamingExporter) collectCadvisorMetrics() []metricdata.Metrics {
 					DataPoints: []metricdata.DataPoint[int64]{
 						{
 							Time:       now,
-							Value:      int64(usageBytes),
+							Value:      usageBytes,
 							Attributes: attrSet,
 						},
 					},
@@ -451,7 +448,7 @@ func (s *StreamingExporter) collectCadvisorMetrics() []metricdata.Metrics {
 					DataPoints: []metricdata.DataPoint[int64]{
 						{
 							Time:       now,
-							Value:      int64(workingSetBytes),
+							Value:      workingSetBytes,
 							Attributes: attrSet,
 						},
 					},
@@ -475,7 +472,7 @@ func (s *StreamingExporter) collectCadvisorMetrics() []metricdata.Metrics {
 						DataPoints: []metricdata.DataPoint[int64]{
 							{
 								Time:       now,
-								Value:      int64(iface.RxBytes),
+								Value:      clampUint64ToInt64(iface.RxBytes),
 								Attributes: netAttrSet,
 							},
 						},
@@ -491,7 +488,7 @@ func (s *StreamingExporter) collectCadvisorMetrics() []metricdata.Metrics {
 						DataPoints: []metricdata.DataPoint[int64]{
 							{
 								Time:       now,
-								Value:      int64(iface.TxBytes),
+								Value:      clampUint64ToInt64(iface.TxBytes),
 								Attributes: netAttrSet,
 							},
 						},
@@ -512,7 +509,7 @@ func (s *StreamingExporter) collectCadvisorMetrics() []metricdata.Metrics {
 					DataPoints: []metricdata.DataPoint[int64]{
 						{
 							Time:       now,
-							Value:      int64(stat.DiskIO.ReadBytes),
+							Value:      clampUint64ToInt64(stat.DiskIO.ReadBytes),
 							Attributes: attrSet,
 						},
 					},
@@ -528,7 +525,7 @@ func (s *StreamingExporter) collectCadvisorMetrics() []metricdata.Metrics {
 					DataPoints: []metricdata.DataPoint[int64]{
 						{
 							Time:       now,
-							Value:      int64(stat.DiskIO.WriteBytes),
+							Value:      clampUint64ToInt64(stat.DiskIO.WriteBytes),
 							Attributes: attrSet,
 						},
 					},
@@ -543,16 +540,23 @@ func (s *StreamingExporter) collectCadvisorMetrics() []metricdata.Metrics {
 // Stats returns exporter statistics
 func (s *StreamingExporter) Stats() map[string]interface{} {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
+	running := s.running
+	lastErr := s.lastError
+	s.mu.RUnlock()
+
+	lastExportTime := time.Time{}
+	if nanos := s.lastExportTimeNanos.Load(); nanos > 0 {
+		lastExportTime = time.Unix(0, nanos)
+	}
 
 	return map[string]interface{}{
-		"running":          s.running,
-		"collect_count":    s.collectCount,
-		"collect_duration": s.collectDuration.String(),
-		"export_count":     s.exportCount,
-		"export_duration":  s.exportDuration.String(),
-		"last_export_time": s.lastExportTime,
-		"last_error":       s.lastError,
+		"running":          running,
+		"collect_count":    s.collectCount.Load(),
+		"collect_duration": time.Duration(s.collectDurationNanos.Load()).String(),
+		"export_count":     s.exportCount.Load(),
+		"export_duration":  time.Duration(s.exportDurationNanos.Load()).String(),
+		"last_export_time": lastExportTime,
+		"last_error":       lastErr,
 	}
 }
 
@@ -563,4 +567,12 @@ func countMetrics(rm *metricdata.ResourceMetrics) int {
 		count += len(sm.Metrics)
 	}
 	return count
+}
+
+// clampUint64ToInt64 prevents overflow when OTEL metric types require int64.
+func clampUint64ToInt64(v uint64) int64 {
+	if v > uint64(math.MaxInt64) {
+		return math.MaxInt64
+	}
+	return int64(v)
 }

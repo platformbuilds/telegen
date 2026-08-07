@@ -67,7 +67,7 @@ func TestRunDontPanic(t *testing.T) {
 			require.NoError(t, cfg.Validate())
 
 			require.NotPanics(t, func() {
-				_ = Run(t.Context(), &cfg)
+				require.NoError(t, Run(t.Context(), &cfg))
 			})
 		})
 	}

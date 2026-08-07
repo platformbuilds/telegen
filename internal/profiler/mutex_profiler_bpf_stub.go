@@ -14,6 +14,7 @@ package profiler
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"github.com/cilium/ebpf"
@@ -89,7 +90,7 @@ type MutexProfilerMutexStats = MutexProfilerStats
 // MutexProfilerConfig matches struct mutex_config in mutex_profiler.c
 type MutexProfilerConfig struct {
 	TargetPid             uint32
-	_pad                  [4]byte   //nolint:unused // struct alignment padding for BPF compatibility
+	_pad                  [4]byte //nolint:unused // struct alignment padding for BPF compatibility
 	ContentionThresholdNs uint64
 	HoldThresholdNs       uint64
 	FilterActive          uint8
@@ -133,6 +134,7 @@ func (o *MutexProfilerObjects) Close() error {
 
 // Close releases all BPF maps
 func (m *MutexProfilerMaps) Close() error {
+	var closeErr error
 	closers := []interface{ Close() error }{
 		m.MutexStacks,
 		m.LockStates,
@@ -144,14 +146,17 @@ func (m *MutexProfilerMaps) Close() error {
 	}
 	for _, c := range closers {
 		if c != nil {
-			_ = c.Close()
+			if err := c.Close(); err != nil {
+				closeErr = errors.Join(closeErr, err)
+			}
 		}
 	}
-	return nil
+	return closeErr
 }
 
 // Close releases all BPF programs
 func (p *MutexProfilerPrograms) Close() error {
+	var closeErr error
 	closers := []interface{ Close() error }{
 		p.TraceMutexLockEnter,
 		p.TraceMutexLockExit,
@@ -159,10 +164,12 @@ func (p *MutexProfilerPrograms) Close() error {
 	}
 	for _, c := range closers {
 		if c != nil {
-			_ = c.Close()
+			if err := c.Close(); err != nil {
+				closeErr = errors.Join(closeErr, err)
+			}
 		}
 	}
-	return nil
+	return closeErr
 }
 
 // Placeholder BPF bytes - will be replaced by bpf2go //go:embed
