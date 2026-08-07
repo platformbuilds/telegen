@@ -11,10 +11,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"strconv"
 	"sync"
-	"syscall"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -123,11 +121,7 @@ func listenAndServe(ctx context.Context, port int, handler http.Handler) {
 		if errors.Is(err, http.ErrServerClosed) {
 			log.Debug("Prometheus endpoint server was closed", "error", err)
 		} else {
-			log.Error("Prometheus endpoint service ended unexpectedly", "error", err)
-			err = syscall.Kill(os.Getpid(), syscall.SIGINT) // interrupt for graceful shutdown, instead of os.Exit
-			if err != nil {
-				log.Error("unable to terminate", "error", err)
-			}
+			log.Error("Prometheus endpoint service ended unexpectedly; metrics on this port are unavailable", "error", err)
 		}
 	}()
 	go func() {

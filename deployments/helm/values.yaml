@@ -80,6 +80,7 @@ agent:
   logFormat: json
   shutdownTimeout: 10s
   enforceSysCaps: false
+  instanceLockPath: "/var/run/telegen.pid"
   
   # Host access for eBPF
   hostPID: true
@@ -111,6 +112,7 @@ collector:
   serviceName: "telegen-collector"
   logLevel: INFO
   logFormat: json
+  instanceLockPath: "/var/lib/telegen/telegen.pid"
   
   # SNMP configuration
   snmp:
@@ -369,7 +371,7 @@ nodeExporter:
 # Internal Metrics Configuration
 # =============================================================================
 internalMetrics:
-  exporter: disabled
+  exporter: prometheus
   prometheus:
     port: 0
     path: "/internal/metrics"

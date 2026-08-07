@@ -36,6 +36,7 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/version"
 	"github.com/mirastacklabs-ai/telegen/internal/vmware"
 	otelmetric "github.com/mirastacklabs-ai/telegen/pkg/export/otel/metric"
+	"github.com/prometheus/client_golang/prometheus"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.uber.org/automaxprocs/maxprocs"
@@ -113,9 +114,9 @@ func main() {
 	} else {
 		logger.Warn("startup preflight checks are disabled by --skip-preflight")
 	}
-	releaseInstanceLock, err := acquireInstanceLock("/var/run/telegen.pid")
+	releaseInstanceLock, err := acquireInstanceLock(cfg.Agent.InstanceLockPath)
 	if err != nil {
-		logger.Error("failed to acquire singleton instance lock", "error", err)
+		logger.Error("failed to acquire singleton instance lock", "path", cfg.Agent.InstanceLockPath, "error", err)
 		os.Exit(1)
 	}
 	defer releaseInstanceLock()
@@ -171,8 +172,12 @@ func main() {
 	}()
 	exportotlp.SetCollectorTelemetry(zapLogger, collectorMeterProvider)
 
+	obiInternalRegistry := prometheus.NewRegistry()
 	mux := http.NewServeMux()
-	registry := selftelemetry.InstallHandlers(mux, cfg.SelfTelemetry.Listen)
+	registry := selftelemetry.InstallHandlers(mux, cfg.SelfTelemetry.Listen, obiInternalRegistry)
+	if cfg.EBPF.InternalMetrics.Prometheus.Port == 0 {
+		cfg.EBPF.InternalMetrics.Registry = obiInternalRegistry
+	}
 	var pprofSrv *http.Server
 	if cfg.SelfTelemetry.PprofEnabled {
 		if cfg.SelfTelemetry.PprofPort > 0 {
@@ -870,6 +875,10 @@ func isSensitiveConfigKey(key string) bool {
 func runPreflightChecks(cfg *config.Config, enforceSysCaps bool) error {
 	if err := obi.CheckOSSupport(); err != nil {
 		return fmt.Errorf("os support check failed: %w", err)
+	}
+	if !cfg.EBPF.Enabled {
+		logger.Debug("skipping eBPF capability preflight because ebpf.enabled is false")
+		return nil
 	}
 	obiCfg, err := pipeline.BuildOBIConfigForPreflight(cfg)
 	if err != nil {

@@ -106,6 +106,7 @@ agent:
   log_format: {{ .Values.agent.logFormat | default "json" }}
   shutdown_timeout: {{ .Values.agent.shutdownTimeout | default "10s" }}
   enforce_sys_caps: {{ .Values.agent.enforceSysCaps | default false }}
+  instance_lock_path: {{ .Values.agent.instanceLockPath | default "/var/run/telegen.pid" | quote }}
 
 # -----------------------------------------------------------------------------
 # Self-Telemetry Configuration
@@ -120,6 +121,7 @@ selfTelemetry:
 # -----------------------------------------------------------------------------
 # Internal Metrics Configuration
 # -----------------------------------------------------------------------------
+# NOTE: relocated to ebpf.internal_metrics (this top-level form was never parsed).
 # internal_metrics:
 #   exporter: {{ .Values.internalMetrics.exporter | default "disabled" }}
 #   prometheus:
@@ -132,6 +134,12 @@ selfTelemetry:
 # -----------------------------------------------------------------------------
 ebpf:
   enabled: {{ .Values.ebpf.enabled | default true }}
+  internal_metrics:
+    exporter: {{ .Values.internalMetrics.exporter | default "prometheus" | quote }}
+    prometheus:
+      port: {{ .Values.internalMetrics.prometheus.port | default 0 }}
+      path: {{ .Values.internalMetrics.prometheus.path | default "/internal/metrics" | quote }}
+    bpf_metric_scrape_interval: {{ .Values.internalMetrics.bpfMetricScrapeInterval | default "15s" }}
   tracer:
     batch_length: {{ .Values.ebpf.batchLength | default 100 }}
     batch_timeout: {{ .Values.ebpf.batchTimeout | default "1s" }}
@@ -851,6 +859,7 @@ agent:
   log_format: {{ .Values.collector.logFormat | default "json" }}
   shutdown_timeout: 10s
   enforce_sys_caps: false
+  instance_lock_path: {{ .Values.collector.instanceLockPath | default "/var/lib/telegen/telegen.pid" | quote }}
 
 # -----------------------------------------------------------------------------
 # Self-Telemetry Configuration
@@ -865,6 +874,7 @@ selfTelemetry:
 # -----------------------------------------------------------------------------
 # Internal Metrics Configuration
 # -----------------------------------------------------------------------------
+# NOTE: relocated to ebpf.internal_metrics (this top-level form was never parsed).
 # internal_metrics:
 #   exporter: disabled
 #   prometheus:
@@ -1077,27 +1087,27 @@ exports:
 # -----------------------------------------------------------------------------
 # Prometheus Export Configuration
 # -----------------------------------------------------------------------------
-prometheus_export:
-  enabled: true
-  path: /metrics
-  port: 0
-  buckets:
-    duration_histogram_buckets:
-      - 0.005
-      - 0.01
-      - 0.025
-      - 0.05
-      - 0.1
-      - 0.25
-      - 0.5
-      - 1
-      - 2.5
-      - 5
-      - 10
-  instrumentations:
-    - all
-  ttl: 5m
-  span_metrics_service_cache_size: 10000
+# prometheus_export:
+#   enabled: true
+#   path: /metrics
+#   port: 0
+#   buckets:
+#     duration_histogram_buckets:
+#       - 0.005
+#       - 0.01
+#       - 0.025
+#       - 0.05
+#       - 0.1
+#       - 0.25
+#       - 0.5
+#       - 1
+#       - 2.5
+#       - 5
+#       - 10
+#   instrumentations:
+#     - all
+#   ttl: 5m
+#   span_metrics_service_cache_size: 10000
 
 # -----------------------------------------------------------------------------
 # Debug Configuration

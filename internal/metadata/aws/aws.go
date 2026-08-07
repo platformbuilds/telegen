@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -21,6 +22,9 @@ const (
 	imdsAddr = "169.254.169.254:80"
 	imdsBase = "http://169.254.169.254/latest"
 )
+
+// ErrIMDSUnavailable indicates the IMDS endpoint is unavailable.
+var ErrIMDSUnavailable = errors.New("imds unavailable")
 
 type Options struct {
 	Timeout         time.Duration
@@ -191,11 +195,11 @@ func (p *Provider) getToken(ctx context.Context) (string, error) {
 	req.Header.Set("X-aws-ec2-metadata-token-ttl-seconds", "21600")
 	resp, err := p.http.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w: %w", ErrIMDSUnavailable, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
-		return "", errors.New("imds token failed")
+		return "", fmt.Errorf("%w: token endpoint returned %d", ErrIMDSUnavailable, resp.StatusCode)
 	}
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {

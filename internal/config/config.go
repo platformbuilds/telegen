@@ -38,13 +38,14 @@ type TLS struct {
 
 type Config struct {
 	Agent struct {
-		ServiceName     string        `yaml:"service_name"`
-		InstanceID      string        `yaml:"instance_id"`
-		Mode            string        `yaml:"mode"`
-		LogLevel        string        `yaml:"log_level"`
-		LogFormat       string        `yaml:"log_format"`
-		ShutdownTimeout time.Duration `yaml:"shutdown_timeout"`
-		EnforceSysCaps  bool          `yaml:"enforce_sys_caps"`
+		ServiceName      string        `yaml:"service_name"`
+		InstanceID       string        `yaml:"instance_id"`
+		Mode             string        `yaml:"mode"`
+		LogLevel         string        `yaml:"log_level"`
+		LogFormat        string        `yaml:"log_format"`
+		ShutdownTimeout  time.Duration `yaml:"shutdown_timeout"`
+		EnforceSysCaps   bool          `yaml:"enforce_sys_caps"`
+		InstanceLockPath string        `yaml:"instance_lock_path"`
 	} `yaml:"agent"`
 	SelfTelemetry struct {
 		Listen       string `yaml:"listen"`
@@ -874,6 +875,9 @@ func Load(path string) (*Config, error) {
 	if c.Pipelines.Metrics.CardinalityLimit <= 0 {
 		c.Pipelines.Metrics.CardinalityLimit = 2000
 	}
+	if c.Agent.InstanceLockPath == "" {
+		c.Agent.InstanceLockPath = "/var/run/telegen.pid"
+	}
 	applyInternalMetricsDefaults(&c)
 	if err := c.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
@@ -894,16 +898,6 @@ func applyInternalMetricsDefaults(c *Config) {
 	if c.EBPF.InternalMetrics.Prometheus.Path == "" {
 		c.EBPF.InternalMetrics.Prometheus.Path = "/metrics"
 	}
-	if c.EBPF.InternalMetrics.Prometheus.Port != 0 {
-		return
-	}
-	if _, port, err := net.SplitHostPort(c.SelfTelemetry.Listen); err == nil {
-		if parsedPort, convErr := strconv.Atoi(port); convErr == nil && parsedPort > 0 {
-			c.EBPF.InternalMetrics.Prometheus.Port = parsedPort
-			return
-		}
-	}
-	c.EBPF.InternalMetrics.Prometheus.Port = 19090
 }
 
 func (c *Config) Validate() error {
@@ -929,11 +923,41 @@ func (c *Config) Validate() error {
 	if c.SelfTelemetry.MemoryLimitBytes < 0 {
 		errs = append(errs, fmt.Errorf("selfTelemetry.memory_limit_bytes must be >= 0"))
 	}
+	if c.EBPF.InternalMetrics.Prometheus.Port != 0 {
+		conflicts := map[string]int{
+			"selfTelemetry.listen":        listenPort(c.SelfTelemetry.Listen),
+			"selfTelemetry.health_listen": listenPort(c.SelfTelemetry.HealthListen),
+		}
+		if c.SelfTelemetry.PprofEnabled {
+			conflicts["selfTelemetry.pprof_port"] = c.SelfTelemetry.PprofPort
+		}
+		for name, otherPort := range conflicts {
+			if otherPort > 0 && otherPort == c.EBPF.InternalMetrics.Prometheus.Port {
+				errs = append(errs, fmt.Errorf(
+					"ebpf.internal_metrics.prometheus.port %d conflicts with %s; leave the port at 0 to share the self-telemetry /metrics endpoint",
+					c.EBPF.InternalMetrics.Prometheus.Port,
+					name,
+				))
+			}
+		}
+	}
 
 	if len(errs) == 0 {
 		return nil
 	}
 	return errors.Join(errs...)
+}
+
+func listenPort(addr string) int {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return 0
+	}
+	parsedPort, err := strconv.Atoi(port)
+	if err != nil {
+		return 0
+	}
+	return parsedPort
 }
 
 func validateConfigValue(v reflect.Value, fieldPath string, errs *[]error) {
