@@ -53,10 +53,11 @@ func NewRegistry(namespace string) *Registry {
 	)
 	return r
 }
-func InstallHandlers(mux *http.ServeMux, listen string) *Registry {
+func InstallHandlers(mux *http.ServeMux, listen string, extra ...prometheus.Gatherer) *Registry {
 	r := NewRegistry("telegen")
 	SetGlobalRegistry(r)
-	mux.Handle("/metrics", promhttp.Handler())
+	gatherers := append(prometheus.Gatherers{prometheus.DefaultGatherer}, extra...)
+	mux.Handle("/metrics", promhttp.HandlerFor(gatherers, promhttp.HandlerOpts{}))
 	installProbeHandlers(mux, r)
 	log.Printf("self-telemetry HTTP on %s", listen)
 	return r

@@ -1,4 +1,17 @@
 {{- if eq .Values.mode "collector" }}
+{{- $snmpCfg := (default (dict) .Values.collector.snmp) -}}
+{{- $snmpTraps := (default (dict) (get $snmpCfg "traps")) -}}
+{{- $snmpTrapReceiver := (default (dict) (get $snmpCfg "trapReceiver")) -}}
+{{- $snmpTrapEnabled := false -}}
+{{- if hasKey $snmpTraps "enabled" -}}
+{{- $snmpTrapEnabled = (get $snmpTraps "enabled") -}}
+{{- else if hasKey $snmpTrapReceiver "enabled" -}}
+{{- $snmpTrapEnabled = (get $snmpTrapReceiver "enabled") -}}
+{{- end -}}
+{{- $snmpTrapPort := 1162 -}}
+{{- if hasKey $snmpTraps "port" -}}
+{{- $snmpTrapPort = (get $snmpTraps "port") -}}
+{{- end -}}
 # Telegen v3.0 Collector Deployment
 # Task: DEP-008
 apiVersion: apps/v1
@@ -65,9 +78,9 @@ spec:
             {{- toYaml .Values.collectorSecurityContext | nindent 12 }}
           
           ports:
-            {{- if .Values.collector.snmp.traps.enabled }}
+            {{- if $snmpTrapEnabled }}
             - name: snmp-traps
-              containerPort: {{ .Values.collector.snmp.traps.port }}
+              containerPort: {{ $snmpTrapPort }}
               protocol: UDP
             {{- end }}
             - name: http-metrics

@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -66,5 +67,29 @@ func TestProviderFetchAndResource(t *testing.T) {
 		if !got[k] {
 			t.Fatalf("resource missing %s", k)
 		}
+	}
+}
+
+func TestProviderFetchReturnsIMDSUnavailableForIMDSv2Only(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/latest/api/token", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	p := New(Options{
+		Timeout:      100 * time.Millisecond,
+		BaseURL:      strings.TrimRight(srv.URL, "/") + "/latest",
+		DisableProbe: true,
+		IMDSv2Only:   true,
+	})
+
+	_, err := p.Fetch(context.Background())
+	if err == nil {
+		t.Fatalf("expected fetch error when IMDSv2 token endpoint is unavailable")
+	}
+	if !errors.Is(err, ErrIMDSUnavailable) {
+		t.Fatalf("expected ErrIMDSUnavailable, got %v", err)
 	}
 }

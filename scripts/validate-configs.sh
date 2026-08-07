@@ -115,18 +115,21 @@ def extract_config_from_helm_render(rendered: str):
     return "\n".join(block) + "\n"
 
 
-def validate_helm_chart(chart_dir: Path, values_file: Path, label: str):
+def validate_helm_chart(chart_dir: Path, values_file: Path, label: str, set_values=None):
+    cmd = [
+        "helm",
+        "template",
+        "telegen",
+        str(chart_dir),
+        "-f",
+        str(values_file),
+        "-s",
+        "templates/configmap.yaml",
+    ]
+    for set_value in set_values or []:
+        cmd.extend(["--set", set_value])
     proc = subprocess.run(
-        [
-            "helm",
-            "template",
-            "telegen",
-            str(chart_dir),
-            "-f",
-            str(values_file),
-            "-s",
-            "templates/configmap.yaml",
-        ],
+        cmd,
         text=True,
         capture_output=True,
         check=False,
@@ -160,6 +163,12 @@ validate_helm_chart(
     root / "deployments/helm",
     root / "deployments/helm/values.yaml",
     "deployments/helm/templates/configmap.yaml (values.yaml render)",
+)
+validate_helm_chart(
+    root / "deployments/helm",
+    root / "deployments/helm/values.yaml",
+    "deployments/helm/templates/configmap.yaml (mode=collector render)",
+    set_values=["mode=collector"],
 )
 
 # Private chart (optional)

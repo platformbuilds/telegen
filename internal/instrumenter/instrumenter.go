@@ -243,6 +243,11 @@ func internalMetrics(
 	case config.InternalMetrics.Exporter == imetrics.InternalMetricsExporterOTEL:
 		slog.Debug("reporting internal metrics as OpenTelemetry")
 		return otel.NewInternalMetricsReporter(ctx, ctxInfo, &config.OTELMetrics, &config.InternalMetrics)
+	case config.InternalMetrics.Exporter == imetrics.InternalMetricsExporterPrometheus &&
+		config.InternalMetrics.Prometheus.Port == 0 &&
+		config.InternalMetrics.Registry != nil:
+		slog.Debug("reporting internal metrics into the shared Prometheus registry")
+		return imetrics.NewPrometheusReporter(&config.InternalMetrics, nil, config.InternalMetrics.Registry), nil
 	case config.InternalMetrics.Exporter == imetrics.InternalMetricsExporterPrometheus || config.InternalMetrics.Prometheus.Port != 0:
 		slog.Debug("reporting internal metrics as Prometheus")
 		metrics := imetrics.NewPrometheusReporter(&config.InternalMetrics, promMgr, nil)

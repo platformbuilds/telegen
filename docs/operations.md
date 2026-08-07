@@ -24,6 +24,23 @@ This document defines the runtime contract for operating `telegen` in production
 - `8080`: health endpoint (`/healthz` and `/readyz`).
 - `9443`: kube-metrics endpoint.
 
+## Internal Metrics Endpoint
+
+- `ebpf.internal_metrics.prometheus.port: 0` means internal eBPF metrics are registered into the shared self-telemetry endpoint (`selfTelemetry.listen`) and exposed on `/metrics`.
+- Setting `ebpf.internal_metrics.prometheus.port` to a non-zero value opens a dedicated Prometheus listener for internal metrics.
+- Startup validation rejects collisions between `ebpf.internal_metrics.prometheus.port` and `selfTelemetry.listen`, `selfTelemetry.health_listen`, and `selfTelemetry.pprof_port` when pprof is enabled.
+
+## Instance Lock Path
+
+- `agent.instance_lock_path` defaults to `/var/run/telegen.pid`.
+- Collector deployments with `readOnlyRootFilesystem: true` must provide a writable path and mount for the lock file.
+- The Helm collector profile now renders `agent.instance_lock_path` and mounts writable storage at `/var/run` so lock acquisition succeeds.
+
+## AWS IMDS Behavior
+
+- On non-EC2 environments, the AWS metadata probe may be unavailable; this is treated as expected and logged at debug level.
+- If you want to silence AWS SDK metadata probing entirely in non-AWS environments, set `AWS_EC2_METADATA_DISABLED=true` in the container environment.
+
 ## Collector Outage Behavior
 
 After the Wave 2/3 hardening changes:
