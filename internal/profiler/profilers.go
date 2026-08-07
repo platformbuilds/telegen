@@ -63,7 +63,8 @@ func safeCloseSignal(ch chan struct{}) {
 		return
 	}
 	defer func() {
-		_ = recover()
+		if recovered := recover(); recovered != nil {
+		}
 	}()
 	close(ch)
 }
@@ -173,18 +174,24 @@ func (p *CPUProfiler) Stop() error {
 
 	// Close ring buffer reader (Read() will return ErrClosed)
 	if p.ringReader != nil {
-		_ = p.ringReader.Close()
+		if err := p.ringReader.Close(); err != nil {
+			p.log.Debug("failed closing CPU profiler ring reader", "error", err)
+		}
 	}
 
 	// Close perf event file descriptors
 	for _, fd := range p.perfFDs {
-		_ = unix.Close(fd)
+		if err := unix.Close(fd); err != nil {
+			p.log.Debug("failed closing CPU profiler perf fd", "fd", fd, "error", err)
+		}
 	}
 	p.perfFDs = nil
 
 	// Close eBPF objects
 	if p.objs != nil {
-		_ = p.objs.Close()
+		if err := p.objs.Close(); err != nil {
+			p.log.Debug("failed closing CPU profiler BPF objects", "error", err)
+		}
 		p.objs = nil
 	}
 
@@ -414,14 +421,18 @@ func (p *CPUProfiler) attachPerfEvents() (int, error) {
 
 		// Attach BPF program to perf event using ioctl
 		if err := unix.IoctlSetInt(fd, unix.PERF_EVENT_IOC_SET_BPF, p.objs.ProfileCpu.FD()); err != nil {
-			_ = unix.Close(fd)
+			if closeErr := unix.Close(fd); closeErr != nil {
+				p.log.Debug("failed closing perf fd after BPF attach error", "fd", fd, "error", closeErr)
+			}
 			p.log.Warn("failed to attach BPF program to perf event", "cpu", cpu, "error", err)
 			continue
 		}
 
 		// Enable the perf event
 		if err := unix.IoctlSetInt(fd, unix.PERF_EVENT_IOC_ENABLE, 0); err != nil {
-			_ = unix.Close(fd)
+			if closeErr := unix.Close(fd); closeErr != nil {
+				p.log.Debug("failed closing perf fd after enable error", "fd", fd, "error", closeErr)
+			}
 			p.log.Warn("failed to enable perf event", "cpu", cpu, "error", err)
 			continue
 		}
@@ -662,13 +673,17 @@ func (p *OffCPUProfiler) Start(ctx context.Context) error {
 
 	// Configure the profiler
 	if err := p.configure(); err != nil {
-		_ = p.objs.Close()
+		if closeErr := p.objs.Close(); closeErr != nil {
+			p.log.Debug("failed closing off-CPU profiler objects after configure error", "error", closeErr)
+		}
 		return fmt.Errorf("failed to configure off-CPU profiler: %w", err)
 	}
 
 	// Attach to sched_switch tracepoint
 	if err := p.attachTracepoints(); err != nil {
-		_ = p.objs.Close()
+		if closeErr := p.objs.Close(); closeErr != nil {
+			p.log.Debug("failed closing off-CPU profiler objects after attach error", "error", closeErr)
+		}
 		return fmt.Errorf("failed to attach tracepoints: %w", err)
 	}
 
@@ -701,16 +716,22 @@ func (p *OffCPUProfiler) Stop() error {
 	safeCloseSignal(p.stopCh)
 
 	if p.ringReader != nil {
-		_ = p.ringReader.Close()
+		if err := p.ringReader.Close(); err != nil {
+			p.log.Debug("failed closing off-CPU profiler ring reader", "error", err)
+		}
 	}
 
 	if p.schedLink != nil {
-		_ = p.schedLink.Close()
+		if err := p.schedLink.Close(); err != nil {
+			p.log.Debug("failed closing off-CPU sched link", "error", err)
+		}
 		p.schedLink = nil
 	}
 
 	if p.objs != nil {
-		_ = p.objs.Close()
+		if err := p.objs.Close(); err != nil {
+			p.log.Debug("failed closing off-CPU profiler BPF objects", "error", err)
+		}
 		p.objs = nil
 	}
 
@@ -1156,18 +1177,24 @@ func (p *WallProfiler) Stop() error {
 
 	// Close ring buffer reader
 	if p.ringReader != nil {
-		_ = p.ringReader.Close()
+		if err := p.ringReader.Close(); err != nil {
+			p.log.Debug("failed closing wall profiler ring reader", "error", err)
+		}
 	}
 
 	// Close perf event file descriptors
 	for _, fd := range p.perfFDs {
-		_ = unix.Close(fd)
+		if err := unix.Close(fd); err != nil {
+			p.log.Debug("failed closing wall profiler perf fd", "fd", fd, "error", err)
+		}
 	}
 	p.perfFDs = nil
 
 	// Close eBPF objects
 	if p.objs != nil {
-		_ = p.objs.Close()
+		if err := p.objs.Close(); err != nil {
+			p.log.Debug("failed closing wall profiler BPF objects", "error", err)
+		}
 		p.objs = nil
 	}
 
@@ -1387,14 +1414,18 @@ func (p *WallProfiler) attachPerfEvents(sampleRate int) (int, error) {
 		// Attach BPF program to perf event
 		if err := unix.IoctlSetInt(fd, unix.PERF_EVENT_IOC_SET_BPF, p.objs.ProfileWall.FD()); err != nil {
 			p.log.Warn("failed to attach BPF to perf event", "cpu", cpu, "error", err)
-			_ = unix.Close(fd)
+			if closeErr := unix.Close(fd); closeErr != nil {
+				p.log.Debug("failed closing wall perf fd after BPF attach error", "fd", fd, "error", closeErr)
+			}
 			continue
 		}
 
 		// Enable the perf event
 		if err := unix.IoctlSetInt(fd, unix.PERF_EVENT_IOC_ENABLE, 0); err != nil {
 			p.log.Warn("failed to enable perf event", "cpu", cpu, "error", err)
-			_ = unix.Close(fd)
+			if closeErr := unix.Close(fd); closeErr != nil {
+				p.log.Debug("failed closing wall perf fd after enable error", "fd", fd, "error", closeErr)
+			}
 			continue
 		}
 
@@ -1594,13 +1625,17 @@ func (p *MemoryProfiler) Start(ctx context.Context) error {
 
 	// Configure the profiler
 	if err := p.configure(); err != nil {
-		_ = p.objs.Close()
+		if closeErr := p.objs.Close(); closeErr != nil {
+			p.log.Debug("failed closing memory profiler objects after configure error", "error", closeErr)
+		}
 		return fmt.Errorf("failed to configure memory profiler: %w", err)
 	}
 
 	// Attach uprobes to libc
 	if err := p.attachUprobes(); err != nil {
-		_ = p.objs.Close()
+		if closeErr := p.objs.Close(); closeErr != nil {
+			p.log.Debug("failed closing memory profiler objects after uprobe attach error", "error", closeErr)
+		}
 		return fmt.Errorf("failed to attach uprobes: %w", err)
 	}
 
@@ -1633,13 +1668,17 @@ func (p *MemoryProfiler) Stop() error {
 	safeCloseSignal(p.stopCh)
 
 	if p.ringReader != nil {
-		_ = p.ringReader.Close()
+		if err := p.ringReader.Close(); err != nil {
+			p.log.Debug("failed closing memory profiler ring reader", "error", err)
+		}
 	}
 
 	// Close uprobe links
 	for _, l := range []link.Link{p.mallocLink, p.freeLink, p.callocLink, p.reallocLink} {
 		if l != nil {
-			_ = l.Close()
+			if err := l.Close(); err != nil {
+				p.log.Debug("failed closing memory profiler uprobe link", "error", err)
+			}
 		}
 	}
 	p.mallocLink = nil
@@ -1648,7 +1687,9 @@ func (p *MemoryProfiler) Stop() error {
 	p.reallocLink = nil
 
 	if p.objs != nil {
-		_ = p.objs.Close()
+		if err := p.objs.Close(); err != nil {
+			p.log.Debug("failed closing memory profiler BPF objects", "error", err)
+		}
 		p.objs = nil
 	}
 
@@ -2250,13 +2291,17 @@ func (p *MutexProfiler) Start(ctx context.Context) error {
 
 	// Configure the profiler
 	if err := p.configure(); err != nil {
-		_ = p.objs.Close()
+		if closeErr := p.objs.Close(); closeErr != nil {
+			p.log.Debug("failed closing mutex profiler objects after configure error", "error", closeErr)
+		}
 		return fmt.Errorf("failed to configure mutex profiler: %w", err)
 	}
 
 	// Attach uprobes
 	if err := p.attachUprobes(); err != nil {
-		_ = p.objs.Close()
+		if closeErr := p.objs.Close(); closeErr != nil {
+			p.log.Debug("failed closing mutex profiler objects after uprobe attach error", "error", closeErr)
+		}
 		return fmt.Errorf("failed to attach uprobes: %w", err)
 	}
 
@@ -2289,13 +2334,17 @@ func (p *MutexProfiler) Stop() error {
 	safeCloseSignal(p.stopCh)
 
 	if p.ringReader != nil {
-		_ = p.ringReader.Close()
+		if err := p.ringReader.Close(); err != nil {
+			p.log.Debug("failed closing mutex profiler ring reader", "error", err)
+		}
 	}
 
 	// Close uprobe links
 	for _, l := range []link.Link{p.lockEnterLink, p.lockExitLink, p.unlockLink} {
 		if l != nil {
-			_ = l.Close()
+			if err := l.Close(); err != nil {
+				p.log.Debug("failed closing mutex profiler uprobe link", "error", err)
+			}
 		}
 	}
 	p.lockEnterLink = nil
@@ -2303,7 +2352,9 @@ func (p *MutexProfiler) Stop() error {
 	p.unlockLink = nil
 
 	if p.objs != nil {
-		_ = p.objs.Close()
+		if err := p.objs.Close(); err != nil {
+			p.log.Debug("failed closing mutex profiler BPF objects", "error", err)
+		}
 		p.objs = nil
 	}
 

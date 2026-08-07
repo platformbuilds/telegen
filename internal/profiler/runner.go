@@ -325,7 +325,9 @@ func (r *Runner) Stop(ctx context.Context) error {
 
 	// Close Java injector
 	if javaInjector != nil {
-		_ = javaInjector.Close()
+		if err := javaInjector.Close(); err != nil {
+			r.log.Warn("error closing Java perfmap injector", "error", err)
+		}
 	}
 
 	// Stop manager (stops all profilers)
