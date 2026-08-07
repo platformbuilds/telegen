@@ -157,7 +157,9 @@ func (c *PprofConverter) FromPprof(data []byte, profileType profiler.ProfileType
 			return nil, fmt.Errorf("failed to decompress pprof: %w", readErr)
 		}
 		_ = decompressedData // TODO: use decompressed data in parsing
-		_ = gzReader.Close()
+		if closeErr := gzReader.Close(); closeErr != nil {
+			return nil, fmt.Errorf("failed to close gzip reader: %w", closeErr)
+		}
 	}
 
 	// Parse pprof (simplified - full implementation would use proper proto parsing)
@@ -346,25 +348,41 @@ func (c *PprofConverter) serialize(pprof *PprofProfile) ([]byte, error) {
 	// In production, use proper protobuf encoding
 
 	// Write sample count
-	_ = binary.Write(&buf, binary.LittleEndian, int32(len(pprof.Sample)))
+	if err := binary.Write(&buf, binary.LittleEndian, int32(len(pprof.Sample))); err != nil {
+		return nil, err
+	}
 
 	// Write samples
 	for _, sample := range pprof.Sample {
-		_ = binary.Write(&buf, binary.LittleEndian, int32(len(sample.LocationID)))
-		for _, locID := range sample.LocationID {
-			_ = binary.Write(&buf, binary.LittleEndian, locID)
+		if err := binary.Write(&buf, binary.LittleEndian, int32(len(sample.LocationID))); err != nil {
+			return nil, err
 		}
-		_ = binary.Write(&buf, binary.LittleEndian, int32(len(sample.Value)))
+		for _, locID := range sample.LocationID {
+			if err := binary.Write(&buf, binary.LittleEndian, locID); err != nil {
+				return nil, err
+			}
+		}
+		if err := binary.Write(&buf, binary.LittleEndian, int32(len(sample.Value))); err != nil {
+			return nil, err
+		}
 		for _, val := range sample.Value {
-			_ = binary.Write(&buf, binary.LittleEndian, val)
+			if err := binary.Write(&buf, binary.LittleEndian, val); err != nil {
+				return nil, err
+			}
 		}
 	}
 
 	// Write string table
-	_ = binary.Write(&buf, binary.LittleEndian, int32(len(pprof.StringTable)))
+	if err := binary.Write(&buf, binary.LittleEndian, int32(len(pprof.StringTable))); err != nil {
+		return nil, err
+	}
 	for _, s := range pprof.StringTable {
-		_ = binary.Write(&buf, binary.LittleEndian, int32(len(s)))
-		buf.WriteString(s)
+		if err := binary.Write(&buf, binary.LittleEndian, int32(len(s))); err != nil {
+			return nil, err
+		}
+		if _, err := buf.WriteString(s); err != nil {
+			return nil, err
+		}
 	}
 
 	// Compress with gzip

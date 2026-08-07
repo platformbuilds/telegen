@@ -223,11 +223,15 @@ func (e *UnifiedExporter) Connect(ctx context.Context) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.shutdown {
-		_ = rawExporter.Stop(context.Background())
+		if err := rawExporter.Stop(context.Background()); err != nil {
+			slog.Debug("failed stopping raw exporter after shutdown check", "error", err)
+		}
 		return fmt.Errorf("exporter is shut down")
 	}
 	if e.rawExporter != nil {
-		_ = rawExporter.Stop(context.Background())
+		if err := rawExporter.Stop(context.Background()); err != nil {
+			slog.Debug("failed stopping duplicate raw exporter", "error", err)
+		}
 		return nil
 	}
 

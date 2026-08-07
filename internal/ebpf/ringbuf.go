@@ -205,12 +205,16 @@ func (r *RingbufReader) readLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			_ = r.reader.Close()
+			if err := r.reader.Close(); err != nil {
+				r.log.Debug("failed to close ring reader on context cancel", "error", err)
+			}
 			r.flush(ctx, batch)
 			return
 
 		case <-r.stopCh:
-			_ = r.reader.Close()
+			if err := r.reader.Close(); err != nil {
+				r.log.Debug("failed to close ring reader on stop", "error", err)
+			}
 			r.flush(ctx, batch)
 			return
 

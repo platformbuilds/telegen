@@ -129,7 +129,9 @@ func (ta *traceAttacher) attacherLoop(_ context.Context) (swarm.RunFunc, error) 
 					}
 
 					if instr.Obj.FileInfo.ELF != nil {
-						_ = instr.Obj.FileInfo.ELF.Close()
+						if err := instr.Obj.FileInfo.ELF.Close(); err != nil {
+							ta.log.Debug("failed closing ELF file", "pid", instr.Obj.FileInfo.Pid, "error", err)
+						}
 					}
 				case EventDeleted:
 					ta.notifyProcessDeletion(&instr.Obj)

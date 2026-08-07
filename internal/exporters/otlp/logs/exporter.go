@@ -180,7 +180,10 @@ func (e *Exporter) flushChunk(ctx context.Context, events []*ProfileEvent) error
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("failed to export logs: status=%d body read failed: %w", resp.StatusCode, readErr)
+		}
 		return fmt.Errorf("failed to export logs: status=%d body=%s", resp.StatusCode, string(respBody))
 	}
 

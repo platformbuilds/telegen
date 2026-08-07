@@ -23,7 +23,10 @@ func ProcessPossibleDubbo2Event(event *TCPRequestInfo, reqBuf, respBuf []byte) (
 		return request.Span{}, ParseInvalid, reqErr
 	}
 
-	respFrames, _, _ := dubbov2parser.ParseFrames(respBuf)
+	respFrames, _, respErr := dubbov2parser.ParseFrames(respBuf)
+	if respErr != nil {
+		respFrames = nil
+	}
 
 	allFrames := append(reqFrames, respFrames...)
 	if len(allFrames) == 0 {

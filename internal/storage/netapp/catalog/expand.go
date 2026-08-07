@@ -74,7 +74,9 @@ func Expand(opts ExpandOptions) (map[string]struct{}, error) {
 			return out, err
 		}
 		if opts.IncludeASAr2 && (k.kind == "rest" || k.kind == "keyperf") {
-			_ = expandKind(out, opts, k.kind, nil, true)
+			if err := expandKind(out, opts, k.kind, nil, true); err != nil {
+				return out, err
+			}
 		}
 	}
 

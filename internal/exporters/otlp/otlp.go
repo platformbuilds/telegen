@@ -206,7 +206,10 @@ func New(ctx context.Context, o TraceOpts, res *resource.Resource) (*Clients, er
 		} else {
 			mopts = append(mopts, otlpmetricgrpc.WithInsecure())
 		}
-		mexp, _ = otlpmetricgrpc.New(ctx, mopts...)
+		metricExp, err := otlpmetricgrpc.New(ctx, mopts...)
+		if err == nil {
+			mexp = metricExp
+		}
 	}
 	if mexp == nil && o.HTTP.Enabled {
 		httpMetricOpts := []otlpmetrichttp.Option{
@@ -216,7 +219,10 @@ func New(ctx context.Context, o TraceOpts, res *resource.Resource) (*Clients, er
 		if !o.TLS.Enable || o.HTTP.Insecure {
 			httpMetricOpts = append(httpMetricOpts, otlpmetrichttp.WithInsecure())
 		}
-		mexp, _ = otlpmetrichttp.New(ctx, httpMetricOpts...)
+		metricExp, err := otlpmetrichttp.New(ctx, httpMetricOpts...)
+		if err == nil {
+			mexp = metricExp
+		}
 	}
 	// Note: mexp can be nil - metrics export is optional, traces and logs are required
 

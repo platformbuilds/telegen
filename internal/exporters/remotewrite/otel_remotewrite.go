@@ -374,7 +374,10 @@ func (w *OTelRemoteWriter) send(ctx context.Context, wr *prompb.WriteRequest) er
 
 	// Check response
 	if resp.StatusCode/100 != 2 {
-		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyBytes, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("remote write returned status %d and body read failed: %w", resp.StatusCode, readErr)
+		}
 		return fmt.Errorf("remote write returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 

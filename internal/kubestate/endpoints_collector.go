@@ -145,11 +145,25 @@ func (k *KubeState) buildEndpointsCollector(ctx context.Context) error {
 
 	//nolint:staticcheck // SA1019: Endpoints still supported for older K8s versions
 	informer := cache.NewSharedInformer(lw, &corev1.Endpoints{}, k.config.GetResyncPeriod())
-	_, _ = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { _ = store.Add(obj) },
-		UpdateFunc: func(_, obj interface{}) { _ = store.Update(obj) },
-		DeleteFunc: func(obj interface{}) { _ = store.Delete(obj) },
-	})
+	if _, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			if err := store.Add(obj); err != nil {
+				return
+			}
+		},
+		UpdateFunc: func(_, obj interface{}) {
+			if err := store.Update(obj); err != nil {
+				return
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+			if err := store.Delete(obj); err != nil {
+				return
+			}
+		},
+	}); err != nil {
+		return err
+	}
 
 	k.informers = append(k.informers, informer)
 	k.logger.Info("endpoints collector built", "generatorCount", len(generators))
@@ -201,11 +215,25 @@ func (k *KubeState) buildEndpointSliceCollector(ctx context.Context) error {
 	}
 
 	informer := cache.NewSharedInformer(lw, &discoveryv1.EndpointSlice{}, k.config.GetResyncPeriod())
-	_, _ = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { _ = store.Add(obj) },
-		UpdateFunc: func(_, obj interface{}) { _ = store.Update(obj) },
-		DeleteFunc: func(obj interface{}) { _ = store.Delete(obj) },
-	})
+	if _, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			if err := store.Add(obj); err != nil {
+				return
+			}
+		},
+		UpdateFunc: func(_, obj interface{}) {
+			if err := store.Update(obj); err != nil {
+				return
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+			if err := store.Delete(obj); err != nil {
+				return
+			}
+		},
+	}); err != nil {
+		return err
+	}
 
 	k.informers = append(k.informers, informer)
 	k.logger.Info("endpointslice collector built", "generatorCount", len(generators))

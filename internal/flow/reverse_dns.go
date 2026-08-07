@@ -145,7 +145,7 @@ func (r *dnsResolver) getName(ip ebpf.IPAddr) string {
 	ipStr := ip.IP().String()
 
 	// Use singleflight to deduplicate concurrent lookups for the same IP
-	result, _, _ := r.sf.Do(ipStr, func() (interface{}, error) {
+	result, err, _ := r.sf.Do(ipStr, func() (interface{}, error) {
 		// Double-check cache in case another goroutine just populated it
 		if entry, ok := r.cache.Get(ip); ok && time.Now().Before(entry.expiresAt) {
 			return entry.hostname, nil
@@ -170,11 +170,18 @@ func (r *dnsResolver) getName(ip ebpf.IPAddr) string {
 		r.cache.Add(ip, entry)
 		return hostname, nil
 	})
+	if err != nil {
+		return ""
+	}
 
 	if result == nil {
 		return ""
 	}
-	return result.(string)
+	hostname, ok := result.(string)
+	if !ok {
+		return ""
+	}
+	return hostname
 }
 
 // randomJitter returns a random duration between 0 and jitterRange

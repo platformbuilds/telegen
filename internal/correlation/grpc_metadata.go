@@ -325,7 +325,9 @@ func SetBaggageValue(ctx context.Context, key GRPCBaggageKey, value string) cont
 		bag = NewBaggage()
 	}
 
-	_ = bag.Set(string(key), value)
+	if err := bag.Set(string(key), value); err != nil {
+		return ctx
+	}
 	return ContextWithBaggage(ctx, bag)
 }
 

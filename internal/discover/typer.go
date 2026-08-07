@@ -46,7 +46,10 @@ func ExecTyperProvider(
 	input *msg.Queue[[]Event[ProcessMatch]],
 	output *msg.Queue[[]Event[ebpf.Instrumentable]],
 ) swarm.InstanceFunc {
-	instrumentableCache, _ := lru.New[uint64, instrumentedExecutable](100)
+	instrumentableCache, err := lru.New[uint64, instrumentedExecutable](100)
+	if err != nil {
+		instrumentableCache = nil
+	}
 
 	t := typer{
 		cfg:                 cfg,
@@ -181,7 +184,9 @@ func (t *typer) FilterClassify(evs []Event[ProcessMatch]) []Event[ebpf.Instrumen
 		case EventDeleted:
 			if fInfo, ok := t.currentPids[ev.Obj.Process.Pid]; ok {
 				if fInfo.ELF != nil {
-					_ = fInfo.ELF.Close()
+					if err := fInfo.ELF.Close(); err != nil {
+						t.log.Debug("failed closing ELF on process deletion", "pid", ev.Obj.Process.Pid, "error", err)
+					}
 					fInfo.ELF = nil
 				}
 				delete(t.currentPids, ev.Obj.Process.Pid)

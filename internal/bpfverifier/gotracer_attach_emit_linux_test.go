@@ -28,6 +28,7 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/goexec"
 	"github.com/mirastacklabs-ai/telegen/internal/obi"
 	"github.com/mirastacklabs-ai/telegen/internal/procs"
+	"github.com/mirastacklabs-ai/telegen/internal/testutil/fdassert"
 	"github.com/mirastacklabs-ai/telegen/internal/tracers/gotracer"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
 	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
@@ -46,6 +47,8 @@ func TestGoTracerAttachAndEmitHTTP(t *testing.T) {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		t.Fatalf("failed to remove memlock limit: %v", err)
 	}
+	// Probe attach/detach tests must leave kernel/user-space handles balanced.
+	fdassert.Track(t, 8)
 
 	cfg := obi.DefaultConfig
 	cfg.EBPF.BatchLength = 1

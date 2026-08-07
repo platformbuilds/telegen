@@ -165,7 +165,9 @@ func (d *PublicCloudDetector) checkEndpoint(ctx context.Context, ep PublicCloudE
 	defer func() { _ = resp.Body.Close() }()
 
 	// Drain body to allow connection reuse
-	_, _ = io.Copy(io.Discard, resp.Body)
+	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+		return false
+	}
 
 	// Consider 200-299 as success
 	return resp.StatusCode >= 200 && resp.StatusCode < 300

@@ -20,7 +20,6 @@ func BenchmarkPipelineParse(b *testing.B) {
 
 	b.ReportAllocs()
 	for name, line := range lines {
-		line := line
 		b.Run(name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				_ = p.Parse(line, "")

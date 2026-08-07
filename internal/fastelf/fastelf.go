@@ -234,13 +234,17 @@ func NewElfContextFromFile(filePath string) (*ElfContext, error) {
 
 	info, err := file.Stat()
 	if err != nil {
-		_ = file.Close()
+		if closeErr := file.Close(); closeErr != nil {
+			return nil, fmt.Errorf("failed to stat %s: %w (close failed: %v)", filePath, err, closeErr)
+		}
 		return nil, fmt.Errorf("failed to stat %s: %w", filePath, err)
 	}
 
 	ctx, err := NewElfContextFromFileHandle(file, info.Size())
 	if err != nil {
-		_ = file.Close()
+		if closeErr := file.Close(); closeErr != nil {
+			return nil, fmt.Errorf("%w (close failed: %v)", err, closeErr)
+		}
 		return nil, err
 	}
 
@@ -261,7 +265,9 @@ func NewElfContextFromFileHandle(file *os.File, fileSize int64) (*ElfContext, er
 
 	ctx, err := NewElfContextFromData(data)
 	if err != nil {
-		_ = unix.Munmap(data)
+		if unmapErr := unix.Munmap(data); unmapErr != nil {
+			return nil, errors.Join(err, fmt.Errorf("munmap failed: %w", unmapErr))
+		}
 
 		return nil, err
 	}

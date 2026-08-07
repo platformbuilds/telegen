@@ -144,12 +144,23 @@ func main() {
 	)
 
 	// Create zap logger for internal use (some components may require it)
-	zapLogger, _ := zap.NewProduction()
-	defer func() { _ = zapLogger.Sync() }()
+	zapLogger, err := zap.NewProduction()
+	if err != nil {
+		zapLogger = zap.NewNop()
+	}
+	defer func() {
+		if syncErr := zapLogger.Sync(); syncErr != nil {
+			logger.Debug("failed to sync zap logger", "error", syncErr)
+		}
+	}()
 	collectorMeterProvider := sdkmetric.NewMeterProvider(
 		sdkmetric.WithReader(sdkmetric.NewManualReader()),
 	)
-	defer func() { _ = collectorMeterProvider.Shutdown(context.Background()) }()
+	defer func() {
+		if shutdownErr := collectorMeterProvider.Shutdown(context.Background()); shutdownErr != nil {
+			logger.Debug("failed to shut down collector meter provider", "error", shutdownErr)
+		}
+	}()
 	exportotlp.SetCollectorTelemetry(zapLogger, collectorMeterProvider)
 
 	mux := http.NewServeMux()
@@ -574,35 +585,55 @@ func main() {
 	logger.Info("telegen shutting down")
 	cancel()
 	if pl != nil {
-		_ = pl.Stop(context.Background())
+		if err := pl.Stop(context.Background()); err != nil {
+			logger.Warn("failed to stop pipeline", "error", err)
+		}
 	}
 	if storageMgr != nil {
-		_ = storageMgr.Stop(context.Background())
+		if err := storageMgr.Stop(context.Background()); err != nil {
+			logger.Warn("failed to stop storage manager", "error", err)
+		}
 	}
 	if vmwareMgr != nil {
-		_ = vmwareMgr.Stop(context.Background())
+		if err := vmwareMgr.Stop(context.Background()); err != nil {
+			logger.Warn("failed to stop vmware manager", "error", err)
+		}
 	}
 	if netinfraMgr != nil {
-		_ = netinfraMgr.Stop()
+		if err := netinfraMgr.Stop(); err != nil {
+			logger.Warn("failed to stop netinfra manager", "error", err)
+		}
 	}
 	if kafkaAutoDiscovery != nil {
 		kafkaAutoDiscovery.Stop()
 	}
 	if kafkaMultiReceiver != nil {
-		_ = kafkaMultiReceiver.Stop(context.Background())
+		if err := kafkaMultiReceiver.Stop(context.Background()); err != nil {
+			logger.Warn("failed to stop kafka receiver", "error", err)
+		}
 	}
 	if profilerRunner != nil {
-		_ = profilerRunner.Stop(context.Background())
+		if err := profilerRunner.Stop(context.Background()); err != nil {
+			logger.Warn("failed to stop profiler runner", "error", err)
+		}
 	}
 	if nodeExp != nil {
-		_ = nodeExp.Shutdown(context.Background())
+		if err := nodeExp.Shutdown(context.Background()); err != nil {
+			logger.Warn("failed to shut down node exporter", "error", err)
+		}
 	}
 	if kubeMetricsProvider != nil {
-		_ = kubeMetricsProvider.Stop(context.Background())
+		if err := kubeMetricsProvider.Stop(context.Background()); err != nil {
+			logger.Warn("failed to stop kubemetrics provider", "error", err)
+		}
 	}
-	_ = srv.Shutdown(context.Background())
+	if err := srv.Shutdown(context.Background()); err != nil {
+		logger.Warn("self-telemetry shutdown returned error", "error", err)
+	}
 	if cfg.SelfTelemetry.HealthListen != cfg.SelfTelemetry.Listen {
-		_ = healthSrv.Shutdown(context.Background())
+		if err := healthSrv.Shutdown(context.Background()); err != nil {
+			logger.Warn("health listener shutdown returned error", "error", err)
+		}
 	}
 	logger.Info("telegen shutdown complete")
 }
@@ -623,7 +654,9 @@ func installDebugConfigHandler(mux *http.ServeMux, cfg *config.Config) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write(out)
+		if _, err := w.Write(out); err != nil {
+			return
+		}
 	})
 }
 
@@ -755,16 +788,26 @@ func acquireInstanceLock(path string) (func(), error) {
 		return nil, fmt.Errorf("open lock file: %w", err)
 	}
 	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		_ = lockFile.Close()
+		if closeErr := lockFile.Close(); closeErr != nil {
+			return nil, fmt.Errorf("lock file %s close failed after flock error: %w", path, closeErr)
+		}
 		return nil, fmt.Errorf("lock file %s is already held: %w", path, err)
 	}
 	if err := lockFile.Truncate(0); err == nil {
-		_, _ = fmt.Fprintf(lockFile, "%d\n", os.Getpid())
+		if _, writeErr := fmt.Fprintf(lockFile, "%d\n", os.Getpid()); writeErr != nil {
+			return nil, fmt.Errorf("write lock file pid: %w", writeErr)
+		}
 	}
 	release := func() {
-		_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
-		_ = lockFile.Close()
-		_ = os.Remove(path)
+		if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN); err != nil {
+			slog.Debug("failed to unlock instance lock", "path", path, "error", err)
+		}
+		if err := lockFile.Close(); err != nil {
+			slog.Debug("failed to close instance lock file", "path", path, "error", err)
+		}
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			slog.Debug("failed to remove instance lock file", "path", path, "error", err)
+		}
 	}
 	return release, nil
 }

@@ -122,14 +122,10 @@ func parseRedisRequest(buf []byte) (string, string, bool) {
 	}
 
 	// we need at least 2 lines
-	_, next, eof = nextRedisLine(buf, next)
+	_, _, eof = nextRedisLine(buf, next)
 	if eof {
 		return "", "", false
 	}
-	// we are good, start over
-	next = 0
-	line, next, eof = nextRedisLine(buf, next)
-
 	// It's not a command, something else?
 	if len(line) == 0 || line[0] != '*' {
 		return "", "", true

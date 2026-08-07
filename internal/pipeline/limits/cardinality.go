@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"hash"
 	"hash/fnv"
-	"io"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -403,7 +402,9 @@ func (l *CardinalityLimiter) hashAttributes(attrs pcommon.Map) uint64 {
 		if !l.shouldHashAttribute(k) {
 			return true
 		}
-		_, _ = io.WriteString(h, k)
+		if _, err := h.Write([]byte(k)); err != nil {
+			return false
+		}
 		_, _ = h.Write([]byte{'='})
 		hashAttributeValue(h, v)
 		_, _ = h.Write([]byte{','})
@@ -573,7 +574,9 @@ func hashAttributeValue(h hash.Hash64, v pcommon.Value) {
 	var buf [32]byte
 	switch v.Type() {
 	case pcommon.ValueTypeStr:
-		_, _ = io.WriteString(h, v.Str())
+		if _, err := h.Write([]byte(v.Str())); err != nil {
+			return
+		}
 	case pcommon.ValueTypeInt:
 		b := strconv.AppendInt(buf[:0], v.Int(), 10)
 		_, _ = h.Write(b)
@@ -588,7 +591,9 @@ func hashAttributeValue(h hash.Hash64, v pcommon.Value) {
 		}
 	case pcommon.ValueTypeMap:
 		v.Map().Range(func(k string, nested pcommon.Value) bool {
-			_, _ = io.WriteString(h, k)
+			if _, err := h.Write([]byte(k)); err != nil {
+				return false
+			}
 			_, _ = h.Write([]byte{':'})
 			hashAttributeValue(h, nested)
 			_, _ = h.Write([]byte{';'})
@@ -601,6 +606,6 @@ func hashAttributeValue(h hash.Hash64, v pcommon.Value) {
 			_, _ = h.Write([]byte{'|'})
 		}
 	default:
-		_, _ = io.WriteString(h, v.AsString())
+		_, _ = h.Write([]byte(v.AsString()))
 	}
 }

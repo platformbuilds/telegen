@@ -267,7 +267,10 @@ func (ep *RemoteWriteEndpoint) send(ctx context.Context, req *prompb.WriteReques
 
 	// Check response
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		if readErr != nil {
+			body = []byte("failed to read response body")
+		}
 		err := fmt.Errorf("remote write failed with status %d: %s", resp.StatusCode, string(body))
 		ep.mu.Lock()
 		ep.retryCount++

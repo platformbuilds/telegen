@@ -208,7 +208,10 @@ func (t *Tailer) Run(stop <-chan struct{}) error {
 			}
 			discoveredPaths := make(map[string]struct{})
 			for _, g := range allGlobs {
-				matches, _ := filepath.Glob(g)
+				matches, err := filepath.Glob(g)
+				if err != nil {
+					continue
+				}
 				for _, p := range matches {
 					if t.isExcluded(p) {
 						continue
@@ -262,13 +265,15 @@ func (t *Tailer) deleteTrackedPath(path string) {
 // isExcluded returns true if the path matches any of the configured exclude patterns.
 func (t *Tailer) isExcluded(path string) bool {
 	for _, ex := range t.excludes {
-		if matched, _ := filepath.Match(ex, path); matched {
+		matched, err := filepath.Match(ex, path)
+		if err == nil && matched {
 			return true
 		}
 		// Also try matching against just the base name for patterns
 		// without directory separators (e.g. "*telegen*")
 		if !strings.ContainsRune(ex, '/') {
-			if matched, _ := filepath.Match(ex, filepath.Base(path)); matched {
+			baseMatched, matchErr := filepath.Match(ex, filepath.Base(path))
+			if matchErr == nil && baseMatched {
 				return true
 			}
 		}

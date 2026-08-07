@@ -200,7 +200,10 @@ func DecodeRequest(buf []byte) (Message, int, error) {
 		if len(fields) < 3 {
 			return Message{}, consumed, fmt.Errorf("memcached: gat requires exptime and keys")
 		}
-		exp, _ := strconv.ParseInt(fields[1], 10, 64)
+		exp, err := strconv.ParseInt(fields[1], 10, 64)
+		if err != nil {
+			return Message{}, consumed, fmt.Errorf("memcached: invalid exptime: %q", fields[1])
+		}
 		msg.Exptime = exp
 		msg.Keys = fields[2:]
 		msg.Key = fields[2]
@@ -211,9 +214,15 @@ func DecodeRequest(buf []byte) (Message, int, error) {
 			return Message{}, consumed, fmt.Errorf("memcached: %s requires key/flags/exptime/bytes", verb)
 		}
 		msg.Key = fields[1]
-		f, _ := strconv.ParseUint(fields[2], 10, 32)
+		f, err := strconv.ParseUint(fields[2], 10, 32)
+		if err != nil {
+			return Message{}, consumed, fmt.Errorf("memcached: invalid flags: %q", fields[2])
+		}
 		msg.Flags = uint32(f)
-		exp, _ := strconv.ParseInt(fields[3], 10, 64)
+		exp, err := strconv.ParseInt(fields[3], 10, 64)
+		if err != nil {
+			return Message{}, consumed, fmt.Errorf("memcached: invalid exptime: %q", fields[3])
+		}
 		msg.Exptime = exp
 		bc, err := strconv.Atoi(fields[4])
 		if err != nil || bc < 0 {
@@ -236,16 +245,25 @@ func DecodeRequest(buf []byte) (Message, int, error) {
 			return Message{}, consumed, fmt.Errorf("memcached: cas requires 5 fields")
 		}
 		msg.Key = fields[1]
-		f, _ := strconv.ParseUint(fields[2], 10, 32)
+		f, err := strconv.ParseUint(fields[2], 10, 32)
+		if err != nil {
+			return Message{}, consumed, fmt.Errorf("memcached: invalid flags: %q", fields[2])
+		}
 		msg.Flags = uint32(f)
-		exp, _ := strconv.ParseInt(fields[3], 10, 64)
+		exp, err := strconv.ParseInt(fields[3], 10, 64)
+		if err != nil {
+			return Message{}, consumed, fmt.Errorf("memcached: invalid exptime: %q", fields[3])
+		}
 		msg.Exptime = exp
 		bc, err := strconv.Atoi(fields[4])
 		if err != nil || bc < 0 {
 			return Message{}, consumed, fmt.Errorf("memcached: invalid byte count: %q", fields[4])
 		}
 		msg.ByteCount = bc
-		cas, _ := strconv.ParseUint(fields[5], 10, 64)
+		cas, err := strconv.ParseUint(fields[5], 10, 64)
+		if err != nil {
+			return Message{}, consumed, fmt.Errorf("memcached: invalid cas token: %q", fields[5])
+		}
 		msg.CASToken = cas
 		if len(fields) >= 7 && fields[6] == "noreply" {
 			msg.NoReply = true
@@ -279,7 +297,10 @@ func DecodeRequest(buf []byte) (Message, int, error) {
 			return Message{}, consumed, fmt.Errorf("memcached: touch requires key and exptime")
 		}
 		msg.Key = fields[1]
-		exp, _ := strconv.ParseInt(fields[2], 10, 64)
+		exp, err := strconv.ParseInt(fields[2], 10, 64)
+		if err != nil {
+			return Message{}, consumed, fmt.Errorf("memcached: invalid exptime: %q", fields[2])
+		}
 		msg.Exptime = exp
 
 	case CmdStats, CmdFlushAll, CmdVersion, CmdQuit:

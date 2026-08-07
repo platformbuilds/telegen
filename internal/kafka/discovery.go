@@ -156,12 +156,12 @@ type KafkaDiscovery struct {
 	logger        *slog.Logger
 	dynamicClient dynamic.Interface
 
-	mu              sync.RWMutex
-	clusters        map[string]*DiscoveredCluster // key: namespace/name
-	handler         DiscoveryHandler
-	stopCh          chan struct{}
-	wg              sync.WaitGroup
-	started         bool
+	mu       sync.RWMutex
+	clusters map[string]*DiscoveredCluster // key: namespace/name
+	handler  DiscoveryHandler
+	stopCh   chan struct{}
+	wg       sync.WaitGroup
+	started  bool
 }
 
 // Strimzi CRD GVR - supports both v1 (current) and v1beta2 (legacy)
@@ -569,7 +569,9 @@ func (d *KafkaDiscovery) parseStrimziKafka(obj *unstructured.Unstructured) (*Dis
 		// Try to use any available listener
 		if len(listeners) > 0 {
 			if first, ok := listeners[0].(map[string]interface{}); ok {
-				targetListener, _, _ = unstructured.NestedString(first, "name")
+				if parsed, _, err := unstructured.NestedString(first, "name"); err == nil {
+					targetListener = parsed
+				}
 				listenerStatus = first
 			}
 		}
@@ -580,7 +582,10 @@ func (d *KafkaDiscovery) parseStrimziKafka(obj *unstructured.Unstructured) (*Dis
 
 	// Prefer bootstrapServers field (available in newer Strimzi versions)
 	// Format: "host1:port,host2:port,host3:port"
-	bootstrapServers, found, _ := unstructured.NestedString(listenerStatus, "bootstrapServers")
+	bootstrapServers, found, err := unstructured.NestedString(listenerStatus, "bootstrapServers")
+	if err != nil {
+		found = false
+	}
 	if found && bootstrapServers != "" {
 		// Split comma-separated list
 		for _, server := range strings.Split(bootstrapServers, ",") {
@@ -593,14 +598,23 @@ func (d *KafkaDiscovery) parseStrimziKafka(obj *unstructured.Unstructured) (*Dis
 
 	// Fallback to addresses[] if bootstrapServers not available
 	if len(cluster.Brokers) == 0 {
-		addresses, _, _ := unstructured.NestedSlice(listenerStatus, "addresses")
+		addresses, _, err := unstructured.NestedSlice(listenerStatus, "addresses")
+		if err != nil {
+			addresses = nil
+		}
 		for _, addr := range addresses {
 			addrMap, ok := addr.(map[string]interface{})
 			if !ok {
 				continue
 			}
-			host, _, _ := unstructured.NestedString(addrMap, "host")
-			port, _, _ := unstructured.NestedInt64(addrMap, "port")
+			host, _, err := unstructured.NestedString(addrMap, "host")
+			if err != nil {
+				continue
+			}
+			port, _, err := unstructured.NestedInt64(addrMap, "port")
+			if err != nil {
+				continue
+			}
 			if host != "" && port > 0 {
 				cluster.Brokers = append(cluster.Brokers, fmt.Sprintf("%s:%d", host, port))
 			}
@@ -613,24 +627,42 @@ func (d *KafkaDiscovery) parseStrimziKafka(obj *unstructured.Unstructured) (*Dis
 
 	// Determine TLS from listener spec
 	// Check spec.kafka.listeners[].tls field
-	spec, _, _ := unstructured.NestedMap(obj.Object, "spec")
-	kafkaSpec, _, _ := unstructured.NestedMap(spec, "kafka")
-	specListeners, _, _ := unstructured.NestedSlice(kafkaSpec, "listeners")
+	spec, _, err := unstructured.NestedMap(obj.Object, "spec")
+	if err != nil {
+		spec = nil
+	}
+	kafkaSpec, _, err := unstructured.NestedMap(spec, "kafka")
+	if err != nil {
+		kafkaSpec = nil
+	}
+	specListeners, _, err := unstructured.NestedSlice(kafkaSpec, "listeners")
+	if err != nil {
+		specListeners = nil
+	}
 
 	for _, l := range specListeners {
 		lMap, ok := l.(map[string]interface{})
 		if !ok {
 			continue
 		}
-		lName, _, _ := unstructured.NestedString(lMap, "name")
+		lName, _, err := unstructured.NestedString(lMap, "name")
+		if err != nil {
+			continue
+		}
 		if lName == targetListener {
 			// Check TLS: spec.kafka.listeners[].tls (boolean)
-			tlsEnabled, found, _ := unstructured.NestedBool(lMap, "tls")
+			tlsEnabled, found, err := unstructured.NestedBool(lMap, "tls")
+			if err != nil {
+				found = false
+			}
 			if found {
 				cluster.TLSEnabled = tlsEnabled
 			}
 			// Also check listener type: "internal" vs "route", "loadbalancer", "nodeport", "ingress"
-			lType, _, _ := unstructured.NestedString(lMap, "type")
+			lType, _, err := unstructured.NestedString(lMap, "type")
+			if err != nil {
+				lType = ""
+			}
 			// External listeners are typically TLS
 			if lType == "route" || lType == "loadbalancer" || lType == "nodeport" || lType == "ingress" {
 				// External listener - might need external access config
@@ -638,9 +670,15 @@ func (d *KafkaDiscovery) parseStrimziKafka(obj *unstructured.Unstructured) (*Dis
 			}
 
 			// Check authentication: spec.kafka.listeners[].authentication.type
-			auth, found, _ := unstructured.NestedMap(lMap, "authentication")
+			auth, found, err := unstructured.NestedMap(lMap, "authentication")
+			if err != nil {
+				found = false
+			}
 			if found {
-				authType, _, _ := unstructured.NestedString(auth, "type")
+				authType, _, err := unstructured.NestedString(auth, "type")
+				if err != nil {
+					authType = ""
+				}
 				// Strimzi auth types: tls, scram-sha-512, oauth, custom
 				cluster.AuthType = authType
 			}
@@ -654,7 +692,10 @@ func (d *KafkaDiscovery) parseStrimziKafka(obj *unstructured.Unstructured) (*Dis
 	}
 
 	// Store certificates from status if available (for client verification)
-	certs, _, _ := unstructured.NestedStringSlice(listenerStatus, "certificates")
+	certs, _, err := unstructured.NestedStringSlice(listenerStatus, "certificates")
+	if err != nil {
+		certs = nil
+	}
 	if len(certs) > 0 {
 		// Certs are available in status for TLS listeners
 		// These can be used for CA verification
@@ -672,12 +713,18 @@ func (d *KafkaDiscovery) findStrimziListener(listeners []interface{}, name strin
 			continue
 		}
 		// Check "name" field (primary)
-		lName, _, _ := unstructured.NestedString(lMap, "name")
+		lName, _, err := unstructured.NestedString(lMap, "name")
+		if err != nil {
+			continue
+		}
 		if lName == name {
 			return lMap
 		}
 		// Also check deprecated "type" field (v1beta2 backward compatibility)
-		lType, _, _ := unstructured.NestedString(lMap, "type")
+		lType, _, err := unstructured.NestedString(lMap, "type")
+		if err != nil {
+			continue
+		}
 		if lType == name {
 			return lMap
 		}
@@ -702,21 +749,36 @@ func (d *KafkaDiscovery) parseConfluentKafka(obj *unstructured.Unstructured) (*D
 
 	// Try to get bootstrap endpoint from status first
 	// Status structure: status.listeners[].bootstrapEndpoint, status.listeners[].type
-	status, statusFound, _ := unstructured.NestedMap(obj.Object, "status")
+	status, statusFound, err := unstructured.NestedMap(obj.Object, "status")
+	if err != nil {
+		statusFound = false
+	}
 	if statusFound {
 		// Check for internalSecrets or kafkaClusterID to confirm it's ready
-		_, clusterIDFound, _ := unstructured.NestedString(status, "kafkaClusterID")
+		_, clusterIDFound, err := unstructured.NestedString(status, "kafkaClusterID")
+		if err != nil {
+			clusterIDFound = false
+		}
 		if clusterIDFound {
 			// Try to get listeners from status
-			statusListeners, _, _ := unstructured.NestedSlice(status, "listeners")
+			statusListeners, _, err := unstructured.NestedSlice(status, "listeners")
+			if err != nil {
+				statusListeners = nil
+			}
 			for _, l := range statusListeners {
 				lMap, ok := l.(map[string]interface{})
 				if !ok {
 					continue
 				}
-				lType, _, _ := unstructured.NestedString(lMap, "type")
-				bootstrap, _, _ := unstructured.NestedString(lMap, "bootstrapEndpoint")
-				
+				lType, _, err := unstructured.NestedString(lMap, "type")
+				if err != nil {
+					continue
+				}
+				bootstrap, _, err := unstructured.NestedString(lMap, "bootstrapEndpoint")
+				if err != nil {
+					continue
+				}
+
 				// Prefer internal listener for in-cluster
 				if d.config.Confluent.UseInternalEndpoint && lType == "internal" && bootstrap != "" {
 					cluster.Brokers = append(cluster.Brokers, bootstrap)
@@ -743,12 +805,21 @@ func (d *KafkaDiscovery) parseConfluentKafka(obj *unstructured.Unstructured) (*D
 	}
 
 	// Parse spec for TLS and authentication configuration
-	spec, _, _ := unstructured.NestedMap(obj.Object, "spec")
-	
+	spec, _, err := unstructured.NestedMap(obj.Object, "spec")
+	if err != nil {
+		spec = nil
+	}
+
 	// Check global TLS config: spec.tls.secretRef
-	tls, found, _ := unstructured.NestedMap(spec, "tls")
+	tls, found, err := unstructured.NestedMap(spec, "tls")
+	if err != nil {
+		found = false
+	}
 	if found {
-		secretRef, _, _ := unstructured.NestedString(tls, "secretRef")
+		secretRef, _, err := unstructured.NestedString(tls, "secretRef")
+		if err != nil {
+			secretRef = ""
+		}
 		if secretRef != "" {
 			cluster.TLSEnabled = true
 			cluster.TLSSecretRef = &SecretReference{
@@ -759,26 +830,50 @@ func (d *KafkaDiscovery) parseConfluentKafka(obj *unstructured.Unstructured) (*D
 	}
 
 	// Check listener-level TLS: spec.listeners.internal.tls.enabled
-	listeners, _, _ := unstructured.NestedMap(spec, "listeners")
+	listeners, _, err := unstructured.NestedMap(spec, "listeners")
+	if err != nil {
+		listeners = nil
+	}
 	if d.config.Confluent.UseInternalEndpoint {
-		internal, _, _ := unstructured.NestedMap(listeners, "internal")
+		internal, _, err := unstructured.NestedMap(listeners, "internal")
+		if err != nil {
+			internal = nil
+		}
 		if internal != nil {
-			internalTLS, _, _ := unstructured.NestedMap(internal, "tls")
+			internalTLS, _, err := unstructured.NestedMap(internal, "tls")
+			if err != nil {
+				internalTLS = nil
+			}
 			if internalTLS != nil {
-				enabled, _, _ := unstructured.NestedBool(internalTLS, "enabled")
+				enabled, _, err := unstructured.NestedBool(internalTLS, "enabled")
+				if err != nil {
+					enabled = false
+				}
 				if enabled {
 					cluster.TLSEnabled = true
 				}
 			}
 			// Check authentication: spec.listeners.internal.authentication.type
-			auth, _, _ := unstructured.NestedMap(internal, "authentication")
+			auth, _, err := unstructured.NestedMap(internal, "authentication")
+			if err != nil {
+				auth = nil
+			}
 			if auth != nil {
-				authType, _, _ := unstructured.NestedString(auth, "type")
+				authType, _, err := unstructured.NestedString(auth, "type")
+				if err != nil {
+					authType = ""
+				}
 				cluster.AuthType = authType // plain, mtls, ldap, oauth, etc.
 				// JAAS config secret: spec.listeners.internal.authentication.jaasConfig.secretRef
-				jaas, _, _ := unstructured.NestedMap(auth, "jaasConfig")
+				jaas, _, err := unstructured.NestedMap(auth, "jaasConfig")
+				if err != nil {
+					jaas = nil
+				}
 				if jaas != nil {
-					secretRef, _, _ := unstructured.NestedString(jaas, "secretRef")
+					secretRef, _, err := unstructured.NestedString(jaas, "secretRef")
+					if err != nil {
+						secretRef = ""
+					}
 					if secretRef != "" {
 						cluster.SecretRef = &SecretReference{
 							Namespace: namespace,
@@ -789,22 +884,43 @@ func (d *KafkaDiscovery) parseConfluentKafka(obj *unstructured.Unstructured) (*D
 			}
 		}
 	} else {
-		external, _, _ := unstructured.NestedMap(listeners, "external")
+		external, _, err := unstructured.NestedMap(listeners, "external")
+		if err != nil {
+			external = nil
+		}
 		if external != nil {
-			extTLS, _, _ := unstructured.NestedMap(external, "tls")
+			extTLS, _, err := unstructured.NestedMap(external, "tls")
+			if err != nil {
+				extTLS = nil
+			}
 			if extTLS != nil {
-				enabled, _, _ := unstructured.NestedBool(extTLS, "enabled")
+				enabled, _, err := unstructured.NestedBool(extTLS, "enabled")
+				if err != nil {
+					enabled = false
+				}
 				if enabled {
 					cluster.TLSEnabled = true
 				}
 			}
-			auth, _, _ := unstructured.NestedMap(external, "authentication")
+			auth, _, err := unstructured.NestedMap(external, "authentication")
+			if err != nil {
+				auth = nil
+			}
 			if auth != nil {
-				authType, _, _ := unstructured.NestedString(auth, "type")
+				authType, _, err := unstructured.NestedString(auth, "type")
+				if err != nil {
+					authType = ""
+				}
 				cluster.AuthType = authType
-				jaas, _, _ := unstructured.NestedMap(auth, "jaasConfig")
+				jaas, _, err := unstructured.NestedMap(auth, "jaasConfig")
+				if err != nil {
+					jaas = nil
+				}
 				if jaas != nil {
-					secretRef, _, _ := unstructured.NestedString(jaas, "secretRef")
+					secretRef, _, err := unstructured.NestedString(jaas, "secretRef")
+					if err != nil {
+						secretRef = ""
+					}
 					if secretRef != "" {
 						cluster.SecretRef = &SecretReference{
 							Namespace: namespace,
@@ -822,16 +938,16 @@ func (d *KafkaDiscovery) parseConfluentKafka(obj *unstructured.Unstructured) (*D
 // ToClusterConfig converts a discovered cluster to a ClusterConfig for the receiver
 func (d *KafkaDiscovery) ToClusterConfig(cluster *DiscoveredCluster) ClusterConfig {
 	cfg := Config{
-		Enabled:         true,
-		Brokers:         cluster.Brokers,
-		GroupID:         d.config.DefaultConfig.GroupIDPrefix + strings.ReplaceAll(cluster.Name, "/", "-"),
-		ClientID:        "telegen-" + strings.ReplaceAll(cluster.Name, "/", "-"),
-		Topics:          d.config.DefaultConfig.Topics,
-		InitialOffset:   d.config.DefaultConfig.InitialOffset,
-		UseLeaderEpoch:  d.config.DefaultConfig.UseLeaderEpoch,
-		SessionTimeout:  d.config.DefaultConfig.SessionTimeout,
+		Enabled:          true,
+		Brokers:          cluster.Brokers,
+		GroupID:          d.config.DefaultConfig.GroupIDPrefix + strings.ReplaceAll(cluster.Name, "/", "-"),
+		ClientID:         "telegen-" + strings.ReplaceAll(cluster.Name, "/", "-"),
+		Topics:           d.config.DefaultConfig.Topics,
+		InitialOffset:    d.config.DefaultConfig.InitialOffset,
+		UseLeaderEpoch:   d.config.DefaultConfig.UseLeaderEpoch,
+		SessionTimeout:   d.config.DefaultConfig.SessionTimeout,
 		HeaderExtraction: d.config.DefaultConfig.HeaderExtraction,
-		Telemetry:       d.config.DefaultConfig.Telemetry,
+		Telemetry:        d.config.DefaultConfig.Telemetry,
 		MessageMarking: MessageMarking{
 			After:            true,
 			OnPermanentError: true,
@@ -884,12 +1000,12 @@ func DefaultDiscoveryConfig() DiscoveryConfig {
 			UseLeaderEpoch: true,
 			SessionTimeout: 30 * time.Second,
 			Telemetry: TelemetryConfig{
-				KafkaReceiverRecords:      true,
-				KafkaReceiverOffsetLag:    true,
-				KafkaBrokerConnects:       true,
-				KafkaBrokerDisconnects:    true,
-				KafkaBrokerReadLatency:    true,
-				KafkaFetchBatchMetrics:    true,
+				KafkaReceiverRecords:   true,
+				KafkaReceiverOffsetLag: true,
+				KafkaBrokerConnects:    true,
+				KafkaBrokerDisconnects: true,
+				KafkaBrokerReadLatency: true,
+				KafkaFetchBatchMetrics: true,
 			},
 		},
 	}

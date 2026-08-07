@@ -196,7 +196,9 @@ func (m *MapManager) DeleteMap(name string) error {
 	// Unpin if pinned
 	if m.pinPath != "" {
 		pinPath := filepath.Join(m.pinPath, name)
-		_ = os.Remove(pinPath)
+		if err := os.Remove(pinPath); err != nil && !os.IsNotExist(err) {
+			m.log.Debug("failed to unpin map path", "path", pinPath, "error", err)
+		}
 	}
 
 	if err := mp.Close(); err != nil {

@@ -394,7 +394,9 @@ func (l LogExportConfig) DiskRotateSizeBytes() int64 {
 		}
 	}
 	var val int64
-	_, _ = fmt.Sscanf(size, "%d", &val)
+	if _, err := fmt.Sscanf(size, "%d", &val); err != nil {
+		return 100 * 1024 * 1024
+	}
 	if val <= 0 {
 		return 100 * 1024 * 1024
 	}
@@ -773,7 +775,13 @@ type Q struct {
 	MaxAgeStr string `yaml:"max_age"`
 }
 
-func (q Q) MaxAge() time.Duration { d, _ := time.ParseDuration(q.MaxAgeStr); return d }
+func (q Q) MaxAge() time.Duration {
+	d, err := time.ParseDuration(q.MaxAgeStr)
+	if err != nil {
+		return 0
+	}
+	return d
+}
 
 type RemoteWrite struct {
 	Mode      string       `yaml:"mode"`

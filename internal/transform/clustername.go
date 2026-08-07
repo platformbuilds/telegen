@@ -73,6 +73,7 @@ func httpGet(ctx context.Context, url string, headers map[string]string) (string
 	if err != nil {
 		return "", fmt.Errorf("invoking GET %s: %w", url, err)
 	}
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("%s unexpected response: %d %s",
 			url, resp.StatusCode, resp.Status)

@@ -165,7 +165,10 @@ func (e *OTLPExporter) flush(ctx context.Context, profiles []*profiler.Profile) 
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("export failed with status %d and body read failed: %w", resp.StatusCode, readErr)
+		}
 		return fmt.Errorf("export failed with status %d: %s", resp.StatusCode, string(body))
 	}
 

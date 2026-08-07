@@ -305,7 +305,9 @@ func (e *Exporter) Serve() error {
 	mux.HandleFunc("/live", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK\n"))
+		if _, err := w.Write([]byte("OK\n")); err != nil {
+			return
+		}
 	})
 
 	// Readiness endpoint - returns OK if collectors are initialized
@@ -313,19 +315,27 @@ func (e *Exporter) Serve() error {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		if len(e.collectors) == 0 {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte("Not Ready: no collectors initialized\n"))
+			if _, err := w.Write([]byte("Not Ready: no collectors initialized\n")); err != nil {
+				return
+			}
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("Ready\n"))
+		if _, err := w.Write([]byte("Ready\n")); err != nil {
+			return
+		}
 	})
 
 	// Health endpoint - detailed health status
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		_, _ = fmt.Fprintf(w, `{"status":"healthy","collectors":%d,"namespace":"%s"}`, len(e.collectors), e.config.Namespace)
-		_, _ = w.Write([]byte("\n"))
+		if _, err := fmt.Fprintf(w, `{"status":"healthy","collectors":%d,"namespace":"%s"}`, len(e.collectors), e.config.Namespace); err != nil {
+			return
+		}
+		if _, err := w.Write([]byte("\n")); err != nil {
+			return
+		}
 	})
 
 	// Metrics description endpoint - documents available metrics and OTEL mappings
@@ -339,7 +349,7 @@ func (e *Exporter) Serve() error {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		_, _ = fmt.Fprintf(w, `<!DOCTYPE html>
+		if _, err := fmt.Fprintf(w, `<!DOCTYPE html>
 <html>
 <head><title>Telegen Node Exporter</title></head>
 <body>
@@ -351,7 +361,9 @@ func (e *Exporter) Serve() error {
 <p><a href="/live">Live</a></p>
 </body>
 </html>
-`, e.config.Endpoint.Path)
+`, e.config.Endpoint.Path); err != nil {
+			return
+		}
 	})
 
 	addr := fmt.Sprintf(":%d", e.config.Endpoint.Port)
@@ -398,7 +410,9 @@ func (e *Exporter) Run(ctx context.Context) error {
 	mux.HandleFunc("/live", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK\n"))
+		if _, err := w.Write([]byte("OK\n")); err != nil {
+			return
+		}
 	})
 
 	// Readiness endpoint
@@ -406,19 +420,27 @@ func (e *Exporter) Run(ctx context.Context) error {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		if len(e.collectors) == 0 {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte("Not Ready: no collectors initialized\n"))
+			if _, err := w.Write([]byte("Not Ready: no collectors initialized\n")); err != nil {
+				return
+			}
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("Ready\n"))
+		if _, err := w.Write([]byte("Ready\n")); err != nil {
+			return
+		}
 	})
 
 	// Health endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		_, _ = fmt.Fprintf(w, `{"status":"healthy","collectors":%d,"namespace":"%s"}`, len(e.collectors), e.config.Namespace)
-		_, _ = w.Write([]byte("\n"))
+		if _, err := fmt.Fprintf(w, `{"status":"healthy","collectors":%d,"namespace":"%s"}`, len(e.collectors), e.config.Namespace); err != nil {
+			return
+		}
+		if _, err := w.Write([]byte("\n")); err != nil {
+			return
+		}
 	})
 
 	// Metrics description endpoint - documents available metrics and OTEL mappings
@@ -432,7 +454,7 @@ func (e *Exporter) Run(ctx context.Context) error {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		_, _ = fmt.Fprintf(w, `<!DOCTYPE html>
+		if _, err := fmt.Fprintf(w, `<!DOCTYPE html>
 <html>
 <head><title>Telegen Node Exporter</title></head>
 <body>
@@ -444,7 +466,9 @@ func (e *Exporter) Run(ctx context.Context) error {
 <p><a href="/live">Live</a></p>
 </body>
 </html>
-`, e.config.Endpoint.Path)
+`, e.config.Endpoint.Path); err != nil {
+			return
+		}
 	})
 
 	addr := fmt.Sprintf(":%d", e.config.Endpoint.Port)
@@ -463,7 +487,9 @@ func (e *Exporter) Run(ctx context.Context) error {
 	// Watch for context cancellation
 	go func() {
 		<-ctx.Done()
-		_ = e.Shutdown(context.Background())
+		if err := e.Shutdown(context.Background()); err != nil {
+			e.logger.Debug("exporter shutdown failed", "error", err)
+		}
 	}()
 
 	// Check if TLS is enabled

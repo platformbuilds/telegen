@@ -88,7 +88,9 @@ func (e *EventSubscriber) Stop() {
 	e.cancel()
 
 	if e.conn != nil {
-		_ = e.conn.Close()
+		if err := e.conn.Close(); err != nil {
+			e.log.Debug("failed closing event websocket", "error", err)
+		}
 	}
 
 	e.wg.Wait()
@@ -143,7 +145,10 @@ func (e *EventSubscriber) subscribe() error {
 		headers["Authorization"] = []string{"Bearer " + token}
 	}
 
-	conn, _, err := dialer.DialContext(e.ctx, wsURL, headers)
+	conn, resp, err := dialer.DialContext(e.ctx, wsURL, headers)
+	if resp != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
 	if err != nil {
 		return fmt.Errorf("failed to connect to event stream: %w", err)
 	}
