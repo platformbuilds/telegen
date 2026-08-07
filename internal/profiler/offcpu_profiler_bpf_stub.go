@@ -14,6 +14,7 @@ package profiler
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"github.com/cilium/ebpf"
@@ -116,6 +117,7 @@ func (o *OffcpuProfilerObjects) Close() error {
 
 // Close releases all BPF maps
 func (m *OffcpuProfilerMaps) Close() error {
+	var closeErr error
 	closers := []interface{ Close() error }{
 		m.OffcpuStacks,
 		m.OffcpuStartTimes,
@@ -126,14 +128,17 @@ func (m *OffcpuProfilerMaps) Close() error {
 	}
 	for _, c := range closers {
 		if c != nil {
-			_ = c.Close()
+			if err := c.Close(); err != nil {
+				closeErr = errors.Join(closeErr, err)
+			}
 		}
 	}
-	return nil
+	return closeErr
 }
 
 // Close releases all BPF programs
 func (p *OffcpuProfilerPrograms) Close() error {
+	var closeErr error
 	closers := []interface{ Close() error }{
 		p.OffcpuSchedSwitch,
 		p.TraceFutexWait,
@@ -141,10 +146,12 @@ func (p *OffcpuProfilerPrograms) Close() error {
 	}
 	for _, c := range closers {
 		if c != nil {
-			_ = c.Close()
+			if err := c.Close(); err != nil {
+				closeErr = errors.Join(closeErr, err)
+			}
 		}
 	}
-	return nil
+	return closeErr
 }
 
 // Placeholder BPF bytes - will be replaced by bpf2go //go:embed

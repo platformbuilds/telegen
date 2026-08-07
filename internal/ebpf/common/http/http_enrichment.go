@@ -127,7 +127,9 @@ func readRequestBody(req *http.Request) func() ([]byte, error) {
 			return nil, nil
 		}
 		bodyBytes, err := io.ReadAll(req.Body)
-		_ = req.Body.Close()
+		if closeErr := req.Body.Close(); closeErr != nil {
+			return nil, closeErr
+		}
 		if err != nil {
 			return nil, err
 		}

@@ -25,6 +25,7 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/discover/exec"
 	common "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
 	"github.com/mirastacklabs-ai/telegen/internal/goexec"
+	obiconfig "github.com/mirastacklabs-ai/telegen/internal/obiconfig"
 	ebpfconvenience "github.com/mirastacklabs-ai/telegen/internal/tracers/convenience"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
 	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
@@ -42,6 +43,12 @@ type instrumenter struct {
 	metrics     imetrics.Reporter
 	processName string
 }
+
+const (
+	dnsEventsMapName    = "dns_events"
+	mysqlEventsMapName  = "mysql_events"
+	oracleEventsMapName = "oracle_events"
+)
 
 func roundToNearestMultiple(x, n uint32) uint32 {
 	if x < n {
@@ -62,6 +69,43 @@ func alignMaxEntriesIfRingBuf(m *ebpf.MapSpec) {
 	}
 }
 
+func scaleMapMaxEntries(maxEntries uint32, scale int) uint32 {
+	if maxEntries == 0 || scale == 0 {
+		return maxEntries
+	}
+
+	if scale > 0 {
+		for i := 0; i < scale; i++ {
+			if maxEntries > ^uint32(0)/2 {
+				return ^uint32(0)
+			}
+			maxEntries *= 2
+		}
+		return maxEntries
+	}
+
+	for i := 0; i > scale; i-- {
+		maxEntries /= 2
+		if maxEntries == 0 {
+			return 1
+		}
+	}
+	return maxEntries
+}
+
+func configuredRingBufferSize(mapName string, cfg obiconfig.MapsConfig) uint32 {
+	switch mapName {
+	case dnsEventsMapName:
+		return cfg.DNSRingBufferSizeBytes
+	case mysqlEventsMapName:
+		return cfg.MySQLRingBufferSizeBytes
+	case oracleEventsMapName:
+		return cfg.OracleRingBufferSizeBytes
+	default:
+		return 0
+	}
+}
+
 // sets up internal maps and ensures sane max entries values
 func resolveMaps(eventContext *common.EBPFEventContext, spec *ebpf.CollectionSpec) (*ebpf.CollectionOptions, error) {
 	collOpts := ebpf.CollectionOptions{MapReplacements: map[string]*ebpf.Map{}}
@@ -70,6 +114,10 @@ func resolveMaps(eventContext *common.EBPFEventContext, spec *ebpf.CollectionSpe
 	defer eventContext.MapsLock.Unlock()
 
 	for k, v := range spec.Maps {
+		if configured := configuredRingBufferSize(k, eventContext.MapsConfig); configured > 0 && v.Type == ebpf.RingBuf {
+			v.MaxEntries = configured
+		}
+		v.MaxEntries = scaleMapMaxEntries(v.MaxEntries, eventContext.MapsConfig.GlobalScaleFactor)
 		alignMaxEntriesIfRingBuf(v)
 
 		if v.Pinning != PinInternal {
@@ -102,7 +150,9 @@ func unloadInternalMaps(eventContext *common.EBPFEventContext) {
 	defer eventContext.MapsLock.Unlock()
 
 	for _, v := range eventContext.EBPFMaps {
-		_ = v.Close()
+		if err := v.Close(); err != nil {
+			slog.Debug("failed closing internal eBPF map", "error", err)
+		}
 	}
 
 	eventContext.EBPFMaps = make(map[string]*ebpf.Map)
@@ -225,41 +275,53 @@ func (pt *ProcessTracer) loadTracer(eventContext *common.EBPFEventContext, p Tra
 	p.SetupTailCalls()
 
 	i := instrumenter{} // dummy instrumenter to setup the kprobes, socket filters and tracepoint probes
+	cleanupClosers := func() {
+		closeAll(i.closables)
+		i.closables = nil
+	}
 
 	// Kprobes to be used for native instrumentation points
 	if err := i.kprobes(p); err != nil {
 		printVerifierErrorInfo(err)
+		cleanupClosers()
 		return err
 	}
 
 	// Tracepoints support
 	if err := i.tracepoints(p); err != nil {
 		printVerifierErrorInfo(err)
+		cleanupClosers()
 		return err
 	}
 
 	// Sock filters support
 	if err := i.sockfilters(p); err != nil {
 		printVerifierErrorInfo(err)
+		cleanupClosers()
 		return err
 	}
 
 	// Sock_msg support
 	if err := i.sockmsgs(p); err != nil {
 		printVerifierErrorInfo(err)
+		cleanupClosers()
 		return err
 	}
 
 	// Sockops support
 	if err := i.sockops(p); err != nil {
 		printVerifierErrorInfo(err)
+		cleanupClosers()
 		return err
 	}
 
 	if err := i.iters(p); err != nil {
 		printVerifierErrorInfo(err)
+		cleanupClosers()
 		return err
 	}
+
+	p.AddCloser(i.closables...)
 
 	return nil
 }
@@ -311,7 +373,7 @@ func (pt *ProcessTracer) NewExecutableInstance(ie *Instrumentable) error {
 	return nil
 }
 
-func (pt *ProcessTracer) NewExecutable(exe *link.Executable, ie *Instrumentable) error {
+func (pt *ProcessTracer) NewExecutable(exe *link.Executable, ie *Instrumentable) (retErr error) {
 	i := instrumenter{
 		exe:         exe,
 		offsets:     ie.Offsets, // this is needed for the function offsets, not fields
@@ -319,25 +381,42 @@ func (pt *ProcessTracer) NewExecutable(exe *link.Executable, ie *Instrumentable)
 		metrics:     pt.metrics,
 		processName: ie.FileInfo.CmdExePath,
 	}
+	pt.Instrumentables[ie.FileInfo.Ino] = &i
+	defer func() {
+		if retErr == nil {
+			return
+		}
+		closeAll(i.closables)
+		for ino := range i.modules {
+			for _, p := range pt.Programs {
+				p.UnlinkInstrumentedLib(ino)
+			}
+		}
+		delete(pt.Instrumentables, ie.FileInfo.Ino)
+	}()
 
 	for _, p := range pt.Programs {
+		closersBefore := len(i.closables)
 		p.RegisterOffsets(ie.FileInfo, ie.Offsets)
 
 		// Go style Uprobes
 		if err := i.goprobes(p); err != nil {
 			printVerifierErrorInfo(err)
-			return err
+			retErr = err
+			return retErr
 		}
 
 		// Uprobes to be used for native module instrumentation points
 		if err := i.uprobes(ie.FileInfo.Pid, p); err != nil {
 			printVerifierErrorInfo(err)
-			return err
+			retErr = err
+			return retErr
+		}
+		if len(i.closables) > closersBefore {
+			p.AddCloser(i.closables[closersBefore:]...)
 		}
 	}
-
-	pt.Instrumentables[ie.FileInfo.Ino] = &i
-
+	retErr = nil
 	return nil
 }
 
@@ -390,13 +469,16 @@ func RunUtilityTracer(ctx context.Context, eventContext *common.EBPFEventContext
 
 	if err := i.kprobes(p); err != nil {
 		printVerifierErrorInfo(err)
+		closeAll(i.closables)
 		return err
 	}
 
 	if err := i.tracepoints(p); err != nil {
 		printVerifierErrorInfo(err)
+		closeAll(i.closables)
 		return err
 	}
+	p.AddCloser(i.closables...)
 
 	go p.Run(ctx)
 

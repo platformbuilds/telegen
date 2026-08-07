@@ -12,26 +12,58 @@ import (
 // LargeBuffer is a minimal contiguous byte buffer used by protocol parsers.
 // It intentionally keeps API parity with OBI's parser-facing methods.
 type LargeBuffer struct {
-	data []byte
+	data      []byte
+	maxSize   int
+	truncated bool
 }
 
+const defaultMaxLargeBufferBytes = 1 << 20 // 1 MiB
+
 func NewLargeBuffer() *LargeBuffer {
-	return &LargeBuffer{}
+	return NewLargeBufferWithMaxSize(defaultMaxLargeBufferBytes)
+}
+
+func NewLargeBufferWithMaxSize(maxSize int) *LargeBuffer {
+	if maxSize <= 0 {
+		maxSize = defaultMaxLargeBufferBytes
+	}
+	return &LargeBuffer{maxSize: maxSize}
 }
 
 // NewLargeBufferFrom wraps the provided slice without copying.
 func NewLargeBufferFrom(b []byte) *LargeBuffer {
-	return &LargeBuffer{data: b}
+	lb := NewLargeBuffer()
+	if len(b) <= lb.maxSize {
+		lb.data = b
+		return lb
+	}
+	lb.data = b[:lb.maxSize]
+	lb.truncated = true
+	return lb
 }
 
 // AppendChunk appends a copy of b to the backing buffer.
-func (lb *LargeBuffer) AppendChunk(b []byte) {
+// It returns true when payload truncation occurred.
+func (lb *LargeBuffer) AppendChunk(b []byte) bool {
 	if len(b) == 0 {
-		return
+		return lb.truncated
+	}
+	if lb.maxSize <= 0 {
+		lb.maxSize = defaultMaxLargeBufferBytes
+	}
+	remaining := lb.maxSize - len(lb.data)
+	if remaining <= 0 {
+		lb.truncated = true
+		return true
+	}
+	if len(b) > remaining {
+		b = b[:remaining]
+		lb.truncated = true
 	}
 	cp := make([]byte, len(b))
 	copy(cp, b)
 	lb.data = append(lb.data, cp...)
+	return lb.truncated
 }
 
 func (lb *LargeBuffer) Len() int {
@@ -40,6 +72,10 @@ func (lb *LargeBuffer) Len() int {
 
 func (lb *LargeBuffer) IsEmpty() bool {
 	return len(lb.data) == 0
+}
+
+func (lb *LargeBuffer) Truncated() bool {
+	return lb.truncated
 }
 
 func (lb *LargeBuffer) UnsafeView() []byte {

@@ -8,8 +8,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/mirastacklabs-ai/telegen/internal/config"
 	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+	"github.com/mirastacklabs-ai/telegen/internal/config"
 	otlp "github.com/mirastacklabs-ai/telegen/internal/exporters/otlp"
 	"github.com/mirastacklabs-ai/telegen/internal/instrumenter"
 	"github.com/mirastacklabs-ai/telegen/internal/jfr/converter"
@@ -359,6 +359,15 @@ func (p *UnifiedPipeline) buildOBIConfig() (*obi.Config, error) {
 	if ebpfCfg.Tracer.MapsConfig.GlobalScaleFactor != 0 {
 		cfg.EBPF.MapsConfig.GlobalScaleFactor = ebpfCfg.Tracer.MapsConfig.GlobalScaleFactor
 	}
+	if ebpfCfg.Tracer.MapsConfig.DNSRingBufferSizeBytes > 0 {
+		cfg.EBPF.MapsConfig.DNSRingBufferSizeBytes = ebpfCfg.Tracer.MapsConfig.DNSRingBufferSizeBytes
+	}
+	if ebpfCfg.Tracer.MapsConfig.MySQLRingBufferSizeBytes > 0 {
+		cfg.EBPF.MapsConfig.MySQLRingBufferSizeBytes = ebpfCfg.Tracer.MapsConfig.MySQLRingBufferSizeBytes
+	}
+	if ebpfCfg.Tracer.MapsConfig.OracleRingBufferSizeBytes > 0 {
+		cfg.EBPF.MapsConfig.OracleRingBufferSizeBytes = ebpfCfg.Tracer.MapsConfig.OracleRingBufferSizeBytes
+	}
 
 	cfg.Discovery = ebpfCfg.Discovery
 	if ebpfCfg.NameResolver != nil {
@@ -466,11 +475,26 @@ func (p *UnifiedPipeline) buildOBIConfig() (*obi.Config, error) {
 	if ebpfCfg.Prometheus.Registry != nil {
 		cfg.Prometheus.Registry = ebpfCfg.Prometheus.Registry
 	}
+	cfg.InternalMetrics = ebpfCfg.InternalMetrics
 
 	if ebpfCfg.NetworkFlows.Enabled {
 		cfg.NetworkFlows.Enable = true
 	}
 	return &cfg, nil
+}
+
+// BuildOBIConfigForPreflight builds an OBI config from runtime config without
+// starting the pipeline, so callers can run OS/kernel capability preflight checks.
+func BuildOBIConfigForPreflight(runtimeCfg *config.Config) (*obi.Config, error) {
+	if runtimeCfg == nil {
+		return nil, fmt.Errorf("runtime config is nil")
+	}
+	p := &UnifiedPipeline{
+		config: UnifiedPipelineConfig{
+			RuntimeConfig: runtimeCfg,
+		},
+	}
+	return p.buildOBIConfig()
 }
 
 func slogFromZapLogger(_ *zap.Logger) *slog.Logger {

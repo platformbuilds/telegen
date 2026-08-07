@@ -402,6 +402,8 @@ func CheckDatabaseConnectivity(db *DatabaseInfo, timeout time.Duration) bool {
 	if err != nil {
 		return false
 	}
-	_ = conn.Close()
+	if err := conn.Close(); err != nil {
+		return false
+	}
 	return true
 }

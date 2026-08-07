@@ -197,14 +197,14 @@ type EBPFParseContext struct {
 
 	// parseStats tracks per-connection parse failure rates. When a connection's
 	// failure rate exceeds parseFailureThreshold, events are suppressed.
-	parseStats   map[connStatsKey]*connParseStats
-	parseStatsMu sync.Mutex
+	parseStats *expirable.LRU[connStatsKey, *connParseStats]
 }
 
 type EBPFEventContext struct {
 	CommonPIDsFilter ServiceFilter
 	SharedRingBuffer *ringBufForwarder
 	EBPFMaps         map[string]*ebpf.Map
+	MapsConfig       config.MapsConfig
 	RingBufLock      sync.Mutex
 	MapsLock         sync.Mutex
 	LoadLock         sync.Mutex
@@ -234,7 +234,10 @@ func NewEBPFParseContext(cfg *config.EBPFTracer, spansChan *msg.Queue[[]request.
 		emitSpans                  func([]request.Span)
 	)
 
-	h2c, _ := lru.New[uint64, h2Connection](1024 * 10)
+	h2c, err := lru.New[uint64, h2Connection](1024 * 10)
+	if err != nil {
+		h2c = nil
+	}
 	largeBuffers := expirable.NewLRU[largeBufferKey, *largeBuffer](1024, nil, 5*time.Minute)
 
 	if cfg != nil {
@@ -329,14 +332,20 @@ func NewEBPFParseContext(cfg *config.EBPFTracer, spansChan *msg.Queue[[]request.
 		payloadExtraction:          payloadExtraction,
 		httpEnricher:               httpEnricher,
 		dnsEvents:                  dnsEvents,
-		parseStats:                 make(map[connStatsKey]*connParseStats),
+		parseStats:                 expirable.NewLRU[connStatsKey, *connParseStats](8192, nil, 10*time.Minute),
 		emitSpans:                  emitSpans,
 	}
 }
 
-func NewEBPFEventContext() *EBPFEventContext {
+func NewEBPFEventContext(mapCfg ...config.MapsConfig) *EBPFEventContext {
+	cfg := config.MapsConfig{}
+	if len(mapCfg) > 0 {
+		cfg = mapCfg[0]
+	}
+
 	return &EBPFEventContext{
 		EBPFMaps:    map[string]*ebpf.Map{},
+		MapsConfig:  cfg,
 		RingBufLock: sync.Mutex{},
 		MapsLock:    sync.Mutex{},
 		LoadLock:    sync.Mutex{},

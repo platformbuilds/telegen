@@ -275,7 +275,10 @@ func HealthAlerts(mat *matrix.Matrix, cfg any, log *slog.Logger) []*matrix.Matri
 	for _, n := range names {
 		m := matrix.New("health")
 		met := m.NewMetric(n+"_alerts", n+"_alerts", "gauge")
-		inst, _ := m.NewInstance("cluster")
+		inst, err := m.NewInstance("cluster")
+		if err != nil {
+			continue
+		}
 		inst.Labels["style"] = "health"
 		met.Values[inst.Key] = 0
 		out = append(out, m)

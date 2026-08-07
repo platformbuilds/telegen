@@ -41,14 +41,7 @@ func TestRegisterer(t *testing.T) {
 		return []Interface{{"foo", 1}, {"bar", 2}, {"baz", 3}}, nil
 	}
 	inputLinks := make(chan netlink.LinkUpdate, 10)
-	watcher.linkSubscriber = func(ch chan<- netlink.LinkUpdate, _ <-chan struct{}) error {
-		go func() {
-			for link := range inputLinks {
-				ch <- link
-			}
-		}()
-		return nil
-	}
+	watcher.linkSubscriber = mockLinkSubscriber(inputLinks)
 
 	outputEvents, err := registry.Subscribe(ctx)
 	require.NoError(t, err)

@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
+	"time"
+
+	"github.com/hashicorp/golang-lru/v2/expirable"
 )
 
 // K8sPathEnricher extracts Kubernetes metadata from container log file paths
@@ -141,9 +143,13 @@ func ParseK8sLogPath(filePath string) *K8sLogPathInfo {
 	return nil
 }
 
-// containerIDCache caches container ID lookups to avoid repeated filesystem access
-var containerIDCache = make(map[string]string)
-var containerIDCacheMu sync.RWMutex
+const (
+	containerIDCacheSize = 4096
+	containerIDCacheTTL  = 10 * time.Minute
+)
+
+// containerIDCache caches container ID lookups to avoid repeated filesystem access.
+var containerIDCache = expirable.NewLRU[string, string](containerIDCacheSize, nil, containerIDCacheTTL)
 
 // ResolveContainerID attempts to resolve the container ID for a /var/log/pods/ path
 // by finding the matching symlink in /var/log/containers/
@@ -161,13 +167,10 @@ func ResolveContainerID(info *K8sLogPathInfo) string {
 	// Construct cache key from pod/namespace/container
 	cacheKey := info.Namespace + "/" + info.PodName + "/" + info.ContainerName
 
-	// Check cache first
-	containerIDCacheMu.RLock()
-	if id, ok := containerIDCache[cacheKey]; ok {
-		containerIDCacheMu.RUnlock()
+	// Check cache first.
+	if id, ok := containerIDCache.Get(cacheKey); ok {
 		return id
 	}
-	containerIDCacheMu.RUnlock()
 
 	// Try to find container ID from /var/log/containers/ symlinks
 	// Pattern: /var/log/containers/{pod}_{namespace}_{container}-{containerID}.log
@@ -185,10 +188,8 @@ func ResolveContainerID(info *K8sLogPathInfo) string {
 		if submatches := containerIDRegex.FindStringSubmatch(match); submatches != nil {
 			containerID := submatches[1]
 
-			// Cache the result
-			containerIDCacheMu.Lock()
-			containerIDCache[cacheKey] = containerID
-			containerIDCacheMu.Unlock()
+			// Cache the result.
+			containerIDCache.Add(cacheKey, containerID)
 
 			return containerID
 		}

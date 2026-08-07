@@ -57,7 +57,11 @@ func (np *Poller) Subscribe(ctx context.Context) (<-chan Event, error) {
 				log.Warn("fetching interface names", "error", err)
 			} else {
 				log.Debug("fetched interface names", "names", ifaces)
-				np.diffNames(out, ifaces)
+				if !np.diffNames(ctx, out, ifaces) {
+					log.Debug("stopped while forwarding poller events")
+					close(out)
+					return
+				}
 			}
 			select {
 			case <-ctx.Done():
@@ -74,7 +78,7 @@ func (np *Poller) Subscribe(ctx context.Context) (<-chan Event, error) {
 
 // diffNames compares and updates the internal account of interfaces with the latest list of
 // polled interfaces. It forwards Events for any detected addition or removal of interfaces.
-func (np *Poller) diffNames(events chan Event, ifaces []Interface) {
+func (np *Poller) diffNames(ctx context.Context, events chan Event, ifaces []Interface) bool {
 	ilog := ilog()
 	// Check for new interfaces
 	acquired := map[Interface]struct{}{}
@@ -83,9 +87,14 @@ func (np *Poller) diffNames(events chan Event, ifaces []Interface) {
 		if _, ok := np.current[iface]; !ok {
 			ilog.Debug("added network interface", "interface", iface)
 			np.current[iface] = struct{}{}
-			events <- Event{
+			ev := Event{
 				Type:      EventAdded,
 				Interface: iface,
+			}
+			select {
+			case events <- ev:
+			case <-ctx.Done():
+				return false
 			}
 		}
 	}
@@ -94,10 +103,16 @@ func (np *Poller) diffNames(events chan Event, ifaces []Interface) {
 		if _, ok := acquired[iface]; !ok {
 			delete(np.current, iface)
 			ilog.Debug("deleted network interface", "interface", iface)
-			events <- Event{
+			ev := Event{
 				Type:      EventDeleted,
 				Interface: iface,
 			}
+			select {
+			case events <- ev:
+			case <-ctx.Done():
+				return false
+			}
 		}
 	}
+	return true
 }

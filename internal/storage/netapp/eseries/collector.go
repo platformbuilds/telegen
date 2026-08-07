@@ -184,7 +184,9 @@ func (c *Collector) poll(ctx context.Context, tmpl *template.Template, now time.
 		}
 		for _, m := range metrics {
 			if f, ok := jsonpath.GetFloat(rec, m.APIName); ok {
-				_ = mat.SetValue(m.APIName, key, f)
+				if err := mat.SetValue(m.APIName, key, f); err != nil {
+					continue
+				}
 			}
 		}
 	}

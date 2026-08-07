@@ -108,15 +108,15 @@ func (p *Poller) getConnection(target Target) (*gosnmp.GoSNMP, error) {
 		host = target.Address
 		portStr = "161"
 	}
-	port, _ := strconv.Atoi(portStr)
-	if port <= 0 || port > 65535 {
-		port = 161 // Default SNMP port
+	port := uint16(161) // Default SNMP port
+	if parsedPort, parseErr := strconv.ParseUint(portStr, 10, 16); parseErr == nil && parsedPort > 0 {
+		port = uint16(parsedPort)
 	}
 
 	// Create new connection
 	conn := &gosnmp.GoSNMP{
 		Target:  host,
-		Port:    uint16(port), // Safe: validated above
+		Port:    port,
 		Timeout: p.config.Timeout,
 		Retries: p.config.Retries,
 	}
@@ -304,7 +304,11 @@ func (p *Poller) Close() error {
 	defer p.mu.Unlock()
 
 	for key, conn := range p.conns {
-		_ = conn.Conn.Close()
+		if conn.Conn != nil {
+			if err := conn.Conn.Close(); err != nil {
+				p.log.Debug("failed to close SNMP connection", "target", key, "error", err)
+			}
+		}
 		delete(p.conns, key)
 	}
 

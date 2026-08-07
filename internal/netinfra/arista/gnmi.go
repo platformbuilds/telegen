@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/openconfig/gnmi/proto/gnmi"
 	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
+	"github.com/openconfig/gnmi/proto/gnmi"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -102,7 +102,9 @@ func (c *GNMIClient) Stop() {
 	c.wg.Wait()
 
 	if c.conn != nil {
-		_ = c.conn.Close()
+		if err := c.conn.Close(); err != nil {
+			c.log.Debug("failed closing gNMI connection", "error", err)
+		}
 	}
 
 	close(c.metrics)

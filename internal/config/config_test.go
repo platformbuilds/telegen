@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
 )
 
 func TestLoad_PointerTogglesDoNotBreakEnvParse(t *testing.T) {
@@ -47,5 +49,55 @@ pipelines:
 	}
 	if !*cfg.Pipelines.JFR.Recursive {
 		t.Fatalf("pipelines.jfr.recursive should be true")
+	}
+}
+
+func TestLoad_DefaultInternalMetricsEnabledOnSelfTelemetryPort(t *testing.T) {
+	t.Parallel()
+
+	yamlConfig := `
+agent:
+  service_name: test
+`
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte(yamlConfig), 0o600); err != nil {
+		t.Fatalf("write temp config: %v", err)
+	}
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.EBPF.InternalMetrics.Exporter != imetrics.InternalMetricsExporterPrometheus {
+		t.Fatalf("expected prometheus internal metrics exporter, got %q", cfg.EBPF.InternalMetrics.Exporter)
+	}
+	if cfg.EBPF.InternalMetrics.Prometheus.Port != 19090 {
+		t.Fatalf("expected internal metrics port 19090, got %d", cfg.EBPF.InternalMetrics.Prometheus.Port)
+	}
+}
+
+func TestLoad_InternalMetricsPortFollowsSelfTelemetryListen(t *testing.T) {
+	t.Parallel()
+
+	yamlConfig := `
+selfTelemetry:
+  listen: ":29090"
+ebpf:
+  internal_metrics:
+    exporter: prometheus
+`
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte(yamlConfig), 0o600); err != nil {
+		t.Fatalf("write temp config: %v", err)
+	}
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.EBPF.InternalMetrics.Prometheus.Port != 29090 {
+		t.Fatalf("expected internal metrics port 29090, got %d", cfg.EBPF.InternalMetrics.Prometheus.Port)
 	}
 }

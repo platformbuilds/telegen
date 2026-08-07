@@ -40,6 +40,7 @@ type RemoteWriteEndpoint struct {
 	// Retry state
 	retryCount int
 	lastError  error
+	mu         sync.RWMutex
 }
 
 // NewRemoteWriteClient creates a new remote write client
@@ -256,29 +257,40 @@ func (ep *RemoteWriteEndpoint) send(ctx context.Context, req *prompb.WriteReques
 	// Send request
 	resp, err := ep.client.Do(httpReq)
 	if err != nil {
+		ep.mu.Lock()
 		ep.retryCount++
 		ep.lastError = err
+		ep.mu.Unlock()
 		return fmt.Errorf("failed to send request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	// Check response
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		if readErr != nil {
+			body = []byte("failed to read response body")
+		}
 		err := fmt.Errorf("remote write failed with status %d: %s", resp.StatusCode, string(body))
+		ep.mu.Lock()
 		ep.retryCount++
 		ep.lastError = err
+		ep.mu.Unlock()
 		return err
 	}
 
 	// Reset retry count on success
+	ep.mu.Lock()
 	ep.retryCount = 0
 	ep.lastError = nil
+	ep.mu.Unlock()
 
 	return nil
 }
 
 // Status returns the status of an endpoint
 func (ep *RemoteWriteEndpoint) Status() (int, error) {
+	ep.mu.RLock()
+	defer ep.mu.RUnlock()
 	return ep.retryCount, ep.lastError
 }

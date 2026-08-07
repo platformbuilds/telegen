@@ -33,6 +33,7 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/config"
 	exportotlp "github.com/mirastacklabs-ai/telegen/internal/exporters/otlp"
 	"github.com/mirastacklabs-ai/telegen/internal/exporters/remotewrite"
+	"github.com/mirastacklabs-ai/telegen/internal/helpers"
 	"github.com/mirastacklabs-ai/telegen/internal/kube"
 	"github.com/mirastacklabs-ai/telegen/internal/logs/filetailer"
 	awsm "github.com/mirastacklabs-ai/telegen/internal/metadata/aws"
@@ -41,6 +42,7 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/pipeline/adapters"
 	"github.com/mirastacklabs-ai/telegen/internal/pipeline/converters"
 	"github.com/mirastacklabs-ai/telegen/internal/queue"
+	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/instrumentations"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/tracesgen"
@@ -95,6 +97,13 @@ type QueueConfig struct {
 	MaxItems int `yaml:"max_items" json:"max_items"`
 }
 
+const (
+	walRetryInitialBackoff = 200 * time.Millisecond
+	walRetryMaxBackoff     = 30 * time.Second
+	walRetryMultiplier     = 2.0
+	walRetryMaxAttempts    = 10
+)
+
 // DefaultUnifiedPipelineConfig returns default configuration.
 func DefaultUnifiedPipelineConfig() UnifiedPipelineConfig {
 	return UnifiedPipelineConfig{
@@ -136,12 +145,25 @@ type UnifiedPipeline struct {
 	metricCh chan pmetric.Metrics
 
 	// Stats.
-	receivedTraces  atomic.Int64
-	receivedLogs    atomic.Int64
-	receivedMetrics atomic.Int64
-	droppedTraces   atomic.Int64
-	droppedLogs     atomic.Int64
-	droppedMetrics  atomic.Int64
+	receivedTraces      atomic.Int64
+	receivedLogs        atomic.Int64
+	receivedMetrics     atomic.Int64
+	droppedTraces       atomic.Int64
+	droppedLogs         atomic.Int64
+	droppedMetrics      atomic.Int64
+	workerPanicCount    atomic.Uint64
+	lastWorkerPanicLog  atomic.Int64
+	qMetricsDroppedSeen atomic.Uint64
+	lastQueueDropLog    atomic.Int64
+	lastTraceDropLog    atomic.Int64
+	lastLogDropLog      atomic.Int64
+	lastMetricDropLog   atomic.Int64
+	lastTraceWALLog     atomic.Int64
+	lastLogWALLog       atomic.Int64
+	lastMetricWALLog    atomic.Int64
+	traceWALDeadLetter  atomic.Int64
+	logWALDeadLetter    atomic.Int64
+	metricWALDeadLetter atomic.Int64
 
 	// Lifecycle.
 	ctx       context.Context
@@ -170,13 +192,28 @@ func NewUnifiedPipeline(config UnifiedPipelineConfig) (*UnifiedPipeline, error) 
 		ctx:               ctx,
 		cancel:            cancel,
 		stopCh:            make(chan struct{}),
-		qMetrics:          queue.NewRing[*prompb.WriteRequest](8192, func(_ uint64, _ queue.DropReason) {}),
 		traceAttrCache: expirable2.NewLRU[localsvc.UID, []attribute.KeyValue](
 			1024,
 			nil,
 			5*time.Minute,
 		),
 	}
+	p.qMetrics = queue.NewRing[*prompb.WriteRequest](8192, func(n uint64, reason queue.DropReason) {
+		prev := p.qMetricsDroppedSeen.Swap(n)
+		if n > prev {
+			delta := n - prev
+			p.droppedMetrics.Add(int64(delta))
+			if reg := selftelemetry.GlobalRegistry(); reg != nil {
+				reg.QueueDropped.WithLabelValues("metrics_remote_write_ring", fmt.Sprint(reason)).Add(float64(delta))
+			}
+		}
+		if helpers.ShouldLogEvery(&p.lastQueueDropLog, 10*time.Second) {
+			p.logger.Warn("metrics ring dropped items",
+				"total_dropped", n,
+				"reason", reason,
+			)
+		}
+	})
 
 	// Initialize integration layer (limits/transform/PII). Default is enabled
 	// and acts as pass-through until explicit rules/limits are configured.
@@ -268,16 +305,23 @@ func (p *UnifiedPipeline) Start(ctx context.Context) error {
 		p.logger.Warn("shared OTLP clients unavailable; some downstream integrations may degrade", "error", err)
 	}
 
+	// Mark running before launching workers/adapters so Start failure paths can
+	// still be torn down by Stop.
+	p.running = true
+	p.startTime = time.Now()
+
 	// Initialize legacy remote-write transport if configured.
 	if p.config.RemoteWrite != nil {
 		p.rw = remotewrite.New()
-		_ = p.rw.WithTLS(remotewrite.TLSConfig{
+		if err := p.rw.WithTLS(remotewrite.TLSConfig{
 			Enable:             p.config.RemoteWrite.TLS.Enable,
 			CAFile:             p.config.RemoteWrite.TLS.CAFile,
 			CertFile:           p.config.RemoteWrite.TLS.CertFile,
 			KeyFile:            p.config.RemoteWrite.TLS.KeyFile,
 			InsecureSkipVerify: p.config.RemoteWrite.TLS.InsecureSkipVerify,
-		})
+		}); err != nil {
+			p.logger.Warn("failed configuring remote write TLS", "error", err)
+		}
 		p.wg.Add(1)
 		go p.remoteWriteWorker()
 	}
@@ -322,9 +366,6 @@ func (p *UnifiedPipeline) Start(ctx context.Context) error {
 		p.logger.Warn("runtime sources started with degradation", "error", err)
 	}
 
-	p.running = true
-	p.startTime = time.Now()
-
 	p.logger.Info("unified pipeline started",
 		"adapters", len(p.adapterRegistry.List()),
 	)
@@ -359,11 +400,6 @@ func (p *UnifiedPipeline) Stop(ctx context.Context) error {
 		p.logger.Error("error stopping adapters", "error", err)
 	}
 
-	// Close signal channels.
-	close(p.traceCh)
-	close(p.logCh)
-	close(p.metricCh)
-
 	// Wait for workers to drain.
 	done := make(chan struct{})
 	go func() {
@@ -380,16 +416,28 @@ func (p *UnifiedPipeline) Stop(ctx context.Context) error {
 
 	// Flush and close queues.
 	if p.traceQueue != nil {
-		_ = p.traceQueue.Flush()
-		_ = p.traceQueue.Close()
+		if err := p.traceQueue.Flush(); err != nil {
+			p.logger.Debug("trace queue flush failed", "error", err)
+		}
+		if err := p.traceQueue.Close(); err != nil {
+			p.logger.Debug("trace queue close failed", "error", err)
+		}
 	}
 	if p.logQueue != nil {
-		_ = p.logQueue.Flush()
-		_ = p.logQueue.Close()
+		if err := p.logQueue.Flush(); err != nil {
+			p.logger.Debug("log queue flush failed", "error", err)
+		}
+		if err := p.logQueue.Close(); err != nil {
+			p.logger.Debug("log queue close failed", "error", err)
+		}
 	}
 	if p.metricQueue != nil {
-		_ = p.metricQueue.Flush()
-		_ = p.metricQueue.Close()
+		if err := p.metricQueue.Flush(); err != nil {
+			p.logger.Debug("metric queue flush failed", "error", err)
+		}
+		if err := p.metricQueue.Close(); err != nil {
+			p.logger.Debug("metric queue close failed", "error", err)
+		}
 	}
 
 	// Stop exporters.
@@ -465,6 +513,8 @@ func (p *UnifiedPipeline) SendTraces(ctx context.Context, traces ptrace.Traces) 
 	p.receivedTraces.Add(int64(traces.SpanCount()))
 
 	select {
+	case <-p.stopCh:
+		return fmt.Errorf("pipeline stopping")
 	case p.traceCh <- traces:
 		return nil
 	case <-ctx.Done():
@@ -475,9 +525,14 @@ func (p *UnifiedPipeline) SendTraces(ctx context.Context, traces ptrace.Traces) 
 			return p.enqueuePersistentTraces(traces)
 		}
 		p.droppedTraces.Add(int64(traces.SpanCount()))
-		p.logger.Warn("trace channel full, dropping spans",
-			"dropped", traces.SpanCount(),
-		)
+		if reg := selftelemetry.GlobalRegistry(); reg != nil {
+			reg.QueueDropped.WithLabelValues("traces", "channel_full").Add(float64(traces.SpanCount()))
+		}
+		if helpers.ShouldLogEvery(&p.lastTraceDropLog, 10*time.Second) {
+			p.logger.Warn("trace channel full, dropping spans",
+				"dropped", traces.SpanCount(),
+			)
+		}
 		return fmt.Errorf("trace channel full")
 	}
 }
@@ -497,6 +552,8 @@ func (p *UnifiedPipeline) SendLogs(ctx context.Context, logs plog.Logs) error {
 	p.receivedLogs.Add(int64(logs.LogRecordCount()))
 
 	select {
+	case <-p.stopCh:
+		return fmt.Errorf("pipeline stopping")
 	case p.logCh <- logs:
 		return nil
 	case <-ctx.Done():
@@ -506,9 +563,14 @@ func (p *UnifiedPipeline) SendLogs(ctx context.Context, logs plog.Logs) error {
 			return p.enqueuePersistentLogs(logs)
 		}
 		p.droppedLogs.Add(int64(logs.LogRecordCount()))
-		p.logger.Warn("log channel full, dropping logs",
-			"dropped", logs.LogRecordCount(),
-		)
+		if reg := selftelemetry.GlobalRegistry(); reg != nil {
+			reg.QueueDropped.WithLabelValues("logs", "channel_full").Add(float64(logs.LogRecordCount()))
+		}
+		if helpers.ShouldLogEvery(&p.lastLogDropLog, 10*time.Second) {
+			p.logger.Warn("log channel full, dropping logs",
+				"dropped", logs.LogRecordCount(),
+			)
+		}
 		return fmt.Errorf("log channel full")
 	}
 }
@@ -528,6 +590,8 @@ func (p *UnifiedPipeline) SendMetrics(ctx context.Context, metrics pmetric.Metri
 	p.receivedMetrics.Add(int64(metrics.DataPointCount()))
 
 	select {
+	case <-p.stopCh:
+		return fmt.Errorf("pipeline stopping")
 	case p.metricCh <- metrics:
 		return nil
 	case <-ctx.Done():
@@ -537,9 +601,14 @@ func (p *UnifiedPipeline) SendMetrics(ctx context.Context, metrics pmetric.Metri
 			return p.enqueuePersistentMetrics(metrics)
 		}
 		p.droppedMetrics.Add(int64(metrics.DataPointCount()))
-		p.logger.Warn("metric channel full, dropping metrics",
-			"dropped", metrics.DataPointCount(),
-		)
+		if reg := selftelemetry.GlobalRegistry(); reg != nil {
+			reg.QueueDropped.WithLabelValues("metrics", "channel_full").Add(float64(metrics.DataPointCount()))
+		}
+		if helpers.ShouldLogEvery(&p.lastMetricDropLog, 10*time.Second) {
+			p.logger.Warn("metric channel full, dropping metrics",
+				"dropped", metrics.DataPointCount(),
+			)
+		}
 		return fmt.Errorf("metric channel full")
 	}
 }
@@ -584,13 +653,21 @@ func (p *UnifiedPipeline) enqueuePersistentMetrics(metrics pmetric.Metrics) erro
 func (p *UnifiedPipeline) traceWorker(id int) {
 	defer p.wg.Done()
 
-	for traces := range p.traceCh {
-		if err := p.exportTraces(p.ctx, traces); err != nil {
-			p.logger.Error("failed to export traces",
-				"worker", id,
-				"error", err,
-				"span_count", traces.SpanCount(),
-			)
+	for {
+		select {
+		case <-p.stopCh:
+			return
+		case traces := <-p.traceCh:
+			func() {
+				defer p.recoverWorkerPanic("trace", id)
+				if err := p.exportTraces(p.ctx, traces); err != nil {
+					p.logger.Error("failed to export traces",
+						"worker", id,
+						"error", err,
+						"span_count", traces.SpanCount(),
+					)
+				}
+			}()
 		}
 	}
 }
@@ -599,13 +676,21 @@ func (p *UnifiedPipeline) traceWorker(id int) {
 func (p *UnifiedPipeline) logWorker(id int) {
 	defer p.wg.Done()
 
-	for logs := range p.logCh {
-		if err := p.exportLogs(p.ctx, logs); err != nil {
-			p.logger.Error("failed to export logs",
-				"worker", id,
-				"error", err,
-				"log_count", logs.LogRecordCount(),
-			)
+	for {
+		select {
+		case <-p.stopCh:
+			return
+		case logs := <-p.logCh:
+			func() {
+				defer p.recoverWorkerPanic("log", id)
+				if err := p.exportLogs(p.ctx, logs); err != nil {
+					p.logger.Error("failed to export logs",
+						"worker", id,
+						"error", err,
+						"log_count", logs.LogRecordCount(),
+					)
+				}
+			}()
 		}
 	}
 }
@@ -614,97 +699,242 @@ func (p *UnifiedPipeline) logWorker(id int) {
 func (p *UnifiedPipeline) metricWorker(id int) {
 	defer p.wg.Done()
 
-	for metrics := range p.metricCh {
-		if err := p.exportMetrics(p.ctx, metrics); err != nil {
-			p.logger.Error("failed to export metrics",
-				"worker", id,
-				"error", err,
-				"datapoint_count", metrics.DataPointCount(),
+	for {
+		select {
+		case <-p.stopCh:
+			return
+		case metrics := <-p.metricCh:
+			func() {
+				defer p.recoverWorkerPanic("metric", id)
+				if err := p.exportMetrics(p.ctx, metrics); err != nil {
+					p.logger.Error("failed to export metrics",
+						"worker", id,
+						"error", err,
+						"datapoint_count", metrics.DataPointCount(),
+					)
+				}
+			}()
+		}
+	}
+}
+
+func (p *UnifiedPipeline) recoverWorkerPanic(worker string, id int) {
+	if recovered := recover(); recovered != nil {
+		panicCount := p.workerPanicCount.Add(1)
+		if shouldRateLimitPipelineLog(&p.lastWorkerPanicLog, 60*time.Second) {
+			p.logger.Error("recovered panic in pipeline worker",
+				"worker", worker,
+				"worker_id", id,
+				"panic", recovered,
+				"panic_count", panicCount,
 			)
 		}
 	}
 }
 
+func shouldRateLimitPipelineLog(lastLog *atomic.Int64, interval time.Duration) bool {
+	now := time.Now().UnixNano()
+	last := lastLog.Load()
+	if last != 0 && now-last < interval.Nanoseconds() {
+		return false
+	}
+	return lastLog.CompareAndSwap(last, now)
+}
+
 func (p *UnifiedPipeline) traceQueueWorker() {
 	defer p.wg.Done()
+	popErrAttempts := 0
 	for p.ctx.Err() == nil {
 		item, err := p.traceQueue.Pop(p.ctx)
 		if err != nil {
-			p.logger.Warn("trace WAL pop failed", "error", err)
-			time.Sleep(200 * time.Millisecond)
+			popErrAttempts++
+			if helpers.ShouldLogEvery(&p.lastTraceWALLog, 10*time.Second) {
+				p.logger.Warn("trace WAL pop failed", "error", err, "attempt", popErrAttempts)
+			}
+			if !helpers.SleepWithContext(p.ctx, helpers.JitteredExponentialBackoff(popErrAttempts, walRetryInitialBackoff, walRetryMaxBackoff, walRetryMultiplier)) {
+				return
+			}
 			continue
 		}
+		popErrAttempts = 0
 		if item == nil {
-			time.Sleep(100 * time.Millisecond)
+			if !helpers.SleepWithContext(p.ctx, 100*time.Millisecond) {
+				return
+			}
 			continue
 		}
+		attempt := 0
 		req := ptraceotlp.NewExportRequest()
 		if err := req.UnmarshalProto(item.Data); err != nil {
-			p.logger.Warn("trace WAL decode failed", "error", err)
+			p.traceWALDeadLetter.Add(1)
+			if helpers.ShouldLogEvery(&p.lastTraceWALLog, 10*time.Second) {
+				p.logger.Warn("trace WAL decode failed; dropping item", "error", err)
+			}
 			continue
 		}
-		if err := p.exportTraces(p.ctx, req.Traces()); err != nil {
-			p.logger.Warn("trace WAL export failed", "error", err)
-			_ = p.traceQueue.Push("traces", item.Data)
-			time.Sleep(200 * time.Millisecond)
+		for p.ctx.Err() == nil {
+			if err := p.exportTraces(p.ctx, req.Traces()); err != nil {
+				attempt++
+				if attempt >= walRetryMaxAttempts {
+					p.traceWALDeadLetter.Add(1)
+					if helpers.ShouldLogEvery(&p.lastTraceWALLog, 10*time.Second) {
+						p.logger.Error("trace WAL export failed; dropping poison item after retry budget",
+							"error", err,
+							"attempts", attempt,
+							"dead_letter_total", p.traceWALDeadLetter.Load(),
+						)
+					}
+					break
+				}
+				if helpers.ShouldLogEvery(&p.lastTraceWALLog, 10*time.Second) {
+					p.logger.Warn("trace WAL export failed; retrying in memory",
+						"error", err,
+						"attempt", attempt,
+						"max_attempts", walRetryMaxAttempts,
+					)
+				}
+				if !helpers.SleepWithContext(p.ctx, helpers.JitteredExponentialBackoff(attempt, walRetryInitialBackoff, walRetryMaxBackoff, walRetryMultiplier)) {
+					return
+				}
+				continue
+			}
+			break
 		}
 	}
 }
 
 func (p *UnifiedPipeline) logQueueWorker() {
 	defer p.wg.Done()
+	popErrAttempts := 0
 	for p.ctx.Err() == nil {
 		item, err := p.logQueue.Pop(p.ctx)
 		if err != nil {
-			p.logger.Warn("log WAL pop failed", "error", err)
-			time.Sleep(200 * time.Millisecond)
+			popErrAttempts++
+			if helpers.ShouldLogEvery(&p.lastLogWALLog, 10*time.Second) {
+				p.logger.Warn("log WAL pop failed", "error", err, "attempt", popErrAttempts)
+			}
+			if !helpers.SleepWithContext(p.ctx, helpers.JitteredExponentialBackoff(popErrAttempts, walRetryInitialBackoff, walRetryMaxBackoff, walRetryMultiplier)) {
+				return
+			}
 			continue
 		}
+		popErrAttempts = 0
 		if item == nil {
-			time.Sleep(100 * time.Millisecond)
+			if !helpers.SleepWithContext(p.ctx, 100*time.Millisecond) {
+				return
+			}
 			continue
 		}
+		attempt := 0
 		req := plogotlp.NewExportRequest()
 		if err := req.UnmarshalProto(item.Data); err != nil {
-			p.logger.Warn("log WAL decode failed", "error", err)
+			p.logWALDeadLetter.Add(1)
+			if helpers.ShouldLogEvery(&p.lastLogWALLog, 10*time.Second) {
+				p.logger.Warn("log WAL decode failed; dropping item", "error", err)
+			}
 			continue
 		}
-		if err := p.exportLogs(p.ctx, req.Logs()); err != nil {
-			p.logger.Warn("log WAL export failed", "error", err)
-			_ = p.logQueue.Push("logs", item.Data)
-			time.Sleep(200 * time.Millisecond)
+		for p.ctx.Err() == nil {
+			if err := p.exportLogs(p.ctx, req.Logs()); err != nil {
+				attempt++
+				if attempt >= walRetryMaxAttempts {
+					p.logWALDeadLetter.Add(1)
+					if helpers.ShouldLogEvery(&p.lastLogWALLog, 10*time.Second) {
+						p.logger.Error("log WAL export failed; dropping poison item after retry budget",
+							"error", err,
+							"attempts", attempt,
+							"dead_letter_total", p.logWALDeadLetter.Load(),
+						)
+					}
+					break
+				}
+				if helpers.ShouldLogEvery(&p.lastLogWALLog, 10*time.Second) {
+					p.logger.Warn("log WAL export failed; retrying in memory",
+						"error", err,
+						"attempt", attempt,
+						"max_attempts", walRetryMaxAttempts,
+					)
+				}
+				if !helpers.SleepWithContext(p.ctx, helpers.JitteredExponentialBackoff(attempt, walRetryInitialBackoff, walRetryMaxBackoff, walRetryMultiplier)) {
+					return
+				}
+				continue
+			}
+			break
 		}
 	}
 }
 
 func (p *UnifiedPipeline) metricQueueWorker() {
 	defer p.wg.Done()
+	popErrAttempts := 0
 	for p.ctx.Err() == nil {
 		item, err := p.metricQueue.Pop(p.ctx)
 		if err != nil {
-			p.logger.Warn("metric WAL pop failed", "error", err)
-			time.Sleep(200 * time.Millisecond)
+			popErrAttempts++
+			if helpers.ShouldLogEvery(&p.lastMetricWALLog, 10*time.Second) {
+				p.logger.Warn("metric WAL pop failed", "error", err, "attempt", popErrAttempts)
+			}
+			if !helpers.SleepWithContext(p.ctx, helpers.JitteredExponentialBackoff(popErrAttempts, walRetryInitialBackoff, walRetryMaxBackoff, walRetryMultiplier)) {
+				return
+			}
 			continue
 		}
+		popErrAttempts = 0
 		if item == nil {
-			time.Sleep(100 * time.Millisecond)
+			if !helpers.SleepWithContext(p.ctx, 100*time.Millisecond) {
+				return
+			}
 			continue
 		}
+		attempt := 0
 		req := pmetricotlp.NewExportRequest()
 		if err := req.UnmarshalProto(item.Data); err != nil {
-			p.logger.Warn("metric WAL decode failed", "error", err)
+			p.metricWALDeadLetter.Add(1)
+			if helpers.ShouldLogEvery(&p.lastMetricWALLog, 10*time.Second) {
+				p.logger.Warn("metric WAL decode failed; dropping item", "error", err)
+			}
 			continue
 		}
-		if err := p.exportMetrics(p.ctx, req.Metrics()); err != nil {
-			p.logger.Warn("metric WAL export failed", "error", err)
-			_ = p.metricQueue.Push("metrics", item.Data)
-			time.Sleep(200 * time.Millisecond)
+		for p.ctx.Err() == nil {
+			if err := p.exportMetrics(p.ctx, req.Metrics()); err != nil {
+				attempt++
+				if attempt >= walRetryMaxAttempts {
+					p.metricWALDeadLetter.Add(1)
+					if helpers.ShouldLogEvery(&p.lastMetricWALLog, 10*time.Second) {
+						p.logger.Error("metric WAL export failed; dropping poison item after retry budget",
+							"error", err,
+							"attempts", attempt,
+							"dead_letter_total", p.metricWALDeadLetter.Load(),
+						)
+					}
+					break
+				}
+				if helpers.ShouldLogEvery(&p.lastMetricWALLog, 10*time.Second) {
+					p.logger.Warn("metric WAL export failed; retrying in memory",
+						"error", err,
+						"attempt", attempt,
+						"max_attempts", walRetryMaxAttempts,
+					)
+				}
+				if !helpers.SleepWithContext(p.ctx, helpers.JitteredExponentialBackoff(attempt, walRetryInitialBackoff, walRetryMaxBackoff, walRetryMultiplier)) {
+					return
+				}
+				continue
+			}
+			break
 		}
 	}
 }
 
 func (p *UnifiedPipeline) remoteWriteWorker() {
 	defer p.wg.Done()
+
+	const (
+		maxMergedSamples = 20000
+		maxMergedBytes   = 4 * 1024 * 1024
+	)
+
 	for p.ctx.Err() == nil {
 		p.qMetrics.DropExpired(5 * time.Minute)
 		batch := p.qMetrics.PopBatch(500, 1*time.Second)
@@ -713,31 +943,92 @@ func (p *UnifiedPipeline) remoteWriteWorker() {
 		}
 
 		var wr prompb.WriteRequest
-		for _, it := range batch {
+		totalSamples := 0
+		totalBytes := 0
+		var oldestEnqueue time.Time
+		haveOldest := false
+		requeueItems := make([]queue.Item[*prompb.WriteRequest], 0)
+
+		for i, it := range batch {
 			if it.V == nil {
 				continue
 			}
+			if !haveOldest || it.Enqueue.Before(oldestEnqueue) {
+				oldestEnqueue = it.Enqueue
+				haveOldest = true
+			}
+			reqSamples := writeRequestSampleCount(it.V)
+			reqBytes := writeRequestApproxBytes(it.V)
+			if totalSamples > 0 && (totalSamples+reqSamples > maxMergedSamples || totalBytes+reqBytes > maxMergedBytes) {
+				requeueItems = append(requeueItems, batch[i:]...)
+				break
+			}
 			wr.Timeseries = append(wr.Timeseries, it.V.Timeseries...)
 			wr.Metadata = append(wr.Metadata, it.V.Metadata...)
+			totalSamples += reqSamples
+			totalBytes += reqBytes
+		}
+		for _, it := range requeueItems {
+			if it.V != nil {
+				p.qMetrics.PushWithEnqueueTime(it.V, it.Enqueue)
+			}
+		}
+		if len(wr.Timeseries) == 0 {
+			continue
 		}
 		if p.config.RemoteWrite == nil || len(p.config.RemoteWrite.Endpoints) == 0 {
 			time.Sleep(1 * time.Second)
 			continue
 		}
 		ep := p.config.RemoteWrite.Endpoints[0]
-		if err := p.rw.Send(p.ctx, &wr, remotewrite.Endpoint{
+		sendStart := time.Now()
+		err := p.rw.Send(p.ctx, &wr, remotewrite.Endpoint{
 			URL:         ep.URL,
 			Timeout:     mustDur(ep.Timeout),
 			Headers:     ep.Headers,
 			Tenant:      ep.Tenant,
 			Compression: ep.Compression,
-		}); err != nil {
+		})
+		p.recordExportOutcome("metrics_remote_write", ep.URL, sendStart, err)
+		if err != nil {
 			p.logger.Warn("remote write send failed", "error", err, "timeseries", len(wr.Timeseries))
-			p.qMetrics.Push(&wr)
+			cloned := wr
+			if haveOldest {
+				p.qMetrics.PushWithEnqueueTime(&cloned, oldestEnqueue)
+			} else {
+				p.qMetrics.Push(&cloned)
+			}
 			time.Sleep(2 * time.Second)
 			continue
 		}
 	}
+}
+
+func writeRequestSampleCount(wr *prompb.WriteRequest) int {
+	if wr == nil {
+		return 0
+	}
+	count := 0
+	for i := range wr.Timeseries {
+		count += len(wr.Timeseries[i].Samples)
+	}
+	return count
+}
+
+func writeRequestApproxBytes(wr *prompb.WriteRequest) int {
+	if wr == nil {
+		return 0
+	}
+	total := 0
+	for i := range wr.Timeseries {
+		ts := wr.Timeseries[i]
+		for j := range ts.Labels {
+			total += len(ts.Labels[j].Name) + len(ts.Labels[j].Value) + 4
+		}
+		total += len(ts.Samples) * 24
+	}
+	total += len(wr.Metadata) * 64
+	return total
 }
 
 // EnqueueMetrics allows legacy prompb producers to use V3's preserved remote-write transport.
@@ -762,28 +1053,57 @@ func (p *UnifiedPipeline) EnqueueMetrics(wr *prompb.WriteRequest) {
 	p.qMetrics.Push(wr)
 }
 
+func (p *UnifiedPipeline) recordExportOutcome(pipeline, endpoint string, startedAt time.Time, err error) {
+	reg := selftelemetry.GlobalRegistry()
+	if reg == nil {
+		return
+	}
+	reg.ObserveLatency(pipeline, endpoint, time.Since(startedAt))
+	if err != nil {
+		reg.ExportFails.WithLabelValues(pipeline, endpoint).Inc()
+		reg.RecordExportOutcome(false)
+		return
+	}
+	reg.RecordExportOutcome(true)
+}
+
 // exportTraces exports traces through the appropriate exporter.
 func (p *UnifiedPipeline) exportTraces(ctx context.Context, traces ptrace.Traces) error {
+	startedAt := time.Now()
 	if p.multiExporter != nil {
-		return p.multiExporter.ExportTraces(ctx, traces)
+		err := p.multiExporter.ExportTraces(ctx, traces)
+		p.recordExportOutcome("traces", "multi_endpoint", startedAt, err)
+		return err
 	}
-	return p.exporter.Export(ctx, NewTraceSignal(traces, "pipeline"))
+	err := p.exporter.Export(ctx, NewTraceSignal(traces, "pipeline"))
+	p.recordExportOutcome("traces", p.config.Exporter.Endpoint, startedAt, err)
+	return err
 }
 
 // exportLogs exports logs through the appropriate exporter.
 func (p *UnifiedPipeline) exportLogs(ctx context.Context, logs plog.Logs) error {
+	startedAt := time.Now()
 	if p.multiExporter != nil {
-		return p.multiExporter.ExportLogs(ctx, logs)
+		err := p.multiExporter.ExportLogs(ctx, logs)
+		p.recordExportOutcome("logs", "multi_endpoint", startedAt, err)
+		return err
 	}
-	return p.exporter.Export(ctx, NewLogSignal(logs, "pipeline"))
+	err := p.exporter.Export(ctx, NewLogSignal(logs, "pipeline"))
+	p.recordExportOutcome("logs", p.config.Exporter.Endpoint, startedAt, err)
+	return err
 }
 
 // exportMetrics exports metrics through the appropriate exporter.
 func (p *UnifiedPipeline) exportMetrics(ctx context.Context, metrics pmetric.Metrics) error {
+	startedAt := time.Now()
 	if p.multiExporter != nil {
-		return p.multiExporter.ExportMetrics(ctx, metrics)
+		err := p.multiExporter.ExportMetrics(ctx, metrics)
+		p.recordExportOutcome("metrics", "multi_endpoint", startedAt, err)
+		return err
 	}
-	return p.exporter.Export(ctx, NewMetricSignal(metrics, "pipeline"))
+	err := p.exporter.Export(ctx, NewMetricSignal(metrics, "pipeline"))
+	p.recordExportOutcome("metrics", p.config.Exporter.Endpoint, startedAt, err)
+	return err
 }
 
 func (p *UnifiedPipeline) initSharedOTLPClients(ctx context.Context) error {
@@ -864,13 +1184,15 @@ func (p *UnifiedPipeline) startRuntimeSources(ctx context.Context) error {
 			p.logger.Info("node_exporter OTLP host metrics started", "interval", rcfg.NodeExporter.Export.Interval)
 		}
 	} else if len(rcfg.Exports.RemoteWrite.Endpoints) > 0 {
-		if hostname, _ := os.Hostname(); true {
-			col := host.New("telegen", hostname, 15*time.Second, p.EnqueueMetrics)
-			if len(p.awsLabels) > 0 {
-				col.SetExtraLabels(p.awsLabels)
-			}
-			go col.Run(p.stopCh)
+		hostname, err := os.Hostname()
+		if err != nil {
+			hostname = "unknown"
 		}
+		col := host.New("telegen", hostname, 15*time.Second, p.EnqueueMetrics)
+		if len(p.awsLabels) > 0 {
+			col.SetExtraLabels(p.awsLabels)
+		}
+		go col.Run(p.stopCh)
 	}
 
 	// File logs parity: keep using shared SDK LoggerProvider.
@@ -891,7 +1213,11 @@ func (p *UnifiedPipeline) startRuntimeSources(ctx context.Context) error {
 				ParserConfig:         filetailer.DefaultParserConfig(),
 			}
 			ft := filetailer.NewWithOptions(opts)
-			go func() { _ = ft.Run(p.stopCh) }()
+			go func() {
+				if err := ft.Run(p.stopCh); err != nil {
+					p.logger.Warn("filetailer stopped with error", "error", err)
+				}
+			}()
 		}
 	}
 
@@ -1067,5 +1393,7 @@ func (p *UnifiedPipeline) IsRunning() bool {
 
 // Close provides compatibility with the legacy pipeline lifecycle.
 func (p *UnifiedPipeline) Close() {
-	_ = p.Stop(context.Background())
+	if err := p.Stop(context.Background()); err != nil {
+		p.logger.Debug("pipeline close failed", "error", err)
+	}
 }

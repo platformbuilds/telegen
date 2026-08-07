@@ -80,6 +80,7 @@
 #define ORACLE_SERVICE_MAX_LEN 64
 #define ORACLE_USER_MAX_LEN    32
 #define ORACLE_ERROR_MSG_MAX_LEN 256
+#define ORACLE_EVENTS_RINGBUF_SIZE (1 * 1024 * 1024)  // 1MB default
 
 // ============================================================================
 // Event Type for Ring Buffer
@@ -192,7 +193,7 @@ struct {
 // Ring buffer for events
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
-    __uint(max_entries, 64 * 1024 * 1024);  // 64MB
+    __uint(max_entries, ORACLE_EVENTS_RINGBUF_SIZE);
 } oracle_events SEC(".maps");
 
 // ============================================================================

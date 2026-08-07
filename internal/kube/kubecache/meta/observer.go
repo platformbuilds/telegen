@@ -57,9 +57,14 @@ func (i *BaseNotifier) Notify(event *informer.Event) {
 
 func (i *BaseNotifier) notifyAll(event *informer.Event) []string {
 	i.mutex.RLock()
-	defer i.mutex.RUnlock()
-	var remove []string
+	observers := make(map[string]Observer, len(i.observers))
 	for id, observer := range i.observers {
+		observers[id] = observer
+	}
+	i.mutex.RUnlock()
+
+	var remove []string
+	for id, observer := range observers {
 		if err := observer.On(event); err != nil {
 			i.log.Debug("observer failed. Unsubscribing it", "observer", id, "error", err)
 			remove = append(remove, id)

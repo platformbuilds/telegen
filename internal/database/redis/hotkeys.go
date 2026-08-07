@@ -357,14 +357,16 @@ type CommandStats struct {
 
 // CommandTracker tracks Redis command statistics.
 type CommandTracker struct {
-	mu       sync.RWMutex
-	commands map[string]*CommandStats
+	mu          sync.RWMutex
+	commands    map[string]*CommandStats
+	maxCommands int
 }
 
 // NewCommandTracker creates a new command tracker.
 func NewCommandTracker() *CommandTracker {
 	return &CommandTracker{
-		commands: make(map[string]*CommandStats),
+		commands:    make(map[string]*CommandStats),
+		maxCommands: 1024,
 	}
 }
 
@@ -375,6 +377,9 @@ func (ct *CommandTracker) RecordCommand(command string, duration time.Duration, 
 
 	stats, exists := ct.commands[command]
 	if !exists {
+		if ct.maxCommands > 0 && len(ct.commands) >= ct.maxCommands {
+			return
+		}
 		stats = &CommandStats{
 			Command:     command,
 			MaxDuration: duration,

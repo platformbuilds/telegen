@@ -111,7 +111,9 @@ func (f *CardinalityFilter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	contentType := capture.headers.Get("Content-Type")
 	if capture.statusCode != http.StatusOK || !strings.Contains(contentType, "text/plain") {
 		w.WriteHeader(capture.statusCode)
-		_, _ = io.Copy(w, capture.body)
+		if _, err := io.Copy(w, capture.body); err != nil {
+			return
+		}
 		return
 	}
 
@@ -121,12 +123,16 @@ func (f *CardinalityFilter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.logger.Error("failed to filter metrics", "err", err)
 		// On error, pass through the original response
 		w.WriteHeader(capture.statusCode)
-		_, _ = io.Copy(w, capture.body)
+		if _, err := io.Copy(w, capture.body); err != nil {
+			return
+		}
 		return
 	}
 
 	w.WriteHeader(capture.statusCode)
-	_, _ = w.Write(filtered)
+	if _, err := w.Write(filtered); err != nil {
+		return
+	}
 }
 
 // filterMetrics parses Prometheus metrics and applies cardinality controls.

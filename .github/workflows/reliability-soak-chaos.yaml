@@ -1,0 +1,85 @@
+name: Reliability Soak And Chaos
+
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  blackhole-soak:
+    name: 30m Collector Blackhole Soak
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run blackhole soak
+        env:
+          TELEGEN_RELIABILITY: "1"
+          TELEGEN_BLACKHOLE_DURATION: "30m"
+          TELEGEN_BLACKHOLE_REQUEST_TIMEOUT: "250ms"
+          TELEGEN_BLACKHOLE_SAMPLE_EVERY: "2s"
+          TELEGEN_BLACKHOLE_MAX_ALLOC_DELTA_BYTES: "134217728"
+          TELEGEN_BLACKHOLE_MAX_GOROUTINE_DELTA: "48"
+          TELEGEN_BLACKHOLE_MAX_FD_DELTA: "32"
+        run: |
+          go test -v ./internal/reliability -run '^TestReliabilityBlackholeSoak$' -count=1 -timeout=40m
+
+  process-churn-soak:
+    name: 30m Process Churn Soak
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run process churn soak
+        env:
+          TELEGEN_RELIABILITY: "1"
+          TELEGEN_CHURN_DURATION: "30m"
+          TELEGEN_CHURN_SAMPLE_EVERY: "2s"
+          TELEGEN_CHURN_MAX_ALLOC_DELTA_BYTES: "134217728"
+          TELEGEN_CHURN_MAX_GOROUTINE_DELTA: "64"
+          TELEGEN_CHURN_MAX_FD_DELTA: "24"
+        run: |
+          go test -v ./internal/reliability -run '^TestReliabilityProcessChurnSoak$' -count=1 -timeout=40m
+
+  malformed-replay:
+    name: Mutated Corpus Replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run malformed replay
+        env:
+          TELEGEN_RELIABILITY: "1"
+        run: |
+          go test -v ./internal/reliability -run '^TestReliabilityMutatedCorpusNoPanic$' -count=1 -timeout=15m
+
+# This workflow intentionally runs only the short 30-minute versions.
+# Full 4h/24h reliability runs remain manual release gates and should not be
+# substituted with this schedule.

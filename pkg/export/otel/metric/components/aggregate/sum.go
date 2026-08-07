@@ -28,10 +28,14 @@ type valueMap[N int64 | float64] struct {
 	values map[attribute.Distinct]sumValue[N]
 }
 
-func newValueMap[N int64 | float64](limit int, r func() exemplar.FilteredReservoir[N]) *valueMap[N] {
+func newValueMap[N int64 | float64](
+	limit int,
+	onOverflow func(),
+	r func() exemplar.FilteredReservoir[N],
+) *valueMap[N] {
 	return &valueMap[N]{
 		newRes: r,
-		limit:  newLimiter[sumValue[N]](limit),
+		limit:  newLimiter[sumValue[N]](limit, onOverflow),
 		values: make(map[attribute.Distinct]sumValue[N]),
 	}
 }
@@ -65,9 +69,14 @@ func (s *valueMap[N]) remove(_ context.Context, fltrAttr attribute.Set) {
 // newSum returns an aggregator that summarizes a set of measurements as their
 // arithmetic sum. Each sum is scoped by attributes and the aggregation cycle
 // the measurements were made in.
-func newSum[N int64 | float64](monotonic bool, limit int, r func() exemplar.FilteredReservoir[N]) *sum[N] {
+func newSum[N int64 | float64](
+	monotonic bool,
+	limit int,
+	onOverflow func(),
+	r func() exemplar.FilteredReservoir[N],
+) *sum[N] {
 	return &sum[N]{
-		valueMap:  newValueMap[N](limit, r),
+		valueMap:  newValueMap[N](limit, onOverflow, r),
 		monotonic: monotonic,
 		start:     now(),
 	}
@@ -153,9 +162,14 @@ func (s *sum[N]) cumulative(dest *sdkmetricdata.Aggregation) int {
 // newPrecomputedSum returns an aggregator that summarizes a set of
 // observatrions as their arithmetic sum. Each sum is scoped by attributes and
 // the aggregation cycle the measurements were made in.
-func newPrecomputedSum[N int64 | float64](monotonic bool, limit int, r func() exemplar.FilteredReservoir[N]) *precomputedSum[N] {
+func newPrecomputedSum[N int64 | float64](
+	monotonic bool,
+	limit int,
+	onOverflow func(),
+	r func() exemplar.FilteredReservoir[N],
+) *precomputedSum[N] {
 	return &precomputedSum[N]{
-		valueMap:  newValueMap[N](limit, r),
+		valueMap:  newValueMap[N](limit, onOverflow, r),
 		monotonic: monotonic,
 		start:     now(),
 	}

@@ -15,9 +15,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
+
+	"github.com/hashicorp/golang-lru/v2/expirable"
 )
+
+const processMetadataCacheSize = 4096
 
 // ProcessRuntimeMetadata holds cached process runtime information (language-agnostic).
 // This is used by both LogExporter and MetricsExporter for consistent app name resolution.
@@ -38,7 +41,7 @@ type ProcessRuntimeMetadata struct {
 // app name resolution across exporters.
 type ProcessMetadataResolver struct {
 	log   *slog.Logger
-	cache sync.Map // pid (uint32) -> *ProcessRuntimeMetadata
+	cache *expirable.LRU[uint32, *ProcessRuntimeMetadata]
 
 	// Configuration
 	cacheTTL time.Duration
@@ -51,6 +54,7 @@ func NewProcessMetadataResolver(log *slog.Logger) *ProcessMetadataResolver {
 	}
 	return &ProcessMetadataResolver{
 		log:      log.With("component", "process_metadata_resolver"),
+		cache:    expirable.NewLRU[uint32, *ProcessRuntimeMetadata](processMetadataCacheSize, nil, 60*time.Second),
 		cacheTTL: 60 * time.Second,
 	}
 }
@@ -88,21 +92,23 @@ func (r *ProcessMetadataResolver) ResolveAppName(pid uint32, comm string, servic
 // Results are cached for cacheTTL duration.
 func (r *ProcessMetadataResolver) GetMetadata(pid uint32) *ProcessRuntimeMetadata {
 	// Check cache first
-	if cached, ok := r.cache.Load(pid); ok {
-		meta := cached.(*ProcessRuntimeMetadata)
-		if time.Since(meta.CachedAt) < r.cacheTTL {
-			return meta
-		}
+	if cached, ok := r.cache.Get(pid); ok {
+		return cached
 	}
 
 	// Extract metadata from /proc filesystem
 	meta := r.extractMetadata(pid)
 	if meta != nil {
 		meta.CachedAt = time.Now()
-		r.cache.Store(pid, meta)
+		r.cache.Add(pid, meta)
 	}
 
 	return meta
+}
+
+// RemovePID removes a single PID entry from the metadata cache.
+func (r *ProcessMetadataResolver) RemovePID(pid uint32) {
+	r.cache.Remove(pid)
 }
 
 // extractMetadata extracts process metadata from /proc filesystem.
@@ -474,8 +480,5 @@ func (r *ProcessMetadataResolver) LookupLockClass(pid uint32, addr uint64) strin
 
 // ClearCache clears the metadata cache. Useful for testing.
 func (r *ProcessMetadataResolver) ClearCache() {
-	r.cache.Range(func(key, value interface{}) bool {
-		r.cache.Delete(key)
-		return true
-	})
+	r.cache.Purge()
 }

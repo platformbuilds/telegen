@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mirastacklabs-ai/telegen/internal/exporters/otlp"
+	"github.com/mirastacklabs-ai/telegen/internal/helpers"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/plog/plogotlp"
 	"go.opentelemetry.io/collector/pdata/pmetric"
@@ -100,8 +101,11 @@ type UnifiedExporter struct {
 	exportedMetrics atomic.Int64
 	failedExports   atomic.Int64
 
-	mu       sync.RWMutex
-	shutdown bool
+	mu               sync.RWMutex
+	connectMu        sync.Mutex
+	shutdown         bool
+	connectFailures  atomic.Int64
+	circuitOpenUntil atomic.Int64
 }
 
 // OTLPTraceClient is the interface for OTLP trace export.
@@ -159,12 +163,40 @@ func NewUnifiedExporter(config ExporterConfig) (*UnifiedExporter, error) {
 
 // Connect establishes the gRPC connection.
 func (e *UnifiedExporter) Connect(ctx context.Context) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	now := time.Now()
+	if openUntil := e.circuitOpenUntil.Load(); openUntil > now.UnixNano() {
+		return fmt.Errorf("connection circuit open")
+	}
 
+	e.mu.RLock()
+	if e.shutdown {
+		e.mu.RUnlock()
+		return fmt.Errorf("exporter is shut down")
+	}
 	if e.rawExporter != nil {
+		e.mu.RUnlock()
 		return nil // Already connected.
 	}
+	e.mu.RUnlock()
+
+	e.connectMu.Lock()
+	defer e.connectMu.Unlock()
+
+	now = time.Now()
+	if openUntil := e.circuitOpenUntil.Load(); openUntil > now.UnixNano() {
+		return fmt.Errorf("connection circuit open")
+	}
+
+	e.mu.RLock()
+	if e.shutdown {
+		e.mu.RUnlock()
+		return fmt.Errorf("exporter is shut down")
+	}
+	if e.rawExporter != nil {
+		e.mu.RUnlock()
+		return nil
+	}
+	e.mu.RUnlock()
 
 	rawCfg := otlp.DefaultConfig()
 	rawCfg.Endpoint = e.config.Endpoint
@@ -182,10 +214,25 @@ func (e *UnifiedExporter) Connect(ctx context.Context) error {
 
 	rawExporter, err := otlp.NewExporter(rawCfg, slog.Default())
 	if err != nil {
-		return fmt.Errorf("failed to create OTLP exporter: %w", err)
+		return e.recordConnectFailure(fmt.Errorf("failed to create OTLP exporter: %w", err))
 	}
 	if err := rawExporter.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start OTLP exporter: %w", err)
+		return e.recordConnectFailure(fmt.Errorf("failed to start OTLP exporter: %w", err))
+	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.shutdown {
+		if err := rawExporter.Stop(context.Background()); err != nil {
+			slog.Debug("failed stopping raw exporter after shutdown check", "error", err)
+		}
+		return fmt.Errorf("exporter is shut down")
+	}
+	if e.rawExporter != nil {
+		if err := rawExporter.Stop(context.Background()); err != nil {
+			slog.Debug("failed stopping duplicate raw exporter", "error", err)
+		}
+		return nil
 	}
 
 	e.rawExporter = rawExporter
@@ -194,8 +241,18 @@ func (e *UnifiedExporter) Connect(ctx context.Context) error {
 	e.traceClient = &grpcTraceClient{exporter: rawExporter}
 	e.logClient = &grpcLogClient{exporter: rawExporter}
 	e.metricClient = &grpcMetricClient{exporter: rawExporter}
+	e.connectFailures.Store(0)
+	e.circuitOpenUntil.Store(0)
 
 	return nil
+}
+
+func (e *UnifiedExporter) recordConnectFailure(err error) error {
+	failures := e.connectFailures.Add(1)
+	if failures >= 3 {
+		e.circuitOpenUntil.Store(time.Now().Add(10 * time.Second).UnixNano())
+	}
+	return err
 }
 
 // Export exports a signal to the configured endpoint.
@@ -368,15 +425,12 @@ func (e *UnifiedExporter) exportMetrics(ctx context.Context, metrics pmetric.Met
 }
 
 func (e *UnifiedExporter) calculateBackoff(attempt int) time.Duration {
-	backoff := e.config.Retry.InitialInterval
-	for i := 1; i < attempt; i++ {
-		backoff = time.Duration(float64(backoff) * e.config.Retry.Multiplier)
-		if backoff > e.config.Retry.MaxInterval {
-			backoff = e.config.Retry.MaxInterval
-			break
-		}
-	}
-	return backoff
+	return helpers.JitteredExponentialBackoff(
+		attempt,
+		e.config.Retry.InitialInterval,
+		e.config.Retry.MaxInterval,
+		e.config.Retry.Multiplier,
+	)
 }
 
 // Shutdown gracefully shuts down the exporter.

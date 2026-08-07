@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/collector/component"
@@ -15,9 +16,7 @@ import (
 	"go.opentelemetry.io/collector/config/configopaque"
 	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/config/configtls"
-	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/exporter"
-	"go.opentelemetry.io/collector/exporter/exporterhelper"
 	"go.opentelemetry.io/collector/exporter/otlpexporter"
 	"go.opentelemetry.io/collector/exporter/otlphttpexporter"
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -27,6 +26,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/metric"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -35,6 +35,27 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/credentials"
 )
+
+var (
+	collectorTelemetryMu sync.RWMutex
+	collectorLogger                           = zap.NewExample()
+	collectorMeter       metric.MeterProvider = sdkmetric.NewMeterProvider(
+		sdkmetric.WithReader(sdkmetric.NewManualReader()),
+	)
+)
+
+// SetCollectorTelemetry configures logger and meter provider for collector helper telemetry.
+func SetCollectorTelemetry(logger *zap.Logger, meterProvider metric.MeterProvider) {
+	collectorTelemetryMu.Lock()
+	defer collectorTelemetryMu.Unlock()
+
+	if logger != nil {
+		collectorLogger = logger
+	}
+	if meterProvider != nil {
+		collectorMeter = meterProvider
+	}
+}
 
 type TraceOpts struct {
 	Mode string
@@ -185,7 +206,10 @@ func New(ctx context.Context, o TraceOpts, res *resource.Resource) (*Clients, er
 		} else {
 			mopts = append(mopts, otlpmetricgrpc.WithInsecure())
 		}
-		mexp, _ = otlpmetricgrpc.New(ctx, mopts...)
+		metricExp, err := otlpmetricgrpc.New(ctx, mopts...)
+		if err == nil {
+			mexp = metricExp
+		}
 	}
 	if mexp == nil && o.HTTP.Enabled {
 		httpMetricOpts := []otlpmetrichttp.Option{
@@ -195,7 +219,10 @@ func New(ctx context.Context, o TraceOpts, res *resource.Resource) (*Clients, er
 		if !o.TLS.Enable || o.HTTP.Insecure {
 			httpMetricOpts = append(httpMetricOpts, otlpmetrichttp.WithInsecure())
 		}
-		mexp, _ = otlpmetrichttp.New(ctx, httpMetricOpts...)
+		metricExp, err := otlpmetrichttp.New(ctx, httpMetricOpts...)
+		if err == nil {
+			mexp = metricExp
+		}
 	}
 	// Note: mexp can be nil - metrics export is optional, traces and logs are required
 
@@ -364,18 +391,6 @@ func createHTTPCollectorTracesExporter(ctx context.Context, o TraceOpts) (export
 		return nil, err
 	}
 
-	// Wrap with queue/retry using exporterhelper
-	exp, err = exporterhelper.NewTraces(ctx, set, config,
-		exp.ConsumeTraces,
-		exporterhelper.WithStart(exp.Start),
-		exporterhelper.WithShutdown(exp.Shutdown),
-		exporterhelper.WithCapabilities(consumer.Capabilities{MutatesData: false}),
-		exporterhelper.WithRetry(config.RetryConfig),
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	// Start the exporter
 	if err := exp.Start(ctx, emptyHost{}); err != nil {
 		return nil, err
@@ -387,11 +402,16 @@ func createHTTPCollectorTracesExporter(ctx context.Context, o TraceOpts) (export
 
 // getCollectorSettings creates exporter.Settings for Collector exporters
 func getCollectorSettings(dataType component.Type) exporter.Settings {
+	collectorTelemetryMu.RLock()
+	logger := collectorLogger
+	meterProvider := collectorMeter
+	collectorTelemetryMu.RUnlock()
+
 	return exporter.Settings{
 		ID: component.NewIDWithName(dataType, "unified"),
 		TelemetrySettings: component.TelemetrySettings{
-			Logger:         zap.NewNop(),
-			MeterProvider:  sdkmetric.NewMeterProvider(),
+			Logger:         logger,
+			MeterProvider:  meterProvider,
 			TracerProvider: tracenoop.NewTracerProvider(),
 			Resource:       pcommon.NewResource(),
 		},

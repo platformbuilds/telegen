@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/mirastacklabs-ai/telegen/internal/exporters/otlp/profiles"
 	"github.com/mirastacklabs-ai/telegen/internal/jfr/converter"
 	"go.uber.org/zap"
@@ -73,10 +74,15 @@ func (o Options) getInputDirs() []string {
 type Watcher struct {
 	opts           Options
 	logger         *zap.Logger
-	processedFiles sync.Map // map[string]string (path -> hash)
+	processedFiles *expirable.LRU[string, string] // path -> hash
 	workQueue      chan string
 	jfrConverter   *profiles.JFRConverter
 }
+
+const (
+	processedFilesCacheSize = 8192
+	processedFilesCacheTTL  = 24 * time.Hour
+)
 
 // New creates a new Watcher
 func New(opts Options) *Watcher {
@@ -87,7 +93,12 @@ func New(opts Options) *Watcher {
 		opts.Workers = 2
 	}
 	if opts.Logger == nil {
-		opts.Logger, _ = zap.NewProduction()
+		logger, err := zap.NewProduction()
+		if err != nil {
+			opts.Logger = zap.NewNop()
+		} else {
+			opts.Logger = logger
+		}
 	}
 
 	// Create JFR converter for direct export
@@ -104,8 +115,13 @@ func New(opts Options) *Watcher {
 	}
 
 	return &Watcher{
-		opts:         opts,
-		logger:       opts.Logger,
+		opts:   opts,
+		logger: opts.Logger,
+		processedFiles: expirable.NewLRU[string, string](
+			processedFilesCacheSize,
+			nil,
+			processedFilesCacheTTL,
+		),
 		workQueue:    make(chan string, 100),
 		jfrConverter: jfrConv,
 	}
@@ -221,8 +237,8 @@ func (w *Watcher) scanDirectory(inputDir string) {
 			w.logger.Warn("Failed to hash file", zap.String("path", path), zap.Error(err))
 			return nil
 		}
-		if existingHash, ok := w.processedFiles.Load(path); ok {
-			if existingHash.(string) == hash {
+		if existingHash, ok := w.processedFiles.Get(path); ok {
+			if existingHash == hash {
 				return nil // Already processed, no changes
 			}
 		}
@@ -290,7 +306,7 @@ func (w *Watcher) processFile(ctx context.Context, jfrPath string) {
 		logger.Warn("No profile events found in JFR file")
 		// Still mark as processed
 		if hash, err := w.fileHash(jfrPath); err == nil {
-			w.processedFiles.Store(jfrPath, hash)
+			w.processedFiles.Add(jfrPath, hash)
 		}
 		return
 	}
@@ -332,7 +348,7 @@ func (w *Watcher) processFile(ctx context.Context, jfrPath string) {
 
 	// Mark as processed
 	if hash, err := w.fileHash(jfrPath); err == nil {
-		w.processedFiles.Store(jfrPath, hash)
+		w.processedFiles.Add(jfrPath, hash)
 	}
 
 	logger.Info("Successfully processed JFR file",
@@ -494,13 +510,8 @@ type Stats struct {
 
 // GetStats returns current statistics
 func (w *Watcher) GetStats() Stats {
-	var count int
-	w.processedFiles.Range(func(_, _ interface{}) bool {
-		count++
-		return true
-	})
 	return Stats{
-		ProcessedFiles: count,
+		ProcessedFiles: w.processedFiles.Len(),
 		QueuedFiles:    len(w.workQueue),
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
 
+	"github.com/mirastacklabs-ai/telegen/internal/helpers"
 	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
 )
 
@@ -191,14 +192,43 @@ func (r *PerfbufReader) readLoop(ctx context.Context) {
 	batch := make([]PerfbufEvent, 0, r.cfg.BatchSize)
 	flushTimer := time.NewTimer(r.cfg.FlushInterval)
 	defer flushTimer.Stop()
+	type readResult struct {
+		record perf.Record
+		err    error
+	}
+	readCh := make(chan readResult, 1)
+	readCtx, readCancel := context.WithCancel(ctx)
+	defer readCancel()
+	var readErrLogAt atomic.Int64
+	go func() {
+		for {
+			record, err := r.reader.Read()
+			select {
+			case readCh <- readResult{record: record, err: err}:
+			case <-readCtx.Done():
+				return
+			}
+			if err != nil && errors.Is(err, perf.ErrClosed) {
+				return
+			}
+		}
+	}()
+	const readErrorBudget = 1000
+	consecutiveErrs := 0
 
 	for {
 		select {
 		case <-ctx.Done():
+			if err := r.reader.Close(); err != nil {
+				r.log.Debug("failed to close perf reader on context cancel", "error", err)
+			}
 			r.flush(ctx, batch)
 			return
 
 		case <-r.stopCh:
+			if err := r.reader.Close(); err != nil {
+				r.log.Debug("failed to close perf reader on stop", "error", err)
+			}
 			r.flush(ctx, batch)
 			return
 
@@ -208,18 +238,34 @@ func (r *PerfbufReader) readLoop(ctx context.Context) {
 				batch = batch[:0]
 			}
 			flushTimer.Reset(r.cfg.FlushInterval)
-
-		default:
-			// Try to read an event
-			record, err := r.reader.Read()
+		case rr := <-readCh:
+			record, err := rr.record, rr.err
 			if err != nil {
 				if errors.Is(err, perf.ErrClosed) {
 					r.flush(ctx, batch)
 					return
 				}
-				r.log.Debug("perf buffer read error", "error", err)
+				consecutiveErrs++
+				if consecutiveErrs >= readErrorBudget {
+					r.log.Error("perf buffer reader exceeded error budget; stopping loop",
+						"consecutive_errors", consecutiveErrs,
+						"error_budget", readErrorBudget,
+						"last_error", err,
+					)
+					r.flush(ctx, batch)
+					return
+				}
+				if helpers.ShouldLogEvery(&readErrLogAt, 10*time.Second) {
+					r.log.Debug("perf buffer read error", "error", err, "consecutive_errors", consecutiveErrs)
+				}
+				backoff := time.Duration(1<<minInt(consecutiveErrs, 8)) * time.Millisecond
+				if backoff > 250*time.Millisecond {
+					backoff = 250 * time.Millisecond
+				}
+				time.Sleep(backoff)
 				continue
 			}
+			consecutiveErrs = 0
 
 			// Handle lost samples
 			if record.LostSamples > 0 {

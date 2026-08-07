@@ -88,7 +88,10 @@ func (c *ServiceClassifier) getListeningPorts() []ListeningPort {
 			continue
 		}
 
-		inode, _ := strconv.ParseUint(fields[9], 10, 64)
+		inode, err := strconv.ParseUint(fields[9], 10, 64)
+		if err != nil {
+			continue
+		}
 
 		lp := ListeningPort{
 			Port:     int(portNum),

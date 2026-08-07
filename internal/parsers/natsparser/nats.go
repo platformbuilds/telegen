@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/mirastacklabs-ai/telegen/internal/parsers"
 )
 
 // ErrNeedsMoreData indicates the buffer does not contain a complete NATS message.
@@ -23,19 +25,19 @@ var ErrNeedsMoreData = errors.New("nats: needs more data")
 type MessageType int
 
 const (
-	TypeUnknown    MessageType = iota
-	TypeINFO                   // server → client: server info JSON
-	TypeCONNECT                // client → server: client options JSON
-	TypePUB                    // client → server: publish (no headers)
-	TypeHPUB                   // client → server: publish with headers (NATS 2.x)
-	TypeSUB                    // client → server: subscribe
-	TypeUNSUB                  // client → server: unsubscribe
-	TypeMSG                    // server → client: message delivery (no headers)
-	TypeHMSG                   // server → client: message delivery with headers (NATS 2.x)
-	TypePING                   // either direction
-	TypePONG                   // either direction
-	TypeOK                     // server → client: +OK
-	TypeERR                    // server → client: -ERR
+	TypeUnknown MessageType = iota
+	TypeINFO                // server → client: server info JSON
+	TypeCONNECT             // client → server: client options JSON
+	TypePUB                 // client → server: publish (no headers)
+	TypeHPUB                // client → server: publish with headers (NATS 2.x)
+	TypeSUB                 // client → server: subscribe
+	TypeUNSUB               // client → server: unsubscribe
+	TypeMSG                 // server → client: message delivery (no headers)
+	TypeHMSG                // server → client: message delivery with headers (NATS 2.x)
+	TypePING                // either direction
+	TypePONG                // either direction
+	TypeOK                  // server → client: +OK
+	TypeERR                 // server → client: -ERR
 )
 
 // Direction of the NATS message.
@@ -50,14 +52,14 @@ const (
 type Message struct {
 	Type        MessageType
 	Direction   Direction
-	Subject     string  // PUB/MSG/SUB: topic subject
-	SID         string  // MSG/SUB: subscription ID
-	ReplyTo     string  // PUB/MSG: optional reply subject
-	PayloadSize int     // declared payload byte count
-	Payload     []byte  // message payload (up to PayloadSize bytes)
-	HeadersRaw  string  // HPUB/HMSG: raw header block
-	ErrText     string  // -ERR: error message
-	InfoJSON    string  // INFO: server info JSON
+	Subject     string // PUB/MSG/SUB: topic subject
+	SID         string // MSG/SUB: subscription ID
+	ReplyTo     string // PUB/MSG: optional reply subject
+	PayloadSize int    // declared payload byte count
+	Payload     []byte // message payload (up to PayloadSize bytes)
+	HeadersRaw  string // HPUB/HMSG: raw header block
+	ErrText     string // -ERR: error message
+	InfoJSON    string // INFO: server info JSON
 }
 
 // IsClientMessage returns true for messages sent by the client.
@@ -165,10 +167,16 @@ func parsePUB(parts []string, payload []byte, headerConsumed int) (Message, int,
 	if err != nil {
 		return Message{}, 0, fmt.Errorf("nats: invalid PUB size: %w", err)
 	}
+	if size < 0 {
+		return Message{}, 0, errors.New("nats: invalid PUB size: negative value")
+	}
 	if len(payload) < size+2 {
 		return Message{}, 0, ErrNeedsMoreData
 	}
-	msgPayload := payload[:size]
+	msgPayload, ok := parsers.Prefix(payload, size)
+	if !ok {
+		return Message{}, 0, errors.New("nats: invalid PUB payload bounds")
+	}
 	return Message{
 		Type:        TypePUB,
 		Direction:   DirectionClient,
@@ -188,20 +196,37 @@ func parseHPUB(parts []string, payload []byte, headerConsumed int) (Message, int
 	if err != nil {
 		return Message{}, 0, fmt.Errorf("nats: invalid HPUB total size: %w", err)
 	}
+	if totalSize < 0 {
+		return Message{}, 0, errors.New("nats: invalid HPUB total size: negative value")
+	}
 	headerSize, err := strconv.Atoi(parts[len(parts)-2])
 	if err != nil {
 		return Message{}, 0, fmt.Errorf("nats: invalid HPUB header size: %w", err)
 	}
+	if headerSize < 0 {
+		return Message{}, 0, errors.New("nats: invalid HPUB header size: negative value")
+	}
+	if headerSize > totalSize || totalSize > len(payload) {
+		return Message{}, 0, errors.New("nats: invalid HPUB frame bounds")
+	}
 	if len(payload) < totalSize+2 {
 		return Message{}, 0, ErrNeedsMoreData
+	}
+	headersRaw, ok := parsers.Prefix(payload, headerSize)
+	if !ok {
+		return Message{}, 0, errors.New("nats: invalid HPUB header bounds")
+	}
+	msgPayload, ok := parsers.Slice(payload, headerSize, totalSize)
+	if !ok {
+		return Message{}, 0, errors.New("nats: invalid HPUB payload bounds")
 	}
 	return Message{
 		Type:        TypeHPUB,
 		Direction:   DirectionClient,
 		Subject:     subject,
 		PayloadSize: totalSize - headerSize,
-		HeadersRaw:  string(payload[:headerSize]),
-		Payload:     payload[headerSize:totalSize],
+		HeadersRaw:  string(headersRaw),
+		Payload:     msgPayload,
 	}, headerConsumed + totalSize + 2, nil
 }
 
@@ -231,8 +256,15 @@ func parseMSG(parts []string, payload []byte, headerConsumed int) (Message, int,
 	if err != nil {
 		return Message{}, 0, fmt.Errorf("nats: invalid MSG size: %w", err)
 	}
+	if size < 0 {
+		return Message{}, 0, errors.New("nats: invalid MSG size: negative value")
+	}
 	if len(payload) < size+2 {
 		return Message{}, 0, ErrNeedsMoreData
+	}
+	msgPayload, ok := parsers.Prefix(payload, size)
+	if !ok {
+		return Message{}, 0, errors.New("nats: invalid MSG payload bounds")
 	}
 	return Message{
 		Type:        TypeMSG,
@@ -240,7 +272,7 @@ func parseMSG(parts []string, payload []byte, headerConsumed int) (Message, int,
 		Subject:     subject,
 		SID:         sid,
 		PayloadSize: size,
-		Payload:     payload[:size],
+		Payload:     msgPayload,
 	}, headerConsumed + size + 2, nil
 }
 
@@ -254,8 +286,15 @@ func parseHMSG(parts []string, payload []byte, headerConsumed int) (Message, int
 	if err != nil {
 		return Message{}, 0, fmt.Errorf("nats: invalid HMSG total size: %w", err)
 	}
+	if totalSize < 0 {
+		return Message{}, 0, errors.New("nats: invalid HMSG total size: negative value")
+	}
 	if len(payload) < totalSize+2 {
 		return Message{}, 0, ErrNeedsMoreData
+	}
+	msgPayload, ok := parsers.Prefix(payload, totalSize)
+	if !ok {
+		return Message{}, 0, errors.New("nats: invalid HMSG payload bounds")
 	}
 	return Message{
 		Type:        TypeHMSG,
@@ -263,7 +302,7 @@ func parseHMSG(parts []string, payload []byte, headerConsumed int) (Message, int
 		Subject:     subject,
 		SID:         sid,
 		PayloadSize: totalSize,
-		Payload:     payload[:totalSize],
+		Payload:     msgPayload,
 	}, headerConsumed + totalSize + 2, nil
 }
 
@@ -281,6 +320,9 @@ func ParseMessages(buf []byte) ([]Message, int, error) {
 			buf = buf[1:]
 			consumed++
 			continue
+		}
+		if n <= 0 || n > len(buf) {
+			break
 		}
 		messages = append(messages, m)
 		buf = buf[n:]
@@ -321,7 +363,7 @@ func StitchMessages(messages []Message) []Record {
 			records = append(records, Record{Response: m})
 		case TypeERR:
 			records = append(records, Record{Response: m})
-		// INFO, CONNECT, SUB, UNSUB, OK are control messages — not span-worthy.
+			// INFO, CONNECT, SUB, UNSUB, OK are control messages — not span-worthy.
 		}
 	}
 

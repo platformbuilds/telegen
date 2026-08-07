@@ -32,7 +32,10 @@ func PowerSensor(mat *matrix.Matrix, log *slog.Logger) *matrix.Matrix {
 		}
 	}
 	if n > 0 {
-		sumInst, _ := mat.NewInstance("power_total")
+		sumInst, err := mat.NewInstance("power_total")
+		if err != nil {
+			return mat
+		}
 		sumInst.Labels["style"] = "power_aggregate"
 		power.Values[sumInst.Key] = total
 	}
@@ -43,16 +46,16 @@ func PowerSensor(mat *matrix.Matrix, log *slog.Logger) *matrix.Matrix {
 func SensorExtras(mat *matrix.Matrix, log *slog.Logger) []*matrix.Matrix {
 	_ = log
 	stats := map[string]*statAcc{
-		"average_temperature":        {},
-		"max_temperature":            {mode: "max"},
-		"min_temperature":            {mode: "min"},
+		"average_temperature":         {},
+		"max_temperature":             {mode: "max"},
+		"min_temperature":             {mode: "min"},
 		"average_ambient_temperature": {},
-		"min_ambient_temperature":    {mode: "min"},
-		"average_fan_speed":          {},
-		"max_fan_speed":              {mode: "max"},
-		"min_fan_speed":              {mode: "min"},
-		"power":                      {},
-		"status":                     {},
+		"min_ambient_temperature":     {mode: "min"},
+		"average_fan_speed":           {},
+		"max_fan_speed":               {mode: "max"},
+		"min_fan_speed":               {mode: "min"},
+		"power":                       {},
+		"status":                      {},
 	}
 	for ik, inst := range mat.Instances {
 		typ := inst.Labels["type"]
@@ -86,7 +89,10 @@ func SensorExtras(mat *matrix.Matrix, log *slog.Logger) []*matrix.Matrix {
 	for k, v := range mat.GlobalLabels {
 		out.GlobalLabels[k] = v
 	}
-	inst, _ := out.NewInstance("aggregate")
+	inst, err := out.NewInstance("aggregate")
+	if err != nil {
+		return nil
+	}
 	inst.Labels["style"] = "sensor_aggregate"
 	for name, s := range stats {
 		met := out.NewMetric(name, name, "gauge")
@@ -157,7 +163,9 @@ func ShelfPlugin(mat *matrix.Matrix, log *slog.Logger) []*matrix.Matrix {
 	for ik := range mat.Instances {
 		for _, d := range derived {
 			if _, ok := mat.GetValue(d, ik); !ok {
-				_ = mat.SetValue(d, ik, 0)
+				if err := mat.SetValue(d, ik, 0); err != nil {
+					continue
+				}
 			}
 		}
 	}
@@ -165,7 +173,10 @@ func ShelfPlugin(mat *matrix.Matrix, log *slog.Logger) []*matrix.Matrix {
 	for _, comp := range []string{"fan", "module", "psu", "sensor", "temperature", "voltage"} {
 		m := matrix.New("shelf_" + comp)
 		met := m.NewMetric("labels", "labels", "gauge")
-		inst, _ := m.NewInstance("aggregate")
+		inst, err := m.NewInstance("aggregate")
+		if err != nil {
+			continue
+		}
 		met.Values[inst.Key] = 1
 		extras = append(extras, m)
 	}
@@ -212,7 +223,10 @@ func FabricPool(mat *matrix.Matrix, log *slog.Logger) *matrix.Matrix {
 		if len(parts) != 2 {
 			continue
 		}
-		inst, _ := mat.NewInstance("fp:" + parts[0])
+		inst, err := mat.NewInstance("fp:" + parts[0])
+		if err != nil {
+			continue
+		}
 		inst.Labels["volume"] = parts[0]
 		inst.Labels["style"] = "fabricpool_rollup"
 		if mat.GetMetric(parts[1]) != nil {
@@ -229,7 +243,10 @@ func FabricPoolExtras(mat *matrix.Matrix, log *slog.Logger) []*matrix.Matrix {
 	m := matrix.New("fabricpool")
 	for _, n := range []string{"average_latency", "get_throughput_bytes", "put_throughput_bytes", "stats", "throughput_ops"} {
 		met := m.NewMetric(n, n, "gauge")
-		inst, _ := m.NewInstance("cluster")
+		inst, err := m.NewInstance("cluster")
+		if err != nil {
+			continue
+		}
 		met.Values[inst.Key] = 0
 	}
 	return []*matrix.Matrix{m}
@@ -276,9 +293,15 @@ func FCPPercent(mat *matrix.Matrix, log *slog.Logger) *matrix.Matrix {
 		r, ok1 := findValue(mat, ik, "read_data", "read_ops")
 		w, ok2 := findValue(mat, ik, "write_data", "write_ops")
 		if ok1 && ok2 && (r+w) > 0 {
-			_ = mat.SetValue("read_percent", ik, (r/(r+w))*100)
-			_ = mat.SetValue("write_percent", ik, (w/(r+w))*100)
-			_ = mat.SetValue("util_percent", ik, math.Min(100, r+w))
+			if err := mat.SetValue("read_percent", ik, (r/(r+w))*100); err != nil {
+				continue
+			}
+			if err := mat.SetValue("write_percent", ik, (w/(r+w))*100); err != nil {
+				continue
+			}
+			if err := mat.SetValue("util_percent", ik, math.Min(100, r+w)); err != nil {
+				continue
+			}
 		}
 	}
 	return mat

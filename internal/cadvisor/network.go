@@ -65,16 +65,48 @@ func (stats *NetworkStats) parseNetDevLine(line string) {
 	ifaceStats := InterfaceStats{Name: ifaceName}
 
 	// Parse receive stats (first 8 fields)
-	ifaceStats.RxBytes, _ = strconv.ParseUint(fields[0], 10, 64)
-	ifaceStats.RxPackets, _ = strconv.ParseUint(fields[1], 10, 64)
-	ifaceStats.RxErrors, _ = strconv.ParseUint(fields[2], 10, 64)
-	ifaceStats.RxDropped, _ = strconv.ParseUint(fields[3], 10, 64)
+	rxBytes, err := strconv.ParseUint(fields[0], 10, 64)
+	if err != nil {
+		return
+	}
+	rxPackets, err := strconv.ParseUint(fields[1], 10, 64)
+	if err != nil {
+		return
+	}
+	rxErrors, err := strconv.ParseUint(fields[2], 10, 64)
+	if err != nil {
+		return
+	}
+	rxDropped, err := strconv.ParseUint(fields[3], 10, 64)
+	if err != nil {
+		return
+	}
+	ifaceStats.RxBytes = rxBytes
+	ifaceStats.RxPackets = rxPackets
+	ifaceStats.RxErrors = rxErrors
+	ifaceStats.RxDropped = rxDropped
 
 	// Parse transmit stats (fields 8-15)
-	ifaceStats.TxBytes, _ = strconv.ParseUint(fields[8], 10, 64)
-	ifaceStats.TxPackets, _ = strconv.ParseUint(fields[9], 10, 64)
-	ifaceStats.TxErrors, _ = strconv.ParseUint(fields[10], 10, 64)
-	ifaceStats.TxDropped, _ = strconv.ParseUint(fields[11], 10, 64)
+	txBytes, err := strconv.ParseUint(fields[8], 10, 64)
+	if err != nil {
+		return
+	}
+	txPackets, err := strconv.ParseUint(fields[9], 10, 64)
+	if err != nil {
+		return
+	}
+	txErrors, err := strconv.ParseUint(fields[10], 10, 64)
+	if err != nil {
+		return
+	}
+	txDropped, err := strconv.ParseUint(fields[11], 10, 64)
+	if err != nil {
+		return
+	}
+	ifaceStats.TxBytes = txBytes
+	ifaceStats.TxPackets = txPackets
+	ifaceStats.TxErrors = txErrors
+	ifaceStats.TxDropped = txDropped
 
 	// Aggregate totals
 	stats.RxBytes += ifaceStats.RxBytes

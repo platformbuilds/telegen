@@ -12,10 +12,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 // HTTPTransport implements OTLP export over HTTP.
@@ -50,7 +52,13 @@ func buildHTTPClient(cfg Config) (*http.Client, error) {
 	transport := &http.Transport{
 		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 100,
-		IdleConnTimeout:     90 * cfg.Timeout,
+		IdleConnTimeout:     90 * time.Second,
+		DialContext: (&net.Dialer{
+			Timeout: 10 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: cfg.Timeout,
+		ExpectContinueTimeout: 1 * time.Second,
 	}
 
 	// Configure TLS
@@ -274,7 +282,10 @@ func (t *HTTPTransport) handleResponse(resp *http.Response) error {
 	}
 
 	// Read response body for error details
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if err != nil {
+		body = []byte("failed to read response body")
+	}
 	errMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))
 
 	// Determine if retryable based on status code

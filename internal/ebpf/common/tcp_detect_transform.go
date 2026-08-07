@@ -44,7 +44,7 @@ func ReadTCPRequestIntoSpan(parseCtx *EBPFParseContext, cfg *config.EBPFTracer, 
 		return request.Span{}, true, nil
 	}
 
-	requestBuffer, responseBuffer := getBuffers(parseCtx, event)
+	requestBuffer, responseBuffer, payloadTruncated := getBuffers(parseCtx, event)
 
 	if cfg.ProtocolDebug {
 		fmt.Printf("[>] %v\n", requestBuffer)
@@ -62,6 +62,9 @@ func ReadTCPRequestIntoSpan(parseCtx *EBPFParseContext, cfg *config.EBPFTracer, 
 		recordParseOutcome(parseCtx, event.ConnInfo, ParseSuccess)
 	}
 
+	if payloadTruncated && !ignore && parseErr == nil {
+		request.SetPayloadTruncated(&span)
+	}
 	return span, ignore, parseErr
 }
 
@@ -325,13 +328,13 @@ func readTCPRequestIntoSpanInner(parseCtx *EBPFParseContext, cfg *config.EBPFTra
 
 	switch {
 	case isRedis(requestBuffer) && isRedis(responseBuffer):
-		op, text, ok := parseRedisRequest(string(requestBuffer))
+		op, text, ok := parseRedisRequest(requestBuffer)
 
 		if ok {
 			var status int
 			var redisErr request.DBError
 			if op == "" {
-				op, text, ok = parseRedisRequest(string(responseBuffer))
+				op, text, ok = parseRedisRequest(responseBuffer)
 				if !ok || op == "" {
 					return request.Span{}, true, nil // ignore if we couldn't parse it
 				}
@@ -434,7 +437,7 @@ func protocolOutcomeForHeuristic(
 	}
 }
 
-func getBuffers(parseCtx *EBPFParseContext, event *TCPRequestInfo) (req []byte, resp []byte) {
+func getBuffers(parseCtx *EBPFParseContext, event *TCPRequestInfo) (req []byte, resp []byte, truncated bool) {
 	l := int(event.Len)
 	if l < 0 || len(event.Buf) < l {
 		l = len(event.Buf)
@@ -448,11 +451,13 @@ func getBuffers(parseCtx *EBPFParseContext, event *TCPRequestInfo) (req []byte, 
 	resp = event.Rbuf[:l]
 
 	if event.HasLargeBuffers == 1 {
-		if b, ok := extractTCPLargeBuffer(parseCtx, event.Tp.TraceId, packetTypeRequest, directionByPacketType(packetTypeRequest, !event.IsServer), event.ConnInfo); ok {
+		if b, payloadTruncated, ok := extractTCPLargeBuffer(parseCtx, event.Tp.TraceId, packetTypeRequest, directionByPacketType(packetTypeRequest, !event.IsServer), event.ConnInfo); ok {
 			req = b
+			truncated = truncated || payloadTruncated
 		}
-		if b, ok := extractTCPLargeBuffer(parseCtx, event.Tp.TraceId, packetTypeResponse, directionByPacketType(packetTypeResponse, !event.IsServer), event.ConnInfo); ok {
+		if b, payloadTruncated, ok := extractTCPLargeBuffer(parseCtx, event.Tp.TraceId, packetTypeResponse, directionByPacketType(packetTypeResponse, !event.IsServer), event.ConnInfo); ok {
 			resp = b
+			truncated = truncated || payloadTruncated
 		}
 	}
 

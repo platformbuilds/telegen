@@ -23,14 +23,17 @@ func ProcessPossibleMemcachedEvent(event *TCPRequestInfo, reqBuf, respBuf []byte
 	if reqErr != nil && len(requests) == 0 {
 		// Could be a response-only capture or wrong direction — try the other side.
 		if isMemcached(respBuf) {
-			responses, _, _ := memcachedparser.ParseResponse(respBuf)
+			responses, _, respErr := memcachedparser.ParseResponse(respBuf)
+			if respErr != nil {
+				responses = nil
+			}
 			if len(responses) > 0 {
 				// We only have a response; build a minimal span.
 				resp := responses[0]
 				return TCPToMemcachedToSpan(event, memcachedparser.Message{
-					Direction:    memcachedparser.DirectionRequest,
-					CommandStr:   "unknown",
-					Command:      memcachedparser.CmdUnknown,
+					Direction:  memcachedparser.DirectionRequest,
+					CommandStr: "unknown",
+					Command:    memcachedparser.CmdUnknown,
 				}, resp), ParseSuccess, nil
 			}
 		}
@@ -44,7 +47,10 @@ func ProcessPossibleMemcachedEvent(event *TCPRequestInfo, reqBuf, respBuf []byte
 	req := requests[0]
 	// Match the best response for the first request.
 	var resp memcachedparser.Message
-	responses, _, _ := memcachedparser.ParseResponse(respBuf)
+	responses, _, respErr := memcachedparser.ParseResponse(respBuf)
+	if respErr != nil {
+		responses = nil
+	}
 	if len(responses) > 0 {
 		resp = responses[0]
 	}

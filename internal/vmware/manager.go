@@ -26,10 +26,11 @@ type Manager struct {
 	logs    *sdklog.LoggerProvider // shared; may be nil when logs export is off
 	log     *slog.Logger
 
-	mu      sync.Mutex
-	running bool
-	stopCh  chan struct{}
-	wg      sync.WaitGroup
+	mu       sync.Mutex
+	running  bool
+	stopCh   chan struct{}
+	stopOnce sync.Once
+	wg       sync.WaitGroup
 
 	stateMu sync.Mutex
 	states  map[string]*targetState // keyed by target name
@@ -65,6 +66,8 @@ func (m *Manager) Start(ctx context.Context) error {
 	if len(m.cfg.Targets) == 0 {
 		return fmt.Errorf("no vmware targets configured")
 	}
+	m.stopCh = make(chan struct{})
+	m.stopOnce = sync.Once{}
 	if m.cfg.Collectors.EsxcliHostNIC || m.cfg.Collectors.EsxcliStorage {
 		m.log.Warn("vmware esxcli collectors are configured but not implemented in this build; ignoring",
 			"esxcli_host_nic", m.cfg.Collectors.EsxcliHostNIC,
@@ -94,13 +97,15 @@ func (m *Manager) Start(ctx context.Context) error {
 // exporters/provider are intentionally left untouched (owned by the pipeline).
 func (m *Manager) Stop(ctx context.Context) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	if !m.running {
+		m.mu.Unlock()
 		return nil
 	}
+	m.running = false
+	m.stopOnce.Do(func() { close(m.stopCh) })
+	m.mu.Unlock()
+
 	m.log.Info("stopping vmware manager")
-	close(m.stopCh)
 
 	done := make(chan struct{})
 	go func() {
@@ -114,7 +119,6 @@ func (m *Manager) Stop(ctx context.Context) error {
 		return ctx.Err()
 	}
 
-	m.running = false
 	m.log.Info("vmware manager stopped")
 	return nil
 }

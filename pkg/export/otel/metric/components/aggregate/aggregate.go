@@ -52,6 +52,9 @@ type Builder[N int64 | float64] struct {
 	// If AggregationLimit is less than or equal to zero there will not be an
 	// aggregation limit imposed (i.e. unlimited attribute sets).
 	AggregationLimit int
+	// OnOverflow is called whenever a new distinct attribute set would exceed
+	// AggregationLimit and gets routed into the overflow series.
+	OnOverflow func()
 }
 
 func (b Builder[N]) resFunc() func() exemplar.FilteredReservoir[N] {
@@ -79,7 +82,7 @@ func (b Builder[N]) filter(f fltrMeasure[N]) Measure[N] {
 
 // LastValue returns a last-value aggregate function input and output.
 func (b Builder[N]) LastValue() (Measure[N], Remove, ComputeAggregation) {
-	lv := newLastValue[N](b.AggregationLimit, b.resFunc())
+	lv := newLastValue[N](b.AggregationLimit, b.OnOverflow, b.resFunc())
 	switch b.Temporality {
 	case sdkmetricdata.DeltaTemporality:
 		return b.filter(lv.measure), lv.remove, lv.delta
@@ -92,7 +95,7 @@ func (b Builder[N]) LastValue() (Measure[N], Remove, ComputeAggregation) {
 // output. The aggregation returned from the returned ComputeAggregation
 // function will always only return values from the previous collection cycle.
 func (b Builder[N]) PrecomputedLastValue() (Measure[N], Remove, ComputeAggregation) {
-	lv := newPrecomputedLastValue[N](b.AggregationLimit, b.resFunc())
+	lv := newPrecomputedLastValue[N](b.AggregationLimit, b.OnOverflow, b.resFunc())
 	switch b.Temporality {
 	case sdkmetricdata.DeltaTemporality:
 		return b.filter(lv.measure), lv.remove, lv.delta
@@ -104,7 +107,7 @@ func (b Builder[N]) PrecomputedLastValue() (Measure[N], Remove, ComputeAggregati
 // PrecomputedSum returns a sum aggregate function input and output. The
 // arguments passed to the input are expected to be the precomputed sum values.
 func (b Builder[N]) PrecomputedSum(monotonic bool) (Measure[N], Remove, ComputeAggregation) {
-	s := newPrecomputedSum[N](monotonic, b.AggregationLimit, b.resFunc())
+	s := newPrecomputedSum[N](monotonic, b.AggregationLimit, b.OnOverflow, b.resFunc())
 	switch b.Temporality {
 	case sdkmetricdata.DeltaTemporality:
 		return b.filter(s.measure), s.remove, s.delta
@@ -115,7 +118,7 @@ func (b Builder[N]) PrecomputedSum(monotonic bool) (Measure[N], Remove, ComputeA
 
 // Sum returns a sum aggregate function input and output.
 func (b Builder[N]) Sum(monotonic bool) (Measure[N], Remove, ComputeAggregation) {
-	s := newSum[N](monotonic, b.AggregationLimit, b.resFunc())
+	s := newSum[N](monotonic, b.AggregationLimit, b.OnOverflow, b.resFunc())
 	switch b.Temporality {
 	case sdkmetricdata.DeltaTemporality:
 		return b.filter(s.measure), s.remove, s.delta
@@ -127,7 +130,7 @@ func (b Builder[N]) Sum(monotonic bool) (Measure[N], Remove, ComputeAggregation)
 // ExplicitBucketHistogram returns a histogram aggregate function input and
 // output.
 func (b Builder[N]) ExplicitBucketHistogram(boundaries []float64, noMinMax, noSum bool) (Measure[N], Remove, ComputeAggregation) {
-	h := newHistogram[N](boundaries, noMinMax, noSum, b.AggregationLimit, b.resFunc())
+	h := newHistogram[N](boundaries, noMinMax, noSum, b.AggregationLimit, b.OnOverflow, b.resFunc())
 	switch b.Temporality {
 	case sdkmetricdata.DeltaTemporality:
 		return b.filter(h.measure), h.remove, h.delta
@@ -139,7 +142,7 @@ func (b Builder[N]) ExplicitBucketHistogram(boundaries []float64, noMinMax, noSu
 // ExponentialBucketHistogram returns a histogram aggregate function input and
 // output.
 func (b Builder[N]) ExponentialBucketHistogram(maxSize, maxScale int32, noMinMax, noSum bool) (Measure[N], Remove, ComputeAggregation) {
-	h := newExponentialHistogram[N](maxSize, maxScale, noMinMax, noSum, b.AggregationLimit, b.resFunc())
+	h := newExponentialHistogram[N](maxSize, maxScale, noMinMax, noSum, b.AggregationLimit, b.OnOverflow, b.resFunc())
 	switch b.Temporality {
 	case sdkmetricdata.DeltaTemporality:
 		return b.filter(h.measure), h.remove, h.delta

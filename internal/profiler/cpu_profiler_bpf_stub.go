@@ -17,6 +17,7 @@ package profiler
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"github.com/cilium/ebpf"
@@ -94,6 +95,7 @@ func (o *CpuProfilerObjects) Close() error {
 
 // Close releases all BPF maps
 func (m *CpuProfilerMaps) Close() error {
+	var closeErr error
 	closers := []interface{ Close() error }{
 		m.CpuStacks,
 		m.CpuStackCounts,
@@ -103,10 +105,12 @@ func (m *CpuProfilerMaps) Close() error {
 	}
 	for _, c := range closers {
 		if c != nil {
-			_ = c.Close()
+			if err := c.Close(); err != nil {
+				closeErr = errors.Join(closeErr, err)
+			}
 		}
 	}
-	return nil
+	return closeErr
 }
 
 // Close releases all BPF programs

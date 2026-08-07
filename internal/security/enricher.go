@@ -240,8 +240,10 @@ func (e *Enricher) enrichK8sMetadata(info *ContainerInfo, pid uint32) {
 
 	// If still no pod name, try to get from hostname
 	if info.PodName == "" {
-		hostname, _ := os.ReadFile("/proc/" + itoa(pid) + "/hostname")
-		info.PodName = strings.TrimSpace(string(hostname))
+		hostname, err := os.ReadFile("/proc/" + itoa(pid) + "/hostname")
+		if err == nil {
+			info.PodName = strings.TrimSpace(string(hostname))
+		}
 	}
 }
 

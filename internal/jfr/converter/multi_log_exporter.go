@@ -215,13 +215,17 @@ func (e *MultiLogExporter) Close() error {
 	// Close disk file
 	if e.diskFile != nil {
 		e.diskMu.Lock()
-		_ = e.diskFile.Close()
+		if err := e.diskFile.Close(); err != nil {
+			e.log.Error("failed to close disk file", "error", err)
+		}
 		e.diskMu.Unlock()
 	}
 
 	// Close OTLP exporter
 	if e.otlpExporter != nil {
-		_ = e.otlpExporter.Close()
+		if err := e.otlpExporter.Close(); err != nil {
+			e.log.Error("failed to close OTLP exporter", "error", err)
+		}
 	}
 
 	return nil
@@ -325,15 +329,21 @@ func (e *MultiLogExporter) rotateDiskFile() error {
 	for i := e.config.DiskMaxFiles - 1; i > 0; i-- {
 		oldPath := fmt.Sprintf("%s.%d", e.config.DiskPath, i)
 		newPath := fmt.Sprintf("%s.%d", e.config.DiskPath, i+1)
-		_ = os.Rename(oldPath, newPath)
+		if err := os.Rename(oldPath, newPath); err != nil && !os.IsNotExist(err) {
+			e.log.Debug("failed rotating historical file", "from", oldPath, "to", newPath, "error", err)
+		}
 	}
 
 	// Rename current file to .1
-	_ = os.Rename(e.config.DiskPath, e.config.DiskPath+".1")
+	if err := os.Rename(e.config.DiskPath, e.config.DiskPath+".1"); err != nil && !os.IsNotExist(err) {
+		e.log.Debug("failed rotating current file", "path", e.config.DiskPath, "error", err)
+	}
 
 	// Delete oldest file if over limit
 	oldestPath := fmt.Sprintf("%s.%d", e.config.DiskPath, e.config.DiskMaxFiles+1)
-	_ = os.Remove(oldestPath)
+	if err := os.Remove(oldestPath); err != nil && !os.IsNotExist(err) {
+		e.log.Debug("failed removing oldest rotated file", "path", oldestPath, "error", err)
+	}
 
 	// Create new file
 	f, err := os.OpenFile(e.config.DiskPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)

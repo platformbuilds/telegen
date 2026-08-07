@@ -6,8 +6,81 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
+
+var (
+	xmlNLogSimpleLevelPattern = regexp.MustCompile(`(?i)<log\s+[^>]*level=`)
+	xmlNLogNsLevelPattern     = regexp.MustCompile(`(?i)<nlog:log\s+[^>]*level=`)
+
+	xmlLevelAttrPattern           = regexp.MustCompile(`(?i)level=["']([^"']+)["']`)
+	xmlTimestampAttrPattern       = regexp.MustCompile(`(?i)timestamp=["'](\d+)["']`)
+	xmlLoggerAttrPattern          = regexp.MustCompile(`(?i)logger=["']([^"']+)["']`)
+	xmlThreadAttrPattern          = regexp.MustCompile(`(?i)thread=["']([^"']+)["']`)
+	xmlLog4jThrowablePattern      = regexp.MustCompile(`(?i)<log4j:throwable>(?:<!\[CDATA\[)?([^\]<]+)`)
+	xmlExceptionElementPattern    = regexp.MustCompile(`(?i)<exception[^>]*>([^<]*)</exception>`)
+	xmlSerilogLevelPattern        = regexp.MustCompile(`(?i)Level=["']([^"']+)["']`)
+	xmlSerilogTimestampPattern    = regexp.MustCompile(`(?i)Timestamp=["']([^"']+)["']`)
+	xmlRenderedMessagePattern     = regexp.MustCompile(`(?i)<RenderedMessage>([^<]*)</RenderedMessage>`)
+	xmlMessageTemplatePattern     = regexp.MustCompile(`(?i)<MessageTemplate>([^<]*)</MessageTemplate>`)
+	xmlSerilogExceptionPattern    = regexp.MustCompile(`(?i)<Exception>([^<]*)</Exception>`)
+	xmlWindowsLevelPattern        = regexp.MustCompile(`(?i)<Level>(\d+)</Level>`)
+	xmlWindowsTimeCreatedPattern  = regexp.MustCompile(`(?i)TimeCreated[^>]*SystemTime=["']([^"']+)["']`)
+	xmlWindowsProviderNamePattern = regexp.MustCompile(`(?i)Provider[^>]*Name=["']([^"']+)["']`)
+	xmlWindowsEventIDPattern      = regexp.MustCompile(`(?i)<EventID[^>]*>(\d+)</EventID>`)
+	xmlWindowsComputerPattern     = regexp.MustCompile(`(?i)<Computer>([^<]+)</Computer>`)
+	xmlWindowsDataPattern         = regexp.MustCompile(`(?i)<Data[^>]*>([^<]+)</Data>`)
+	xmlWindowsMessagePattern      = regexp.MustCompile(`(?i)<Message>([^<]*)</Message>`)
+	xmlTraceIDAttrPattern         = regexp.MustCompile(`(?i)(?:trace[-_]?id|traceid)=["']([^"']+)["']`)
+	xmlSpanIDAttrPattern          = regexp.MustCompile(`(?i)(?:span[-_]?id|spanid)=["']([^"']+)["']`)
+
+	xmlMessagePatterns = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)<(?:log4j:)?message>([^<]*(?:<!\[CDATA\[[^\]]*\]\]>[^<]*)*)</(?:log4j:)?message>`),
+		regexp.MustCompile(`(?i)<msg>([^<]*)</msg>`),
+		regexp.MustCompile(`(?i)<body>([^<]*)</body>`),
+		regexp.MustCompile(`(?i)<text>([^<]*)</text>`),
+		regexp.MustCompile(`(?i)<content>([^<]*)</content>`),
+		regexp.MustCompile(`(?i)<data>([^<]*)</data>`),
+		regexp.MustCompile(`(?i)<description>([^<]*)</description>`),
+	}
+	xmlTimestampPatterns = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)timestamp=["']([^"']+)["']`),
+		regexp.MustCompile(`(?i)time=["']([^"']+)["']`),
+		regexp.MustCompile(`(?i)datetime=["']([^"']+)["']`),
+		regexp.MustCompile(`(?i)date=["']([^"']+)["']`),
+		regexp.MustCompile(`(?i)Snt=["']([^"']+)["']`),
+		regexp.MustCompile(`(?i)Tm=["']([^"']+)["']`),
+		regexp.MustCompile(`(?i)TS=["']([^"']+)["']`),
+		regexp.MustCompile(`(?i)<timestamp>([^<]+)</timestamp>`),
+		regexp.MustCompile(`(?i)<time>([^<]+)</time>`),
+		regexp.MustCompile(`(?i)<datetime>([^<]+)</datetime>`),
+	}
+	xmlSeverityPatterns = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)level=["']([^"']+)["']`),
+		regexp.MustCompile(`(?i)severity=["']([^"']+)["']`),
+		regexp.MustCompile(`(?i)priority=["']([^"']+)["']`),
+		regexp.MustCompile(`(?i)loglevel=["']([^"']+)["']`),
+		regexp.MustCompile(`(?i)<level>([^<]+)</level>`),
+		regexp.MustCompile(`(?i)<severity>([^<]+)</severity>`),
+		regexp.MustCompile(`(?i)<priority>([^<]+)</priority>`),
+	}
+
+	fixmlVersionPattern      = regexp.MustCompile(`(?i)<FIXML[^>]*v=["']([^"']+)["']`)
+	isoDEInlinePattern       = regexp.MustCompile(`(?i)DE\d{1,3}[=:]`)
+	isoMTIFieldPattern       = regexp.MustCompile(`(?i)(?:MTI|MessageType|MsgType)\s*[:=]\s*["']?(\d{4})["']?`)
+	nonDigitPattern          = regexp.MustCompile(`\D`)
+	fixmlTimestampPatternLRU sync.Map // map[string]*regexp.Regexp
+)
+
+func fixmlTimestampPattern(field string) *regexp.Regexp {
+	if cached, ok := fixmlTimestampPatternLRU.Load(field); ok {
+		return cached.(*regexp.Regexp)
+	}
+	re := regexp.MustCompile(regexp.QuoteMeta(field) + `=["']([^"']+)["']`)
+	fixmlTimestampPatternLRU.Store(field, re)
+	return re
+}
 
 // SpringBootParser parses Spring Boot Logback-formatted logs with trace correlation
 // Default format: YYYY-MM-DD HH:MM:SS.mmm LEVEL [app, traceId, spanId, exported] threadId --- [threadName] logger: message
@@ -62,15 +135,13 @@ func (p *SpringBootParser) Name() string {
 
 // Parse attempts to parse a Spring Boot formatted log line
 func (p *SpringBootParser) Parse(line string) (*ParsedLog, error) {
-	log := NewParsedLog()
-	log.Format = "spring_boot"
-
 	// Try full format with tracing first
 	if matches := p.fullPattern.FindStringSubmatch(line); matches != nil {
+		log := &ParsedLog{Format: "spring_boot"}
 		log.Timestamp = parseSpringTimestamp(matches[1])
 		log.Severity = normalizeSeverity(matches[2])
 		log.SeverityNumber = severityToNumber(log.Severity)
-		log.Attributes["service.name"] = strings.TrimSpace(matches[3])
+		setParsedAttr(log, "service.name", strings.TrimSpace(matches[3]))
 		// Set trace context on the struct (OTLP compliant)
 		if traceID := strings.TrimSpace(matches[4]); traceID != "" && traceID != "-" {
 			log.TraceID = traceID
@@ -79,29 +150,31 @@ func (p *SpringBootParser) Parse(line string) (*ParsedLog, error) {
 			log.SpanID = spanID
 		}
 		if exported := strings.TrimSpace(matches[6]); exported != "" {
-			log.Attributes[AttrTracingExported] = exported
+			setParsedAttr(log, AttrTracingExported, exported)
 		}
-		log.Attributes[AttrThreadID] = matches[7]
-		log.Attributes[AttrThreadName] = strings.TrimSpace(matches[8])
-		log.Attributes[AttrCodeNamespace] = strings.TrimSpace(matches[9])
+		setParsedAttr(log, AttrThreadID, matches[7])
+		setParsedAttr(log, AttrThreadName, strings.TrimSpace(matches[8]))
+		setParsedAttr(log, AttrCodeNamespace, strings.TrimSpace(matches[9]))
 		log.Body = strings.TrimSpace(matches[10])
 		return log, nil
 	}
 
 	// Try simple format without tracing
 	if matches := p.simplePattern.FindStringSubmatch(line); matches != nil {
+		log := &ParsedLog{Format: "spring_boot"}
 		log.Timestamp = parseSpringTimestamp(matches[1])
 		log.Severity = normalizeSeverity(matches[2])
 		log.SeverityNumber = severityToNumber(log.Severity)
-		log.Attributes[AttrThreadID] = matches[3]
-		log.Attributes[AttrThreadName] = strings.TrimSpace(matches[4])
-		log.Attributes[AttrCodeNamespace] = strings.TrimSpace(matches[5])
+		setParsedAttr(log, AttrThreadID, matches[3])
+		setParsedAttr(log, AttrThreadName, strings.TrimSpace(matches[4]))
+		setParsedAttr(log, AttrCodeNamespace, strings.TrimSpace(matches[5]))
 		log.Body = strings.TrimSpace(matches[6])
 		return log, nil
 	}
 
 	// Try basic format
 	if matches := p.basicPattern.FindStringSubmatch(line); matches != nil {
+		log := &ParsedLog{Format: "spring_boot"}
 		log.Timestamp = parseSpringTimestamp(matches[1])
 		log.Severity = normalizeSeverity(matches[2])
 		log.SeverityNumber = severityToNumber(log.Severity)
@@ -173,27 +246,26 @@ func (p *Log4jParser) Name() string {
 
 // Parse attempts to parse a Log4j formatted log line
 func (p *Log4jParser) Parse(line string) (*ParsedLog, error) {
-	log := NewParsedLog()
-	log.Format = "log4j"
-
 	// Try standard Log4j format
 	if matches := p.standardPattern.FindStringSubmatch(line); matches != nil {
+		log := &ParsedLog{Format: "log4j"}
 		log.Timestamp = parseSpringTimestamp(matches[1]) // Same timestamp format
 		log.Severity = normalizeSeverity(matches[2])
 		log.SeverityNumber = severityToNumber(log.Severity)
-		log.Attributes[AttrThreadName] = strings.TrimSpace(matches[3])
-		log.Attributes[AttrCodeNamespace] = strings.TrimSpace(matches[4])
+		setParsedAttr(log, AttrThreadName, strings.TrimSpace(matches[3]))
+		setParsedAttr(log, AttrCodeNamespace, strings.TrimSpace(matches[4]))
 		log.Body = strings.TrimSpace(matches[5])
 		return log, nil
 	}
 
 	// Try Log4j2 format
 	if matches := p.log4j2Pattern.FindStringSubmatch(line); matches != nil {
+		log := &ParsedLog{Format: "log4j"}
 		log.Timestamp = parseSpringTimestamp(matches[1])
 		log.Severity = normalizeSeverity(matches[2])
 		log.SeverityNumber = severityToNumber(log.Severity)
-		log.Attributes[AttrCodeNamespace] = strings.TrimSpace(matches[3])
-		log.Attributes[AttrThreadName] = strings.TrimSpace(matches[4])
+		setParsedAttr(log, AttrCodeNamespace, strings.TrimSpace(matches[3]))
+		setParsedAttr(log, AttrThreadName, strings.TrimSpace(matches[4]))
 		log.Body = strings.TrimSpace(matches[5])
 		return log, nil
 	}
@@ -261,9 +333,6 @@ func (p *GenericTimestampParser) Name() string {
 
 // Parse attempts to parse using generic timestamp patterns
 func (p *GenericTimestampParser) Parse(line string) (*ParsedLog, error) {
-	log := NewParsedLog()
-	log.Format = "generic"
-
 	for _, pat := range p.patterns {
 		matches := pat.regex.FindStringSubmatch(line)
 		if matches == nil {
@@ -278,6 +347,7 @@ func (p *GenericTimestampParser) Parse(line string) (*ParsedLog, error) {
 				continue
 			}
 		}
+		log := &ParsedLog{Format: "generic"}
 		log.Timestamp = ts
 
 		switch pat.name {
@@ -292,10 +362,10 @@ func (p *GenericTimestampParser) Parse(line string) (*ParsedLog, error) {
 			log.SeverityNumber = severityToNumber(log.Severity)
 			log.Body = strings.TrimSpace(matches[3])
 		case "syslog":
-			log.Attributes["host.name"] = matches[2]
-			log.Attributes["process.name"] = matches[3]
+			setParsedAttr(log, "host.name", matches[2])
+			setParsedAttr(log, "process.name", matches[3])
 			if matches[4] != "" {
-				log.Attributes["process.pid"] = matches[4]
+				setParsedAttr(log, "process.pid", matches[4])
 			}
 			log.Body = strings.TrimSpace(matches[5])
 		default:
@@ -312,6 +382,13 @@ func (p *GenericTimestampParser) Parse(line string) (*ParsedLog, error) {
 	}
 
 	return nil, ErrNotMatched
+}
+
+func setParsedAttr(log *ParsedLog, key, value string) {
+	if log.Attributes == nil {
+		log.Attributes = make(map[string]string, 4)
+	}
+	log.Attributes[key] = value
 }
 
 // normalizeSeverity normalizes various severity level names to standard OTLP names
@@ -387,7 +464,7 @@ type XMLLogParser struct {
 func NewXMLLogParser() *XMLLogParser {
 	return &XMLLogParser{
 		// Log4j XML: <log4j:event level="INFO" timestamp="1234567890" ...>...</log4j:event>
-		log4jEventPattern: regexp.MustCompile(`(?i)<log4j:event[^>]*>`),
+		log4jEventPattern:   regexp.MustCompile(`(?i)<log4j:event[^>]*>`),
 		log4jMessagePattern: regexp.MustCompile(`(?i)<log4j:message>(?:<!\[CDATA\[)?([^\]<]+)(?:\]\]>)?</log4j:message>`),
 
 		// NLog XML: <nlog ...><log level="Info" ...>...</log></nlog> or just <log level="Info"...>
@@ -499,25 +576,25 @@ func (p *XMLLogParser) isXMLContent(line string) bool {
 // isNLogFormat checks if line is NLog XML format: <log level="..."> but NOT <LogEvent>, <logentry>, etc.
 func (p *XMLLogParser) isNLogFormat(line string) bool {
 	lower := strings.ToLower(line)
-	
+
 	// Must start with <log (case insensitive) and have level attribute
 	if !strings.Contains(lower, "<log") || !strings.Contains(lower, "level=") {
 		return false
 	}
-	
+
 	// Exclude LogEvent (Serilog), logentry, logevent, logrecord
 	if strings.Contains(lower, "<logevent") ||
 		strings.Contains(lower, "<logentry") ||
 		strings.Contains(lower, "<logrecord") {
 		return false
 	}
-	
+
 	// Check for simple <log with level attribute pattern
-	if regexp.MustCompile(`(?i)<log\s+[^>]*level=`).MatchString(line) ||
-		regexp.MustCompile(`(?i)<nlog:log\s+[^>]*level=`).MatchString(line) {
+	if xmlNLogSimpleLevelPattern.MatchString(line) ||
+		xmlNLogNsLevelPattern.MatchString(line) {
 		return true
 	}
-	
+
 	return false
 }
 
@@ -526,25 +603,25 @@ func (p *XMLLogParser) parseLog4jXML(line string, log *ParsedLog) (*ParsedLog, e
 	log.Format = "log4j_xml"
 
 	// Extract level attribute
-	if matches := regexp.MustCompile(`(?i)level=["']([^"']+)["']`).FindStringSubmatch(line); matches != nil {
+	if matches := xmlLevelAttrPattern.FindStringSubmatch(line); matches != nil {
 		log.Severity = normalizeSeverity(matches[1])
 		log.SeverityNumber = severityToNumber(log.Severity)
 	}
 
 	// Extract timestamp (milliseconds since epoch)
-	if matches := regexp.MustCompile(`(?i)timestamp=["'](\d+)["']`).FindStringSubmatch(line); matches != nil {
+	if matches := xmlTimestampAttrPattern.FindStringSubmatch(line); matches != nil {
 		if ts, err := strconv.ParseInt(matches[1], 10, 64); err == nil {
 			log.Timestamp = time.UnixMilli(ts)
 		}
 	}
 
 	// Extract logger name
-	if matches := regexp.MustCompile(`(?i)logger=["']([^"']+)["']`).FindStringSubmatch(line); matches != nil {
+	if matches := xmlLoggerAttrPattern.FindStringSubmatch(line); matches != nil {
 		log.Attributes[AttrCodeNamespace] = matches[1]
 	}
 
 	// Extract thread
-	if matches := regexp.MustCompile(`(?i)thread=["']([^"']+)["']`).FindStringSubmatch(line); matches != nil {
+	if matches := xmlThreadAttrPattern.FindStringSubmatch(line); matches != nil {
 		log.Attributes[AttrThreadName] = matches[1]
 	}
 
@@ -555,7 +632,7 @@ func (p *XMLLogParser) parseLog4jXML(line string, log *ParsedLog) (*ParsedLog, e
 	}
 
 	// Extract throwable/exception if present
-	if matches := regexp.MustCompile(`(?i)<log4j:throwable>(?:<!\[CDATA\[)?([^\]<]+)`).FindStringSubmatch(line); matches != nil {
+	if matches := xmlLog4jThrowablePattern.FindStringSubmatch(line); matches != nil {
 		log.Attributes[AttrExceptionStacktrace] = strings.TrimSpace(matches[1])
 	}
 
@@ -570,7 +647,7 @@ func (p *XMLLogParser) parseNLogXML(line string, log *ParsedLog) (*ParsedLog, er
 	log.Format = "nlog_xml"
 
 	// Extract level using simple pattern
-	if matches := regexp.MustCompile(`(?i)level=["']([^"']+)["']`).FindStringSubmatch(line); matches != nil {
+	if matches := xmlLevelAttrPattern.FindStringSubmatch(line); matches != nil {
 		log.Severity = normalizeSeverity(matches[1])
 		log.SeverityNumber = severityToNumber(log.Severity)
 	}
@@ -579,7 +656,7 @@ func (p *XMLLogParser) parseNLogXML(line string, log *ParsedLog) (*ParsedLog, er
 	p.extractTimestamp(log, line)
 
 	// Extract logger
-	if matches := regexp.MustCompile(`(?i)logger=["']([^"']+)["']`).FindStringSubmatch(line); matches != nil {
+	if matches := xmlLoggerAttrPattern.FindStringSubmatch(line); matches != nil {
 		log.Attributes[AttrCodeNamespace] = matches[1]
 	}
 
@@ -590,7 +667,7 @@ func (p *XMLLogParser) parseNLogXML(line string, log *ParsedLog) (*ParsedLog, er
 	}
 
 	// Extract exception
-	if matches := regexp.MustCompile(`(?i)<exception[^>]*>([^<]*)</exception>`).FindStringSubmatch(line); matches != nil {
+	if matches := xmlExceptionElementPattern.FindStringSubmatch(line); matches != nil {
 		log.Attributes[AttrExceptionMessage] = strings.TrimSpace(matches[1])
 	}
 
@@ -603,20 +680,20 @@ func (p *XMLLogParser) parseSerilogXML(line string, log *ParsedLog) (*ParsedLog,
 	log.Format = "serilog_xml"
 
 	// Extract Level attribute
-	if matches := regexp.MustCompile(`(?i)Level=["']([^"']+)["']`).FindStringSubmatch(line); matches != nil {
+	if matches := xmlSerilogLevelPattern.FindStringSubmatch(line); matches != nil {
 		log.Severity = normalizeSeverity(matches[1])
 		log.SeverityNumber = severityToNumber(log.Severity)
 	}
 
 	// Extract Timestamp
-	if matches := regexp.MustCompile(`(?i)Timestamp=["']([^"']+)["']`).FindStringSubmatch(line); matches != nil {
+	if matches := xmlSerilogTimestampPattern.FindStringSubmatch(line); matches != nil {
 		log.Timestamp = p.parseTimestampString(matches[1])
 	}
 
 	// Extract MessageTemplate or RenderedMessage
-	if matches := regexp.MustCompile(`(?i)<RenderedMessage>([^<]*)</RenderedMessage>`).FindStringSubmatch(line); matches != nil {
+	if matches := xmlRenderedMessagePattern.FindStringSubmatch(line); matches != nil {
 		log.Body = p.extractCDATA(matches[1])
-	} else if matches := regexp.MustCompile(`(?i)<MessageTemplate>([^<]*)</MessageTemplate>`).FindStringSubmatch(line); matches != nil {
+	} else if matches := xmlMessageTemplatePattern.FindStringSubmatch(line); matches != nil {
 		log.Body = p.extractCDATA(matches[1])
 	} else {
 		log.Body = p.extractXMLMessage(line)
@@ -627,7 +704,7 @@ func (p *XMLLogParser) parseSerilogXML(line string, log *ParsedLog) (*ParsedLog,
 	}
 
 	// Extract Exception
-	if matches := regexp.MustCompile(`(?i)<Exception>([^<]*)</Exception>`).FindStringSubmatch(line); matches != nil {
+	if matches := xmlSerilogExceptionPattern.FindStringSubmatch(line); matches != nil {
 		log.Attributes[AttrExceptionStacktrace] = p.extractCDATA(matches[1])
 	}
 
@@ -640,8 +717,11 @@ func (p *XMLLogParser) parseWindowsEventXML(line string, log *ParsedLog) (*Parse
 	log.Format = "windows_event_xml"
 
 	// Extract Level (Windows uses numeric levels: 1=Critical, 2=Error, 3=Warning, 4=Information)
-	if matches := regexp.MustCompile(`(?i)<Level>(\d+)</Level>`).FindStringSubmatch(line); matches != nil {
-		level, _ := strconv.Atoi(matches[1])
+	if matches := xmlWindowsLevelPattern.FindStringSubmatch(line); matches != nil {
+		level, err := strconv.Atoi(matches[1])
+		if err != nil {
+			level = 4
+		}
 		switch level {
 		case 1:
 			log.Severity = SeverityFatal
@@ -660,28 +740,28 @@ func (p *XMLLogParser) parseWindowsEventXML(line string, log *ParsedLog) (*Parse
 	}
 
 	// Extract TimeCreated
-	if matches := regexp.MustCompile(`(?i)TimeCreated[^>]*SystemTime=["']([^"']+)["']`).FindStringSubmatch(line); matches != nil {
+	if matches := xmlWindowsTimeCreatedPattern.FindStringSubmatch(line); matches != nil {
 		log.Timestamp = p.parseTimestampString(matches[1])
 	}
 
 	// Extract Provider Name
-	if matches := regexp.MustCompile(`(?i)Provider[^>]*Name=["']([^"']+)["']`).FindStringSubmatch(line); matches != nil {
+	if matches := xmlWindowsProviderNamePattern.FindStringSubmatch(line); matches != nil {
 		log.Attributes["event.provider"] = matches[1]
 	}
 
 	// Extract EventID
-	if matches := regexp.MustCompile(`(?i)<EventID[^>]*>(\d+)</EventID>`).FindStringSubmatch(line); matches != nil {
+	if matches := xmlWindowsEventIDPattern.FindStringSubmatch(line); matches != nil {
 		log.Attributes["event.id"] = matches[1]
 	}
 
 	// Extract Computer
-	if matches := regexp.MustCompile(`(?i)<Computer>([^<]+)</Computer>`).FindStringSubmatch(line); matches != nil {
+	if matches := xmlWindowsComputerPattern.FindStringSubmatch(line); matches != nil {
 		log.ResourceAttributes["host.name"] = matches[1]
 	}
 
 	// Extract EventData - look for Data elements anywhere in the line
 	// Pattern: <Data>content</Data> or <Data Name="...">content</Data>
-	dataMatches := regexp.MustCompile(`(?i)<Data[^>]*>([^<]+)</Data>`).FindAllStringSubmatch(line, -1)
+	dataMatches := xmlWindowsDataPattern.FindAllStringSubmatch(line, -1)
 	if len(dataMatches) > 0 {
 		var dataParts []string
 		for _, dm := range dataMatches {
@@ -696,7 +776,7 @@ func (p *XMLLogParser) parseWindowsEventXML(line string, log *ParsedLog) (*Parse
 
 	if log.Body == "" {
 		// Try Message element
-		if matches := regexp.MustCompile(`(?i)<Message>([^<]*)</Message>`).FindStringSubmatch(line); matches != nil {
+		if matches := xmlWindowsMessagePattern.FindStringSubmatch(line); matches != nil {
 			log.Body = p.extractCDATA(matches[1])
 		}
 	}
@@ -726,10 +806,10 @@ func (p *XMLLogParser) parseGenericXML(line string, log *ParsedLog) (*ParsedLog,
 	}
 
 	// Extract trace context if present
-	if matches := regexp.MustCompile(`(?i)(?:trace[-_]?id|traceid)=["']([^"']+)["']`).FindStringSubmatch(line); matches != nil {
+	if matches := xmlTraceIDAttrPattern.FindStringSubmatch(line); matches != nil {
 		log.TraceID = matches[1]
 	}
-	if matches := regexp.MustCompile(`(?i)(?:span[-_]?id|spanid)=["']([^"']+)["']`).FindStringSubmatch(line); matches != nil {
+	if matches := xmlSpanIDAttrPattern.FindStringSubmatch(line); matches != nil {
 		log.SpanID = matches[1]
 	}
 
@@ -761,19 +841,8 @@ func (p *XMLLogParser) parseFallbackXML(line string, log *ParsedLog) (*ParsedLog
 
 // extractXMLMessage extracts message content from common XML message elements
 func (p *XMLLogParser) extractXMLMessage(line string) string {
-	// Message element patterns in priority order
-	msgPatterns := []string{
-		`(?i)<(?:log4j:)?message>([^<]*(?:<!\[CDATA\[[^\]]*\]\]>[^<]*)*)</(?:log4j:)?message>`,
-		`(?i)<msg>([^<]*)</msg>`,
-		`(?i)<body>([^<]*)</body>`,
-		`(?i)<text>([^<]*)</text>`,
-		`(?i)<content>([^<]*)</content>`,
-		`(?i)<data>([^<]*)</data>`,
-		`(?i)<description>([^<]*)</description>`,
-	}
-
-	for _, pat := range msgPatterns {
-		if matches := regexp.MustCompile(pat).FindStringSubmatch(line); matches != nil {
+	for _, pattern := range xmlMessagePatterns {
+		if matches := pattern.FindStringSubmatch(line); matches != nil {
 			return strings.TrimSpace(p.extractCDATA(matches[1]))
 		}
 	}
@@ -791,21 +860,8 @@ func (p *XMLLogParser) extractCDATA(s string) string {
 
 // extractTimestamp extracts timestamp from common XML patterns
 func (p *XMLLogParser) extractTimestamp(log *ParsedLog, line string) {
-	tsPatterns := []string{
-		`(?i)timestamp=["']([^"']+)["']`,
-		`(?i)time=["']([^"']+)["']`,
-		`(?i)datetime=["']([^"']+)["']`,
-		`(?i)date=["']([^"']+)["']`,
-		`(?i)Snt=["']([^"']+)["']`,    // FIXML
-		`(?i)Tm=["']([^"']+)["']`,     // Time shorthand
-		`(?i)TS=["']([^"']+)["']`,     // Timestamp shorthand
-		`(?i)<timestamp>([^<]+)</timestamp>`,
-		`(?i)<time>([^<]+)</time>`,
-		`(?i)<datetime>([^<]+)</datetime>`,
-	}
-
-	for _, pat := range tsPatterns {
-		if matches := regexp.MustCompile(pat).FindStringSubmatch(line); matches != nil {
+	for _, pattern := range xmlTimestampPatterns {
+		if matches := pattern.FindStringSubmatch(line); matches != nil {
 			if ts := p.parseTimestampString(matches[1]); !ts.IsZero() {
 				log.Timestamp = ts
 				return
@@ -816,18 +872,8 @@ func (p *XMLLogParser) extractTimestamp(log *ParsedLog, line string) {
 
 // extractSeverity extracts severity level from common XML patterns
 func (p *XMLLogParser) extractSeverity(log *ParsedLog, line string) {
-	levelPatterns := []string{
-		`(?i)level=["']([^"']+)["']`,
-		`(?i)severity=["']([^"']+)["']`,
-		`(?i)priority=["']([^"']+)["']`,
-		`(?i)loglevel=["']([^"']+)["']`,
-		`(?i)<level>([^<]+)</level>`,
-		`(?i)<severity>([^<]+)</severity>`,
-		`(?i)<priority>([^<]+)</priority>`,
-	}
-
-	for _, pat := range levelPatterns {
-		if matches := regexp.MustCompile(pat).FindStringSubmatch(line); matches != nil {
+	for _, pattern := range xmlSeverityPatterns {
+		if matches := pattern.FindStringSubmatch(line); matches != nil {
 			log.Severity = normalizeSeverity(matches[1])
 			log.SeverityNumber = severityToNumber(log.Severity)
 			return
@@ -874,18 +920,18 @@ func (p *XMLLogParser) parseTimestampString(s string) time.Time {
 func (p *XMLLogParser) extractXMLAttributes(log *ParsedLog, line string) {
 	// Skip keys that are already handled specially
 	skipKeys := map[string]bool{
-		"level":       true,
-		"severity":    true,
-		"timestamp":   true,
-		"time":        true,
-		"datetime":    true,
-		"message":     true,
-		"msg":         true,
-		"body":        true,
-		"text":        true,
-		"xmlns":       true,
-		"version":     true,
-		"encoding":    true,
+		"level":     true,
+		"severity":  true,
+		"timestamp": true,
+		"time":      true,
+		"datetime":  true,
+		"message":   true,
+		"msg":       true,
+		"body":      true,
+		"text":      true,
+		"xmlns":     true,
+		"version":   true,
+		"encoding":  true,
 	}
 
 	// First, try to parse the full XML structure recursively
@@ -1071,7 +1117,7 @@ func (p *JSONLogParser) Name() string {
 // Parse attempts to parse a JSON-formatted log line
 func (p *JSONLogParser) Parse(line string) (*ParsedLog, error) {
 	line = strings.TrimSpace(line)
-	
+
 	// Handle escaped JSON strings (e.g., "{\"key\":\"value\"}" or '{"key":"value"}')
 	// This is common when JSON is embedded in another format or from certain logging frameworks
 	if (strings.HasPrefix(line, `"`) && strings.HasSuffix(line, `"`)) ||
@@ -1090,7 +1136,7 @@ func (p *JSONLogParser) Parse(line string) (*ParsedLog, error) {
 			}
 		}
 	}
-	
+
 	// Support both JSON objects {...} and arrays [...]
 	if !strings.HasPrefix(line, "{") && !strings.HasPrefix(line, "[") {
 		return nil, ErrNotMatched
@@ -1103,7 +1149,7 @@ func (p *JSONLogParser) Parse(line string) (*ParsedLog, error) {
 		if err := json.Unmarshal([]byte(line), &arr); err != nil {
 			return nil, ErrNotMatched
 		}
-		
+
 		log := NewParsedLog()
 		log.Format = "json_array"
 		log.Body = line
@@ -1123,10 +1169,10 @@ func (p *JSONLogParser) Parse(line string) (*ParsedLog, error) {
 	// Extract common log fields
 	// Message/body - check various common keys used by different logging frameworks
 	bodyKeys := []string{
-		"msg", "message", "log", "text", "body",  // Standard
-		"_msg", "_message",                        // VictoriaMetrics/underscore prefix
-		"content", "data", "payload",              // Alternative names
-		"event", "raw",                            // Event-based
+		"msg", "message", "log", "text", "body", // Standard
+		"_msg", "_message", // VictoriaMetrics/underscore prefix
+		"content", "data", "payload", // Alternative names
+		"event", "raw", // Event-based
 	}
 	for _, key := range bodyKeys {
 		if v, ok := data[key].(string); ok {
@@ -1139,7 +1185,7 @@ func (p *JSONLogParser) Parse(line string) (*ParsedLog, error) {
 	// If body is escaped JSON, try to parse it recursively
 	if log.Body != "" {
 		trimmedBody := strings.TrimSpace(log.Body)
-		
+
 		// Check for escaped JSON (starts with quote) or raw JSON
 		if strings.HasPrefix(trimmedBody, `"`) || strings.HasPrefix(trimmedBody, `'`) {
 			// Try to unquote first
@@ -1150,7 +1196,7 @@ func (p *JSONLogParser) Parse(line string) (*ParsedLog, error) {
 				trimmedBody = trimmedBody[1 : len(trimmedBody)-1]
 			}
 		}
-		
+
 		// If body looks like JSON, try to parse it and merge fields
 		if strings.HasPrefix(trimmedBody, "{") {
 			if nestedData, err := parseJSON(trimmedBody); err == nil {
@@ -1163,7 +1209,7 @@ func (p *JSONLogParser) Parse(line string) (*ParsedLog, error) {
 						break
 					}
 				}
-				
+
 				// Use nested body if found, otherwise use unescaped JSON
 				if nestedBody != "" {
 					log.Body = nestedBody
@@ -1171,7 +1217,7 @@ func (p *JSONLogParser) Parse(line string) (*ParsedLog, error) {
 					// No message field in nested JSON, use unescaped JSON as body
 					log.Body = trimmedBody
 				}
-				
+
 				// Extract level from nested JSON if not already set
 				for _, levelKey := range []string{"level", "severity", "lvl", "loglevel"} {
 					if v, ok := nestedData[levelKey].(string); ok {
@@ -1181,7 +1227,7 @@ func (p *JSONLogParser) Parse(line string) (*ParsedLog, error) {
 						break
 					}
 				}
-				
+
 				// Merge remaining nested JSON fields into attributes
 				for k, v := range nestedData {
 					attrValue := jsonValueToString(v)
@@ -1363,7 +1409,7 @@ func jsonValueToString(v interface{}) string {
 	if v == nil {
 		return "" // Skip null values in attributes
 	}
-	
+
 	switch val := v.(type) {
 	case string:
 		return val
@@ -1425,18 +1471,18 @@ func NewFIXMLParser() *FIXMLParser {
 
 		// Message type patterns
 		messageTypePatterns: map[string]*regexp.Regexp{
-			"order":           regexp.MustCompile(`(?i)<(Order|NewOrdSingle|OrdCxlRplcReq|OrdCxlReq)[^>]*>`),
-			"execution":       regexp.MustCompile(`(?i)<(ExecRpt|TrdCaptRpt|TrdRpt)[^>]*>`),
-			"trade_match":     regexp.MustCompile(`(?i)<(TrdMtchRpt|TrdMtch)[^>]*>`),
-			"quote":           regexp.MustCompile(`(?i)<(Quote|QuotReq|MassQuote)[^>]*>`),
-			"market_data":     regexp.MustCompile(`(?i)<(MktData|MDReq|MDFullGrp|MDIncGrp)[^>]*>`),
-			"position":        regexp.MustCompile(`(?i)<(PosRpt|PosMntReq)[^>]*>`),
-			"allocation":      regexp.MustCompile(`(?i)<(Alloc|AllocRpt)[^>]*>`),
-			"confirmation":    regexp.MustCompile(`(?i)<(Conf|TrdAllocRpt)[^>]*>`),
-			"settlement":      regexp.MustCompile(`(?i)<(SetlInst|SetlObligation)[^>]*>`),
-			"security":        regexp.MustCompile(`(?i)<(SecDef|SecList|SecTypReq)[^>]*>`),
-			"party":           regexp.MustCompile(`(?i)<(Pty|PtyDtl)[^>]*>`),
-			"collateral":      regexp.MustCompile(`(?i)<(CollReq|CollRpt|CollAssgn)[^>]*>`),
+			"order":        regexp.MustCompile(`(?i)<(Order|NewOrdSingle|OrdCxlRplcReq|OrdCxlReq)[^>]*>`),
+			"execution":    regexp.MustCompile(`(?i)<(ExecRpt|TrdCaptRpt|TrdRpt)[^>]*>`),
+			"trade_match":  regexp.MustCompile(`(?i)<(TrdMtchRpt|TrdMtch)[^>]*>`),
+			"quote":        regexp.MustCompile(`(?i)<(Quote|QuotReq|MassQuote)[^>]*>`),
+			"market_data":  regexp.MustCompile(`(?i)<(MktData|MDReq|MDFullGrp|MDIncGrp)[^>]*>`),
+			"position":     regexp.MustCompile(`(?i)<(PosRpt|PosMntReq)[^>]*>`),
+			"allocation":   regexp.MustCompile(`(?i)<(Alloc|AllocRpt)[^>]*>`),
+			"confirmation": regexp.MustCompile(`(?i)<(Conf|TrdAllocRpt)[^>]*>`),
+			"settlement":   regexp.MustCompile(`(?i)<(SetlInst|SetlObligation)[^>]*>`),
+			"security":     regexp.MustCompile(`(?i)<(SecDef|SecList|SecTypReq)[^>]*>`),
+			"party":        regexp.MustCompile(`(?i)<(Pty|PtyDtl)[^>]*>`),
+			"collateral":   regexp.MustCompile(`(?i)<(CollReq|CollRpt|CollAssgn)[^>]*>`),
 		},
 
 		// Extract XML attributes
@@ -1445,69 +1491,69 @@ func NewFIXMLParser() *FIXMLParser {
 		// FIXML field tag to human-readable name mapping
 		fieldMappings: map[string]string{
 			// Identifiers
-			"TrdID":    "trade_id",
-			"OrdID":    "order_id",
-			"ClOrdID":  "client_order_id",
-			"ExecID":   "execution_id",
-			"SecID":    "security_id",
-			"ID":       "id",
-			"ReqID":    "request_id",
-			"RptID":    "report_id",
-			"AllocID":  "allocation_id",
-			"ConfID":   "confirmation_id",
-			"PosID":    "position_id",
+			"TrdID":   "trade_id",
+			"OrdID":   "order_id",
+			"ClOrdID": "client_order_id",
+			"ExecID":  "execution_id",
+			"SecID":   "security_id",
+			"ID":      "id",
+			"ReqID":   "request_id",
+			"RptID":   "report_id",
+			"AllocID": "allocation_id",
+			"ConfID":  "confirmation_id",
+			"PosID":   "position_id",
 
 			// Parties
-			"SID":      "sender_id",
-			"TID":      "target_id",
-			"Acct":     "account",
+			"SID":       "sender_id",
+			"TID":       "target_id",
+			"Acct":      "account",
 			"AcctIDSrc": "account_id_source",
 
 			// Instrument
-			"Sym":      "symbol",
+			"Sym":       "symbol",
 			"InstrmtID": "instrument_id",
-			"Src":      "id_source",
-			"SecTyp":   "security_type",
-			"CFI":      "cfi_code",
-			"MMY":      "maturity_month_year",
-			"Mat":      "maturity_date",
-			"Strk":     "strike_price",
-			"StrkCcy":  "strike_currency",
-			"OptTyp":   "option_type",
-			"Exch":     "exchange",
-			"Ccy":      "currency",
+			"Src":       "id_source",
+			"SecTyp":    "security_type",
+			"CFI":       "cfi_code",
+			"MMY":       "maturity_month_year",
+			"Mat":       "maturity_date",
+			"Strk":      "strike_price",
+			"StrkCcy":   "strike_currency",
+			"OptTyp":    "option_type",
+			"Exch":      "exchange",
+			"Ccy":       "currency",
 
 			// Pricing/Quantity
-			"Px":       "price",
-			"LastPx":   "last_price",
-			"AvgPx":    "average_price",
-			"StopPx":   "stop_price",
-			"Qty":      "quantity",
-			"LastQty":  "last_quantity",
-			"CumQty":   "cumulative_quantity",
+			"Px":        "price",
+			"LastPx":    "last_price",
+			"AvgPx":     "average_price",
+			"StopPx":    "stop_price",
+			"Qty":       "quantity",
+			"LastQty":   "last_quantity",
+			"CumQty":    "cumulative_quantity",
 			"LeavesQty": "leaves_quantity",
-			"MinQty":   "minimum_quantity",
-			"OrdQty":   "order_quantity",
+			"MinQty":    "minimum_quantity",
+			"OrdQty":    "order_quantity",
 
 			// Order/Trade details
-			"Side":     "side",
-			"OrdTyp":   "order_type",
+			"Side":      "side",
+			"OrdTyp":    "order_type",
 			"TmInForce": "time_in_force",
-			"ExecTyp":  "execution_type",
-			"OrdStat":  "order_status",
-			"TrdTyp":   "trade_type",
-			"RptTyp":   "report_type",
-			"TransTyp": "transaction_type",
-			"SettlTyp": "settlement_type",
-			"SettlDt":  "settlement_date",
+			"ExecTyp":   "execution_type",
+			"OrdStat":   "order_status",
+			"TrdTyp":    "trade_type",
+			"RptTyp":    "report_type",
+			"TransTyp":  "transaction_type",
+			"SettlTyp":  "settlement_type",
+			"SettlDt":   "settlement_date",
 
 			// Timestamps
-			"Snt":      "send_time",
-			"TrdDt":    "trade_date",
-			"TxnTm":    "transaction_time",
-			"BizDt":    "business_date",
+			"Snt":       "send_time",
+			"TrdDt":     "trade_date",
+			"TxnTm":     "transaction_time",
+			"BizDt":     "business_date",
 			"RegTmStmp": "regulatory_timestamp",
-			"TrdRegTS": "trade_regulatory_timestamp",
+			"TrdRegTS":  "trade_regulatory_timestamp",
 
 			// Market
 			"LastMkt":  "last_market",
@@ -1515,11 +1561,11 @@ func NewFIXMLParser() *FIXMLParser {
 			"MktSegID": "market_segment_id",
 
 			// Misc
-			"v":        "fix_version",
-			"xv":       "extension_version",
-			"cv":       "custom_version",
-			"Txt":      "text",
-			"Stat":     "status",
+			"v":    "fix_version",
+			"xv":   "extension_version",
+			"cv":   "custom_version",
+			"Txt":  "text",
+			"Stat": "status",
 		},
 	}
 }
@@ -1547,7 +1593,7 @@ func (p *FIXMLParser) Parse(line string) (*ParsedLog, error) {
 	log.Attributes["fixml.message_type"] = msgType
 
 	// Extract FIX version info from FIXML root
-	if matches := regexp.MustCompile(`(?i)<FIXML[^>]*v=["']([^"']+)["']`).FindStringSubmatch(line); matches != nil {
+	if matches := fixmlVersionPattern.FindStringSubmatch(line); matches != nil {
 		log.Attributes["fixml.fix_version"] = matches[1]
 	}
 
@@ -1608,7 +1654,7 @@ func (p *FIXMLParser) extractFIXMLTimestamp(log *ParsedLog, line string) {
 	tsFields := []string{"Snt", "TxnTm", "TrdRegTS", "RegTmStmp", "TrdDt"}
 
 	for _, field := range tsFields {
-		pattern := regexp.MustCompile(field + `=["']([^"']+)["']`)
+		pattern := fixmlTimestampPattern(field)
 		if matches := pattern.FindStringSubmatch(line); matches != nil {
 			ts := p.parseFIXTimestamp(matches[1])
 			if !ts.IsZero() {
@@ -1628,10 +1674,10 @@ func (p *FIXMLParser) parseFIXTimestamp(s string) time.Time {
 		"2006-01-02T15:04:05.999999999Z07:00",
 		"2006-01-02T15:04:05.999Z",
 		"2006-01-02T15:04:05",
-		"20060102-15:04:05.999999999",    // FIX UTCTimestamp with nanoseconds
-		"20060102-15:04:05.999",          // FIX UTCTimestamp with milliseconds
-		"20060102-15:04:05",              // FIX UTCTimestamp
-		"20060102",                       // FIX LocalMktDate
+		"20060102-15:04:05.999999999", // FIX UTCTimestamp with nanoseconds
+		"20060102-15:04:05.999",       // FIX UTCTimestamp with milliseconds
+		"20060102-15:04:05",           // FIX UTCTimestamp
+		"20060102",                    // FIX LocalMktDate
 	}
 
 	for _, format := range formats {
@@ -1843,7 +1889,7 @@ func (p *ISO8583Parser) Parse(line string) (*ParsedLog, error) {
 	}
 
 	// Check for DE[XX] patterns anywhere in the line
-	if regexp.MustCompile(`(?i)DE\d{1,3}[=:]`).MatchString(line) {
+	if isoDEInlinePattern.MatchString(line) {
 		return p.parseKeyValueFormat(line, p.kvPattern.FindAllStringSubmatch(line, -1))
 	}
 
@@ -1879,7 +1925,7 @@ func (p *ISO8583Parser) parseKeyValueFormat(line string, matches [][]string) (*P
 	}
 
 	// Extract MTI if present in the line
-	if mtiMatch := regexp.MustCompile(`(?i)(?:MTI|MessageType|MsgType)\s*[:=]\s*["']?(\d{4})["']?`).FindStringSubmatch(line); mtiMatch != nil {
+	if mtiMatch := isoMTIFieldPattern.FindStringSubmatch(line); mtiMatch != nil {
 		log.Attributes["iso8583.mti"] = mtiMatch[1]
 		log.Attributes["iso8583.message_type"] = p.getMTIDescription(mtiMatch[1])
 	}
@@ -1923,27 +1969,27 @@ func (p *ISO8583Parser) parseJSONFormat(line string) (*ParsedLog, error) {
 
 	// Extract known ISO 8583 fields
 	fieldMappings := map[string]string{
-		"mti":                       "mti",
-		"MTI":                       "mti",
-		"message_type":              "message_type",
-		"pan":                       "pan",
-		"PAN":                       "pan",
-		"processing_code":           "processing_code",
-		"amount":                    "amount_transaction",
-		"amount_transaction":        "amount_transaction",
-		"stan":                      "stan",
-		"STAN":                      "stan",
-		"rrn":                       "retrieval_reference_number",
-		"RRN":                       "retrieval_reference_number",
+		"mti":                        "mti",
+		"MTI":                        "mti",
+		"message_type":               "message_type",
+		"pan":                        "pan",
+		"PAN":                        "pan",
+		"processing_code":            "processing_code",
+		"amount":                     "amount_transaction",
+		"amount_transaction":         "amount_transaction",
+		"stan":                       "stan",
+		"STAN":                       "stan",
+		"rrn":                        "retrieval_reference_number",
+		"RRN":                        "retrieval_reference_number",
 		"retrieval_reference_number": "retrieval_reference_number",
-		"auth_code":                 "authorization_code",
-		"authorization_code":        "authorization_code",
-		"response_code":             "response_code",
-		"terminal_id":               "card_acceptor_terminal_id",
-		"merchant_id":               "card_acceptor_id",
-		"currency_code":             "currency_code_transaction",
-		"card_expiry":               "expiration_date",
-		"mcc":                       "merchant_category_code",
+		"auth_code":                  "authorization_code",
+		"authorization_code":         "authorization_code",
+		"response_code":              "response_code",
+		"terminal_id":                "card_acceptor_terminal_id",
+		"merchant_id":                "card_acceptor_id",
+		"currency_code":              "currency_code_transaction",
+		"card_expiry":                "expiration_date",
+		"mcc":                        "merchant_category_code",
 	}
 
 	for jsonKey, isoKey := range fieldMappings {
@@ -2028,7 +2074,7 @@ func (p *ISO8583Parser) getMTIDescription(mti string) string {
 // maskPAN masks a PAN/card number for security
 func (p *ISO8583Parser) maskPAN(pan string) string {
 	// Remove any non-digit characters
-	digits := regexp.MustCompile(`\D`).ReplaceAllString(pan, "")
+	digits := nonDigitPattern.ReplaceAllString(pan, "")
 
 	if len(digits) < 10 {
 		return "****"

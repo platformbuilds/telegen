@@ -71,12 +71,14 @@ func (m *MapTracer) TraceLoop(out *msg.Queue[[]*ebpf.Record]) swarm.RunFunc {
 	return func(ctx context.Context) {
 		defer out.MarkCloseable()
 		evictionTicker := time.NewTicker(m.evictionTimeout)
+		defer evictionTicker.Stop()
 		go m.evictionSynchronization(ctx, out)
 		mtlog := mtlog()
 		for {
 			select {
 			case <-ctx.Done():
-				evictionTicker.Stop()
+				// Wake evictionSynchronization so it can observe cancellation and exit.
+				m.Flush()
 				mtlog.Debug("exiting trace loop due to context cancellation")
 				return
 			case <-evictionTicker.C:
@@ -98,15 +100,15 @@ func (m *MapTracer) evictionSynchronization(ctx context.Context, out *msg.Queue[
 		// make sure we only evict once at a time, even if there are multiple eviction signals
 		m.evictionCond.L.Lock()
 		m.evictionCond.Wait()
-		select {
-		case <-ctx.Done():
+		m.evictionCond.L.Unlock()
+
+		if ctx.Err() != nil {
 			mtlog.Debug("context canceled. Stopping goroutine before evicting flows")
 			return
-		default:
-			mtlog.Debug("evictionSynchronization signal received")
-			m.evictFlows(ctx, out)
 		}
-		m.evictionCond.L.Unlock()
+
+		mtlog.Debug("evictionSynchronization signal received")
+		m.evictFlows(ctx, out)
 	}
 }
 

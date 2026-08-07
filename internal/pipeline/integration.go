@@ -32,8 +32,8 @@ type IntegrationConfig struct {
 
 // V3LimitsConfig configures all limit types.
 type V3LimitsConfig struct {
-	Cardinality *limits.CardinalityConfig   `yaml:"cardinality,omitempty"`
-	Rate        *limits.RateLimiterConfig   `yaml:"rate,omitempty"`
+	Cardinality *limits.CardinalityConfig      `yaml:"cardinality,omitempty"`
+	Rate        *limits.RateLimiterConfig      `yaml:"rate,omitempty"`
 	Attributes  *limits.AttributeLimiterConfig `yaml:"attributes,omitempty"`
 }
 
@@ -160,7 +160,11 @@ func (v *Integration) ProcessMetrics(ctx context.Context, metrics pmetric.Metric
 
 	// Apply attribute limiting
 	if v.attributeLimiter != nil {
-		metrics, _ = v.attributeLimiter.ProcessMetrics(ctx, metrics)
+		var err error
+		metrics, err = v.attributeLimiter.ProcessMetrics(ctx, metrics)
+		if err != nil {
+			v.logger.Warn("attribute limiting error", "error", err)
+		}
 	}
 
 	// Apply transformation
@@ -369,12 +373,12 @@ func (v *Integration) MetricHook() func(ctx context.Context, metrics pmetric.Met
 
 // IntegrationStats provides integration statistics.
 type IntegrationStats struct {
-	Enabled           bool                   `json:"enabled"`
-	AdapterCount      int                    `json:"adapter_count"`
-	CardinalityStats  interface{}            `json:"cardinality_stats,omitempty"`
-	RateLimiterStats  interface{}            `json:"rate_limiter_stats,omitempty"`
-	TransformStats    interface{}            `json:"transform_stats,omitempty"`
-	PIIRedactionStats interface{}            `json:"pii_redaction_stats,omitempty"`
+	Enabled           bool        `json:"enabled"`
+	AdapterCount      int         `json:"adapter_count"`
+	CardinalityStats  interface{} `json:"cardinality_stats,omitempty"`
+	RateLimiterStats  interface{} `json:"rate_limiter_stats,omitempty"`
+	TransformStats    interface{} `json:"transform_stats,omitempty"`
+	PIIRedactionStats interface{} `json:"pii_redaction_stats,omitempty"`
 }
 
 // Stats returns current integration statistics.

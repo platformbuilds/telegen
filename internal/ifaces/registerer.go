@@ -51,23 +51,36 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 	}
 	out := make(chan Event, r.bufLen)
 	go func() {
-		for ev := range innerCh {
-			switch ev.Type {
-			case EventAdded:
-				r.m.Lock()
-				r.ifaces[ev.Interface.Index] = ev.Interface.Name
-				r.m.Unlock()
-			case EventDeleted:
-				r.m.Lock()
-				name, ok := r.ifaces[ev.Interface.Index]
-				// prevent removing an interface with the same index but different name
-				// e.g. due to an out-of-order add/delete signaling
-				if ok && name == ev.Interface.Name {
-					delete(r.ifaces, ev.Interface.Index)
+		defer close(out)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case ev, ok := <-innerCh:
+				if !ok {
+					return
 				}
-				r.m.Unlock()
+				switch ev.Type {
+				case EventAdded:
+					r.m.Lock()
+					r.ifaces[ev.Interface.Index] = ev.Interface.Name
+					r.m.Unlock()
+				case EventDeleted:
+					r.m.Lock()
+					name, ok := r.ifaces[ev.Interface.Index]
+					// prevent removing an interface with the same index but different name
+					// e.g. due to an out-of-order add/delete signaling
+					if ok && name == ev.Interface.Name {
+						delete(r.ifaces, ev.Interface.Index)
+					}
+					r.m.Unlock()
+				}
+				select {
+				case out <- ev:
+				case <-ctx.Done():
+					return
+				}
 			}
-			out <- ev
 		}
 	}()
 	return out, nil

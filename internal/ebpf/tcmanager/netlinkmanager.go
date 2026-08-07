@@ -341,7 +341,9 @@ func ifaceHasFilters(iface *netlinkIface, parent uint32) bool {
 func (tc *netlinkManager) cleanupProgsLocked() {
 	for _, prog := range tc.programs {
 		tc.log.Debug("closing tc program", "name", prog.name)
-		_ = prog.Close()
+		if err := prog.Close(); err != nil {
+			tc.log.Debug("failed closing tc program", "name", prog.name, "error", err)
+		}
 	}
 
 	tc.programs = []*netlinkProg{}

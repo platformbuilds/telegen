@@ -78,14 +78,16 @@ func useDatabaseSQL() error {
 	}
 	defer func() { _ = db.Close() }()
 
-	// Execute a query to trigger driverConn usage
-	_, err = db.Query("SELECT 1")
-	return err
+	// Execute a query to trigger driverConn usage.
+	var one int
+	return db.QueryRow("SELECT 1").Scan(&one)
 }
 
 func main() {
 	// Trigger database/sql types to be compiled
-	_ = useDatabaseSQL()
+	if err := useDatabaseSQL(); err != nil {
+		os.Exit(1)
+	}
 
 	err := regularGetRequest(context.Background(), "http://localhost:8090/rolldice")
 	if err != nil {
@@ -100,7 +102,9 @@ func main() {
 	}
 	// Register the Arith service.
 	arith := new(Arith)
-	_ = rpc.Register(arith)
+	if err := rpc.Register(arith); err != nil {
+		os.Exit(1)
+	}
 	err = http.ListenAndServe(":8080", http.HandlerFunc(jsonrpcHandler))
 	if err != nil {
 		os.Exit(1)

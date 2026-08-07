@@ -183,8 +183,14 @@ func (d *RuntimeDetector) detectCompiledLanguage(runtime *RuntimeInfo, binaryPat
 	defer func() { _ = f.Close() }()
 
 	// Get symbols (both dynamic and regular)
-	symbols, _ := f.DynamicSymbols()
-	staticSymbols, _ := f.Symbols()
+	symbols, err := f.DynamicSymbols()
+	if err != nil {
+		symbols = nil
+	}
+	staticSymbols, err := f.Symbols()
+	if err != nil {
+		staticSymbols = nil
+	}
 	symbols = append(symbols, staticSymbols...)
 
 	symbolNames := make(map[string]bool)
@@ -329,11 +335,17 @@ func (d *RuntimeDetector) detectJavaVersion(runtime *RuntimeInfo, binaryPath str
 func (d *RuntimeDetector) detectFramework(runtime *RuntimeInfo, pid int) {
 	// Read command line and environment
 	cmdlinePath := filepath.Join("/proc", strconv.Itoa(pid), "cmdline")
-	cmdline, _ := os.ReadFile(cmdlinePath)
+	cmdline, err := os.ReadFile(cmdlinePath)
+	if err != nil {
+		cmdline = nil
+	}
 	cmdlineStr := string(cmdline)
 
 	environPath := filepath.Join("/proc", strconv.Itoa(pid), "environ")
-	environ, _ := os.ReadFile(environPath)
+	environ, err := os.ReadFile(environPath)
+	if err != nil {
+		environ = nil
+	}
 	environStr := string(environ)
 
 	switch runtime.Language {

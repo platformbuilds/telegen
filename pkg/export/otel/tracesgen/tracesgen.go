@@ -66,7 +66,7 @@ func UserSelectedAttributes(selectorCfg *attributes.SelectorConfig) (map[attr.Na
 
 // GroupSpans must remain public for collectors embedding OBI
 func GroupSpans(ctx context.Context, spans []request.Span, traceAttrs map[attr.Name]struct{}, sampler trace.Sampler, is instrumentations.InstrumentationSelection) map[svc.UID][]TraceSpanAndAttributes {
-	spanGroups := map[svc.UID][]TraceSpanAndAttributes{}
+	spanGroups := make(map[svc.UID][]TraceSpanAndAttributes, len(spans))
 
 	for i := range spans {
 		span := &spans[i]
@@ -101,7 +101,7 @@ func GroupSpans(ctx context.Context, spans []request.Span, traceAttrs map[attr.N
 
 		group, ok := spanGroups[span.Service.UID]
 		if !ok {
-			group = []TraceSpanAndAttributes{}
+			group = make([]TraceSpanAndAttributes, 0, 8)
 		}
 		group = append(group, TraceSpanAndAttributes{Span: span, Attributes: finalAttrs})
 		spanGroups[span.Service.UID] = group
@@ -128,12 +128,12 @@ func GenerateTracesWithAttributes(
 	resourceAttrsMap.PutStr(string(semconv.OTelScopeNameKey), reporterName)
 	addAttrsToMap(extraResAttrs, resourceAttrsMap)
 	resourceAttrsMap.MoveTo(rs.Resource().Attributes())
+	ss := rs.ScopeSpans().AppendEmpty()
+	otelSpans := ss.Spans()
 
 	for _, spanWithAttributes := range spans {
 		span := spanWithAttributes.Span
 		attrs := spanWithAttributes.Attributes
-
-		ss := rs.ScopeSpans().AppendEmpty()
 
 		t := span.Timings()
 		start := spanStartTime(t)
@@ -147,13 +147,13 @@ func GenerateTracesWithAttributes(
 		}
 
 		if hasSubSpans {
-			createSubSpans(span, spanID, traceID, &ss, t)
+			createSubSpans(span, spanID, traceID, otelSpans, t)
 		} else if span.SpanID.IsValid() {
 			spanID = pcommon.SpanID(span.SpanID)
 		}
 
 		// Create a parent span for the whole request session
-		s := ss.Spans().AppendEmpty()
+		s := otelSpans.AppendEmpty()
 		s.SetName(span.TraceName())
 		s.SetKind(ptrace.SpanKind(spanKind(span)))
 		s.SetStartTimestamp(pcommon.NewTimestampFromTime(start))
@@ -187,9 +187,9 @@ func SpanDiscarded(span *request.Span, is instrumentations.InstrumentationSelect
 }
 
 // createSubSpans creates the internal spans for a request.Span
-func createSubSpans(span *request.Span, parentSpanID pcommon.SpanID, traceID pcommon.TraceID, ss *ptrace.ScopeSpans, t request.Timings) {
+func createSubSpans(span *request.Span, parentSpanID pcommon.SpanID, traceID pcommon.TraceID, spans ptrace.SpanSlice, t request.Timings) {
 	// Create a child span showing the queue time
-	spQ := ss.Spans().AppendEmpty()
+	spQ := spans.AppendEmpty()
 	spQ.SetName("in queue")
 	spQ.SetStartTimestamp(pcommon.NewTimestampFromTime(t.RequestStart))
 	spQ.SetKind(ptrace.SpanKindInternal)
@@ -199,7 +199,7 @@ func createSubSpans(span *request.Span, parentSpanID pcommon.SpanID, traceID pco
 	spQ.SetParentSpanID(parentSpanID)
 
 	// Create a child span showing the processing time
-	spP := ss.Spans().AppendEmpty()
+	spP := spans.AppendEmpty()
 	spP.SetName("processing")
 	spP.SetStartTimestamp(pcommon.NewTimestampFromTime(t.Start))
 	spP.SetKind(ptrace.SpanKindInternal)
@@ -623,7 +623,7 @@ func TraceAttributesSelector(span *request.Span, optionalAttrs map[attr.Name]str
 
 	// Add telegen signal metadata
 	if signalMeta := getSignalMetadataForSpan(span); signalMeta != nil {
-		attrs = append(attrs, signalMeta.ToAttributes()...)
+		attrs = append(attrs, signalMeta.CachedAttributes()...)
 	}
 
 	return attrs

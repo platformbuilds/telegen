@@ -75,7 +75,9 @@ func New(cfg *obi.Config) *Tracer {
 		cfg:        cfg,
 		correlator: correlation.GetGlobalLogTraceCorrelator(),
 		fdCache: expirable.NewLRU[string, *os.File](cfg.EBPF.LogEnricher.CacheSize, func(_ string, f *os.File) {
-			_ = f.Close()
+			if err := f.Close(); err != nil {
+				logger.Debug("failed closing cached file descriptor", "error", err)
+			}
 		}, cfg.EBPF.LogEnricher.CacheTTL),
 		pids: make(map[uint32][]uint32),
 	}

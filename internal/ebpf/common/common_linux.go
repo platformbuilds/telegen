@@ -20,7 +20,22 @@ import (
 )
 
 func (f *Filter) Close() error {
-	return syscall.SetsockoptInt(f.Fd, unix.SOL_SOCKET, unix.SO_DETACH_BPF, 0)
+	if f == nil || f.Fd <= 0 {
+		return nil
+	}
+	fd := f.Fd
+	f.Fd = -1
+
+	var errs []error
+	if err := syscall.SetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_DETACH_BPF, 0); err != nil &&
+		!errors.Is(err, unix.EBADF) &&
+		!errors.Is(err, unix.ENOTSOCK) {
+		errs = append(errs, err)
+	}
+	if err := unix.Close(fd); err != nil && !errors.Is(err, unix.EBADF) {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }
 
 func (s *SockMsg) Close() error {

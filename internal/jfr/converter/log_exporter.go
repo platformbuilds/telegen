@@ -247,7 +247,10 @@ func (e *OTLPLogExporter) flushChunk(ctx context.Context, events []*ProfileEvent
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("OTLP logs export failed with status %d: body read failed: %w", resp.StatusCode, readErr)
+		}
 		return fmt.Errorf("OTLP logs export failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -320,7 +323,10 @@ func (e *OTLPLogExporter) ExportLogs(ctx context.Context, logs plog.Logs) error 
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("OTLP logs export failed with status %d: body read failed: %w", resp.StatusCode, readErr)
+		}
 		return fmt.Errorf("OTLP logs export failed with status %d: %s", resp.StatusCode, string(respBody))
 	}
 

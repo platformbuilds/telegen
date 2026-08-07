@@ -195,8 +195,14 @@ func (d *NetworkDetector) parseProcNet(path, protocol string, ipv6 bool, topolog
 		port = int(portNum)
 
 		// Parse inode and UID
-		uid, _ := strconv.Atoi(fields[7])
-		inode, _ := strconv.ParseUint(fields[9], 10, 64)
+		uid, err := strconv.Atoi(fields[7])
+		if err != nil {
+			continue
+		}
+		inode, err := strconv.ParseUint(fields[9], 10, 64)
+		if err != nil {
+			continue
+		}
 
 		listeningPort := ListeningPort{
 			Port:     port,
@@ -370,7 +376,10 @@ func (d *NetworkDetector) discoverGateway(topology *NetworkTopology) {
 		}
 
 		// Check if gateway is set (flags contain 0x2 = RTF_GATEWAY)
-		flagsInt, _ := strconv.ParseInt(flags, 16, 32)
+		flagsInt, err := strconv.ParseInt(flags, 16, 32)
+		if err != nil {
+			continue
+		}
 		if flagsInt&0x2 == 0 {
 			continue
 		}

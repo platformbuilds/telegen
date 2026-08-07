@@ -123,7 +123,12 @@ func (m *Manager) Stop() error {
 func (m *Manager) collectProfiles(ptype ProfileType, profiler Profiler) {
 	defer m.wg.Done()
 
-	ticker := time.NewTicker(m.config.CollectionInterval)
+	collectionInterval := m.config.CollectionInterval
+	if collectionInterval <= 0 {
+		collectionInterval = 10 * time.Second
+		m.log.Warn("invalid profiling collection interval; using default", "field", "profiling.collection_interval", "default", collectionInterval)
+	}
+	ticker := time.NewTicker(collectionInterval)
 	defer ticker.Stop()
 
 	for {

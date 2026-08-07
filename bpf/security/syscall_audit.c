@@ -42,6 +42,10 @@
 #define MAX_ARG_LEN         256
 #define MAX_ENVIRON_LEN     256
 
+#ifndef E2BIG
+#define E2BIG 7
+#endif
+
 // Syscall event structure (SEC-002)
 struct syscall_event {
     __u64 timestamp;
@@ -87,7 +91,7 @@ struct {
 
 // Map to store syscall entry data for pairing with exit
 struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
     __uint(max_entries, 10240);
     __type(key, __u64);   // pid_tgid
     __type(value, struct syscall_event);
@@ -95,11 +99,25 @@ struct {
 
 // Map to store execve entry data
 struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
     __uint(max_entries, 4096);
     __type(key, __u64);   // pid_tgid
     __type(value, struct execve_event);
 } execve_entry_map SEC(".maps");
+
+struct syscall_audit_stats {
+    __u64 syscall_entry_update_errors;
+    __u64 syscall_entry_update_e2big;
+    __u64 execve_entry_update_errors;
+    __u64 execve_entry_update_e2big;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __type(key, __u32);
+    __type(value, struct syscall_audit_stats);
+    __uint(max_entries, 1);
+} syscall_audit_stats SEC(".maps");
 
 // Configuration: which syscalls to audit
 volatile const __u64 audit_syscall_mask = 0xFFFFFFFFFFFFFFFF;
@@ -138,6 +156,31 @@ static __always_inline bool should_audit_syscall(__u32 syscall_nr) {
 // Helper to check if this is an execve syscall
 static __always_inline bool is_execve_syscall(__u32 syscall_nr) {
     return syscall_nr == SYS_EXECVE || syscall_nr == SYS_EXECVEAT;
+}
+
+static __always_inline void record_syscall_update_result(long ret, bool is_execve) {
+    if (ret == 0) {
+        return;
+    }
+
+    __u32 zero = 0;
+    struct syscall_audit_stats *stats = bpf_map_lookup_elem(&syscall_audit_stats, &zero);
+    if (!stats) {
+        return;
+    }
+
+    if (is_execve) {
+        stats->execve_entry_update_errors++;
+        if (ret == -E2BIG) {
+            stats->execve_entry_update_e2big++;
+        }
+        return;
+    }
+
+    stats->syscall_entry_update_errors++;
+    if (ret == -E2BIG) {
+        stats->syscall_entry_update_e2big++;
+    }
 }
 
 // Helper to get parent PID
@@ -191,7 +234,8 @@ int trace_syscall_enter(struct trace_event_raw_sys_enter *ctx) {
         }
         
         // Store for pairing with exit
-        bpf_map_update_elem(&execve_entry_map, &pid_tgid, &event, BPF_ANY);
+        long update_ret = bpf_map_update_elem(&execve_entry_map, &pid_tgid, &event, BPF_ANY);
+        record_syscall_update_result(update_ret, true);
         return 0;
     }
     
@@ -215,7 +259,8 @@ int trace_syscall_enter(struct trace_event_raw_sys_enter *ctx) {
     event.args[5] = ctx->args[5];
     
     // Store for pairing with exit
-    bpf_map_update_elem(&syscall_entry_map, &pid_tgid, &event, BPF_ANY);
+    long update_ret = bpf_map_update_elem(&syscall_entry_map, &pid_tgid, &event, BPF_ANY);
+    record_syscall_update_result(update_ret, false);
     
     return 0;
 }

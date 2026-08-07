@@ -617,7 +617,9 @@ func (c *FlashArrayCollector) collectVolumeMetrics(ctx context.Context, timestam
 	var perf struct {
 		Items []VolumePerformance `json:"items"`
 	}
-	_ = c.client.Get(ctx, "/api/2.0/volumes/performance", &perf)
+	if err := c.client.Get(ctx, "/api/2.0/volumes/performance", &perf); err != nil {
+		c.log.Debug("failed to get volume performance", "error", err)
+	}
 
 	// Build performance lookup
 	perfMap := make(map[string]VolumePerformance)

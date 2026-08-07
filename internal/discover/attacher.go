@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/cilium/ebpf/link"
@@ -72,6 +73,9 @@ type traceAttacher struct {
 
 	// Is able to find process lifetime duration
 	processAgeFunc func(int32) time.Duration
+
+	routeHarvestTimersMu sync.Mutex
+	routeHarvestTimers   map[int32]*time.Timer
 }
 
 func traceAttacherProvider(ta *traceAttacher) swarm.InstanceFunc {
@@ -96,6 +100,7 @@ func (ta *traceAttacher) attacherLoop(_ context.Context) (swarm.RunFunc, error) 
 	ta.EbpfEventContext.CommonPIDsFilter = ebpfcommon.NewPIDsFilter(&ta.Cfg.Discovery, slog.With("component", "ebpfCommon.CommonPIDsFilter"), ta.Metrics)
 	ta.routeHarvester = harvest.NewRouteHarvester(&ta.Cfg.Discovery.RouteHarvestConfig, ta.Cfg.Discovery.DisabledRouteHarvesters, ta.Cfg.Discovery.RouteHarvesterTimeout)
 	ta.processAgeFunc = ProcessAgeFunc()
+	ta.routeHarvestTimers = make(map[int32]*time.Timer)
 
 	if err := ta.init(); err != nil {
 		ta.log.Error("cant start process tracer. Stopping it", "error", err)
@@ -124,7 +129,9 @@ func (ta *traceAttacher) attacherLoop(_ context.Context) (swarm.RunFunc, error) 
 					}
 
 					if instr.Obj.FileInfo.ELF != nil {
-						_ = instr.Obj.FileInfo.ELF.Close()
+						if err := instr.Obj.FileInfo.ELF.Close(); err != nil {
+							ta.log.Debug("failed closing ELF file", "pid", instr.Obj.FileInfo.Pid, "error", err)
+						}
 					}
 				case EventDeleted:
 					ta.notifyProcessDeletion(&instr.Obj)
@@ -342,17 +349,25 @@ func (ta *traceAttacher) harvestRoutes(ie *ebpf.Instrumentable, reused bool) {
 	if delay, delayTime := ta.routeHarvester.HarvestRoutesDelay(ie.FileInfo); delay {
 		procAge := ta.processAgeFunc(ie.FileInfo.Pid)
 		if procAge < delayTime {
-			time.AfterFunc(delayTime-procAge, func() {
+			var timer *time.Timer
+			timer = time.AfterFunc(delayTime-procAge, func() {
 				// sanity check that the program is still up and running and it's the same command
 				if exePath, ready := ExecutableReady(PID(ie.FileInfo.Pid)); ready && exePath == ie.FileInfo.CmdExePath {
 					ta.harvestRoutesProcessor(ie, reused)
 				}
+				ta.routeHarvestTimersMu.Lock()
+				if current, ok := ta.routeHarvestTimers[ie.FileInfo.Pid]; ok && current == timer {
+					delete(ta.routeHarvestTimers, ie.FileInfo.Pid)
+				}
+				ta.routeHarvestTimersMu.Unlock()
 			})
+			ta.setRouteHarvestTimer(ie.FileInfo.Pid, timer)
 
 			return
 		}
 	}
 
+	ta.stopRouteHarvestTimer(ie.FileInfo.Pid)
 	ta.harvestRoutesProcessor(ie, reused)
 }
 
@@ -453,6 +468,7 @@ func (ta *traceAttacher) monitorPIDs(tracer *ebpf.ProcessTracer, ie *ebpf.Instru
 }
 
 func (ta *traceAttacher) notifyProcessDeletion(ie *ebpf.Instrumentable) {
+	ta.stopRouteHarvestTimer(ie.FileInfo.Pid)
 	if tracer, ok := ta.existingTracers[ie.FileInfo.Ino]; ok {
 		ta.log.Info("process ended for already instrumented executable",
 			"cmd", ie.FileInfo.CmdExePath,
@@ -478,6 +494,24 @@ func (ta *traceAttacher) notifyProcessDeletion(ie *ebpf.Instrumentable) {
 			ta.OutputTracerEvents.Send(Event[*ebpf.Instrumentable]{Type: EventInstanceDeleted, Obj: ie})
 		}
 	}
+}
+
+func (ta *traceAttacher) setRouteHarvestTimer(pid int32, timer *time.Timer) {
+	ta.routeHarvestTimersMu.Lock()
+	if prev, ok := ta.routeHarvestTimers[pid]; ok {
+		prev.Stop()
+	}
+	ta.routeHarvestTimers[pid] = timer
+	ta.routeHarvestTimersMu.Unlock()
+}
+
+func (ta *traceAttacher) stopRouteHarvestTimer(pid int32) {
+	ta.routeHarvestTimersMu.Lock()
+	if timer, ok := ta.routeHarvestTimers[pid]; ok {
+		timer.Stop()
+		delete(ta.routeHarvestTimers, pid)
+	}
+	ta.routeHarvestTimersMu.Unlock()
 }
 
 func (ta *traceAttacher) init() error {

@@ -44,7 +44,12 @@ func New(opts Options) *Converter {
 		opts.SampleIntervalMs = 10
 	}
 	if opts.Logger == nil {
-		opts.Logger, _ = zap.NewProduction()
+		logger, err := zap.NewProduction()
+		if err != nil {
+			opts.Logger = zap.NewNop()
+		} else {
+			opts.Logger = logger
+		}
 	}
 
 	// Determine if we should use native parser
@@ -303,26 +308,38 @@ func (c *Converter) WriteJSON(events []*ProfileEvent, outputPath string) error {
 
 	for _, evt := range events {
 		if err := encoder.Encode(evt); err != nil {
-			_ = f.Close()
-			_ = os.Remove(tempPath)
+			if closeErr := f.Close(); closeErr != nil {
+				c.logger.Debug("failed to close temp file after encode failure", zap.Error(closeErr))
+			}
+			if removeErr := os.Remove(tempPath); removeErr != nil {
+				c.logger.Debug("failed to remove temp file after encode failure", zap.Error(removeErr))
+			}
 			return fmt.Errorf("failed to encode event: %w", err)
 		}
 	}
 
 	if err := writer.Flush(); err != nil {
-		_ = f.Close()
-		_ = os.Remove(tempPath)
+		if closeErr := f.Close(); closeErr != nil {
+			c.logger.Debug("failed to close temp file after flush failure", zap.Error(closeErr))
+		}
+		if removeErr := os.Remove(tempPath); removeErr != nil {
+			c.logger.Debug("failed to remove temp file after flush failure", zap.Error(removeErr))
+		}
 		return fmt.Errorf("failed to flush writer: %w", err)
 	}
 
 	if err := f.Close(); err != nil {
-		_ = os.Remove(tempPath)
+		if removeErr := os.Remove(tempPath); removeErr != nil {
+			c.logger.Debug("failed to remove temp file after close failure", zap.Error(removeErr))
+		}
 		return fmt.Errorf("failed to close file: %w", err)
 	}
 
 	// Atomic rename
 	if err := os.Rename(tempPath, outputPath); err != nil {
-		_ = os.Remove(tempPath)
+		if removeErr := os.Remove(tempPath); removeErr != nil {
+			c.logger.Debug("failed to remove temp file after rename failure", zap.Error(removeErr))
+		}
 		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 

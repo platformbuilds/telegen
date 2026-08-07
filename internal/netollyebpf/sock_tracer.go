@@ -34,6 +34,7 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 	"golang.org/x/sys/unix"
 
+	ebpfcommon "github.com/mirastacklabs-ai/telegen/internal/ebpf/common"
 	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
 	convenience "github.com/mirastacklabs-ai/telegen/internal/tracers/convenience"
 )
@@ -49,6 +50,7 @@ type SockFlowFetcher struct {
 	log           *slog.Logger
 	objects       *NetSkObjects
 	ringbufReader *ringbuf.Reader
+	packetFilter  *ebpfcommon.Filter
 	cacheMaxSize  int
 }
 
@@ -99,24 +101,40 @@ func NewSockFlowFetcher(
 	}
 
 	fd, err := unix.Socket(unix.AF_PACKET, unix.SOCK_RAW, int(htons(unix.ETH_P_ALL)))
-	if err == nil {
-		ssoErr := syscall.SetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_ATTACH_BPF, objects.ObiSocketFilter.FD())
-		if ssoErr != nil {
-			return nil, fmt.Errorf("loading and assigning BPF objects: %w", ssoErr)
+	if err != nil {
+		if closeErr := objects.Close(); closeErr != nil {
+			tlog.Debug("failed closing BPF objects after socket setup error", "error", closeErr)
 		}
-	} else {
 		return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
+	}
+	packetFilter := &ebpfcommon.Filter{Fd: fd}
+	ssoErr := syscall.SetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_ATTACH_BPF, objects.ObiSocketFilter.FD())
+	if ssoErr != nil {
+		if closeErr := packetFilter.Close(); closeErr != nil {
+			tlog.Debug("failed closing packet filter after attach error", "error", closeErr)
+		}
+		if closeErr := objects.Close(); closeErr != nil {
+			tlog.Debug("failed closing BPF objects after attach error", "error", closeErr)
+		}
+		return nil, fmt.Errorf("loading and assigning BPF objects: %w", ssoErr)
 	}
 
 	// read events from socket filter ringbuffer
 	flows, err := ringbuf.NewReader(objects.DirectFlows)
 	if err != nil {
+		if closeErr := packetFilter.Close(); closeErr != nil {
+			tlog.Debug("failed closing packet filter after ringbuf error", "error", closeErr)
+		}
+		if closeErr := objects.Close(); closeErr != nil {
+			tlog.Debug("failed closing BPF objects after ringbuf error", "error", closeErr)
+		}
 		return nil, fmt.Errorf("accessing to ringbuffer: %w", err)
 	}
 	return &SockFlowFetcher{
 		log:           tlog,
 		objects:       &objects,
 		ringbufReader: flows,
+		packetFilter:  packetFilter,
 		cacheMaxSize:  cacheMaxSize,
 	}, nil
 }
@@ -124,7 +142,9 @@ func NewSockFlowFetcher(
 func printVerifierErrorInfo(err error) {
 	var ve *ebpf.VerifierError
 	if errors.As(err, &ve) {
-		_, _ = fmt.Fprintf(os.Stderr, "Error Log:\n %v\n", strings.Join(ve.Log, "\n"))
+		if _, writeErr := fmt.Fprintf(os.Stderr, "Error Log:\n %v\n", strings.Join(ve.Log, "\n")); writeErr != nil {
+			slog.Debug("failed to write verifier error log", "error", writeErr)
+		}
 	}
 }
 
@@ -157,6 +177,12 @@ func (m *SockFlowFetcher) Close() error {
 
 func (m *SockFlowFetcher) closeObjects() []error {
 	var errs []error
+	if m.packetFilter != nil {
+		if err := m.packetFilter.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		m.packetFilter = nil
+	}
 	if err := m.objects.ObiSocketFilter.Close(); err != nil {
 		errs = append(errs, err)
 	}

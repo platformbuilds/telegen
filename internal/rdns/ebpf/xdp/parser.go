@@ -14,7 +14,10 @@ const wordSize = 2
 
 // readByte reads and returns a single byte from the buffer
 func readByte(b *bytes.Buffer) byte {
-	u, _ := b.ReadByte()
+	u, err := b.ReadByte()
+	if err != nil {
+		return 0
+	}
 	return u
 }
 
@@ -186,7 +189,9 @@ func parseRecord(data *bytes.Buffer, base []byte) *record {
 
 		r.name = parseSectionLabel(bytes.NewBuffer(base[offset:]))
 	} else {
-		_ = data.UnreadByte()
+		if err := data.UnreadByte(); err != nil {
+			return nil
+		}
 		r.name = parseSectionLabel(data)
 	}
 

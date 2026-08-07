@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/embedded"
 	"go.opentelemetry.io/otel/sdk/instrumentation"
@@ -29,7 +30,74 @@ var (
 	errCreatingAggregators     = errors.New("could not create all aggregators")
 	errIncompatibleAggregation = errors.New("incompatible aggregation")
 	errUnknownAggregation      = errors.New("unrecognized aggregation")
+
+	defaultAggregationLimit atomic.Int64
+	overflowCounters        sync.Map // map[string]*atomic.Uint64
+	registerOverflowMetric  sync.Once
+	overflowCounterMetric   = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "telegen_metric_cardinality_overflow_total",
+			Help: "Total number of metric measurements routed to overflow due to cardinality limits.",
+		},
+		[]string{"instrument"},
+	)
 )
+
+const (
+	fallbackAggregationLimit = 2000
+	cardinalityWarnEvery     = 1000
+)
+
+func init() {
+	defaultAggregationLimit.Store(fallbackAggregationLimit)
+	registerOverflowMetric.Do(func() {
+		prometheus.MustRegister(overflowCounterMetric)
+	})
+}
+
+// SetDefaultCardinalityLimit sets telegen's fallback metric aggregation limit
+// used when OTEL_GO_X_CARDINALITY_LIMIT is unset.
+func SetDefaultCardinalityLimit(limit int) {
+	if limit <= 0 {
+		limit = fallbackAggregationLimit
+	}
+	defaultAggregationLimit.Store(int64(limit))
+}
+
+func getDefaultCardinalityLimit() int {
+	limit := int(defaultAggregationLimit.Load())
+	if limit <= 0 {
+		return fallbackAggregationLimit
+	}
+	return limit
+}
+
+func newCardinalityOverflowObserver(instrument string, limit int) func() {
+	if instrument == "" {
+		instrument = "unknown"
+	}
+	return func() {
+		overflowCounterMetric.WithLabelValues(instrument).Inc()
+		count := overflowCounterForInstrument(instrument).Add(1)
+		if count == 1 || count%cardinalityWarnEvery == 0 {
+			global.Warn(
+				"metric aggregation cardinality limit reached",
+				"instrument", instrument,
+				"limit", limit,
+				"overflow_measurements_total", count,
+			)
+		}
+	}
+}
+
+func overflowCounterForInstrument(instrument string) *atomic.Uint64 {
+	if value, ok := overflowCounters.Load(instrument); ok {
+		return value.(*atomic.Uint64)
+	}
+	counter := &atomic.Uint64{}
+	actual, _ := overflowCounters.LoadOrStore(instrument, counter)
+	return actual.(*atomic.Uint64)
+}
 
 // instrumentSync is a synchronization point between a pipeline and an
 // instrument's aggregate function.
@@ -350,11 +418,16 @@ func (i *inserter[N]) cachedAggregator(scope instrumentation.Scope, kind Instrum
 			ReservoirFunc: reservoirFunc[N](stream.Aggregation),
 		}
 		b.Filter = stream.AttributeFilter
-		// A value less than or equal to zero will disable the aggregation
-		// limits for the builder (an all the created aggregates).
-		// CardinalityLimit.Lookup returns 0 by default if unset (or
-		// unrecognized input). Use that value directly.
-		b.AggregationLimit, _ = x.CardinalityLimit.Lookup()
+		// Respect OTEL_GO_X_CARDINALITY_LIMIT when set. Otherwise use telegen's
+		// safe fallback default so aggregators are bounded in production.
+		if limit, ok := x.CardinalityLimit.Lookup(); ok {
+			b.AggregationLimit = limit
+		} else {
+			b.AggregationLimit = getDefaultCardinalityLimit()
+		}
+		if b.AggregationLimit > 0 {
+			b.OnOverflow = newCardinalityOverflowObserver(stream.Name, b.AggregationLimit)
+		}
 
 		in, remove, out, err := i.aggregateFunc(b, stream.Aggregation, kind)
 		if err != nil {

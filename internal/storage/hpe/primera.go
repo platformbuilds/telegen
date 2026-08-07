@@ -207,7 +207,9 @@ func (c *PrimeraCollector) Stop(ctx context.Context) error {
 
 	// Logout from session
 	if c.sessionKey != "" {
-		_ = c.logout(ctx)
+		if err := c.logout(ctx); err != nil {
+			c.log.Warn("failed to logout from Primera session", "error", err)
+		}
 	}
 
 	c.running = false

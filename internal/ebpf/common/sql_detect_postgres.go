@@ -325,6 +325,10 @@ Loop:
 		case "BIND":
 			portal := unix.ByteSliceToString(msg.data)
 			portalLen := len(portal) + 1 // +1 for the null terminator
+			if portalLen < 0 || portalLen > len(msg.data) {
+				slog.Debug("Postgres BIND command has invalid portal length", "portalLen", portalLen, "dataLen", len(msg.data))
+				continue
+			}
 			stmtName := unix.ByteSliceToString(msg.data[portalLen:])
 
 			parseCtx.postgresPortals.Add(postgresPortalsKey{

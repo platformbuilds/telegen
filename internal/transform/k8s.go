@@ -382,9 +382,30 @@ func AppendKubeMetadata(db *kube.Store, svc *svc.Attrs, meta *ikube.CachedObjMet
 	// (related issue: https://github.com/grafana/k8s-monitoring-helm/issues/942)
 	svc.UID.Instance = meta.Meta.Namespace + "." + meta.Meta.Name + "." + containerName
 
-	// if, in the future, other pipeline steps modify the service metadata, we should
-	// replace the map literal by individual entry insertions
-	k8sMeta := map[attr.Name]string{
+	cacheScope := clusterName + "|" + containerName
+	cached, ok := meta.GetMergedMetadataCache(cacheScope)
+	if !ok {
+		cached = buildCachedKubeMetadata(meta, topOwner, clusterName, containerName)
+		meta.SetMergedMetadataCache(cacheScope, cached)
+	}
+
+	// Fast path: when no pre-existing metadata exists, reuse immutable cached map.
+	if len(svc.Metadata) == 0 {
+		svc.Metadata = cached
+	} else {
+		// Slow path: preserve existing service metadata while overlaying kube metadata.
+		merged := make(map[attr.Name]string, len(svc.Metadata)+len(cached))
+		maps.Copy(merged, svc.Metadata)
+		maps.Copy(merged, cached)
+		svc.Metadata = merged
+	}
+
+	// override hostname by the Pod name
+	svc.HostName = meta.Meta.Name
+}
+
+func buildCachedKubeMetadata(meta *ikube.CachedObjMeta, topOwner *informer.Owner, clusterName, containerName string) map[attr.Name]string {
+	m := map[attr.Name]string{
 		attr.K8sNamespaceName: meta.Meta.Namespace,
 		attr.K8sPodName:       meta.Meta.Name,
 		attr.K8sContainerName: containerName,
@@ -393,17 +414,6 @@ func AppendKubeMetadata(db *kube.Store, svc *svc.Attrs, meta *ikube.CachedObjMet
 		attr.K8sPodStartTime:  meta.Meta.Pod.StartTimeStr,
 		attr.K8sClusterName:   clusterName,
 	}
-
-	// Create a new map to avoid concurrent map writes on svc.Metadata.
-	m := make(map[attr.Name]string)
-
-	// Thread-safe copy for the existing metadata.
-	if svcMetadata := svc.Metadata; svcMetadata != nil {
-		maps.Copy(m, svcMetadata)
-	}
-
-	// Thread-safe copy for the new k8s metadata.
-	maps.Copy(m, k8sMeta)
 
 	// ownerKind could be also "Pod", but we won't insert it as "owner" label to avoid
 	// growing cardinality
@@ -423,12 +433,7 @@ func AppendKubeMetadata(db *kube.Store, svc *svc.Attrs, meta *ikube.CachedObjMet
 
 	// append resource metadata from cached object
 	maps.Copy(m, meta.OTELResourceMeta)
-
-	// Thread-safe assignment of the new metadata map.
-	svc.Metadata = m
-
-	// override hostname by the Pod name
-	svc.HostName = meta.Meta.Name
+	return m
 }
 
 func OwnerLabelName(kind string) attr.Name {

@@ -198,7 +198,9 @@ func (c *Collector) collectLoop(ctx context.Context) {
 	defer ticker.Stop()
 
 	// Initial collection
-	_ = c.Collect()
+	if err := c.Collect(); err != nil {
+		c.log.Warn("initial GPU metrics collection failed", "error", err)
+	}
 
 	for {
 		select {
@@ -207,7 +209,9 @@ func (c *Collector) collectLoop(ctx context.Context) {
 		case <-c.done:
 			return
 		case <-ticker.C:
-			_ = c.Collect()
+			if err := c.Collect(); err != nil {
+				c.log.Warn("periodic GPU metrics collection failed", "error", err)
+			}
 		}
 	}
 }

@@ -23,16 +23,16 @@ var ErrNeedsMoreData = errors.New("clickhouse: needs more data")
 type ClientPacketType uint64
 
 const (
-	ClientHello         ClientPacketType = 0
-	ClientQuery         ClientPacketType = 1
-	ClientData          ClientPacketType = 2
-	ClientCancel        ClientPacketType = 3
-	ClientPing          ClientPacketType = 4
-	ClientTableStatus   ClientPacketType = 5
-	ClientKeepAlive     ClientPacketType = 6
-	ClientScalar        ClientPacketType = 7
-	ClientIgnoredPartUUIDs ClientPacketType = 8
-	ClientReadTaskResponse  ClientPacketType = 9
+	ClientHello                     ClientPacketType = 0
+	ClientQuery                     ClientPacketType = 1
+	ClientData                      ClientPacketType = 2
+	ClientCancel                    ClientPacketType = 3
+	ClientPing                      ClientPacketType = 4
+	ClientTableStatus               ClientPacketType = 5
+	ClientKeepAlive                 ClientPacketType = 6
+	ClientScalar                    ClientPacketType = 7
+	ClientIgnoredPartUUIDs          ClientPacketType = 8
+	ClientReadTaskResponse          ClientPacketType = 9
 	ClientMergeTreeReadTaskResponse ClientPacketType = 10
 )
 
@@ -61,8 +61,8 @@ const (
 type QueryState uint64
 
 const (
-	QueryStateInitial    QueryState = 0
-	QueryStateSecondary  QueryState = 1
+	QueryStateInitial   QueryState = 0
+	QueryStateSecondary QueryState = 1
 )
 
 // Packet holds a decoded ClickHouse native protocol packet.
@@ -107,6 +107,16 @@ func readString(buf []byte) (string, int, error) {
 	length, n, err := readVarUint(buf)
 	if err != nil {
 		return "", 0, err
+	}
+	maxInt := uint64(^uint(0) >> 1)
+	if length > maxInt {
+		return "", 0, errors.New("clickhouse: string length overflows int")
+	}
+	if n > len(buf) {
+		return "", 0, errors.New("clickhouse: invalid string prefix length")
+	}
+	if length > uint64(len(buf)-n) {
+		return "", 0, ErrNeedsMoreData
 	}
 	total := n + int(length)
 	if len(buf) < total {
@@ -292,7 +302,7 @@ func IsClickHouse(buf []byte) bool {
 type Record struct {
 	QueryID    string
 	QuerySQL   string
-	StatusCode int    // 0 = OK, 1 = exception
+	StatusCode int // 0 = OK, 1 = exception
 	ErrorCode  int32
 	ErrorMsg   string
 }

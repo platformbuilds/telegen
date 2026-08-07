@@ -129,7 +129,9 @@ func parseVersion(s string) versionTuple {
 				break
 			}
 		}
-		min, _ = strconv.Atoi(p)
+		if parsed, err := strconv.Atoi(p); err == nil {
+			min = parsed
+		}
 	}
 	if err1 != nil || err2 != nil {
 		return versionTuple{}

@@ -24,13 +24,13 @@ type EBPFProfileConverter struct {
 
 // ProfileData represents eBPF profiling data.
 type ProfileData struct {
-	Type       ProfileType    `json:"type"`
-	StartTime  time.Time      `json:"startTime"`
-	EndTime    time.Time      `json:"endTime"`
-	Duration   time.Duration  `json:"duration"`
-	SampleRate int            `json:"sampleRate"` // Hz
-	Process    *ProfiledProcess `json:"process"`
-	Samples    []ProfileSample `json:"samples"`
+	Type       ProfileType       `json:"type"`
+	StartTime  time.Time         `json:"startTime"`
+	EndTime    time.Time         `json:"endTime"`
+	Duration   time.Duration     `json:"duration"`
+	SampleRate int               `json:"sampleRate"` // Hz
+	Process    *ProfiledProcess  `json:"process"`
+	Samples    []ProfileSample   `json:"samples"`
 	Metadata   map[string]string `json:"metadata,omitempty"`
 }
 
@@ -38,11 +38,11 @@ type ProfileData struct {
 type ProfileType string
 
 const (
-	ProfileTypeCPU      ProfileType = "cpu"
-	ProfileTypeMemory   ProfileType = "memory"
-	ProfileTypeOffCPU   ProfileType = "off_cpu"
-	ProfileTypeMutex    ProfileType = "mutex"
-	ProfileTypeBlock    ProfileType = "block"
+	ProfileTypeCPU       ProfileType = "cpu"
+	ProfileTypeMemory    ProfileType = "memory"
+	ProfileTypeOffCPU    ProfileType = "off_cpu"
+	ProfileTypeMutex     ProfileType = "mutex"
+	ProfileTypeBlock     ProfileType = "block"
 	ProfileTypeGoroutine ProfileType = "goroutine"
 )
 
@@ -58,36 +58,36 @@ type ProfiledProcess struct {
 
 // ProfileSample represents a single profile sample.
 type ProfileSample struct {
-	Timestamp   time.Time     `json:"timestamp"`
-	Value       int64         `json:"value"` // count, bytes, or nanoseconds depending on type
-	Labels      map[string]string `json:"labels,omitempty"`
-	StackTrace  []StackFrame  `json:"stackTrace,omitempty"`
+	Timestamp  time.Time         `json:"timestamp"`
+	Value      int64             `json:"value"` // count, bytes, or nanoseconds depending on type
+	Labels     map[string]string `json:"labels,omitempty"`
+	StackTrace []StackFrame      `json:"stackTrace,omitempty"`
 }
 
 // StackFrame represents a single stack frame.
 type StackFrame struct {
-	Address    uint64 `json:"address"`
-	Symbol     string `json:"symbol,omitempty"`
-	Module     string `json:"module,omitempty"`
-	File       string `json:"file,omitempty"`
-	Line       int    `json:"line,omitempty"`
-	IsKernel   bool   `json:"isKernel,omitempty"`
-	IsJIT      bool   `json:"isJIT,omitempty"`
+	Address  uint64 `json:"address"`
+	Symbol   string `json:"symbol,omitempty"`
+	Module   string `json:"module,omitempty"`
+	File     string `json:"file,omitempty"`
+	Line     int    `json:"line,omitempty"`
+	IsKernel bool   `json:"isKernel,omitempty"`
+	IsJIT    bool   `json:"isJIT,omitempty"`
 }
 
 // ProfileBatch represents a batch of profile data.
 type ProfileBatch struct {
-	Profiles []ProfileData  `json:"profiles"`
+	Profiles []ProfileData    `json:"profiles"`
 	HostInfo *ProfileHostInfo `json:"hostInfo,omitempty"`
 }
 
 // ProfileHostInfo contains host information.
 type ProfileHostInfo struct {
-	Hostname    string `json:"hostname"`
-	HostID      string `json:"hostId,omitempty"`
-	Kernel      string `json:"kernel,omitempty"`
-	Arch        string `json:"arch,omitempty"`
-	CPUCount    int    `json:"cpuCount,omitempty"`
+	Hostname string `json:"hostname"`
+	HostID   string `json:"hostId,omitempty"`
+	Kernel   string `json:"kernel,omitempty"`
+	Arch     string `json:"arch,omitempty"`
+	CPUCount int    `json:"cpuCount,omitempty"`
 }
 
 // NewEBPFProfileConverter creates a new EBPFProfileConverter with default settings.
@@ -162,8 +162,12 @@ func (c *EBPFProfileConverter) convertProfile(profile *ProfileData, lr plog.LogR
 	} else {
 		// Create a summary without stack traces.
 		summary := c.createProfileSummary(profile)
-		summaryJSON, _ := json.Marshal(summary)
-		lr.Body().SetStr(string(summaryJSON))
+		summaryJSON, err := json.Marshal(summary)
+		if err != nil {
+			lr.Body().SetStr(fmt.Sprintf("profile:%s", profile.Type))
+		} else {
+			lr.Body().SetStr(string(summaryJSON))
+		}
 	}
 
 	// Set attributes.
@@ -340,7 +344,7 @@ func (c *EBPFProfileConverter) addProfileMetrics(profile *ProfileData, sm pmetri
 		sum := m.SetEmptySum()
 		sum.SetIsMonotonic(true)
 		sum.SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
-		
+
 		var total int64
 		for _, s := range profile.Samples {
 			total += s.Value
@@ -361,7 +365,7 @@ func (c *EBPFProfileConverter) addProfileMetrics(profile *ProfileData, sm pmetri
 		sum := m.SetEmptySum()
 		sum.SetIsMonotonic(true)
 		sum.SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
-		
+
 		var total int64
 		for _, s := range profile.Samples {
 			total += s.Value
@@ -381,7 +385,7 @@ func (c *EBPFProfileConverter) addProfileMetrics(profile *ProfileData, sm pmetri
 		sum := m.SetEmptySum()
 		sum.SetIsMonotonic(true)
 		sum.SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
-		
+
 		var total int64
 		for _, s := range profile.Samples {
 			total += s.Value
@@ -401,7 +405,7 @@ func (c *EBPFProfileConverter) addProfileMetrics(profile *ProfileData, sm pmetri
 		sum := m.SetEmptySum()
 		sum.SetIsMonotonic(true)
 		sum.SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
-		
+
 		var total int64
 		for _, s := range profile.Samples {
 			total += s.Value

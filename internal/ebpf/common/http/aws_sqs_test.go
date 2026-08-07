@@ -30,7 +30,7 @@ func TestParseAWSSQS(t *testing.T) {
 				r.Header.Set("x-amz-target", "AmazonSQS.SendMessage")
 				return r
 			}(),
-			resp: func() *http.Response {
+			resp: func() *http.Response { //nolint:bodyclose // closed in test cleanup after parser consumption
 				body := `{"MessageId":"abc123"}`
 				r := &http.Response{
 					Body: io.NopCloser(strings.NewReader(body)),
@@ -59,7 +59,7 @@ func TestParseAWSSQS(t *testing.T) {
 				r, _ := http.NewRequest(http.MethodPost, "https://sqs.us-east-1.amazonaws.com/", io.NopCloser(strings.NewReader(body)))
 				return r
 			}(),
-			resp: func() *http.Response {
+			resp: func() *http.Response { //nolint:bodyclose // closed in test cleanup after parser consumption
 				body := `{"MessageId":"abc123"}`
 				r := &http.Response{
 					Body: io.NopCloser(strings.NewReader(body)),
@@ -195,6 +195,11 @@ func TestParseAWSSQS(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.resp != nil && tt.resp.Body != nil {
+				t.Cleanup(func() {
+					_ = tt.resp.Body.Close()
+				})
+			}
 			got, err := parseAWSSQS(tt.req, tt.resp)
 			if tt.wantErr && err == nil {
 				t.Errorf("expected error, got nil")
