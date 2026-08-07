@@ -2313,7 +2313,6 @@ LEVEL=INFO warn_present=True error_present=True
 +- added config regression guard: new `scripts/validate-configs.sh`, new `make validate-configs`, and CI lint-job step (`.github/workflows/ci.yaml`) running validation each PR/push.
 +- final local gate passed: build + targeted tests + golangci-lint + validate-configs all green, including private helm renders.
 ```
-
 ### fix-106-deploy-regressions (agent crash loop + collector lock failure)
 
 #### PRE output
