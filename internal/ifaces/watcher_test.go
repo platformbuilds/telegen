@@ -43,14 +43,7 @@ func TestWatcher(t *testing.T) {
 		return []Interface{{"foo", 1}, {"bar", 2}, {"baz", 3}}, nil
 	}
 	inputLinks := make(chan netlink.LinkUpdate, 10)
-	watcher.linkSubscriber = func(ch chan<- netlink.LinkUpdate, _ <-chan struct{}) error {
-		go func() {
-			for link := range inputLinks {
-				ch <- link
-			}
-		}()
-		return nil
-	}
+	watcher.linkSubscriber = mockLinkSubscriber(inputLinks)
 
 	outputEvents, err := watcher.Subscribe(ctx)
 	require.NoError(t, err)
@@ -101,5 +94,30 @@ func upAndRunning(name string, index int) netlink.LinkUpdate {
 func down(name string, index int) netlink.LinkUpdate {
 	return netlink.LinkUpdate{
 		Link: &netlink.GenericLink{LinkAttrs: netlink.LinkAttrs{Name: name, Index: index}},
+	}
+}
+
+// mockLinkSubscriber mirrors netlink.LinkSubscribe semantics in tests and exits
+// when done is closed, preventing goroutine leaks in goleak-enabled suites.
+func mockLinkSubscriber(inputLinks <-chan netlink.LinkUpdate) func(chan<- netlink.LinkUpdate, <-chan struct{}) error {
+	return func(ch chan<- netlink.LinkUpdate, done <-chan struct{}) error {
+		go func() {
+			for {
+				select {
+				case <-done:
+					return
+				case link, ok := <-inputLinks:
+					if !ok {
+						return
+					}
+					select {
+					case ch <- link:
+					case <-done:
+						return
+					}
+				}
+			}
+		}()
+		return nil
 	}
 }
