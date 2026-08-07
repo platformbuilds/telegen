@@ -2176,3 +2176,35 @@ $ GOOS=linux GOARCH=amd64 go vet ./internal/ifaces/... && GOOS=linux golangci-li
 +- replaced both inline mock subscriber closures in `internal/ifaces/watcher_test.go` and `internal/ifaces/registerer_test.go` with the shared helper.
 +- this removes both leaked goroutine modes reported by CI (`chan send` in watcher test and `chan receive` in registerer test).
 ```
+
+### task-9.5 (COMPLETED: CodeQL integer/overflow follow-up)
+
+#### PRE output
+
+```text
+$ gh api repos/mirastacklabs-ai/telegen/check-runs/92826890110/annotations --paginate --jq '.[] | "\(.path):\(.start_line) [\(.annotation_level)] \(.title) :: \(.message)"'
+internal/kubemetrics/streaming.go:440 [failure] Incorrect conversion between integer types :: Incorrect conversion of an unsigned 64-bit integer from [strconv.ParseUint](1) to a lower bit size type int64 without an upper bound check.
+internal/kubemetrics/streaming.go:454 [failure] Incorrect conversion between integer types :: Incorrect conversion of an unsigned 64-bit integer from [strconv.ParseUint](1) to a lower bit size type int64 without an upper bound check.
+internal/logs/parsers/pipeline.go:243 [failure] Size computation for allocation may overflow :: This operation, which is used in an [allocation](1), involves a [potentially large value](2) and might overflow.
+internal/snmp/poller.go:119 [failure] Incorrect conversion between integer types :: Incorrect conversion of an integer with architecture-dependent bit size from [strconv.Atoi](1) to a lower bit size type uint16 without an upper bound check.
+```
+
+#### POST output
+
+```text
+$ gofmt -w internal/kubemetrics/streaming.go internal/logs/parsers/pipeline.go internal/snmp/poller.go && golangci-lint run --timeout=10m && go test -race ./internal/kubemetrics ./internal/logs/parsers ./internal/snmp -count=1
+0 issues.
+ok  	github.com/mirastacklabs-ai/telegen/internal/kubemetrics	4.942s
+ok  	github.com/mirastacklabs-ai/telegen/internal/logs/parsers	7.785s
+ok  	github.com/mirastacklabs-ai/telegen/internal/snmp	11.026s
+```
+
+#### Diff hunk
+
+```diff
++resolved all four CodeQL findings from PR check run `92826890110`:
++- `internal/kubemetrics/streaming.go`: added `clampUint64ToInt64` and routed memory/network/disk uint64→int64 metric conversions through saturating conversion.
++- `internal/logs/parsers/pipeline.go`: guarded `len(app.Attributes)+1` map capacity computation with max-int bound check before increment.
++- `internal/snmp/poller.go`: replaced architecture-dependent `strconv.Atoi` + `uint16` cast with bounded `strconv.ParseUint(..., 10, 16)` and default fallback.
++- reran formatting, full lint, and targeted package race tests to verify no regressions.
+```
