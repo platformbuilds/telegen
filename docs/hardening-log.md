@@ -1568,3 +1568,119 @@ ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline
 +updated sub-span helper to append directly into a shared SpanSlice.
 +added sigdef metadata attribute caching keyed by global metadata-config version, and switched tracesgen to consume cached attribute slices.
 ```
+
+### task-8.10
+
+#### POST output
+
+```text
+$ rg -uu -n -B4 'nr.logger.Debug' internal/transform/name_resolver.go | rg -c 'Enabled'
+2
+
+$ rg -uu -n -B4 'Debug' internal/ebpf/common/pids.go | rg -c 'Enabled'
+1
+
+$ rg -uu -n 'context.Background\(\)' internal/transform/name_resolver.go
+(no matches)
+
+$ rg -uu -n 'string\(requestBuffer\)' internal/ebpf/common/tcp_detect_transform.go
+(no matches)
+
+$ rg -uu -n -A10 'func .*PopBatch' internal/queue/queue.go | rg -c 'Sleep'
+0
+
+$ rg -uu -n -A16 'otelServiceInfoByIP' internal/kube/store.go | rg -c 'lru|expirable'
+3
+
+$ go test -race ./internal/transform/... ./internal/logs/... ./internal/ebpf/... ./internal/queue/... ./internal/kube/...
+ok  	github.com/mirastacklabs-ai/telegen/internal/transform/...
+ok  	github.com/mirastacklabs-ai/telegen/internal/logs/...
+ok  	github.com/mirastacklabs-ai/telegen/internal/ebpf/...
+ok  	github.com/mirastacklabs-ai/telegen/internal/queue/...
+ok  	github.com/mirastacklabs-ai/telegen/internal/kube/...
+```
+
+#### Diff hunk
+
+```diff
++name resolver now performs DNS lookups asynchronously into cache (with in-flight dedupe + timeout) and no longer blocks the pipeline goroutine on misses.
++raised default name-resolver cache size to 4096 in runtime defaults and tests.
++converted Redis request parsing path to []byte end-to-end, removing hot-path request/response string conversions.
++replaced Ring.PopBatch fixed 5ms busy-poll with channel wakeups to eliminate idle lock/time.Now churn.
++moved `otelServiceInfoByIP` from an unbounded map under `s.access` to a bounded expirable LRU with a dedicated lock, removing store-wide write-lock misses.
++moved SpringBoot/Log4j/GenericTimestamp parsed-log allocation to post-match paths and lazily initialize attributes map only when these parsers write attributes.
+```
+
+### task-9.1
+
+#### PRE output
+
+```text
+$ rg -uu -n "^func Benchmark(ReadBPFTraceAsSpan|PipelineParse|KubeDecorate|MetricRecord|FlushEvents|TracesGen)" internal pkg
+(no matches)
+```
+
+#### POST output
+
+```text
+$ rg -uu -n "^func Benchmark(ReadBPFTraceAsSpan|PipelineParse|KubeDecorate|MetricRecord|FlushEvents|TracesGen)" internal pkg
+pkg/export/otel/hotpath_bench_test.go:26:func BenchmarkMetricRecord(b *testing.B) {
+pkg/export/otel/hotpath_bench_test.go:61:func BenchmarkTracesGen(b *testing.B) {
+internal/transform/hotpath_bench_test.go:20:func BenchmarkKubeDecorate(b *testing.B) {
+internal/logs/parsers/hotpath_bench_test.go:8:func BenchmarkPipelineParse(b *testing.B) {
+internal/ebpf/common/hotpath_bench_test.go:17:func BenchmarkReadBPFTraceAsSpan(b *testing.B) {
+internal/ebpf/common/hotpath_bench_test.go:46:func BenchmarkFlushEvents(b *testing.B) {
+
+$ go test -run '^$' -bench 'Benchmark(ReadBPFTraceAsSpan|FlushEvents)$' -benchmem ./internal/ebpf/common
+goos: darwin
+goarch: arm64
+pkg: github.com/mirastacklabs-ai/telegen/internal/ebpf/common
+cpu: Apple M1 Pro
+BenchmarkReadBPFTraceAsSpan/http-10         	  624453	      2255 ns/op	     952 B/op	      28 allocs/op
+BenchmarkReadBPFTraceAsSpan/redis-10        	  600789	      2030 ns/op	     592 B/op	      27 allocs/op
+BenchmarkReadBPFTraceAsSpan/sql-10          	  667004	      1748 ns/op	    4304 B/op	      20 allocs/op
+BenchmarkFlushEvents-10                     	 2009572	       604.7 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/mirastacklabs-ai/telegen/internal/ebpf/common	6.002s
+
+$ go test -run '^$' -bench 'BenchmarkPipelineParse$' -benchmem ./internal/logs/parsers
+goos: darwin
+goarch: arm64
+pkg: github.com/mirastacklabs-ai/telegen/internal/logs/parsers
+cpu: Apple M1 Pro
+BenchmarkPipelineParse/log4j-10         	  401887	      2980 ns/op	     700 B/op	       6 allocs/op
+BenchmarkPipelineParse/plain_text-10    	  298312	      4055 ns/op	     595 B/op	       4 allocs/op
+BenchmarkPipelineParse/runtime_docker_json-10         	  382582	      3680 ns/op	    1061 B/op	      14 allocs/op
+BenchmarkPipelineParse/spring_boot-10                 	  342321	      3493 ns/op	     676 B/op	       5 allocs/op
+PASS
+ok  	github.com/mirastacklabs-ai/telegen/internal/logs/parsers	5.506s
+
+$ go test -run '^$' -bench 'BenchmarkKubeDecorate$' -benchmem ./internal/transform
+goos: darwin
+goarch: arm64
+pkg: github.com/mirastacklabs-ai/telegen/internal/transform
+cpu: Apple M1 Pro
+BenchmarkKubeDecorate-10    	 4796088	       248.3 ns/op	     264 B/op	      10 allocs/op
+PASS
+ok  	github.com/mirastacklabs-ai/telegen/internal/transform	2.026s
+
+$ go test -run '^$' -bench 'Benchmark(MetricRecord|TracesGen)$' -benchmem ./pkg/export/otel
+goos: darwin
+goarch: arm64
+pkg: github.com/mirastacklabs-ai/telegen/pkg/export/otel
+cpu: Apple M1 Pro
+BenchmarkMetricRecord-10    	 3554449	       323.5 ns/op	     288 B/op	       3 allocs/op
+BenchmarkTracesGen-10       	    5115	    246048 ns/op	  446899 B/op	    3631 allocs/op
+PASS
+ok  	github.com/mirastacklabs-ai/telegen/pkg/export/otel	3.369s
+```
+
+#### Diff hunk
+
+```diff
++added `internal/ebpf/common/hotpath_bench_test.go` with `BenchmarkReadBPFTraceAsSpan` (table-driven protocol cases) and `BenchmarkFlushEvents` (batch flush + PID filter path), both using `b.ReportAllocs()`.
++added `internal/logs/parsers/hotpath_bench_test.go` with `BenchmarkPipelineParse` over representative runtime/application lines and `b.ReportAllocs()`.
++added `internal/transform/hotpath_bench_test.go` with `BenchmarkKubeDecorate` exercising `AppendKubeMetadata` hot path after cache warm-up.
++added `pkg/export/otel/hotpath_bench_test.go` with `BenchmarkMetricRecord` (`Expirer.ForRecord`) and `BenchmarkTracesGen` (`GroupSpans` + `GenerateTracesWithAttributes`).
++fixed nil-map panic in `internal/logs/parsers/pipeline.go` by initializing `ParsedLog.Attributes` in `setBodyAttributes` and `mergeApplicationLog` before writes; this panic surfaced while running the new parse benchmark.
+```
