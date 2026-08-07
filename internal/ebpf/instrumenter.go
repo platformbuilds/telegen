@@ -36,7 +36,9 @@ func ilog() *slog.Logger {
 
 func closeAll(closers []io.Closer) {
 	for i := range closers {
-		_ = closers[i].Close()
+		if err := closers[i].Close(); err != nil {
+			ilog().Debug("failed to close eBPF resource", "error", err)
+		}
 	}
 }
 

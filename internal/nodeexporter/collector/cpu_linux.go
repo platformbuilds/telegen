@@ -350,7 +350,11 @@ func (c *cpuCollector) updateOnline(ch chan<- prometheus.Metric) error {
 	}
 	for _, cpu := range cpus {
 		setOnline := float64(0)
-		if online, _ := cpu.Online(); online {
+		online, err := cpu.Online()
+		if err != nil {
+			continue
+		}
+		if online {
 			setOnline = 1
 		}
 		ch <- prometheus.MustNewConstMetric(c.cpuOnline, prometheus.GaugeValue, setOnline, cpu.Number())

@@ -150,7 +150,9 @@ func unloadInternalMaps(eventContext *common.EBPFEventContext) {
 	defer eventContext.MapsLock.Unlock()
 
 	for _, v := range eventContext.EBPFMaps {
-		_ = v.Close()
+		if err := v.Close(); err != nil {
+			slog.Debug("failed closing internal eBPF map", "error", err)
+		}
 	}
 
 	eventContext.EBPFMaps = make(map[string]*ebpf.Map)

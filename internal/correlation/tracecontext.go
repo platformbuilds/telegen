@@ -93,14 +93,18 @@ func (f TraceFlags) String() string {
 // NewTraceID generates a new random trace ID.
 func NewTraceID() TraceID {
 	var id TraceID
-	_, _ = rand.Read(id[:])
+	if _, err := rand.Read(id[:]); err != nil {
+		return EmptyTraceID
+	}
 	return id
 }
 
 // NewSpanID generates a new random span ID.
 func NewSpanID() SpanID {
 	var id SpanID
-	_, _ = rand.Read(id[:])
+	if _, err := rand.Read(id[:]); err != nil {
+		return EmptySpanID
+	}
 	return id
 }
 

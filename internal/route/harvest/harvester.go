@@ -26,6 +26,7 @@ type RouteHarvester struct {
 	cfg      *services.RouteHarvestingConfig
 	timeout  time.Duration
 	mux      *sync.Mutex
+	inFlight chan struct{}
 
 	// testing related
 	javaExtractRoutes func(pid int32) (*RouteHarvesterResult, error)
@@ -71,6 +72,7 @@ func NewRouteHarvester(cfg *services.RouteHarvestingConfig, disabled []string, t
 		timeout:  timeout,
 		cfg:      cfg,
 		mux:      &sync.Mutex{},
+		inFlight: make(chan struct{}, 1),
 	}
 
 	h.javaExtractRoutes = h.java.ExtractRoutes
@@ -95,13 +97,20 @@ func (h *RouteHarvester) HarvestRoutes(fileInfo *exec.FileInfo) (*RouteHarvester
 		return nil, nil
 	}
 
-	// Ensure we harvest one by one
+	// Serialize setup/teardown and worker creation across calls.
 	h.mux.Lock()
 	defer h.mux.Unlock()
 
 	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), h.timeout)
 	defer cancel()
+
+	// Keep only one harvesting worker active even after timeout returns.
+	// This prevents concurrent access to shared attacher internals.
+	if !h.acquireWorker(ctx) {
+		h.log.Warn("route harvesting timed out", "timeout", h.timeout, "pid", fileInfo.Pid)
+		return nil, &HarvestError{Message: "route harvesting timed out"}
+	}
 
 	// Channel to receive the result
 	type result struct {
@@ -119,6 +128,7 @@ func (h *RouteHarvester) HarvestRoutes(fileInfo *exec.FileInfo) (*RouteHarvester
 
 	// Run the harvesting in a goroutine
 	go func() {
+		defer h.releaseWorker()
 		defer func() {
 			if r := recover(); r != nil {
 				h.log.Error("route harvesting failed", "error", r)
@@ -158,6 +168,22 @@ func (h *RouteHarvester) HarvestRoutes(fileInfo *exec.FileInfo) (*RouteHarvester
 	case <-ctx.Done():
 		h.log.Warn("route harvesting timed out", "timeout", h.timeout, "pid", fileInfo.Pid)
 		return nil, &HarvestError{Message: "route harvesting timed out"}
+	}
+}
+
+func (h *RouteHarvester) acquireWorker(ctx context.Context) bool {
+	select {
+	case h.inFlight <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func (h *RouteHarvester) releaseWorker() {
+	select {
+	case <-h.inFlight:
+	default:
 	}
 }
 

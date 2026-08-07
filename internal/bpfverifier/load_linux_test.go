@@ -64,7 +64,6 @@ func TestLoadAllTracerBpfObjects(t *testing.T) {
 	}
 
 	for _, tc := range loadCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			loaded, err := tc.load()
 			if err != nil {
