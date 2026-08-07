@@ -239,6 +239,10 @@ func (p *Pipeline) parseApplicationLog(line string) *ParsedLog {
 
 // mergeApplicationLog merges parsed application log data into a runtime-parsed log
 func mergeApplicationLog(runtime, app *ParsedLog) {
+	if runtime.Attributes == nil && (len(app.Attributes) > 0 || app.Format != "") {
+		runtime.Attributes = make(map[string]string, len(app.Attributes)+1)
+	}
+
 	// Use application timestamp if runtime didn't have one or app timestamp is more precise
 	if !app.Timestamp.IsZero() {
 		runtime.Timestamp = app.Timestamp
@@ -270,6 +274,9 @@ func mergeApplicationLog(runtime, app *ParsedLog) {
 func (p *Pipeline) setBodyAttributes(log *ParsedLog, originalLine string) {
 	if log == nil {
 		return
+	}
+	if log.Attributes == nil {
+		log.Attributes = make(map[string]string, 2)
 	}
 
 	// Map format to content type
