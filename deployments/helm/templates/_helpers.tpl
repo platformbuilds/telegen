@@ -120,12 +120,12 @@ selfTelemetry:
 # -----------------------------------------------------------------------------
 # Internal Metrics Configuration
 # -----------------------------------------------------------------------------
-internal_metrics:
-  exporter: {{ .Values.internalMetrics.exporter | default "disabled" }}
-  prometheus:
-    port: {{ .Values.internalMetrics.prometheus.port | default 0 }}
-    path: {{ .Values.internalMetrics.prometheus.path | default "/internal/metrics" | quote }}
-  bpf_metric_scrape_interval: {{ .Values.internalMetrics.bpfMetricScrapeInterval | default "15s" }}
+# internal_metrics:
+#   exporter: {{ .Values.internalMetrics.exporter | default "disabled" }}
+#   prometheus:
+#     port: {{ .Values.internalMetrics.prometheus.port | default 0 }}
+#     path: {{ .Values.internalMetrics.prometheus.path | default "/internal/metrics" | quote }}
+#   bpf_metric_scrape_interval: {{ .Values.internalMetrics.bpfMetricScrapeInterval | default "15s" }}
 
 # -----------------------------------------------------------------------------
 # eBPF Tracer Configuration
@@ -285,24 +285,24 @@ ebpf:
       - {{ . }}
       {{- end }}
     cache_len: {{ .Values.nameResolver.cacheLen | default 1024 }}
-    cache_ttl: {{ .Values.nameResolver.cacheTtl | default "5m" }}
+#     cache_ttl: {{ .Values.nameResolver.cacheTtl | default "5m" }}
   routes:
-    unmatch: {{ .Values.routes.unmatch | default "heuristic" }}
+#     unmatch: {{ .Values.routes.unmatch | default "heuristic" }}
     wildcard_char: {{ .Values.routes.wildcardChar | default "*" | quote }}
     max_path_segment_cardinality: {{ .Values.routes.maxPathSegmentCardinality | default 10 }}
     patterns: {{ .Values.routes.patterns | default list | toJson }}
-  filter:
-    application:
-      by_attribute: {{ .Values.filter.application.byAttribute | default list | toJson }}
-    network:
-      by_attribute: {{ .Values.filter.network.byAttribute | default list | toJson }}
+  # filter:
+  #   application:
+  #     by_attribute: {{ .Values.filter.application.byAttribute | default list | toJson }}
+  #   network:
+  #     by_attribute: {{ .Values.filter.network.byAttribute | default list | toJson }}
   otel_metrics_export:
     protocol: {{ .Values.otelMetricsExport.protocol | default "unset" }}
-    metrics_protocol: {{ .Values.otelMetricsExport.metricsProtocol | default "unset" }}
-    otel_interval_ms: {{ .Values.otelMetricsExport.otelIntervalMs | default 60000 }}
+#     metrics_protocol: {{ .Values.otelMetricsExport.metricsProtocol | default "unset" }}
+#     otel_interval_ms: {{ .Values.otelMetricsExport.otelIntervalMs | default 60000 }}
     buckets:
-      duration_histogram_buckets: {{ .Values.otelMetricsExport.buckets.durationHistogramBuckets | default (list 0.005 0.01 0.025 0.05 0.1 0.25 0.5 1 2.5 5 10) | toJson }}
-      request_size_histogram_buckets: {{ .Values.otelMetricsExport.buckets.requestSizeHistogramBuckets | default (list 0 100 1024 10240 102400 1048576) | toJson }}
+#       duration_histogram_buckets: {{ .Values.otelMetricsExport.buckets.durationHistogramBuckets | default (list 0.005 0.01 0.025 0.05 0.1 0.25 0.5 1 2.5 5 10) | toJson }}
+#       request_size_histogram_buckets: {{ .Values.otelMetricsExport.buckets.requestSizeHistogramBuckets | default (list 0 100 1024 10240 102400 1048576) | toJson }}
     reporters_cache_len: {{ .Values.otelMetricsExport.reportersCacheLen | default 256 }}
     histogram_aggregation: {{ .Values.otelMetricsExport.histogramAggregation | default "explicit" }}
     instrumentations:
@@ -312,7 +312,7 @@ ebpf:
     ttl: {{ .Values.otelMetricsExport.ttl | default "5m" }}
   otel_traces_export:
     protocol: {{ .Values.otelTracesExport.protocol | default "unset" }}
-    traces_protocol: {{ .Values.otelTracesExport.tracesProtocol | default "unset" }}
+#     traces_protocol: {{ .Values.otelTracesExport.tracesProtocol | default "unset" }}
     max_queue_size: {{ .Values.otelTracesExport.maxQueueSize | default 4096 }}
     batch_timeout: {{ .Values.otelTracesExport.batchTimeout | default "15s" }}
     reporters_cache_len: {{ .Values.otelTracesExport.reportersCacheLen | default 256 }}
@@ -321,24 +321,24 @@ ebpf:
       - {{ . }}
       {{- end }}
   prometheus_export:
-    enabled: {{ .Values.prometheusExport.enabled | default true }}
+#     enabled: {{ .Values.prometheusExport.enabled | default true }}
     path: {{ .Values.prometheusExport.path | default "/metrics" }}
     port: {{ .Values.prometheusExport.port | default 0 }}
     buckets:
-      duration_histogram_buckets: {{ .Values.prometheusExport.buckets.durationHistogramBuckets | default (list 0.005 0.01 0.025 0.05 0.1 0.25 0.5 1 2.5 5 10) | toJson }}
+#       duration_histogram_buckets: {{ .Values.prometheusExport.buckets.durationHistogramBuckets | default (list 0.005 0.01 0.025 0.05 0.1 0.25 0.5 1 2.5 5 10) | toJson }}
     instrumentations:
       {{- range .Values.prometheusExport.instrumentations | default (list "all") }}
       - {{ . }}
       {{- end }}
     ttl: {{ .Values.prometheusExport.ttl | default "5m" }}
-    span_metrics_service_cache_size: {{ .Values.prometheusExport.spanMetricsServiceCacheSize | default 10000 }}
+#     span_metrics_service_cache_size: {{ .Values.prometheusExport.spanMetricsServiceCacheSize | default 10000 }}
 
 # -----------------------------------------------------------------------------
 # Channel Configuration
 # -----------------------------------------------------------------------------
-channel_buffer_len: {{ .Values.channel.bufferLen | default 50 }}
-channel_send_timeout: {{ .Values.channel.sendTimeout | default "1m" }}
-channel_send_timeout_panic: {{ .Values.channel.sendTimeoutPanic | default false }}
+# channel_buffer_len: {{ .Values.channel.bufferLen | default 50 }}
+# channel_send_timeout: {{ .Values.channel.sendTimeout | default "1m" }}
+# channel_send_timeout_panic: {{ .Values.channel.sendTimeoutPanic | default false }}
 
 # -----------------------------------------------------------------------------
 # Kubernetes Metrics Configuration (kube-state-metrics + cAdvisor equivalent)
@@ -501,95 +501,95 @@ profiling:
 # -----------------------------------------------------------------------------
 # Security Observability Configuration
 # -----------------------------------------------------------------------------
-security:
-  enabled: {{ .Values.security.enabled | default true }}
-  syscall_audit:
-    enabled: {{ .Values.security.syscallAudit.enabled | default true }}
-    syscalls: {{ .Values.security.syscallAudit.syscalls | default list | toJson }}
-    exclude_processes:
-      {{- range .Values.security.syscallAudit.excludeProcesses | default (list "telegen" "kubelet" "containerd") }}
-      - {{ . }}
-      {{- end }}
-    exclude_uids: {{ .Values.security.syscallAudit.excludeUids | default list | toJson }}
-    capture_args: {{ .Values.security.syscallAudit.captureArgs | default true }}
-    capture_execve_args: {{ .Values.security.syscallAudit.captureExecveArgs | default true }}
-  file_integrity:
-    enabled: {{ .Values.security.fileIntegrity.enabled | default true }}
-    sensitive_paths:
-      {{- range .Values.security.fileIntegrity.sensitivePaths | default (list "/etc/passwd" "/etc/shadow" "/etc/sudoers") }}
-      - {{ . }}
-      {{- end }}
-    exclude_paths:
-      {{- range .Values.security.fileIntegrity.excludePaths | default (list "/var/log" "/tmp") }}
-      - {{ . }}
-      {{- end }}
-    monitor_writes: {{ .Values.security.fileIntegrity.monitorWrites | default true }}
-    monitor_deletes: {{ .Values.security.fileIntegrity.monitorDeletes | default true }}
-    monitor_renames: {{ .Values.security.fileIntegrity.monitorRenames | default true }}
-    monitor_permissions: {{ .Values.security.fileIntegrity.monitorPermissions | default true }}
-    monitor_ownership: {{ .Values.security.fileIntegrity.monitorOwnership | default true }}
-  container_escape:
-    enabled: {{ .Values.security.containerEscape.enabled | default true }}
-    alert_on_all_caps: {{ .Values.security.containerEscape.alertOnAllCaps | default false }}
-    monitor_mounts: {{ .Values.security.containerEscape.monitorMounts | default true }}
-    monitor_namespaces: {{ .Values.security.containerEscape.monitorNamespaces | default true }}
-    monitor_modules: {{ .Values.security.containerEscape.monitorModules | default true }}
-    dangerous_capabilities:
-      {{- range .Values.security.containerEscape.dangerousCapabilities | default (list "CAP_SYS_ADMIN" "CAP_SYS_PTRACE" "CAP_NET_ADMIN") }}
-      - {{ . }}
-      {{- end }}
-  alerting:
-    min_severity: {{ .Values.security.alerting.minSeverity | default "high" }}
-    destinations:
-      {{- range .Values.security.alerting.destinations | default (list (dict "type" "log")) }}
-      - type: {{ .type }}
-      {{- end }}
-    rate_limiting:
-      enabled: {{ .Values.security.alerting.rateLimiting.enabled | default true }}
-      max_alerts_per_min: {{ .Values.security.alerting.rateLimiting.maxAlertsPerMin | default 100 }}
-      burst_size: {{ .Values.security.alerting.rateLimiting.burstSize | default 20 }}
-  export:
-    format: {{ .Values.security.export.format | default "otlp_logs" }}
-    endpoint: {{ .Values.security.export.endpoint | default "" | quote }}
-    batch_size: {{ .Values.security.export.batchSize | default 100 }}
-    flush_interval_ms: {{ .Values.security.export.flushIntervalMs | default 5000 }}
+# security:
+#   enabled: {{ .Values.security.enabled | default true }}
+#   syscall_audit:
+#     enabled: {{ .Values.security.syscallAudit.enabled | default true }}
+#     syscalls: {{ .Values.security.syscallAudit.syscalls | default list | toJson }}
+#     exclude_processes:
+#       {{- range .Values.security.syscallAudit.excludeProcesses | default (list "telegen" "kubelet" "containerd") }}
+#       - {{ . }}
+#       {{- end }}
+#     exclude_uids: {{ .Values.security.syscallAudit.excludeUids | default list | toJson }}
+#     capture_args: {{ .Values.security.syscallAudit.captureArgs | default true }}
+#     capture_execve_args: {{ .Values.security.syscallAudit.captureExecveArgs | default true }}
+#   file_integrity:
+#     enabled: {{ .Values.security.fileIntegrity.enabled | default true }}
+#     sensitive_paths:
+#       {{- range .Values.security.fileIntegrity.sensitivePaths | default (list "/etc/passwd" "/etc/shadow" "/etc/sudoers") }}
+#       - {{ . }}
+#       {{- end }}
+#     exclude_paths:
+#       {{- range .Values.security.fileIntegrity.excludePaths | default (list "/var/log" "/tmp") }}
+#       - {{ . }}
+#       {{- end }}
+#     monitor_writes: {{ .Values.security.fileIntegrity.monitorWrites | default true }}
+#     monitor_deletes: {{ .Values.security.fileIntegrity.monitorDeletes | default true }}
+#     monitor_renames: {{ .Values.security.fileIntegrity.monitorRenames | default true }}
+#     monitor_permissions: {{ .Values.security.fileIntegrity.monitorPermissions | default true }}
+#     monitor_ownership: {{ .Values.security.fileIntegrity.monitorOwnership | default true }}
+#   container_escape:
+#     enabled: {{ .Values.security.containerEscape.enabled | default true }}
+#     alert_on_all_caps: {{ .Values.security.containerEscape.alertOnAllCaps | default false }}
+#     monitor_mounts: {{ .Values.security.containerEscape.monitorMounts | default true }}
+#     monitor_namespaces: {{ .Values.security.containerEscape.monitorNamespaces | default true }}
+#     monitor_modules: {{ .Values.security.containerEscape.monitorModules | default true }}
+#     dangerous_capabilities:
+#       {{- range .Values.security.containerEscape.dangerousCapabilities | default (list "CAP_SYS_ADMIN" "CAP_SYS_PTRACE" "CAP_NET_ADMIN") }}
+#       - {{ . }}
+#       {{- end }}
+#   alerting:
+#     min_severity: {{ .Values.security.alerting.minSeverity | default "high" }}
+#     destinations:
+#       {{- range .Values.security.alerting.destinations | default (list (dict "type" "log")) }}
+#       - type: {{ .type }}
+#       {{- end }}
+#     rate_limiting:
+#       enabled: {{ .Values.security.alerting.rateLimiting.enabled | default true }}
+#       max_alerts_per_min: {{ .Values.security.alerting.rateLimiting.maxAlertsPerMin | default 100 }}
+#       burst_size: {{ .Values.security.alerting.rateLimiting.burstSize | default 20 }}
+#   export:
+#     format: {{ .Values.security.export.format | default "otlp_logs" }}
+#     endpoint: {{ .Values.security.export.endpoint | default "" | quote }}
+#     batch_size: {{ .Values.security.export.batchSize | default 100 }}
+#     flush_interval_ms: {{ .Values.security.export.flushIntervalMs | default 5000 }}
 
 # -----------------------------------------------------------------------------
 # Query Statistics Configuration
 # -----------------------------------------------------------------------------
-stats:
-  enabled: {{ .Values.stats.enabled | default true }}
-  aggregation_interval: {{ .Values.stats.aggregationInterval | default "10s" }}
-  max_patterns: {{ .Values.stats.maxPatterns | default 10000 }}
-  calculate_percentiles: {{ .Values.stats.calculatePercentiles | default true }}
-  percentiles: {{ .Values.stats.percentiles | default (list 50 90 95 99) | toJson }}
+# stats:
+#   enabled: {{ .Values.stats.enabled | default true }}
+#   aggregation_interval: {{ .Values.stats.aggregationInterval | default "10s" }}
+#   max_patterns: {{ .Values.stats.maxPatterns | default 10000 }}
+#   calculate_percentiles: {{ .Values.stats.calculatePercentiles | default true }}
+#   percentiles: {{ .Values.stats.percentiles | default (list 50 90 95 99) | toJson }}
 
 # -----------------------------------------------------------------------------
 # Slow Query Detection Configuration
 # -----------------------------------------------------------------------------
-slow_queries:
-  enabled: {{ .Values.slowQueries.enabled | default true }}
-  default_threshold: {{ .Values.slowQueries.defaultThreshold | default "1s" }}
-  thresholds:
-    postgresql: {{ .Values.slowQueries.thresholds.postgresql | default "1s" }}
-    mysql: {{ .Values.slowQueries.thresholds.mysql | default "1s" }}
-    oracle: {{ .Values.slowQueries.thresholds.oracle | default "2s" }}
-    redis: {{ .Values.slowQueries.thresholds.redis | default "100ms" }}
-    kafka: {{ .Values.slowQueries.thresholds.kafka | default "500ms" }}
-  max_retained: {{ .Values.slowQueries.maxRetained | default 1000 }}
-  alert_very_slow: {{ .Values.slowQueries.alertVerySlow | default true }}
-  alert_repeated: {{ .Values.slowQueries.alertRepeated | default true }}
-  repeated_min_count: {{ .Values.slowQueries.repeatedMinCount | default 5 }}
+# slow_queries:
+#   enabled: {{ .Values.slowQueries.enabled | default true }}
+#   default_threshold: {{ .Values.slowQueries.defaultThreshold | default "1s" }}
+#   thresholds:
+#     postgresql: {{ .Values.slowQueries.thresholds.postgresql | default "1s" }}
+#     mysql: {{ .Values.slowQueries.thresholds.mysql | default "1s" }}
+#     oracle: {{ .Values.slowQueries.thresholds.oracle | default "2s" }}
+#     redis: {{ .Values.slowQueries.thresholds.redis | default "100ms" }}
+#     kafka: {{ .Values.slowQueries.thresholds.kafka | default "500ms" }}
+#   max_retained: {{ .Values.slowQueries.maxRetained | default 1000 }}
+#   alert_very_slow: {{ .Values.slowQueries.alertVerySlow | default true }}
+#   alert_repeated: {{ .Values.slowQueries.alertRepeated | default true }}
+#   repeated_min_count: {{ .Values.slowQueries.repeatedMinCount | default 5 }}
 
 # -----------------------------------------------------------------------------
 # Language-Specific Instrumentation
 # -----------------------------------------------------------------------------
-nodejs:
-  enabled: {{ .Values.nodejs.enabled | default true }}
+# nodejs:
+#   enabled: {{ .Values.nodejs.enabled | default true }}
 
-javaagent:
-  enabled: {{ .Values.javaagent.enabled | default true }}
-  timeout: {{ .Values.javaagent.timeout | default "10s" }}
+# javaagent:
+#   enabled: {{ .Values.javaagent.enabled | default true }}
+#   timeout: {{ .Values.javaagent.timeout | default "10s" }}
 
 # -----------------------------------------------------------------------------
 # Cloud Provider Configuration
@@ -653,7 +653,7 @@ backoff:
 # -----------------------------------------------------------------------------
 pipelines:
   metrics:
-    enabled: {{ .Values.pipelines.metrics.enabled | default true }}
+#     enabled: {{ .Values.pipelines.metrics.enabled | default true }}
     also_expose_prometheus: {{ .Values.pipelines.metrics.alsoExposePrometheus | default true }}
   traces:
     enabled: {{ .Values.pipelines.traces.enabled | default true }}
@@ -811,24 +811,24 @@ exports:
 # Anomaly Detection Configuration
 # -----------------------------------------------------------------------------
 {{- if .Values.anomalyDetection.enabled }}
-analytics:
-  anomaly_detection:
-    enabled: true
-    isolation_forest:
-      num_trees: {{ .Values.anomalyDetection.isolationForest.numTrees | default 100 }}
-      subsample_size: {{ .Values.anomalyDetection.isolationForest.subsampleSize | default 256 }}
-      threshold: {{ .Values.anomalyDetection.isolationForest.threshold | default 0.5 }}
-  rca:
-    enabled: {{ .Values.rca.enabled | default true }}
-    max_why_depth: {{ .Values.rca.maxWhyDepth | default 5 }}
-    correlation_window: {{ .Values.rca.correlationWindow | default "5m" | quote }}
+# analytics:
+#   anomaly_detection:
+#     enabled: true
+#     isolation_forest:
+#       num_trees: {{ .Values.anomalyDetection.isolationForest.numTrees | default 100 }}
+#       subsample_size: {{ .Values.anomalyDetection.isolationForest.subsampleSize | default 256 }}
+#       threshold: {{ .Values.anomalyDetection.isolationForest.threshold | default 0.5 }}
+#   rca:
+#     enabled: {{ .Values.rca.enabled | default true }}
+#     max_why_depth: {{ .Values.rca.maxWhyDepth | default 5 }}
+#     correlation_window: {{ .Values.rca.correlationWindow | default "5m" | quote }}
 {{- end }}
 
 # -----------------------------------------------------------------------------
 # Debug Configuration
 # -----------------------------------------------------------------------------
-trace_printer: {{ .Values.debug.tracePrinter | default "disabled" }}
-profile_port: {{ .Values.debug.profilePort | default 0 }}
+# trace_printer: {{ .Values.debug.tracePrinter | default "disabled" }}
+# profile_port: {{ .Values.debug.profilePort | default 0 }}
 {{- end }}
 {{- end }}
 
@@ -865,12 +865,12 @@ selfTelemetry:
 # -----------------------------------------------------------------------------
 # Internal Metrics Configuration
 # -----------------------------------------------------------------------------
-internal_metrics:
-  exporter: disabled
-  prometheus:
-    port: 0
-    path: "/internal/metrics"
-  bpf_metric_scrape_interval: 15s
+# internal_metrics:
+#   exporter: disabled
+#   prometheus:
+#     port: 0
+#     path: "/internal/metrics"
+#   bpf_metric_scrape_interval: 15s
 
 # -----------------------------------------------------------------------------
 # Queues Configuration
@@ -1102,6 +1102,6 @@ prometheus_export:
 # -----------------------------------------------------------------------------
 # Debug Configuration
 # -----------------------------------------------------------------------------
-trace_printer: disabled
-profile_port: 0
+# trace_printer: disabled
+# profile_port: 0
 {{- end }}
