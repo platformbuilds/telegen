@@ -1499,7 +1499,11 @@ func (p *WallProfiler) processRingBuffer(ctx context.Context) {
 				p.log.Debug("wall ring buffer read error", "error", err, "consecutive_errors", consecutiveErrs)
 				lastErrLog = time.Now()
 			}
-			backoff := time.Duration(1<<min(consecutiveErrs, 8)) * time.Millisecond
+			backoffExponent := consecutiveErrs
+			if backoffExponent > 8 {
+				backoffExponent = 8
+			}
+			backoff := time.Duration(1<<uint(backoffExponent)) * time.Millisecond
 			if backoff > 250*time.Millisecond {
 				backoff = 250 * time.Millisecond
 			}
