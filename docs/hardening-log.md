@@ -2313,3 +2313,140 @@ LEVEL=INFO warn_present=True error_present=True
 +- added config regression guard: new `scripts/validate-configs.sh`, new `make validate-configs`, and CI lint-job step (`.github/workflows/ci.yaml`) running validation each PR/push.
 +- final local gate passed: build + targeted tests + golangci-lint + validate-configs all green, including private helm renders.
 ```
+### fix-106-deploy-regressions (agent crash loop + collector lock failure)
+
+#### PRE output
+
+```text
+$ git status --short
+ M cmd/telegen/main.go
+ M deployments/helm/templates/_helpers.tpl
+ M deployments/helm/templates/deployment.yaml
+ M deployments/helm/values.yaml
+ M docs/operations.md
+ M internal/config/config.go
+ M internal/config/config_test.go
+ M internal/instrumenter/instrumenter.go
+ M internal/instrumenter/instrumenter_test.go
+ M internal/metadata/aws/aws.go
+ M internal/metadata/aws/aws_test.go
+ M internal/pipeline/pipeline_core.go
+ M internal/selftelemetry/metrics.go
+ M pkg/export/connector/prommgr.go
+ M pkg/export/imetrics/imetrics.go
+?? internal/selftelemetry/metrics_test.go
+```
+
+#### POST output
+
+```text
+$ mkdir -p .tmp-go && TMPDIR="$PWD/.tmp-go" go test ./internal/config/... ./internal/instrumenter/... ./internal/selftelemetry/... ./internal/metadata/aws/... && TMPDIR="$PWD/.tmp-go" go test -ldflags='-w' ./internal/pipeline/... && TMPDIR="$PWD/.tmp-go" go test -ldflags='-w' ./cmd/telegen/...
+ok  	github.com/mirastacklabs-ai/telegen/internal/config	0.595s
+ok  	github.com/mirastacklabs-ai/telegen/internal/instrumenter	1.509s
+ok  	github.com/mirastacklabs-ai/telegen/internal/selftelemetry	2.087s
+ok  	github.com/mirastacklabs-ai/telegen/internal/metadata/aws	0.583s
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline	2.988s
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline/adapters	(cached)
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline/converters	(cached)
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline/limits	(cached)
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline/transform	(cached)
+ok  	github.com/mirastacklabs-ai/telegen/cmd/telegen	0.953s
+
+$ TMPDIR="$PWD/.tmp-go" GOFLAGS='-ldflags=-w' make validate-configs PRIVATE_CHART_DIR="/Users/aarvee/repos/github/private/mirastack/deployments/reference/kubernetes/helm/telegen"
+### Validating shipped configuration files...
+go build -o bin/telegen ./cmd/telegen
+TELEGEN_BIN=bin/telegen PRIVATE_CHART_DIR="/Users/aarvee/repos/github/private/mirastack/deployments/reference/kubernetes/helm/telegen" ./scripts/validate-configs.sh
+0  api/config.example.yaml
+0  deployments/systemd/config.yaml
+0  deployments/systemd/collector-config.yaml
+0  deployments/docker/configs/agent.yaml
+0  deployments/docker/configs/collector.yaml
+0  deployments/ecs/config.yaml
+0  deployments/ecs/collector-config.yaml
+0  deployments/kubernetes/configmap.yaml#config.yaml
+0  deployments/openshift/agent-daemonset.yaml#config.yaml
+0  deployments/helm/templates/configmap.yaml (values.yaml render)
+0  private helm values-agent.yaml render
+0  private helm values-collector.yaml render
+0  private helm values.yaml render
+
+$ helm template telegen deployments/helm -f deployments/helm/values.yaml -s templates/configmap.yaml | rg -n 'instance_lock_path|internal_metrics:|exporter: "prometheus"|port: 0|mode: collector|mode: agent'
+31:      mode: agent
+36:      instance_lock_path: "/var/run/telegen.pid"
+51:    # internal_metrics:
+54:    #     port: 0
+63:      internal_metrics:
+64:        exporter: "prometheus"
+66:          port: 0
+
+$ helm template telegen deployments/helm -f deployments/helm/values.yaml --set mode=collector --set collector.snmp.traps.enabled=false -s templates/configmap.yaml | rg -n 'instance_lock_path|internal_metrics:|mode: collector'
+30:      mode: collector
+35:      instance_lock_path: "/var/run/telegen.pid"
+50:    # internal_metrics:
+
+$ helm template telegen deployments/helm -f deployments/helm/values.yaml --set mode=collector --set collector.snmp.traps.enabled=false -s templates/deployment.yaml | rg -n 'name: var-run|mountPath: /var/run'
+122:            - name: var-run
+123:              mountPath: /var/run
+131:        - name: var-run
+
+$ helm template telegen . -f values-agent.yaml -s templates/configmap.yaml | rg -n 'instance_lock_path|internal_metrics:|exporter: "prometheus"|port: 0|mode: agent'
+31:      mode: agent
+36:      instance_lock_path: "/var/run/telegen.pid"
+51:    # internal_metrics:
+54:    #     port: 0
+63:      internal_metrics:
+64:        exporter: "prometheus"
+66:          port: 0
+
+$ helm template telegen . -f values-collector.yaml -s templates/configmap.yaml | rg -n 'instance_lock_path|internal_metrics:|mode: collector'
+30:      mode: collector
+35:      instance_lock_path: "/var/run/telegen.pid"
+50:    # internal_metrics:
+
+$ helm template telegen . -f values-collector.yaml -s templates/deployment.yaml | rg -n 'name: var-run|mountPath: /var/run'
+122:            - name: var-run
+123:              mountPath: /var/run
+131:        - name: var-run
+```
+
+#### Diff hunk
+
+```diff
++implemented PR #106 deployment-regression repair end-to-end:
++- added shared internal-metrics registry path: `pkg/export/imetrics/imetrics.go`, `internal/instrumenter/instrumenter.go`, `internal/selftelemetry/metrics.go`, and `cmd/telegen/main.go`.
++- removed internal-metrics auto-port derivation and added explicit collision validation against self-telemetry/health/pprof listeners: `internal/config/config.go` + `internal/config/config_test.go`.
++- removed process self-SIGINT on Prometheus bind failure: `pkg/export/connector/prommgr.go`.
++- added lock path configurability and lock-path tests: `internal/config/config.go`, `cmd/telegen/main.go`, `cmd/telegen/main_test.go`.
++- wired chart config and collector writable `/var/run` volume in both public/private Helm charts:
++  - public: `deployments/helm/templates/_helpers.tpl`, `deployments/helm/templates/deployment.yaml`, `deployments/helm/values.yaml`
++  - private: `templates/_helpers.tpl`, `templates/deployment.yaml`, `values.yaml`
++- gated eBPF capability preflight when `ebpf.enabled=false`: `cmd/telegen/main.go`.
++- demoted IMDS-unavailable metadata failures to debug via typed sentinel and added coverage:
++  `internal/metadata/aws/aws.go`, `internal/metadata/aws/aws_test.go`, `internal/pipeline/pipeline_core.go`.
++- documented runtime contract changes: `docs/operations.md`.
+```
+
+#### Runtime baseline evidence (before rollout of this patch set)
+
+```text
+$ helm list -n mirastack | rg -n 'telegen-agent|telegen-collector|NAME'
+1:NAME             	NAMESPACE	REVISION	UPDATED                             	STATUS  	CHART          	APP VERSION
+4:telegen-agent    	mirastack	15      	2026-08-07 23:19:42.7483 +0530 IST  	deployed	telegen-3.0.0  	3.0.0
+5:telegen-collector	mirastack	16      	2026-08-07 23:19:56.906157 +0530 IST	deployed	telegen-3.0.0  	3.0.0
+
+$ kubectl get pods -n mirastack | rg -n 'telegen-agent|telegen-collector'
+48:telegen-agent-cfljm                                  0/1     CrashLoopBackOff   32 (4m25s ago)    143m
+49:telegen-agent-f82mc                                  1/1     Running            0                 3d16h
+50:telegen-agent-sfcql                                  1/1     Running            0                 3d16h
+51:telegen-collector-collector-59845bbcf6-fnl99         0/1     CrashLoopBackOff   32 (3m36s ago)    143m
+52:telegen-collector-collector-749c4cbc84-ftdt9         1/1     Running            0                 9d
+
+$ kubectl logs -n mirastack telegen-agent-cfljm --previous | rg -n 'Prometheus endpoint service ended unexpectedly|failed to acquire singleton instance lock|telegen shutting down|listen tcp|bind: address already in use'
+48:{"time":"2026-08-07T20:08:53.959309838Z","level":"ERROR","msg":"Prometheus endpoint service ended unexpectedly","component":"connector.PrometheusManager","port":19090,"error":"listen tcp :19090: bind: address already in use"}
+49:{"time":"2026-08-07T20:08:53.96363613Z","level":"INFO","msg":"telegen shutting down"}
+
+$ kubectl logs -n mirastack telegen-collector-collector-59845bbcf6-fnl99 --previous | rg -n 'failed to acquire singleton instance lock|read-only file system|telegen shutting down'
+2:{"time":"2026-08-07T20:10:02.955819971Z","level":"ERROR","msg":"failed to acquire singleton instance lock","error":"open lock file: open /var/run/telegen.pid: read-only file system"}
+```
+
+Post-deploy validation of the new chart and binary (expected: both telegen pods stable with zero restarts, no Prometheus bind error, no lock-file read-only error) is pending the next rollout from this working tree.

@@ -9,11 +9,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
-	"os/signal"
 	"regexp"
+	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
@@ -543,10 +541,7 @@ func TestSpanMetricsDiscardedGraph(t *testing.T) {
 	}
 }
 
-func TestTerminatesOnBadPromPort(t *testing.T) {
-	now := syncedClock{now: time.Now()}
-	timeNow = now.Now
-
+func TestBadPromPortDoesNotTerminateProcess(t *testing.T) {
 	ctx := t.Context()
 	openPort, err := test.FreeTCPPort()
 	require.NoError(t, err)
@@ -561,9 +556,9 @@ func TestTerminatesOnBadPromPort(t *testing.T) {
 		err := server.ListenAndServe()
 		t.Logf("Terminating server %v\n", err)
 	}()
-
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT)
+	defer func() {
+		_ = server.Shutdown(context.Background())
+	}()
 
 	pm := connector.PrometheusManager{}
 
@@ -576,12 +571,19 @@ func TestTerminatesOnBadPromPort(t *testing.T) {
 	go pm.StartHTTP(ctx)
 
 	ok := false
-	select {
-	case sig := <-sigChan:
-		assert.Equal(t, syscall.SIGINT, sig)
-		ok = true
-	case <-time.After(timeout):
-		ok = false
+	promURL := fmt.Sprintf("http://127.0.0.1:%d/metrics", openPort)
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		resp, reqErr := http.Get(promURL)
+		if reqErr == nil {
+			body, readErr := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			if readErr == nil && strings.Contains(string(body), "Hello, /metrics") {
+				ok = true
+				break
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 
 	assert.True(t, ok)

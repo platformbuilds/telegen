@@ -7,6 +7,8 @@ package imetrics // import "github.com/mirastacklabs-ai/telegen/pkg/export/imetr
 import (
 	"context"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type InternalMetricsExporter string
@@ -64,6 +66,7 @@ type Config struct {
 	Prometheus              PrometheusConfig        `yaml:"prometheus,omitempty"`
 	Exporter                InternalMetricsExporter `yaml:"exporter,omitempty" env:"OTEL_EBPF_INTERNAL_METRICS_EXPORTER"`
 	BpfMetricScrapeInterval time.Duration           `yaml:"bpf_metric_scrape_interval" env:"OTEL_EBPF_BPF_METRIC_SCRAPE_INTERVAL"`
+	Registry                *prometheus.Registry    `yaml:"-"`
 }
 
 // Reporter of internal metrics

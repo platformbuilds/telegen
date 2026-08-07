@@ -1,5 +1,18 @@
 # Telegen v3.0 Service
 # Task: DEP-008
+{{ $snmpCfg := (default (dict) .Values.collector.snmp) -}}
+{{- $snmpTraps := (default (dict) (get $snmpCfg "traps")) -}}
+{{- $snmpTrapReceiver := (default (dict) (get $snmpCfg "trapReceiver")) -}}
+{{- $snmpTrapEnabled := false -}}
+{{- if hasKey $snmpTraps "enabled" -}}
+{{- $snmpTrapEnabled = (get $snmpTraps "enabled") -}}
+{{- else if hasKey $snmpTrapReceiver "enabled" -}}
+{{- $snmpTrapEnabled = (get $snmpTrapReceiver "enabled") -}}
+{{- end -}}
+{{- $snmpTrapPort := 1162 -}}
+{{- if hasKey $snmpTraps "port" -}}
+{{- $snmpTrapPort = (get $snmpTraps "port") -}}
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -38,9 +51,9 @@ spec:
       targetPort: kube-metrics
       protocol: TCP
     {{- end }}
-    {{- if and (eq .Values.mode "collector") .Values.collector.snmp.traps.enabled }}
+    {{- if and (eq .Values.mode "collector") $snmpTrapEnabled }}
     - name: snmp-traps
       port: 162
-      targetPort: {{ .Values.collector.snmp.traps.port }}
+      targetPort: {{ $snmpTrapPort }}
       protocol: UDP
     {{- end }}

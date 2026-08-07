@@ -4,6 +4,7 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -1188,6 +1189,8 @@ func (p *UnifiedPipeline) startRuntimeSources(ctx context.Context) error {
 		prov := awsm.New(aopts)
 		if meta, err := prov.Fetch(ctx); err == nil {
 			p.awsLabels = meta.Labels()
+		} else if errors.Is(err, awsm.ErrIMDSUnavailable) {
+			p.logger.Debug("aws metadata unavailable; not running on EC2", "error", err)
 		} else {
 			p.logger.Warn("aws metadata fetch failed", "error", err)
 		}
