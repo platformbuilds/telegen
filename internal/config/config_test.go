@@ -159,7 +159,6 @@ ebpf:
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			cfgPath := filepath.Join(t.TempDir(), "config.yaml")
