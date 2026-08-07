@@ -62,11 +62,16 @@ func (p *OnPremProvider) Detect(ctx context.Context) (bool, error) {
 
 // GetMetadata retrieves local system metadata.
 func (p *OnPremProvider) GetMetadata(ctx context.Context) (*unified.CloudMetadata, error) {
-	hostname, _ := os.Hostname()
+	hostname, err := os.Hostname()
+	if err != nil || hostname == "" {
+		hostname = "unknown"
+	}
 
 	// Get uname info
 	var uname unix.Utsname
-	_ = unix.Uname(&uname)
+	if err := unix.Uname(&uname); err != nil {
+		uname = unix.Utsname{}
+	}
 
 	// Get network interfaces
 	privateIP, publicIP, mac := p.getNetworkInfo()

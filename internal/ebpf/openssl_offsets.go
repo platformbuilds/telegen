@@ -128,7 +128,9 @@ func (i *OpenSSLOffsetsInspector) InspectProcess(tgid uint32) error {
 
 // RemoveProcess removes the BPF map entry for a process that has exited.
 func (i *OpenSSLOffsetsInspector) RemoveProcess(tgid uint32) {
-	_ = i.symaddrsMap.Delete(tgid)
+	if err := i.symaddrsMap.Delete(tgid); err != nil {
+		i.log.Debug("failed removing openssl offsets entry", "tgid", tgid, "error", err)
+	}
 	delete(i.inspectedTGIDs, tgid)
 }
 
@@ -393,8 +395,14 @@ func versionToKey(version string) string {
 	}
 	parts := strings.SplitN(version, ".", 3)
 	if len(parts) >= 2 {
-		major, _ := strconv.Atoi(parts[0])
-		minor, _ := strconv.Atoi(parts[1])
+		major, err := strconv.Atoi(parts[0])
+		if err != nil {
+			return version
+		}
+		minor, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return version
+		}
 		return fmt.Sprintf("%d.%d", major, minor)
 	}
 	return version
@@ -411,4 +419,3 @@ func resolveLibsslPathForProcess(pid uint32, mappedPath string) string {
 	}
 	return mappedPath
 }
-

@@ -2013,3 +2013,82 @@ $ git status --short -- .github/workflows/reliability-soak-chaos.yaml && git dif
 +- explicit documentation that 4h/24h runs are release gates, not commit gates
 +no workflow code changes were needed in this pass; completion is based on verified content and passing reliability smoke runs.
 ```
+
+### task-9.5 (COMPLETED: CI lint pass follow-up)
+
+#### PRE output
+
+```text
+$ golangci-lint run --timeout=10m
+Error: internal/bpfverifier/load_linux_test.go:67:3: The copy of the 'for' variable "tc" can be deleted (Go 1.22+) (copyloopvar)
+Error: internal/cloud/unified/providers/onprem_linux.go:65:12: Error return value of `os.Hostname` is not checked (errcheck)
+Error: internal/cloud/unified/providers/onprem_linux.go:69:2: Error return value of `unix.Uname` is not checked (errcheck)
+Error: internal/correlation/tracecontext.go:96:5: Error return value of `rand.Read` is not checked (errcheck)
+Error: internal/correlation/tracecontext.go:103:5: Error return value of `rand.Read` is not checked (errcheck)
+Error: internal/ebpf/instrumenter.go:39:3: Error return value of `(io.Closer).Close` is not checked (errcheck)
+...
+Error: internal/tracers/tpinjector/tpinjector.go:152:2: Error return value of `p.bpfObjects.Close` is not checked (errcheck)
+46 issues:
+* copyloopvar: 1
+* errcheck: 45
+```
+
+#### POST output
+
+```text
+$ git diff --name-only -- '*.go' | xargs gofmt -w && golangci-lint run --timeout=10m
+0 issues.
+```
+
+#### Diff hunk
+
+```diff
++completed CI follow-up lint cleanup for `task-9.5`:
++- removed stale Go 1.22 `copyloopvar` shadowing in `internal/bpfverifier/load_linux_test.go`.
++- fixed unchecked host/platform reads in on-prem metadata provider (`os.Hostname`, `unix.Uname`) with safe fallbacks.
++- fixed unchecked randomness reads in trace/span ID generation by returning empty IDs on read failure.
++- fixed unchecked `Close` calls across eBPF setup/teardown and tracer shutdown paths (instrumenter, tc/tcx manager, tracer, sock tracer, tctracer, tpinjector, logenricher cache callback).
++- fixed unchecked parse/walk/match/watcher operations in profiler symbol resolution paths.
++- fixed unchecked collector helpers in node-exporter collectors (`cpu.Online`, hwmon sensor collection, interface addresses).
++- reformatted all touched Go files and confirmed repo-wide lint clean on this branch.
+```
+
+### complete-race-audit (COMPLETED: route harvester timeout race follow-up)
+
+#### PRE output
+
+```text
+$ go test -race ./internal/route/harvest -run '^TestHarvestRoutes_MultipleTimeouts$' -count=1
+==================
+WARNING: DATA RACE
+Write at ... github.com/grafana/jvmtools/jvm.(*JAttacher).Init()
+  /home/runner/go/pkg/mod/github.com/grafana/jvmtools@v0.0.5/jvm/cmd.go:35
+... from github.com/mirastacklabs-ai/telegen/internal/route/harvest.(*RouteHarvester).HarvestRoutes.func2()
+  /home/runner/work/telegen/telegen/internal/route/harvest/harvester.go:134
+Previous write at ... github.com/grafana/jvmtools/jvm.(*JAttacher).Init()
+  /home/runner/go/pkg/mod/github.com/grafana/jvmtools@v0.0.5/jvm/cmd.go:35
+... from github.com/mirastacklabs-ai/telegen/internal/route/harvest.(*RouteHarvester).HarvestRoutes.func2()
+  /home/runner/work/telegen/telegen/internal/route/harvest/harvester.go:134
+...
+--- FAIL: TestHarvestRoutes_MultipleTimeouts (0.15s)
+```
+
+#### POST output
+
+```text
+$ go test -race ./internal/route/harvest -run '^TestHarvestRoutes_MultipleTimeouts$' -count=1
+ok  	github.com/mirastacklabs-ai/telegen/internal/route/harvest	2.109s
+
+$ go test -race ./internal/route/harvest -count=1
+ok  	github.com/mirastacklabs-ai/telegen/internal/route/harvest	1.786s
+```
+
+#### Diff hunk
+
+```diff
++fixed route-harvester timeout race in `internal/route/harvest/harvester.go`:
++- added a bounded in-flight worker gate (`inFlight chan struct{}`) that is acquired before spawning harvest goroutines and released only when worker exits.
++- applied timeout while waiting for worker slot, returning the same timeout HarvestError when a previous timed-out worker is still active.
++- moved worker release into goroutine defer so Init/Attach/Cleanup lifecycle remains mutually exclusive even when caller times out early.
++- outcome: no concurrent `jvm.JAttacher.Init()` writes; targeted and package-level race tests pass.
+```

@@ -95,7 +95,9 @@ func (c *hwMonCollector) updateHwmon(ch chan<- prometheus.Metric, dir string) er
 	// Also check device subdirectory
 	deviceDir := filepath.Join(dir, "device")
 	if _, err := os.Stat(deviceDir); err == nil {
-		_ = c.collectSensorData(deviceDir, data)
+		if err := c.collectSensorData(deviceDir, data); err != nil {
+			c.logger.Debug("failed collecting hwmon device subdirectory data", "dir", deviceDir, "error", err)
+		}
 	}
 
 	// Export chip name metadata

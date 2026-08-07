@@ -378,7 +378,10 @@ func (c *netDevCollector) getAddrsInfo(interfaces []net.Interface) []addrInfo {
 			c.logger.Debug("Ignoring device", "device", ifs.Name)
 			continue
 		}
-		addrs, _ := ifs.Addrs()
+		addrs, err := ifs.Addrs()
+		if err != nil {
+			continue
+		}
 		for _, addr := range addrs {
 			ip, ipNet, err := net.ParseCIDR(addr.String())
 			if err != nil {
