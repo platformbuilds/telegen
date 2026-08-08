@@ -353,6 +353,25 @@ func NewParsedLog() *ParsedLog {
 	}
 }
 
+// EnsureMaps guarantees the attribute maps are non-nil.
+//
+// Enrichers and downstream stages write into these maps unconditionally, so a
+// ParsedLog produced by a parser that used a struct literal instead of
+// NewParsedLog would panic with "assignment to entry in nil map" and take the
+// whole agent down. Any code that accepts a ParsedLog from an arbitrary
+// producer must call this before writing.
+func (p *ParsedLog) EnsureMaps() {
+	if p == nil {
+		return
+	}
+	if p.ResourceAttributes == nil {
+		p.ResourceAttributes = make(map[string]string)
+	}
+	if p.Attributes == nil {
+		p.Attributes = make(map[string]string)
+	}
+}
+
 // parseJSON parses a JSON string into a map
 func parseJSON(s string) (map[string]interface{}, error) {
 	var result map[string]interface{}

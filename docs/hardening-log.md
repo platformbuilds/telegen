@@ -2992,3 +2992,753 @@ Intentional behavior changes and scope notes:
 - The `ContextInfo` stored in `p.ebpfCtxInfo` is now built with shared exporters (`BuildCommonContextInfoWithExporter`) instead of `nil` exporters.
 - Host ID fetching during eBPF source startup now occurs once instead of twice.
 - `pkg/export/connector/prommgr.go` was intentionally not modified: its `PrometheusManager` owns per-instance registries and is not part of the shared-registry duplicate panic path.
+
+## fix-agent-nil-map-panic
+
+PRE (production panic from agent-mode logs):
+
+```text
+panic: assignment to entry in nil map
+
+goroutine 79 [running]:
+github.com/mirastacklabs-ai/telegen/internal/logs/parsers.(*K8sPathEnricher).Enrich(0x2b8caa797a0, 0x2b8cacfea90, {0x2b8cb3dcea0, 0x85})
+	github.com/mirastacklabs-ai/telegen/internal/logs/parsers/k8s_metadata.go:79 +0x48d
+github.com/mirastacklabs-ai/telegen/internal/logs/parsers.(*Pipeline).Parse(0x2b8ca2330e0, {0x2b8ca961b90, 0x28}, {0x2b8cb3dcea0, 0x85})
+	github.com/mirastacklabs-ai/telegen/internal/logs/parsers/pipeline.go:215 +0x328
+github.com/mirastacklabs-ai/telegen/internal/logs/filetailer.(*Tailer).tailOnce(0x2b8ca34cb40, {0x2b8cb3dcea0, 0x85})
+	github.com/mirastacklabs-ai/telegen/internal/logs/filetailer/filetailer.go:369 +0x7a5
+github.com/mirastacklabs-ai/telegen/internal/logs/filetailer.(*Tailer).Run(0x2b8ca34cb40, 0x2b8ca4363f0)
+	github.com/mirastacklabs-ai/telegen/internal/logs/filetailer/filetailer.go:220 +0x41b
+github.com/mirastacklabs-ai/telegen/internal/pipeline.(*UnifiedPipeline).startRuntimeSources.func1()
+	github.com/mirastacklabs-ai/telegen/internal/pipeline/pipeline_core.go:1243 +0x2b
+created by github.com/mirastacklabs-ai/telegen/internal/pipeline.(*UnifiedPipeline).startRuntimeSources in goroutine 1
+	github.com/mirastacklabs-ai/telegen/internal/pipeline/pipeline_core.go:1242 +0xfa9
+```
+
+Root cause chain:
+
+1. Six parser branches created `&ParsedLog{Format: ...}` without initialized maps in `internal/logs/parsers/application.go` (lines 140/164/177/251/263/350).
+2. `Pipeline.Parse` passed those logs to Stage 4 enrichers (`for _, enricher := range p.enrichers`) with no map-invariant guard.
+3. `K8sPathEnricher.Enrich` wrote directly into `log.ResourceAttributes[...]` at `k8s_metadata.go:79`, panicking on nil map.
+4. `TraceContextEnricher.Enrich` had the same latent risk on `log.Attributes["telegen.trace_source"]`.
+5. `filetailer.tailOnce` did not contain per-line parser panics, so a single bad line could terminate the process.
+
+CHANGE (real diffs for all touched files):
+
+```diff
+diff --git a/internal/logs/filetailer/filetailer.go b/internal/logs/filetailer/filetailer.go
+index a5084c1..a703095 100644
+--- a/internal/logs/filetailer/filetailer.go
++++ b/internal/logs/filetailer/filetailer.go
+@@ -22,6 +22,7 @@ import (
+ 	"path/filepath"
+ 	"strings"
+ 	"sync"
++	"sync/atomic"
+ 	"time"
+ 
+ 	"go.opentelemetry.io/otel/log"
+@@ -112,6 +113,10 @@ type Tailer struct {
+ 	pipeline *parsers.Pipeline
+ 	// K8s log discovery (optional, provides dynamically discovered paths)
+ 	k8sDiscovery *K8sLogDiscoverer
++	// parsePanics counts recovered per-line panics for the lifetime of the tailer.
++	parsePanics atomic.Uint64
++	// lastPanicLog rate-limits the recovered-panic ERROR log to one per minute.
++	lastPanicLog atomic.Int64
+ }
+ 
+ // New creates a new Tailer using the unified OTLP LoggerProvider.
+@@ -363,30 +368,7 @@ func (t *Tailer) tailOnce(path string) {
+ 	}
+ 
+ 	for sc.Scan() {
+-		line := sc.Text()
+-
+-		// Parse the log line using the pipeline
+-		parsed := t.pipeline.Parse(line, path)
+-		if parsed == nil {
+-			// Fallback to raw line if parsing fails
+-			parsed = &parsers.ParsedLog{
+-				Body:               line,
+-				Timestamp:          time.Now(),
+-				Format:             "text",
+-				FilePath:           path,
+-				OriginalLine:       line,
+-				ResourceAttributes: make(map[string]string),
+-				Attributes:         make(map[string]string),
+-			}
+-		}
+-
+-		// Convert to OTEL record
+-		rec := parsed.ToOTelRecord()
+-
+-		// Add telegen signal metadata attributes
+-		rec.AddAttributes(logMetadataAttrs...)
+-
+-		logger.Emit(ctx, rec)
++		t.processLine(ctx, logger, path, sc.Text(), logMetadataAttrs)
+ 	}
+ 
+ 	// Update file position to current end for next read
+@@ -399,3 +381,57 @@ func (t *Tailer) tailOnce(path string) {
+ 		t.filePositions.Store(path, currentSize)
+ 	}
+ }
++
++// processLine parses and emits one log line. A panic here is contained to this
++// single line: telegen is a long-running agent and a malformed line from an
++// arbitrary workload must degrade collection, never terminate the process.
++func (t *Tailer) processLine(
++	ctx context.Context,
++	logger log.Logger,
++	path, line string,
++	metadataAttrs []log.KeyValue,
++) {
++	defer t.recoverLinePanic(path)
++
++	parsed := t.pipeline.Parse(line, path)
++	if parsed == nil {
++		// Fallback to raw line if parsing fails
++		parsed = &parsers.ParsedLog{
++			Body:               line,
++			Timestamp:          time.Now(),
++			Format:             "text",
++			FilePath:           path,
++			OriginalLine:       line,
++			ResourceAttributes: make(map[string]string),
++			Attributes:         make(map[string]string),
++		}
++	}
++
++	rec := parsed.ToOTelRecord()
++	rec.AddAttributes(metadataAttrs...)
++	logger.Emit(ctx, rec)
++}
++
++// recoverLinePanic contains a panic raised while parsing or emitting one line.
++// Mirrors UnifiedPipeline.recoverWorkerPanic: log loudly but rate-limited, keep
++// a cumulative count so the damage stays visible, and keep the tailer running.
++func (t *Tailer) recoverLinePanic(path string) {
++	recovered := recover()
++	if recovered == nil {
++		return
++	}
++	count := t.parsePanics.Add(1)
++	now := time.Now().UnixNano()
++	last := t.lastPanicLog.Load()
++	if last != 0 && now-last < int64(time.Minute) {
++		return
++	}
++	if !t.lastPanicLog.CompareAndSwap(last, now) {
++		return
++	}
++	t.logger.Error("recovered panic while processing log line",
++		"path", path,
++		"panic", recovered,
++		"panic_count", count,
++	)
++}
+diff --git a/internal/logs/parsers/application.go b/internal/logs/parsers/application.go
+index 2a73abb..19ce71e 100644
+--- a/internal/logs/parsers/application.go
++++ b/internal/logs/parsers/application.go
+@@ -137,7 +137,8 @@ func (p *SpringBootParser) Name() string {
+ func (p *SpringBootParser) Parse(line string) (*ParsedLog, error) {
+ 	// Try full format with tracing first
+ 	if matches := p.fullPattern.FindStringSubmatch(line); matches != nil {
+-		log := &ParsedLog{Format: "spring_boot"}
++		log := NewParsedLog()
++		log.Format = "spring_boot"
+ 		log.Timestamp = parseSpringTimestamp(matches[1])
+ 		log.Severity = normalizeSeverity(matches[2])
+ 		log.SeverityNumber = severityToNumber(log.Severity)
+@@ -161,7 +162,8 @@ func (p *SpringBootParser) Parse(line string) (*ParsedLog, error) {
+ 
+ 	// Try simple format without tracing
+ 	if matches := p.simplePattern.FindStringSubmatch(line); matches != nil {
+-		log := &ParsedLog{Format: "spring_boot"}
++		log := NewParsedLog()
++		log.Format = "spring_boot"
+ 		log.Timestamp = parseSpringTimestamp(matches[1])
+ 		log.Severity = normalizeSeverity(matches[2])
+ 		log.SeverityNumber = severityToNumber(log.Severity)
+@@ -174,7 +176,8 @@ func (p *SpringBootParser) Parse(line string) (*ParsedLog, error) {
+ 
+ 	// Try basic format
+ 	if matches := p.basicPattern.FindStringSubmatch(line); matches != nil {
+-		log := &ParsedLog{Format: "spring_boot"}
++		log := NewParsedLog()
++		log.Format = "spring_boot"
+ 		log.Timestamp = parseSpringTimestamp(matches[1])
+ 		log.Severity = normalizeSeverity(matches[2])
+ 		log.SeverityNumber = severityToNumber(log.Severity)
+@@ -248,7 +251,8 @@ func (p *Log4jParser) Name() string {
+ func (p *Log4jParser) Parse(line string) (*ParsedLog, error) {
+ 	// Try standard Log4j format
+ 	if matches := p.standardPattern.FindStringSubmatch(line); matches != nil {
+-		log := &ParsedLog{Format: "log4j"}
++		log := NewParsedLog()
++		log.Format = "log4j"
+ 		log.Timestamp = parseSpringTimestamp(matches[1]) // Same timestamp format
+ 		log.Severity = normalizeSeverity(matches[2])
+ 		log.SeverityNumber = severityToNumber(log.Severity)
+@@ -260,7 +264,8 @@ func (p *Log4jParser) Parse(line string) (*ParsedLog, error) {
+ 
+ 	// Try Log4j2 format
+ 	if matches := p.log4j2Pattern.FindStringSubmatch(line); matches != nil {
+-		log := &ParsedLog{Format: "log4j"}
++		log := NewParsedLog()
++		log.Format = "log4j"
+ 		log.Timestamp = parseSpringTimestamp(matches[1])
+ 		log.Severity = normalizeSeverity(matches[2])
+ 		log.SeverityNumber = severityToNumber(log.Severity)
+@@ -347,7 +352,8 @@ func (p *GenericTimestampParser) Parse(line string) (*ParsedLog, error) {
+ 				continue
+ 			}
+ 		}
+-		log := &ParsedLog{Format: "generic"}
++		log := NewParsedLog()
++		log.Format = "generic"
+ 		log.Timestamp = ts
+ 
+ 		switch pat.name {
+diff --git a/internal/logs/parsers/k8s_metadata.go b/internal/logs/parsers/k8s_metadata.go
+index 11d192c..5542342 100644
+--- a/internal/logs/parsers/k8s_metadata.go
++++ b/internal/logs/parsers/k8s_metadata.go
+@@ -47,6 +47,10 @@ func (e *K8sPathEnricher) Enrich(log *ParsedLog, filePath string) {
+ 		return
+ 	}
+ 
++	// Defence in depth: this enricher is exported and is driven directly by
++	// ExtractK8sMetadataFromPath, not only through Pipeline.Parse.
++	log.EnsureMaps()
++
+ 	// Store the file path
+ 	log.FilePath = filePath
+ 
+diff --git a/internal/logs/parsers/pipeline.go b/internal/logs/parsers/pipeline.go
+index f27a245..cf0333a 100644
+--- a/internal/logs/parsers/pipeline.go
++++ b/internal/logs/parsers/pipeline.go
+@@ -210,6 +210,12 @@ func (p *Pipeline) Parse(line string, filePath string) *ParsedLog {
+ 		log.SeverityNumber = severityToNumber(log.Severity)
+ 	}
+ 
++	// The enrichers write into log.ResourceAttributes and log.Attributes
++	// unconditionally. Parsers registered through AddParser are outside this
++	// package's control, so normalise the invariant here rather than trusting
++	// every producer.
++	log.EnsureMaps()
++
+ 	// Stage 4: Apply enrichers
+ 	for _, enricher := range p.enrichers {
+ 		enricher.Enrich(log, filePath)
+@@ -239,13 +245,11 @@ func (p *Pipeline) parseApplicationLog(line string) *ParsedLog {
+ 
+ // mergeApplicationLog merges parsed application log data into a runtime-parsed log
+ func mergeApplicationLog(runtime, app *ParsedLog) {
+-	if runtime.Attributes == nil && (len(app.Attributes) > 0 || app.Format != "") {
+-		capHint := len(app.Attributes)
+-		maxInt := int(^uint(0) >> 1)
+-		if capHint < maxInt {
+-			capHint++
+-		}
+-		runtime.Attributes = make(map[string]string, capHint)
++	// Unconditional: line 281 below writes runtime.Attributes["app.log.format"]
++	// regardless of app.Format, so the previous compound condition left a
++	// reachable nil-map write.
++	if runtime.Attributes == nil {
++		runtime.Attributes = make(map[string]string, len(app.Attributes)+1)
+ 	}
+ 
+ 	// Use application timestamp if runtime didn't have one or app timestamp is more precise
+diff --git a/internal/logs/parsers/trace_enricher.go b/internal/logs/parsers/trace_enricher.go
+index e96b19f..4d214e4 100644
+--- a/internal/logs/parsers/trace_enricher.go
++++ b/internal/logs/parsers/trace_enricher.go
+@@ -80,6 +80,9 @@ func (e *TraceContextEnricher) Enrich(log *ParsedLog, filePath string) {
+ 	if found {
+ 		log.TraceID = traceID
+ 		log.SpanID = spanID
++		if log.Attributes == nil {
++			log.Attributes = make(map[string]string, 1)
++		}
+ 		log.Attributes["telegen.trace_source"] = "ebpf_correlation"
+ 	}
+ }
+diff --git a/internal/logs/parsers/types.go b/internal/logs/parsers/types.go
+index 2801db9..bf57cd0 100644
+--- a/internal/logs/parsers/types.go
++++ b/internal/logs/parsers/types.go
+@@ -353,6 +353,25 @@ func NewParsedLog() *ParsedLog {
+ 	}
+ }
+ 
++// EnsureMaps guarantees the attribute maps are non-nil.
++//
++// Enrichers and downstream stages write into these maps unconditionally, so a
++// ParsedLog produced by a parser that used a struct literal instead of
++// NewParsedLog would panic with "assignment to entry in nil map" and take the
++// whole agent down. Any code that accepts a ParsedLog from an arbitrary
++// producer must call this before writing.
++func (p *ParsedLog) EnsureMaps() {
++	if p == nil {
++		return
++	}
++	if p.ResourceAttributes == nil {
++		p.ResourceAttributes = make(map[string]string)
++	}
++	if p.Attributes == nil {
++		p.Attributes = make(map[string]string)
++	}
++}
++
+ // parseJSON parses a JSON string into a map
+ func parseJSON(s string) (map[string]interface{}, error) {
+ 	var result map[string]interface{}
+diff --git a/internal/logs/parsers/nilmap_regression_test.go b/internal/logs/parsers/nilmap_regression_test.go
+new file mode 100644
+index 0000000..6b1c365
+--- /dev/null
++++ b/internal/logs/parsers/nilmap_regression_test.go
+@@ -0,0 +1,157 @@
++package parsers
++
++import (
++	"testing"
++	"time"
++
++	"github.com/mirastacklabs-ai/telegen/internal/correlation"
++)
++
++func TestK8sPathEnricher_NilResourceAttributesContainersPath(t *testing.T) {
++	t.Parallel()
++
++	log := &ParsedLog{Format: "generic"}
++	enricher := NewK8sPathEnricher()
++	enricher.Enrich(log, "/var/log/containers/mypod_myns_mycontainer-abc123def456.log")
++
++	if got := log.ResourceAttributes["k8s.pod.name"]; got != "mypod" {
++		t.Fatalf("k8s.pod.name = %q, want %q", got, "mypod")
++	}
++}
++
++func TestK8sPathEnricher_NilResourceAttributesPodsPath(t *testing.T) {
++	t.Parallel()
++
++	log := &ParsedLog{Format: "generic"}
++	enricher := NewK8sPathEnricher()
++	enricher.Enrich(log, "/var/log/pods/myns_mypod_1234abcd-5678-90ef-1234-567890abcdef/mycontainer/0.log")
++
++	if got := log.ResourceAttributes["k8s.namespace.name"]; got != "myns" {
++		t.Fatalf("k8s.namespace.name = %q, want %q", got, "myns")
++	}
++}
++
++func TestApplicationParsers_AlwaysInitialiseMaps(t *testing.T) {
++	t.Parallel()
++
++	spring := NewSpringBootParser()
++	log4j := NewLog4jParser()
++	generic := NewGenericTimestampParser()
++
++	tests := []struct {
++		name   string
++		parser Parser
++		input  string
++	}{
++		{
++			name:   "spring full format",
++			parser: spring,
++			input:  "2024-01-15 10:30:45.123 INFO [myapp, abc123def456, span789, true] 12345 --- [main] c.e.MyClass: Application started",
++		},
++		{
++			name:   "spring simple format",
++			parser: spring,
++			input:  "2024-01-15 10:30:45.123 ERROR 12345 --- [http-nio-8080-exec-1] c.e.Controller: Request failed",
++		},
++		{
++			name:   "spring basic format",
++			parser: spring,
++			input:  "2024-01-15 10:30:45.123 WARN Something happened",
++		},
++		{
++			name:   "log4j standard format",
++			parser: log4j,
++			input:  "2024-01-15 10:30:45,123 INFO [main] com.example.MyClass - Application initialized",
++		},
++		{
++			name:   "log4j2 format",
++			parser: log4j,
++			input:  "2024-01-15 10:30:45.123 ERROR [com.example.Service] [worker-1] Database connection failed",
++		},
++		{
++			name:   "generic iso8601 level format",
++			parser: generic,
++			input:  "2024-01-15T10:30:45.123Z INFO service started",
++		},
++	}
++
++	for _, tc := range tests {
++		t.Run(tc.name, func(t *testing.T) {
++			log, err := tc.parser.Parse(tc.input)
++			if err != nil {
++				t.Fatalf("parse failed: %v", err)
++			}
++			if log == nil {
++				t.Fatal("parse returned nil log")
++			}
++			if log.ResourceAttributes == nil {
++				t.Fatal("ResourceAttributes map is nil")
++			}
++			if log.Attributes == nil {
++				t.Fatal("Attributes map is nil")
++			}
++		})
++	}
++}
++
++type nilMapParser struct{}
++
++func (nilMapParser) Parse(line string) (*ParsedLog, error) {
++	return &ParsedLog{
++		Format: "custom",
++		Body:   line,
++	}, nil
++}
++
++func (nilMapParser) Name() string {
++	return "custom_nil_map"
++}
++
++func TestPipelineParse_CustomParserWithNilMapsDoesNotPanic(t *testing.T) {
++	t.Parallel()
++
++	cfg := DefaultPipelineConfig()
++	p := NewPipeline(cfg, nil)
++	p.AddParser(nilMapParser{})
++
++	log := p.Parse(
++		"custom parser line",
++		"/var/log/containers/mypod_myns_mycontainer-abc123def456.log",
++	)
++	if log == nil {
++		t.Fatal("parse returned nil log")
++	}
++	if got := log.ResourceAttributes["k8s.pod.name"]; got != "mypod" {
++		t.Fatalf("k8s.pod.name = %q, want %q", got, "mypod")
++	}
++}
++
++func TestTraceContextEnricher_NilAttributesDoesNotPanic(t *testing.T) {
++	t.Parallel()
++
++	correlator := correlation.NewLogTraceCorrelator(correlation.DefaultLogTraceCorrelatorConfig())
++	defer correlator.Stop()
++
++	ts := time.Now().UTC()
++	traceID, err := correlation.ParseTraceID("0123456789abcdef0123456789abcdef")
++	if err != nil {
++		t.Fatalf("parse trace id: %v", err)
++	}
++	spanID, err := correlation.ParseSpanID("0123456789abcdef")
++	if err != nil {
++		t.Fatalf("parse span id: %v", err)
++	}
++	correlator.RecordTraceContext("cid:abc123def456", ts, traceID, spanID, correlation.FlagsSampled)
++
++	log := &ParsedLog{
++		ResourceAttributes: map[string]string{"k8s.container.id": "abc123def456"},
++		Timestamp:          ts,
++	}
++
++	enricher := NewTraceContextEnricherWithTolerance(correlator, time.Second)
++	enricher.Enrich(log, "")
++
++	if got := log.Attributes["telegen.trace_source"]; got != "ebpf_correlation" {
++		t.Fatalf("telegen.trace_source = %q, want %q", got, "ebpf_correlation")
++	}
++}
+diff --git a/internal/logs/filetailer/panic_containment_test.go b/internal/logs/filetailer/panic_containment_test.go
+new file mode 100644
+index 0000000..950545f
+--- /dev/null
++++ b/internal/logs/filetailer/panic_containment_test.go
+@@ -0,0 +1,51 @@
++package filetailer
++
++import (
++	"context"
++	"io"
++	"log/slog"
++	"testing"
++	"time"
++
++	sdklog "go.opentelemetry.io/otel/sdk/log"
++
++	"github.com/mirastacklabs-ai/telegen/internal/logs/parsers"
++)
++
++type panickingParser struct{}
++
++func (panickingParser) Parse(string) (*parsers.ParsedLog, error) {
++	panic("panic from parser")
++}
++
++func (panickingParser) Name() string {
++	return "panicking_parser"
++}
++
++func TestProcessLine_PanicIsContained(t *testing.T) {
++	t.Parallel()
++
++	lp := sdklog.NewLoggerProvider()
++	tailer := NewWithOptions(Options{
++		Globs:                []string{},
++		LoggerProvider:       lp,
++		ShipHistoricalEvents: false,
++		StartTime:            time.Now(),
++		PollInterval:         10 * time.Millisecond,
++		ParserConfig:         DefaultParserConfig(),
++		Logger:               slog.New(slog.NewTextHandler(io.Discard, nil)),
++	})
++	if tailer == nil {
++		t.Fatal("tailer should not be nil")
++	}
++
++	tailer.pipeline.AddParser(panickingParser{})
++	logger := lp.Logger("filelog")
++
++	tailer.processLine(context.Background(), logger, "/var/log/containers/mypod_myns_mycontainer-abc123def456.log", "line 1", nil)
++	tailer.processLine(context.Background(), logger, "/var/log/containers/mypod_myns_mycontainer-abc123def456.log", "line 2", nil)
++
++	if got := tailer.parsePanics.Load(); got != 2 {
++		t.Fatalf("parsePanics = %d, want %d", got, 2)
++	}
++}
+```
+
+POST / PROOF (literal gate outputs):
+
+Task 0 baseline:
+
+```text
+116ed3b90899b3babcf6604d3c7d788c6db524aa
+go version go1.26.4 darwin/arm64
+PASS  C01-six-literals
+PASS  C02-literal-lines
+PASS  C03-newparsedlog-pre
+PASS  C04-setParsedAttr
+PASS  C05-newparsedlog-ctor
+PASS  C06-no-ensuremaps-yet
+PASS  C07-stage4-loop
+PASS  C08-stage1-escape
+PASS  C09-capHint
+PASS  C10-stage5-guard
+PASS  C11-k8s-crash-line
+PASS  C12-trace-latent
+PASS  C13-runtime-safe
+PASS  C14-tailer-single-ctor
+PASS  C15-no-sync-atomic
+PASS  C16-bench-exists
+---
+TASK0 ALL PASS
+```
+
+Task 1 (`EnsureMaps` helper):
+
+```text
+1
+```
+
+Task 2:
+
+```text
+C01=6
+C02=140,164,177,251,263,350,
+C03=7
+ok  	github.com/mirastacklabs-ai/telegen/internal/logs/parsers	1.324s
+G2a-PASS literals-removed
+G2b-PASS 7-to-13
+G2c-PASS spring-x3
+G2d-PASS log4j-x2
+G2e-PASS generic-x1
+```
+
+Task 3:
+
+```text
+ok  	github.com/mirastacklabs-ai/telegen/internal/logs/parsers	0.726s
+T3a-PASS
+T3b-PASS
+T3c-PASS ordering e=217 f=220
+```
+
+Task 4:
+
+```text
+ok  	github.com/mirastacklabs-ai/telegen/internal/logs/parsers	0.752s
+T4a-PASS
+T4b-PASS
+```
+
+Task 5:
+
+```text
+ok  	github.com/mirastacklabs-ai/telegen/internal/logs/filetailer	4.373s
+T5a-PASS
+T5b-PASS
+T5c-PASS parse-inside-processLine p=388 q=396
+T5d-PASS
+```
+
+Task 6 mutation check (includes deliberate failing phase):
+
+```text
+ok  	github.com/mirastacklabs-ai/telegen/internal/logs/parsers	0.732s
+step1 exit=0
+Saved working directory and index state WIP on main: 116ed3b Duplicate registrars
+--- FAIL: TestK8sPathEnricher_NilResourceAttributesContainersPath (0.00s)
+panic: assignment to entry in nil map [recovered, repanicked]
+
+goroutine 23 [running]:
+testing.tRunner.func1.2({0x104d6dec0, 0x104ebe040})
+	/opt/homebrew/Cellar/go/1.26.4/libexec/src/testing/testing.go:1974 +0x1a0
+testing.tRunner.func1()
+	/opt/homebrew/Cellar/go/1.26.4/libexec/src/testing/testing.go:1977 +0x318
+panic({0x104d6dec0?, 0x104ebe040?})
+	/opt/homebrew/Cellar/go/1.26.4/libexec/src/runtime/panic.go:860 +0x12c
+github.com/mirastacklabs-ai/telegen/internal/logs/parsers.(*K8sPathEnricher).Enrich(0x5c3dd757f220, 0x5c3dd7421e68, {0x10486bcfb, 0x3b})
+	/Users/aarvee/repos/github/public/telegen/internal/logs/parsers/k8s_metadata.go:79 +0x398
+github.com/mirastacklabs-ai/telegen/internal/logs/parsers.TestK8sPathEnricher_NilResourceAttributesContainersPath(0x5c3dd7432908)
+	/Users/aarvee/repos/github/public/telegen/internal/logs/parsers/nilmap_regression_test.go:15 +0x74
+testing.tRunner(0x5c3dd7432908, 0x104e33c20)
+	/opt/homebrew/Cellar/go/1.26.4/libexec/src/testing/testing.go:2036 +0xc4
+created by testing.(*T).Run in goroutine 1
+	/opt/homebrew/Cellar/go/1.26.4/libexec/src/testing/testing.go:2101 +0x3a8
+FAIL	github.com/mirastacklabs-ai/telegen/internal/logs/parsers	0.672s
+FAIL
+step3 exit=1
+G6-PASS mutation-proven
+ok  	github.com/mirastacklabs-ai/telegen/internal/logs/parsers	0.399s
+step4 exit=0
+```
+
+Task 6 benchmark before/after:
+
+```text
+Saved working directory and index state WIP on main: 116ed3b Duplicate registrars
+goos: darwin
+goarch: arm64
+pkg: github.com/mirastacklabs-ai/telegen/internal/logs/parsers
+cpu: Apple M1 Pro
+BenchmarkPipelineParse/log4j-10         	  246234	      4888 ns/op	     749 B/op	       7 allocs/op
+BenchmarkPipelineParse/plain_text-10    	  202630	      7411 ns/op	     596 B/op	       4 allocs/op
+BenchmarkPipelineParse/runtime_docker_json-10         	  284377	      5071 ns/op	    1063 B/op	      14 allocs/op
+BenchmarkPipelineParse/spring_boot-10                 	  198400	      7017 ns/op	     725 B/op	       6 allocs/op
+PASS
+ok  	github.com/mirastacklabs-ai/telegen/internal/logs/parsers	6.562s
+goos: darwin
+goarch: arm64
+pkg: github.com/mirastacklabs-ai/telegen/internal/logs/parsers
+cpu: Apple M1 Pro
+BenchmarkPipelineParse/runtime_docker_json-10         	  199633	      5915 ns/op	    1062 B/op	      14 allocs/op
+BenchmarkPipelineParse/spring_boot-10                 	  204062	      7729 ns/op	     725 B/op	       6 allocs/op
+BenchmarkPipelineParse/log4j-10                       	  279517	      5332 ns/op	     749 B/op	       7 allocs/op
+BenchmarkPipelineParse/plain_text-10                  	  277530	      5606 ns/op	     596 B/op	       4 allocs/op
+PASS
+ok  	github.com/mirastacklabs-ai/telegen/internal/logs/parsers	6.473s
+5,8c5,8
+< BenchmarkPipelineParse/log4j-10         	  246234	      4888 ns/op	     749 B/op	       7 allocs/op
+< BenchmarkPipelineParse/plain_text-10    	  202630	      7411 ns/op	     596 B/op	       4 allocs/op
+< BenchmarkPipelineParse/runtime_docker_json-10         	  284377	      5071 ns/op	    1063 B/op	      14 allocs/op
+< BenchmarkPipelineParse/spring_boot-10                 	  198400	      7017 ns/op	     725 B/op	       6 allocs/op
+---
+> BenchmarkPipelineParse/runtime_docker_json-10         	  199633	      5915 ns/op	    1062 B/op	      14 allocs/op
+> BenchmarkPipelineParse/spring_boot-10                 	  204062	      7729 ns/op	     725 B/op	       6 allocs/op
+> BenchmarkPipelineParse/log4j-10                       	  279517	      5332 ns/op	     749 B/op	       7 allocs/op
+> BenchmarkPipelineParse/plain_text-10                  	  277530	      5606 ns/op	     596 B/op	       4 allocs/op
+10c10
+< ok  	github.com/mirastacklabs-ai/telegen/internal/logs/parsers	6.562s
+---
+> ok  	github.com/mirastacklabs-ai/telegen/internal/logs/parsers	6.473s
+```
+
+Task 7 full gate:
+
+```text
+ok  	github.com/mirastacklabs-ai/telegen/internal/logs/filetailer	2.196s
+ok  	github.com/mirastacklabs-ai/telegen/internal/logs/parsers	2.752s
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline	5.592s
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline/adapters	1.619s
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline/converters	4.362s
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline/limits	2.105s
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline/transform	3.881s
+0 issues.
+```
+
+Task 7 changed-file scope check:
+
+```text
+ internal/logs/filetailer/filetailer.go  | 84 +++++++++++++++++++++++----------
+ internal/logs/parsers/application.go    | 18 ++++---
+ internal/logs/parsers/k8s_metadata.go   |  4 ++
+ internal/logs/parsers/pipeline.go       | 18 ++++---
+ internal/logs/parsers/trace_enricher.go |  3 ++
+ internal/logs/parsers/types.go          | 19 ++++++++
+ 6 files changed, 109 insertions(+), 37 deletions(-)
+
+ M internal/logs/filetailer/filetailer.go
+ M internal/logs/parsers/application.go
+ M internal/logs/parsers/k8s_metadata.go
+ M internal/logs/parsers/pipeline.go
+ M internal/logs/parsers/trace_enricher.go
+ M internal/logs/parsers/types.go
+?? internal/logs/filetailer/panic_containment_test.go
+?? internal/logs/parsers/nilmap_regression_test.go
+```
+
+Intentional behavior changes:
+
+1. The six application parsers now allocate both attribute maps eagerly via `NewParsedLog`; benchmark captures are recorded above.
+2. `mergeApplicationLog` now allocates `runtime.Attributes` whenever nil, eliminating the previous conditional path that could still reach a nil-map write.
+3. `TraceContextEnricher` no longer assumes `Attributes` is non-nil when writing `telegen.trace_source`.
+4. A panic while parsing/emitting one file-log line is now recovered and counted (`parsePanics`), logged at ERROR with rate-limiting, and the tailer continues instead of killing the process.
+
+Not changed (scope lock):
+
+- No Helm chart files were modified.
+- No config schema files were modified.
+- No `internal/kafka` code was modified.
+- No other `startRuntimeSources` goroutine path was modified.
+
+Independent verification ledger (Task 9):
+
+```text
+PASS  L01-ensuremaps-defined
+PASS  L02-literals-gone
+PASS  L03-newparsedlog-13
+PASS  L04-format-spring-3
+PASS  L05-format-log4j-2
+PASS  L06-format-generic-1
+PASS  L07-chokepoint
+PASS  L08-caphint-gone
+PASS  L09-guard-before-loop
+PASS  L10-k8s-guard
+PASS  L11-trace-guard
+PASS  L12-processline
+PASS  L13-defer-recover
+PASS  L14-parse-inside-pl
+PASS  L15-tests-parsers
+PASS  L16-tests-filetailer
+PASS  L17-log-section
+---
+PASS  L18-build
+ok  	github.com/mirastacklabs-ai/telegen/internal/logs/filetailer	(cached)
+ok  	github.com/mirastacklabs-ai/telegen/internal/logs/parsers	(cached)
+PASS  L19-race
+---
+LEDGER ALL PASS
+```

@@ -47,6 +47,10 @@ func (e *K8sPathEnricher) Enrich(log *ParsedLog, filePath string) {
 		return
 	}
 
+	// Defence in depth: this enricher is exported and is driven directly by
+	// ExtractK8sMetadataFromPath, not only through Pipeline.Parse.
+	log.EnsureMaps()
+
 	// Store the file path
 	log.FilePath = filePath
 

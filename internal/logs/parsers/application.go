@@ -137,7 +137,8 @@ func (p *SpringBootParser) Name() string {
 func (p *SpringBootParser) Parse(line string) (*ParsedLog, error) {
 	// Try full format with tracing first
 	if matches := p.fullPattern.FindStringSubmatch(line); matches != nil {
-		log := &ParsedLog{Format: "spring_boot"}
+		log := NewParsedLog()
+		log.Format = "spring_boot"
 		log.Timestamp = parseSpringTimestamp(matches[1])
 		log.Severity = normalizeSeverity(matches[2])
 		log.SeverityNumber = severityToNumber(log.Severity)
@@ -161,7 +162,8 @@ func (p *SpringBootParser) Parse(line string) (*ParsedLog, error) {
 
 	// Try simple format without tracing
 	if matches := p.simplePattern.FindStringSubmatch(line); matches != nil {
-		log := &ParsedLog{Format: "spring_boot"}
+		log := NewParsedLog()
+		log.Format = "spring_boot"
 		log.Timestamp = parseSpringTimestamp(matches[1])
 		log.Severity = normalizeSeverity(matches[2])
 		log.SeverityNumber = severityToNumber(log.Severity)
@@ -174,7 +176,8 @@ func (p *SpringBootParser) Parse(line string) (*ParsedLog, error) {
 
 	// Try basic format
 	if matches := p.basicPattern.FindStringSubmatch(line); matches != nil {
-		log := &ParsedLog{Format: "spring_boot"}
+		log := NewParsedLog()
+		log.Format = "spring_boot"
 		log.Timestamp = parseSpringTimestamp(matches[1])
 		log.Severity = normalizeSeverity(matches[2])
 		log.SeverityNumber = severityToNumber(log.Severity)
@@ -248,7 +251,8 @@ func (p *Log4jParser) Name() string {
 func (p *Log4jParser) Parse(line string) (*ParsedLog, error) {
 	// Try standard Log4j format
 	if matches := p.standardPattern.FindStringSubmatch(line); matches != nil {
-		log := &ParsedLog{Format: "log4j"}
+		log := NewParsedLog()
+		log.Format = "log4j"
 		log.Timestamp = parseSpringTimestamp(matches[1]) // Same timestamp format
 		log.Severity = normalizeSeverity(matches[2])
 		log.SeverityNumber = severityToNumber(log.Severity)
@@ -260,7 +264,8 @@ func (p *Log4jParser) Parse(line string) (*ParsedLog, error) {
 
 	// Try Log4j2 format
 	if matches := p.log4j2Pattern.FindStringSubmatch(line); matches != nil {
-		log := &ParsedLog{Format: "log4j"}
+		log := NewParsedLog()
+		log.Format = "log4j"
 		log.Timestamp = parseSpringTimestamp(matches[1])
 		log.Severity = normalizeSeverity(matches[2])
 		log.SeverityNumber = severityToNumber(log.Severity)
@@ -347,7 +352,8 @@ func (p *GenericTimestampParser) Parse(line string) (*ParsedLog, error) {
 				continue
 			}
 		}
-		log := &ParsedLog{Format: "generic"}
+		log := NewParsedLog()
+		log.Format = "generic"
 		log.Timestamp = ts
 
 		switch pat.name {

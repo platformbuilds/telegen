@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel/log"
@@ -112,6 +113,10 @@ type Tailer struct {
 	pipeline *parsers.Pipeline
 	// K8s log discovery (optional, provides dynamically discovered paths)
 	k8sDiscovery *K8sLogDiscoverer
+	// parsePanics counts recovered per-line panics for the lifetime of the tailer.
+	parsePanics atomic.Uint64
+	// lastPanicLog rate-limits the recovered-panic ERROR log to one per minute.
+	lastPanicLog atomic.Int64
 }
 
 // New creates a new Tailer using the unified OTLP LoggerProvider.
@@ -363,30 +368,7 @@ func (t *Tailer) tailOnce(path string) {
 	}
 
 	for sc.Scan() {
-		line := sc.Text()
-
-		// Parse the log line using the pipeline
-		parsed := t.pipeline.Parse(line, path)
-		if parsed == nil {
-			// Fallback to raw line if parsing fails
-			parsed = &parsers.ParsedLog{
-				Body:               line,
-				Timestamp:          time.Now(),
-				Format:             "text",
-				FilePath:           path,
-				OriginalLine:       line,
-				ResourceAttributes: make(map[string]string),
-				Attributes:         make(map[string]string),
-			}
-		}
-
-		// Convert to OTEL record
-		rec := parsed.ToOTelRecord()
-
-		// Add telegen signal metadata attributes
-		rec.AddAttributes(logMetadataAttrs...)
-
-		logger.Emit(ctx, rec)
+		t.processLine(ctx, logger, path, sc.Text(), logMetadataAttrs)
 	}
 
 	// Update file position to current end for next read
@@ -398,4 +380,58 @@ func (t *Tailer) tailOnce(path string) {
 		// Fallback: use file size
 		t.filePositions.Store(path, currentSize)
 	}
+}
+
+// processLine parses and emits one log line. A panic here is contained to this
+// single line: telegen is a long-running agent and a malformed line from an
+// arbitrary workload must degrade collection, never terminate the process.
+func (t *Tailer) processLine(
+	ctx context.Context,
+	logger log.Logger,
+	path, line string,
+	metadataAttrs []log.KeyValue,
+) {
+	defer t.recoverLinePanic(path)
+
+	parsed := t.pipeline.Parse(line, path)
+	if parsed == nil {
+		// Fallback to raw line if parsing fails
+		parsed = &parsers.ParsedLog{
+			Body:               line,
+			Timestamp:          time.Now(),
+			Format:             "text",
+			FilePath:           path,
+			OriginalLine:       line,
+			ResourceAttributes: make(map[string]string),
+			Attributes:         make(map[string]string),
+		}
+	}
+
+	rec := parsed.ToOTelRecord()
+	rec.AddAttributes(metadataAttrs...)
+	logger.Emit(ctx, rec)
+}
+
+// recoverLinePanic contains a panic raised while parsing or emitting one line.
+// Mirrors UnifiedPipeline.recoverWorkerPanic: log loudly but rate-limited, keep
+// a cumulative count so the damage stays visible, and keep the tailer running.
+func (t *Tailer) recoverLinePanic(path string) {
+	recovered := recover()
+	if recovered == nil {
+		return
+	}
+	count := t.parsePanics.Add(1)
+	now := time.Now().UnixNano()
+	last := t.lastPanicLog.Load()
+	if last != 0 && now-last < int64(time.Minute) {
+		return
+	}
+	if !t.lastPanicLog.CompareAndSwap(last, now) {
+		return
+	}
+	t.logger.Error("recovered panic while processing log line",
+		"path", path,
+		"panic", recovered,
+		"panic_count", count,
+	)
 }

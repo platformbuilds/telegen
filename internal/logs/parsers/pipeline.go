@@ -210,6 +210,12 @@ func (p *Pipeline) Parse(line string, filePath string) *ParsedLog {
 		log.SeverityNumber = severityToNumber(log.Severity)
 	}
 
+	// The enrichers write into log.ResourceAttributes and log.Attributes
+	// unconditionally. Parsers registered through AddParser are outside this
+	// package's control, so normalise the invariant here rather than trusting
+	// every producer.
+	log.EnsureMaps()
+
 	// Stage 4: Apply enrichers
 	for _, enricher := range p.enrichers {
 		enricher.Enrich(log, filePath)
@@ -239,13 +245,11 @@ func (p *Pipeline) parseApplicationLog(line string) *ParsedLog {
 
 // mergeApplicationLog merges parsed application log data into a runtime-parsed log
 func mergeApplicationLog(runtime, app *ParsedLog) {
-	if runtime.Attributes == nil && (len(app.Attributes) > 0 || app.Format != "") {
-		capHint := len(app.Attributes)
-		maxInt := int(^uint(0) >> 1)
-		if capHint < maxInt {
-			capHint++
-		}
-		runtime.Attributes = make(map[string]string, capHint)
+	// Unconditional: line 281 below writes runtime.Attributes["app.log.format"]
+	// regardless of app.Format, so the previous compound condition left a
+	// reachable nil-map write.
+	if runtime.Attributes == nil {
+		runtime.Attributes = make(map[string]string, len(app.Attributes)+1)
 	}
 
 	// Use application timestamp if runtime didn't have one or app timestamp is more precise

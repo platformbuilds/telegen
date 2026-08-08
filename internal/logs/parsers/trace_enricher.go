@@ -80,6 +80,9 @@ func (e *TraceContextEnricher) Enrich(log *ParsedLog, filePath string) {
 	if found {
 		log.TraceID = traceID
 		log.SpanID = spanID
+		if log.Attributes == nil {
+			log.Attributes = make(map[string]string, 1)
+		}
 		log.Attributes["telegen.trace_source"] = "ebpf_correlation"
 	}
 }
