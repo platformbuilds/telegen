@@ -5,6 +5,8 @@ package imetrics // import "github.com/mirastacklabs-ai/telegen/pkg/export/imetr
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"runtime"
 	"time"
 
@@ -125,7 +127,8 @@ func NewPrometheusReporter(cfg *Config, manager *connector.PrometheusManager, re
 		}),
 	}
 	if registry != nil {
-		registry.MustRegister(pr.tracerFlushes,
+		registerAll(registry,
+			pr.tracerFlushes,
 			pr.otelMetricExports,
 			pr.otelMetricExportErrs,
 			pr.otelTraceExports,
@@ -157,6 +160,25 @@ func NewPrometheusReporter(cfg *Config, manager *connector.PrometheusManager, re
 	}
 
 	return pr
+}
+
+// registerAll registers every collector into the shared registry without ever panicking.
+// telegen builds the OBI context info once per process, so a duplicate registration signals a
+// structural regression rather than a routine condition: it is logged loudly and the affected
+// collector is skipped. Losing a few internal-metrics series is always preferable to killing a
+// long-running observability agent due to panic-on-duplicate registration behavior.
+func registerAll(registry *prometheus.Registry, collectors ...prometheus.Collector) {
+	for _, c := range collectors {
+		if err := registry.Register(c); err != nil {
+			var already prometheus.AlreadyRegisteredError
+			if errors.As(err, &already) {
+				slog.Error("internal metrics collector already registered in the shared registry;"+
+					" skipping duplicate registration", "error", err)
+				continue
+			}
+			slog.Error("cannot register internal metrics collector in the shared registry", "error", err)
+		}
+	}
 }
 
 func (p *PrometheusReporter) Start(ctx context.Context) {

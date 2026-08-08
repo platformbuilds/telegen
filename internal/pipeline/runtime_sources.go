@@ -241,7 +241,14 @@ func (p *UnifiedPipeline) startEBPFSource(ctx context.Context) error {
 		return fmt.Errorf("failed to build OBI config: %w", err)
 	}
 
-	ctxInfo, err := instrumenter.BuildCommonContextInfo(ctx, obiCfg)
+	// Build the OBI context info exactly once per process. Every build registers the
+	// internal-metrics collectors into cfg.InternalMetrics.Registry, fetches the host ID and
+	// constructs a Kubernetes metadata informer, so a second build panics with
+	// "duplicate metrics collector registration attempted".
+	sharedMetricsExporter := p.GetMetricsExporter()
+	sharedTracesExporter := p.GetTracesExporter()
+	ctxInfo, err := instrumenter.BuildCommonContextInfoWithExporter(
+		ctx, obiCfg, sharedMetricsExporter, sharedTracesExporter)
 	if err != nil {
 		return fmt.Errorf("failed to build context info: %w", err)
 	}
@@ -259,10 +266,8 @@ func (p *UnifiedPipeline) startEBPFSource(ctx context.Context) error {
 		return nil
 	})
 
-	sharedMetricsExporter := p.GetMetricsExporter()
-	sharedTracesExporter := p.GetTracesExporter()
 	go func() {
-		if err := instrumenter.RunUpstream(ctx, obiCfg, sharedMetricsExporter, sharedTracesExporter, appQueue); err != nil && ctx.Err() == nil {
+		if err := instrumenter.RunUpstream(ctx, obiCfg, ctxInfo, appQueue); err != nil && ctx.Err() == nil {
 			p.logger.Error("ebpf upstream OBI runtime error", "error", err)
 		}
 	}()

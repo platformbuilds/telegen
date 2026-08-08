@@ -2450,3 +2450,545 @@ $ kubectl logs -n mirastack telegen-collector-collector-59845bbcf6-fnl99 --previ
 ```
 
 Post-deploy validation of the new chart and binary (expected: both telegen pods stable with zero restarts, no Prometheus bind error, no lock-file read-only error) is pending the next rollout from this working tree.
+
+### fix-agent-duplicate-imetrics-registration (agent crash: duplicate collector registration)
+
+#### PRE output
+
+```text
+panic: duplicate metrics collector registration attempted
+
+goroutine 308 [running]:
+github.com/prometheus/client_golang/prometheus.(*Registry).MustRegister(...)
+	github.com/prometheus/client_golang@v1.24.1/prometheus/registry.go:419
+github.com/mirastacklabs-ai/telegen/pkg/export/imetrics.NewPrometheusReporter(0x1c02fd7428f8, 0x0, 0x1c02fd9194f0)
+	github.com/mirastacklabs-ai/telegen/pkg/export/imetrics/iprom.go:128 +0x1f17
+github.com/mirastacklabs-ai/telegen/internal/instrumenter.internalMetrics({0x3c6b950?, 0x1c02fd919a40?}, 0x1c02fd742008, 0x1dcd6500?, 0x1c02fde189f0)
+	github.com/mirastacklabs-ai/telegen/internal/instrumenter/instrumenter.go:250 +0x1a7
+github.com/mirastacklabs-ai/telegen/internal/instrumenter.BuildCommonContextInfoWithExporter({0x3c6b950, 0x1c02fd919a40}, 0x1c02fd742008, {0x3c73c80, 0x1c02fd914c80}, {0x3c6dab0, 0x1c02fd8a9ea8})
+	github.com/mirastacklabs-ai/telegen/internal/instrumenter/instrumenter.go:214 +0x605
+github.com/mirastacklabs-ai/telegen/internal/instrumenter.RunUpstream({0x3c6b950, 0x1c02fd919a40}, 0x1c02fd742008, {0x3c73c80?, 0x1c02fd914c80?}, {0x3c6dab0?, 0x1c02fd8a9ea8?}, 0x1c02fdf464b0)
+	github.com/mirastacklabs-ai/telegen/internal/instrumenter/upstream_adapter_linux.go:29 +0x65
+github.com/mirastacklabs-ai/telegen/internal/pipeline.(*UnifiedPipeline).startEBPFSource.func2()
+	github.com/mirastacklabs-ai/telegen/internal/pipeline/runtime_sources.go:265 +0x52
+created by github.com/mirastacklabs-ai/telegen/internal/pipeline.(*UnifiedPipeline).startEBPFSource in goroutine 1
+	github.com/mirastacklabs-ai/telegen/internal/pipeline/runtime_sources.go:264 +0x3ff
+
+$ git rev-parse --abbrev-ref HEAD
+main
+$ git rev-parse HEAD
+bd3c253bcf6459e6608f3004cc998aec4fdb6003
+$ git status --porcelain
+(no output)
+
+$ rg -n "BuildCommonContextInfo" internal/pipeline/ internal/instrumenter/
+internal/pipeline/runtime_sources.go:244:	ctxInfo, err := instrumenter.BuildCommonContextInfo(ctx, obiCfg)
+internal/instrumenter/upstream_adapter_linux.go:29:	ctxInfo, err := BuildCommonContextInfoWithExporter(ctx, cfg, sharedMetricsExporter, sharedTracesExporter)
+internal/instrumenter/instrumenter.go:39:	ctxInfo, err := BuildCommonContextInfo(ctx, cfg)
+internal/instrumenter/instrumenter.go:151:// BuildCommonContextInfo populates some globally shared components and properties
+internal/instrumenter/instrumenter.go:153:func BuildCommonContextInfo(
+internal/instrumenter/instrumenter.go:156:	return BuildCommonContextInfoWithExporter(ctx, config, nil, nil)
+internal/instrumenter/instrumenter.go:159:// BuildCommonContextInfoWithExporter is like BuildCommonContextInfo but accepts shared
+internal/instrumenter/instrumenter.go:168:func BuildCommonContextInfoWithExporter(
+internal/instrumenter/context_shared_exporters_test.go:32:func TestBuildCommonContextInfoWithExporter_SetsSharedTracesExporter(t *testing.T) {
+internal/instrumenter/context_shared_exporters_test.go:40:	ctxInfo, err := BuildCommonContextInfoWithExporter(context.Background(), &cfg, nil, shared)
+internal/instrumenter/context_shared_exporters_test.go:42:		t.Fatalf("BuildCommonContextInfoWithExporter failed: %v", err)
+
+$ rg -n "MustRegister" pkg/export/imetrics/iprom.go
+128:		registry.MustRegister(pr.tracerFlushes,
+
+$ rg -n "func RunUpstream" internal/instrumenter/
+internal/instrumenter/upstream_adapter_notlinux.go:16:func RunUpstream(
+internal/instrumenter/upstream_adapter_linux.go:18:func RunUpstream(
+internal/instrumenter/upstream_adapter_linux_stub.go:19:func RunUpstream(
+```
+
+#### POST output
+
+```text
+$ rg -n "BuildCommonContextInfo|sdkmetric|collector/exporter" internal/instrumenter/upstream_adapter_linux.go internal/instrumenter/upstream_adapter_linux_stub.go internal/instrumenter/upstream_adapter_notlinux.go; echo "rg_exit=$?"
+rg_exit=1
+
+$ rg -c "global.ContextInfo" internal/instrumenter/upstream_adapter_linux.go internal/instrumenter/upstream_adapter_linux_stub.go internal/instrumenter/upstream_adapter_notlinux.go
+internal/instrumenter/upstream_adapter_linux.go:1
+internal/instrumenter/upstream_adapter_notlinux.go:1
+internal/instrumenter/upstream_adapter_linux_stub.go:1
+
+$ git diff --numstat -- internal/instrumenter/upstream_adapter_linux.go internal/instrumenter/upstream_adapter_linux_stub.go internal/instrumenter/upstream_adapter_notlinux.go
+8	9	internal/instrumenter/upstream_adapter_linux.go
+2	4	internal/instrumenter/upstream_adapter_linux_stub.go
+2	4	internal/instrumenter/upstream_adapter_notlinux.go
+
+$ gofmt -l internal/instrumenter/
+(no output)
+
+$ rg -n "BuildCommonContextInfo" internal/pipeline/
+internal/pipeline/runtime_sources.go:250:	ctxInfo, err := instrumenter.BuildCommonContextInfoWithExporter(
+
+$ rg -n "GetMetricsExporter\(\)|GetTracesExporter\(\)" internal/pipeline/runtime_sources.go
+248:	sharedMetricsExporter := p.GetMetricsExporter()
+249:	sharedTracesExporter := p.GetTracesExporter()
+
+$ rg -n "RunUpstream\(ctx, obiCfg, ctxInfo, appQueue\)" internal/pipeline/runtime_sources.go
+270:		if err := instrumenter.RunUpstream(ctx, obiCfg, ctxInfo, appQueue); err != nil && ctx.Err() == nil {
+
+$ git diff --numstat -- internal/pipeline/runtime_sources.go
+9	4	internal/pipeline/runtime_sources.go
+
+$ gofmt -l internal/pipeline/runtime_sources.go
+(no output)
+
+$ go build ./... && echo "HOST_BUILD_OK" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /dev/null ./cmd/telegen && echo "LINUX_STUB_OK" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags obiupstream -ldflags="-s -w" -o /dev/null ./cmd/telegen && echo "LINUX_OBIUPSTREAM_AMD64_OK" && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags obiupstream -ldflags="-s -w" -o /dev/null ./cmd/telegen && echo "LINUX_OBIUPSTREAM_ARM64_OK"
+HOST_BUILD_OK
+LINUX_STUB_OK
+LINUX_OBIUPSTREAM_AMD64_OK
+LINUX_OBIUPSTREAM_ARM64_OK
+
+$ rg -n "MustRegister" pkg/export/imetrics/iprom.go; echo "rg_exit=$?"
+rg_exit=1
+
+$ rg -n "func registerAll|errors.As|AlreadyRegisteredError" pkg/export/imetrics/iprom.go
+170:func registerAll(registry *prometheus.Registry, collectors ...prometheus.Collector) {
+173:			var already prometheus.AlreadyRegisteredError
+174:			if errors.As(err, &already) {
+
+$ rg -n "MustRegister" pkg/export/connector/prommgr.go
+64:	reg.MustRegister(collectors...)
+
+$ git diff --numstat -- pkg/export/imetrics/iprom.go pkg/export/connector/prommgr.go
+23	1	pkg/export/imetrics/iprom.go
+
+$ gofmt -l pkg/export/imetrics/
+(no output)
+
+$ go vet ./pkg/export/imetrics/... && echo "VET_OK"
+VET_OK
+
+$ go test -race -count=1 -run 'TestNewPrometheusReporter_DuplicateRegistrationDoesNotPanic' -v ./pkg/export/imetrics/
+=== RUN   TestNewPrometheusReporter_DuplicateRegistrationDoesNotPanic
+=== PAUSE TestNewPrometheusReporter_DuplicateRegistrationDoesNotPanic
+=== CONT  TestNewPrometheusReporter_DuplicateRegistrationDoesNotPanic
+2026/08/08 18:52:04 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:52:04 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:52:04 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:52:04 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:52:04 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:52:04 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:52:04 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:52:04 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:52:04 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:52:04 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:52:04 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:52:04 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:52:04 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:52:04 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+--- PASS: TestNewPrometheusReporter_DuplicateRegistrationDoesNotPanic (0.00s)
+PASS
+ok  	github.com/mirastacklabs-ai/telegen/pkg/export/imetrics	1.672s
+
+$ go test -race -count=1 -run 'TestBuildCommonContextInfoWithExporter_TwiceWithSharedRegistryDoesNotPanic' -v ./internal/instrumenter/
+=== RUN   TestBuildCommonContextInfoWithExporter_TwiceWithSharedRegistryDoesNotPanic
+=== PAUSE TestBuildCommonContextInfoWithExporter_TwiceWithSharedRegistryDoesNotPanic
+=== CONT  TestBuildCommonContextInfoWithExporter_TwiceWithSharedRegistryDoesNotPanic
+2026/08/08 18:53:15 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:53:15 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:53:15 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:53:15 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:53:15 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:53:15 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:53:15 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:53:15 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:53:15 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:53:15 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:53:15 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:53:15 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:53:15 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+2026/08/08 18:53:15 ERROR internal metrics collector already registered in the shared registry; skipping duplicate registration error="duplicate metrics collector registration attempted"
+--- PASS: TestBuildCommonContextInfoWithExporter_TwiceWithSharedRegistryDoesNotPanic (0.01s)
+PASS
+ok  	github.com/mirastacklabs-ai/telegen/internal/instrumenter	2.167s
+
+$ git stash push -- pkg/export/imetrics/iprom.go
+Saved working directory and index state WIP on main: bd3c253 Merge pull request #108 from mirastacklabs-ai/perf-20260807
+
+$ go test -count=1 -run 'TestBuildCommonContextInfoWithExporter_TwiceWithSharedRegistryDoesNotPanic' ./internal/instrumenter/; echo "mutated_exit=$?"
+--- FAIL: TestBuildCommonContextInfoWithExporter_TwiceWithSharedRegistryDoesNotPanic (0.00s)
+panic: duplicate metrics collector registration attempted [recovered, repanicked]
+goroutine 66 [running]:
+testing.tRunner.func1.2({0x10566cac0, 0x23754b02fd80})
+	/opt/homebrew/Cellar/go/1.26.4/libexec/src/testing/testing.go:1974 +0x1a0
+testing.tRunner.func1()
+	/opt/homebrew/Cellar/go/1.26.4/libexec/src/testing/testing.go:1977 +0x318
+panic({0x10566cac0?, 0x23754b02fd80?})
+	/opt/homebrew/Cellar/go/1.26.4/libexec/src/runtime/panic.go:860 +0x12c
+github.com/prometheus/client_golang/prometheus.(*Registry).MustRegister(...)
+	/Users/aarvee/go/pkg/mod/github.com/prometheus/client_golang@v1.24.1/prometheus/registry.go:419
+github.com/mirastacklabs-ai/telegen/pkg/export/imetrics.NewPrometheusReporter(0x23754b0a9df8, 0x0, 0x23754adfe500)
+	/Users/aarvee/repos/github/public/telegen/pkg/export/imetrics/iprom.go:128 +0x1688
+github.com/mirastacklabs-ai/telegen/internal/instrumenter.internalMetrics({0x1058f6cc8?, 0x105a5bee0?}, 0x23754b0a9508, 0x102618910?, 0x23754ae5e630)
+	/Users/aarvee/repos/github/public/telegen/internal/instrumenter/instrumenter.go:250 +0x18c
+github.com/mirastacklabs-ai/telegen/internal/instrumenter.BuildCommonContextInfoWithExporter({0x1058f6cc8, 0x105a5bee0}, 0x23754b0a9508, {0x0, 0x0}, {0x0, 0x0})
+	/Users/aarvee/repos/github/public/telegen/internal/instrumenter/instrumenter.go:214 +0x4bc
+github.com/mirastacklabs-ai/telegen/internal/instrumenter.TestBuildCommonContextInfoWithExporter_TwiceWithSharedRegistryDoesNotPanic(0x23754b0726c8)
+	/Users/aarvee/repos/github/public/telegen/internal/instrumenter/context_internal_metrics_test.go:35 +0x230
+testing.tRunner(0x23754b0726c8, 0x1058cafc8)
+	/opt/homebrew/Cellar/go/1.26.4/libexec/src/testing/testing.go:2036 +0xc4
+created by testing.(*T).Run in goroutine 1
+	/opt/homebrew/Cellar/go/1.26.4/libexec/src/testing/testing.go:2101 +0x3a8
+FAIL	github.com/mirastacklabs-ai/telegen/internal/instrumenter	0.924s
+FAIL
+mutated_exit=1
+
+$ git stash pop
+On branch main
+Your branch is up to date with 'origin/main'.
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   internal/instrumenter/upstream_adapter_linux.go
+	modified:   internal/instrumenter/upstream_adapter_linux_stub.go
+	modified:   internal/instrumenter/upstream_adapter_notlinux.go
+	modified:   internal/pipeline/runtime_sources.go
+	modified:   pkg/export/imetrics/iprom.go
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	internal/instrumenter/context_internal_metrics_test.go
+	pkg/export/imetrics/iprom_test.go
+
+no changes added to commit (use "git add" and/or "git commit -a")
+Dropped refs/stash@{0} (91ce75c421efedc8bdc48b7236820ea3bf5ee1c8)
+
+$ go test -count=1 -run 'TestBuildCommonContextInfoWithExporter_TwiceWithSharedRegistryDoesNotPanic' ./internal/instrumenter/; echo "restored_exit=$?"
+ok  	github.com/mirastacklabs-ai/telegen/internal/instrumenter	0.932s
+restored_exit=0
+
+$ git status --porcelain
+ M internal/instrumenter/upstream_adapter_linux.go
+ M internal/instrumenter/upstream_adapter_linux_stub.go
+ M internal/instrumenter/upstream_adapter_notlinux.go
+ M internal/pipeline/runtime_sources.go
+ M pkg/export/imetrics/iprom.go
+?? internal/instrumenter/context_internal_metrics_test.go
+?? pkg/export/imetrics/iprom_test.go
+
+$ go build ./... && echo "G6_BUILD_OK" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags obiupstream -ldflags="-s -w" -o /dev/null ./cmd/telegen && echo "G6_OBIUPSTREAM_AMD64_OK" && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags obiupstream -ldflags="-s -w" -o /dev/null ./cmd/telegen && echo "G6_OBIUPSTREAM_ARM64_OK" && go vet ./internal/instrumenter/... ./internal/pipeline/... ./pkg/export/imetrics/... && echo "G6_VET_OK" && go test -race -count=1 ./internal/instrumenter/... ./pkg/export/imetrics/... ./internal/pipeline/... ./pkg/export/prom/... && echo "G6_TEST_OK" && golangci-lint run ./... && echo "G6_LINT_OK"
+G6_BUILD_OK
+G6_OBIUPSTREAM_AMD64_OK
+G6_OBIUPSTREAM_ARM64_OK
+G6_VET_OK
+ok  	github.com/mirastacklabs-ai/telegen/internal/instrumenter	1.967s
+ok  	github.com/mirastacklabs-ai/telegen/pkg/export/imetrics	2.675s
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline	7.845s
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline/adapters	1.732s
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline/converters	2.399s
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline/limits	8.683s
+ok  	github.com/mirastacklabs-ai/telegen/internal/pipeline/transform	9.370s
+ok  	github.com/mirastacklabs-ai/telegen/pkg/export/prom	8.235s
+G6_TEST_OK
+0 issues.
+G6_LINT_OK
+
+$ rg -n "internal_metrics" -A 6 deployments/helm/templates/_helpers.tpl
+124:# NOTE: relocated to ebpf.internal_metrics (this top-level form was never parsed).
+125:# internal_metrics:
+126-#   exporter: {{ .Values.internalMetrics.exporter | default "disabled" }}
+127-#   prometheus:
+128-#     port: {{ .Values.internalMetrics.prometheus.port | default 0 }}
+129-#     path: {{ .Values.internalMetrics.prometheus.path | default "/internal/metrics" | quote }}
+130-#   bpf_metric_scrape_interval: {{ .Values.internalMetrics.bpfMetricScrapeInterval | default "15s" }}
+131-
+--
+137:  internal_metrics:
+138-    exporter: {{ .Values.internalMetrics.exporter | default "prometheus" | quote }}
+139-    prometheus:
+140-      port: {{ .Values.internalMetrics.prometheus.port | default 0 }}
+141-      path: {{ .Values.internalMetrics.prometheus.path | default "/internal/metrics" | quote }}
+142-    bpf_metric_scrape_interval: {{ .Values.internalMetrics.bpfMetricScrapeInterval | default "15s" }}
+143-  tracer:
+--
+877:# NOTE: relocated to ebpf.internal_metrics (this top-level form was never parsed).
+878:# internal_metrics:
+879-#   exporter: disabled
+880-#   prometheus:
+881-#     port: 0
+882-#     path: "/internal/metrics"
+883-#   bpf_metric_scrape_interval: 15s
+884-
+```
+
+#### Diff hunk
+
+```diff
+diff --git a/internal/instrumenter/upstream_adapter_linux.go b/internal/instrumenter/upstream_adapter_linux.go
+index 735d1ed..c033b8e 100644
+--- a/internal/instrumenter/upstream_adapter_linux.go
++++ b/internal/instrumenter/upstream_adapter_linux.go
+@@ -8,27 +8,26 @@ import (
+ 
+ 	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+ 	"github.com/mirastacklabs-ai/telegen/internal/obi"
++	"github.com/mirastacklabs-ai/telegen/pkg/pipe/global"
+ 	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+-	"go.opentelemetry.io/collector/exporter"
+-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+ )
+ 
+-// RunUpstream starts upstream OBI with a caller-supplied app export queue.
++// RunUpstream starts upstream OBI with a caller-supplied context info and app export queue.
++// The caller owns the ContextInfo because exactly one may exist per process: every build
++// registers the internal-metrics collectors into the shared Prometheus registry, fetches the
++// host ID, and constructs a Kubernetes metadata informer.
+ // The queue can be drained by ConsumeUpstreamSpanQueue and bridged into telegen's pipeline.
+ func RunUpstream(
+ 	ctx context.Context,
+ 	cfg *obi.Config,
+-	sharedMetricsExporter sdkmetric.Exporter,
+-	sharedTracesExporter exporter.Traces,
++	ctxInfo *global.ContextInfo,
+ 	appQueue *msg.Queue[[]request.Span],
+ ) error {
+ 	if cfg == nil {
+ 		return fmt.Errorf("config cannot be nil")
+ 	}
+-
+-	ctxInfo, err := BuildCommonContextInfoWithExporter(ctx, cfg, sharedMetricsExporter, sharedTracesExporter)
+-	if err != nil {
+-		return fmt.Errorf("build upstream context info: %w", err)
++	if ctxInfo == nil {
++		return fmt.Errorf("context info cannot be nil")
+ 	}
+ 
+ 	opts := make([]Option, 0, 1)
+diff --git a/internal/instrumenter/upstream_adapter_linux_stub.go b/internal/instrumenter/upstream_adapter_linux_stub.go
+index c78a8d9..563bda4 100644
+--- a/internal/instrumenter/upstream_adapter_linux_stub.go
++++ b/internal/instrumenter/upstream_adapter_linux_stub.go
+@@ -8,9 +8,8 @@ import (
+ 
+ 	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+ 	"github.com/mirastacklabs-ai/telegen/internal/obi"
++	"github.com/mirastacklabs-ai/telegen/pkg/pipe/global"
+ 	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+-	"go.opentelemetry.io/collector/exporter"
+-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+ )
+ 
+ // RunUpstream is disabled in default linux builds because upstream OBI runtime
+@@ -19,8 +18,7 @@ import (
+ func RunUpstream(
+ 	_ context.Context,
+ 	_ *obi.Config,
+-	_ sdkmetric.Exporter,
+-	_ exporter.Traces,
++	_ *global.ContextInfo,
+ 	_ *msg.Queue[[]request.Span],
+ ) error {
+ 	return fmt.Errorf("upstream OBI runtime disabled in this build (enable with -tags obiupstream)")
+diff --git a/internal/instrumenter/upstream_adapter_notlinux.go b/internal/instrumenter/upstream_adapter_notlinux.go
+index 8ce1729..9e687ac 100644
+--- a/internal/instrumenter/upstream_adapter_notlinux.go
++++ b/internal/instrumenter/upstream_adapter_notlinux.go
+@@ -8,16 +8,14 @@ import (
+ 
+ 	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
+ 	"github.com/mirastacklabs-ai/telegen/internal/obi"
++	"github.com/mirastacklabs-ai/telegen/pkg/pipe/global"
+ 	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
+-	"go.opentelemetry.io/collector/exporter"
+-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+ )
+ 
+ func RunUpstream(
+ 	_ context.Context,
+ 	_ *obi.Config,
+-	_ sdkmetric.Exporter,
+-	_ exporter.Traces,
++	_ *global.ContextInfo,
+ 	_ *msg.Queue[[]request.Span],
+ ) error {
+ 	return fmt.Errorf("upstream OBI adapter is supported on linux only")
+diff --git a/internal/pipeline/runtime_sources.go b/internal/pipeline/runtime_sources.go
+index 22ca4dd..69e81e1 100644
+--- a/internal/pipeline/runtime_sources.go
++++ b/internal/pipeline/runtime_sources.go
+@@ -241,7 +241,14 @@ func (p *UnifiedPipeline) startEBPFSource(ctx context.Context) error {
+ 		return fmt.Errorf("failed to build OBI config: %w", err)
+ 	}
+ 
+-	ctxInfo, err := instrumenter.BuildCommonContextInfo(ctx, obiCfg)
++	// Build the OBI context info exactly once per process. Every build registers the
++	// internal-metrics collectors into cfg.InternalMetrics.Registry, fetches the host ID and
++	// constructs a Kubernetes metadata informer, so a second build panics with
++	// "duplicate metrics collector registration attempted".
++	sharedMetricsExporter := p.GetMetricsExporter()
++	sharedTracesExporter := p.GetTracesExporter()
++	ctxInfo, err := instrumenter.BuildCommonContextInfoWithExporter(
++		ctx, obiCfg, sharedMetricsExporter, sharedTracesExporter)
+ 	if err != nil {
+ 		return fmt.Errorf("failed to build context info: %w", err)
+ 	}
+@@ -259,10 +266,8 @@ func (p *UnifiedPipeline) startEBPFSource(ctx context.Context) error {
+ 		return nil
+ 	})
+ 
+-	sharedMetricsExporter := p.GetMetricsExporter()
+-	sharedTracesExporter := p.GetTracesExporter()
+ 	go func() {
+-		if err := instrumenter.RunUpstream(ctx, obiCfg, sharedMetricsExporter, sharedTracesExporter, appQueue); err != nil && ctx.Err() == nil {
++		if err := instrumenter.RunUpstream(ctx, obiCfg, ctxInfo, appQueue); err != nil && ctx.Err() == nil {
+ 			p.logger.Error("ebpf upstream OBI runtime error", "error", err)
+ 		}
+ 	}()
+diff --git a/pkg/export/imetrics/iprom.go b/pkg/export/imetrics/iprom.go
+index 2d09d5d..2369caf 100644
+--- a/pkg/export/imetrics/iprom.go
++++ b/pkg/export/imetrics/iprom.go
+@@ -5,6 +5,8 @@ package imetrics // import "github.com/mirastacklabs-ai/telegen/pkg/export/imetr
+ 
+ import (
+ 	"context"
++	"errors"
++	"log/slog"
+ 	"runtime"
+ 	"time"
+ 
+@@ -125,7 +127,8 @@ func NewPrometheusReporter(cfg *Config, manager *connector.PrometheusManager, re
+ 		}),
+ 	}
+ 	if registry != nil {
+-		registry.MustRegister(pr.tracerFlushes,
++		registerAll(registry,
++			pr.tracerFlushes,
+ 			pr.otelMetricExports,
+ 			pr.otelMetricExportErrs,
+ 			pr.otelTraceExports,
+@@ -159,6 +162,25 @@ func NewPrometheusReporter(cfg *Config, manager *connector.PrometheusManager, re
+ 	return pr
+ }
+ 
++// registerAll registers every collector into the shared registry without ever panicking.
++// telegen builds the OBI context info once per process, so a duplicate registration signals a
++// structural regression rather than a routine condition: it is logged loudly and the affected
++// collector is skipped. Losing a few internal-metrics series is always preferable to killing a
++// long-running observability agent due to panic-on-duplicate registration behavior.
++func registerAll(registry *prometheus.Registry, collectors ...prometheus.Collector) {
++	for _, c := range collectors {
++		if err := registry.Register(c); err != nil {
++			var already prometheus.AlreadyRegisteredError
++			if errors.As(err, &already) {
++				slog.Error("internal metrics collector already registered in the shared registry;"+
++					" skipping duplicate registration", "error", err)
++				continue
++			}
++			slog.Error("cannot register internal metrics collector in the shared registry", "error", err)
++		}
++	}
++}
++
+ func (p *PrometheusReporter) Start(ctx context.Context) {
+ 	if p.connector != nil {
+ 		p.connector.StartHTTP(ctx)
+diff --git a/internal/instrumenter/context_internal_metrics_test.go b/internal/instrumenter/context_internal_metrics_test.go
+new file mode 100644
+index 0000000..f2a6254
+--- /dev/null
++++ b/internal/instrumenter/context_internal_metrics_test.go
+@@ -0,0 +1,42 @@
++package instrumenter
++
++import (
++	"context"
++	"testing"
++
++	"github.com/prometheus/client_golang/prometheus"
++
++	"github.com/mirastacklabs-ai/telegen/internal/obi"
++	"github.com/mirastacklabs-ai/telegen/pkg/export/imetrics"
++)
++
++// Regression guard for the agent crash "panic: duplicate metrics collector registration
++// attempted". startEBPFSource used to build the ContextInfo twice against one *obi.Config,
++// so the shared registry received the internal-metrics collectors twice.
++func TestBuildCommonContextInfoWithExporter_TwiceWithSharedRegistryDoesNotPanic(t *testing.T) {
++	t.Parallel()
++
++	reg := prometheus.NewRegistry()
++	cfg := obi.DefaultConfig
++	// Override the host ID so the builder does not probe live cloud metadata endpoints.
++	cfg.Attributes.HostID.Override = "test-host"
++	cfg.InternalMetrics.Exporter = imetrics.InternalMetricsExporterPrometheus
++	cfg.InternalMetrics.Prometheus.Port = 0
++	cfg.InternalMetrics.Registry = reg
++
++	firstCtxInfo, err := BuildCommonContextInfoWithExporter(context.Background(), &cfg, nil, nil)
++	if err != nil {
++		t.Fatalf("first build failed: %v", err)
++	}
++	if firstCtxInfo == nil {
++		t.Fatal("first build returned nil context info")
++	}
++
++	secondCtxInfo, err := BuildCommonContextInfoWithExporter(context.Background(), &cfg, nil, nil)
++	if err != nil {
++		t.Fatalf("second build failed: %v", err)
++	}
++	if secondCtxInfo == nil {
++		t.Fatal("second build returned nil context info")
++	}
++}
+diff --git a/pkg/export/imetrics/iprom_test.go b/pkg/export/imetrics/iprom_test.go
+new file mode 100644
+index 0000000..51ebc32
+--- /dev/null
++++ b/pkg/export/imetrics/iprom_test.go
+@@ -0,0 +1,41 @@
++package imetrics
++
++import (
++	"testing"
++
++	"github.com/prometheus/client_golang/prometheus"
++)
++
++// Regression guard for the agent crash "panic: duplicate metrics collector registration
++// attempted". Constructing the reporter twice against one shared registry must degrade,
++// never panic.
++func TestNewPrometheusReporter_DuplicateRegistrationDoesNotPanic(t *testing.T) {
++	t.Parallel()
++
++	reg := prometheus.NewRegistry()
++	cfg := &Config{Exporter: InternalMetricsExporterPrometheus}
++
++	if first := NewPrometheusReporter(cfg, nil, reg); first == nil {
++		t.Fatal("first reporter is nil")
++	}
++	if second := NewPrometheusReporter(cfg, nil, reg); second == nil {
++		t.Fatal("second reporter is nil")
++	}
++
++	families, err := reg.Gather()
++	if err != nil {
++		t.Fatalf("gather failed after duplicate registration: %v", err)
++	}
++	if len(families) == 0 {
++		t.Fatal("no metric families registered in the shared registry")
++	}
++	seen := map[string]int{}
++	for _, f := range families {
++		seen[f.GetName()]++
++	}
++	for name, count := range seen {
++		if count != 1 {
++			t.Fatalf("metric family %q present %d times, want 1", name, count)
++		}
++	}
++}
+```
+
+Intentional behavior changes and scope notes:
+
+- `p.ebpfCtxInfo` now points to the same `ContextInfo` used by the OBI runtime; `GetKubeStore` now reads the informer actually used at runtime, not a second independently built informer.
+- The `ContextInfo` stored in `p.ebpfCtxInfo` is now built with shared exporters (`BuildCommonContextInfoWithExporter`) instead of `nil` exporters.
+- Host ID fetching during eBPF source startup now occurs once instead of twice.
+- `pkg/export/connector/prommgr.go` was intentionally not modified: its `PrometheusManager` owns per-instance registries and is not part of the shared-registry duplicate panic path.

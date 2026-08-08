@@ -8,27 +8,26 @@ import (
 
 	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
 	"github.com/mirastacklabs-ai/telegen/internal/obi"
+	"github.com/mirastacklabs-ai/telegen/pkg/pipe/global"
 	"github.com/mirastacklabs-ai/telegen/pkg/pipe/msg"
-	"go.opentelemetry.io/collector/exporter"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 )
 
-// RunUpstream starts upstream OBI with a caller-supplied app export queue.
+// RunUpstream starts upstream OBI with a caller-supplied context info and app export queue.
+// The caller owns the ContextInfo because exactly one may exist per process: every build
+// registers the internal-metrics collectors into the shared Prometheus registry, fetches the
+// host ID, and constructs a Kubernetes metadata informer.
 // The queue can be drained by ConsumeUpstreamSpanQueue and bridged into telegen's pipeline.
 func RunUpstream(
 	ctx context.Context,
 	cfg *obi.Config,
-	sharedMetricsExporter sdkmetric.Exporter,
-	sharedTracesExporter exporter.Traces,
+	ctxInfo *global.ContextInfo,
 	appQueue *msg.Queue[[]request.Span],
 ) error {
 	if cfg == nil {
 		return fmt.Errorf("config cannot be nil")
 	}
-
-	ctxInfo, err := BuildCommonContextInfoWithExporter(ctx, cfg, sharedMetricsExporter, sharedTracesExporter)
-	if err != nil {
-		return fmt.Errorf("build upstream context info: %w", err)
+	if ctxInfo == nil {
+		return fmt.Errorf("context info cannot be nil")
 	}
 
 	opts := make([]Option, 0, 1)
