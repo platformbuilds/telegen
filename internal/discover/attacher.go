@@ -173,7 +173,7 @@ func (ta *traceAttacher) getTracer(ie *ebpf.Instrumentable) bool {
 		"pid", ie.FileInfo.Pid,
 		"ino", ie.FileInfo.Ino,
 		"type", ie.Type,
-		"service", ie.FileInfo.Service.UID.Name,
+		"service", ie.FileInfo.ServiceNameOrExecutable(),
 		"logenricher", ie.FileInfo.Service.LogEnricherEnabled,
 	)
 

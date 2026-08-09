@@ -947,6 +947,8 @@ func (c *Config) Validate() error {
 	if c.Site.Timezone != "" {
 		if _, err := time.LoadLocation(c.Site.Timezone); err != nil {
 			errs = append(errs, fmt.Errorf("site.timezone %q is invalid IANA timezone: %w", c.Site.Timezone, err))
+		} else {
+			c.Site.Timezone = canonicalizeIANATimezone(c.Site.Timezone)
 		}
 	}
 
