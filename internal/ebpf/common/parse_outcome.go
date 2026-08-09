@@ -42,16 +42,17 @@ const parseWindowSize = 20
 // Thread-safe via a mutex; connections are typically processed by a single goroutine
 // but the map of stats is shared across the parse context.
 type connParseStats struct {
-	mu       sync.Mutex
-	window   [parseWindowSize]bool // true = success, false = failure
-	head     int
-	total    int
-	failures int32 // atomic counter for logging
+	mu         sync.Mutex
+	window     [parseWindowSize]bool // true = success, false = failure
+	head       int
+	total      int
+	failures   int32 // atomic counter for logging
+	suppressed bool
 }
 
-// record records the outcome of a parse attempt and returns whether this
-// connection should be suppressed (failure rate exceeded threshold).
-func (s *connParseStats) record(outcome ParseOutcome) bool {
+// record records the outcome of a parse attempt and returns the current
+// suppression state, plus whether suppression just changed.
+func (s *connParseStats) record(outcome ParseOutcome) (suppressed bool, changed bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -70,7 +71,7 @@ func (s *connParseStats) record(outcome ParseOutcome) bool {
 
 	if s.total < parseWindowSize/2 {
 		// Not enough samples yet; don't suppress.
-		return false
+		return false, false
 	}
 
 	failCount := 0
@@ -80,7 +81,10 @@ func (s *connParseStats) record(outcome ParseOutcome) bool {
 		}
 	}
 	rate := float64(failCount) / float64(s.total)
-	return rate > parseFailureThreshold
+	suppressed = rate > parseFailureThreshold
+	changed = suppressed != s.suppressed
+	s.suppressed = suppressed
+	return suppressed, changed
 }
 
 // connStatsKey identifies a connection for per-connection parse statistics.
@@ -113,22 +117,33 @@ func recordParseOutcome(parseCtx *EBPFParseContext, connInfo BpfConnectionInfoT,
 		parseCtx.parseStats.Add(key, stats)
 	}
 
-	suppress := stats.record(outcome)
-	if suppress {
+	suppress, changed := stats.record(outcome)
+	if suppress && changed {
 		slog.Warn("suppressing connection due to high parse failure rate",
 			"src_port", connInfo.S_port,
 			"dst_port", connInfo.D_port,
 			"total_failures", atomic.LoadInt32(&stats.failures),
 		)
+	} else if !suppress && changed {
+		slog.Debug("connection parse failure rate recovered",
+			"src_port", connInfo.S_port,
+			"dst_port", connInfo.D_port,
+		)
 	}
 	return suppress
 }
 
-// evictConnParseStats removes the stats entry for a connection (called on connection close).
-func evictConnParseStats(parseCtx *EBPFParseContext, connInfo BpfConnectionInfoT) {
+// isConnSuppressed reports the current suppression state without mutating the
+// rolling parse window.
+func isConnSuppressed(parseCtx *EBPFParseContext, connInfo BpfConnectionInfoT) bool {
 	if parseCtx == nil || parseCtx.parseStats == nil {
-		return
+		return false
 	}
-	key := connKeyFromInfo(connInfo)
-	parseCtx.parseStats.Remove(key)
+	stats, ok := parseCtx.parseStats.Get(connKeyFromInfo(connInfo))
+	if !ok {
+		return false
+	}
+	stats.mu.Lock()
+	defer stats.mu.Unlock()
+	return stats.suppressed
 }

@@ -3742,3 +3742,27 @@ PASS  L19-race
 ---
 LEDGER ALL PASS
 ```
+
+## 2026-08-09 - Kafka parse suppression hardening (P3)
+
+Decision: removed `evictConnParseStats` from `internal/ebpf/common/parse_outcome.go` instead of wiring it.
+
+Why wiring is not currently possible without broader refactors:
+
+1. `NewConnStatsConsumer` (the only candidate close-event path) has no call sites in the runtime path, so no live connection-close callback exists for parse stats eviction.
+2. `connCloseEvent` in `conn_stats.go` only carries IPv4 addresses as `uint32`, but parse suppression keys are built from `BpfConnectionInfoT` `[16]uint8` addresses; key material is not directly compatible.
+3. `ConnStatsConsumer` does not hold or receive `*EBPFParseContext`, so it cannot access `parseStats` to evict entries.
+
+Current behavior remains bounded and safe because `parseStats` uses an expirable LRU cache with TTL, so stale entries age out automatically.
+
+## 2026-08-09 - Kafka JoinGroup/SyncGroup branch status (P4)
+
+Decision: documented the JoinGroup/SyncGroup dispatch branch as unreachable; no functional parser change in this task.
+
+Rationale:
+
+1. `ProcessKafkaEvent` dispatches API keys 11/14, but `ParseKafkaRequestHeader` runs `validateKafkaRequestHeader` first, and that validator currently accepts only Produce/Fetch/Metadata. So the branch cannot be reached at runtime.
+2. `processJoinGroupRequest` calls `ParseJoinGroupRequest`; routing SyncGroup through the same parser is unsafe because SyncGroup has a different wire layout.
+3. `isFlexible` does not define flexible-version thresholds for API keys 11/14, so enabling those keys without extending flexible handling would misparse tagged-field/flexible payloads.
+
+Follow-up (separate change): if JoinGroup/SyncGroup support is required, add explicit validator/version policy and dedicated parsing for SyncGroup before enabling the validator path.

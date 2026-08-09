@@ -5,6 +5,7 @@ package kafkaparser
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -370,6 +371,30 @@ func TestValidateKafkaHeader(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateKafkaRequestHeader_UnsupportedAPIKeySentinel(t *testing.T) {
+	makePacket := func(apiKey uint16, apiVersion uint16) []byte {
+		pkt := make([]byte, 14)
+		binary.BigEndian.PutUint32(pkt[0:4], 100) // MessageSize
+		binary.BigEndian.PutUint16(pkt[4:6], apiKey)
+		binary.BigEndian.PutUint16(pkt[6:8], apiVersion)
+		binary.BigEndian.PutUint32(pkt[8:12], 1234) // CorrelationID
+		binary.BigEndian.PutUint16(pkt[12:14], 0)   // ClientID length
+		return pkt
+	}
+
+	for _, apiKey := range []uint16{8, 11, 12, 14, 18} {
+		t.Run(fmt.Sprintf("api_key_%d_uses_sentinel", apiKey), func(t *testing.T) {
+			_, _, err := ParseKafkaRequestHeader(makePacket(apiKey, 4))
+			require.Error(t, err)
+			assert.ErrorIs(t, err, ErrUnsupportedAPIKey)
+		})
+	}
+
+	_, _, err := ParseKafkaRequestHeader(makePacket(uint16(APIKeyFetch), 5))
+	require.NoError(t, err)
+	assert.False(t, errors.Is(err, ErrUnsupportedAPIKey))
 }
 
 func TestIsFlexible(t *testing.T) {

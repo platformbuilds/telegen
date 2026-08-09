@@ -59,7 +59,7 @@ func (k Operation) String() string {
 // Otherwise, return kafka.Info with the processed data.
 func ProcessPossibleKafkaEvent(event *TCPRequestInfo, pkt []byte, rpkt []byte, kafkaTopicUUIDToName *simplelru.LRU[kafkaparser.UUID, string]) (*KafkaInfo, bool, error) {
 	k, ok, err := ProcessKafkaEvent(pkt, rpkt, kafkaTopicUUIDToName)
-	if err != nil {
+	if err != nil && !errors.Is(err, kafkaparser.ErrUnsupportedAPIKey) {
 		// If we are getting the information in the response buffer, the event
 		// must be reversed and that's how we captured it.
 		k, ok, err = ProcessKafkaEvent(rpkt, pkt, kafkaTopicUUIDToName)
@@ -82,10 +82,17 @@ func ProcessKafkaEvent(pkt []byte, rpkt []byte, kafkaTopicUUIDToName *simplelru.
 		return processFetchRequest(pkt, hdr, offset, kafkaTopicUUIDToName)
 	case kafkaparser.APIKeyMetadata:
 		return processMetadataResponse(rpkt, hdr, kafkaTopicUUIDToName)
+	// NOTE: This branch is currently unreachable. ParseKafkaRequestHeader calls
+	// validateKafkaRequestHeader first, and that validator rejects API keys 11
+	// and 14 before dispatch reaches this switch.
+	//
+	// We do not enable this path in this change: SyncGroup does not share
+	// JoinGroup's wire layout, and isFlexible currently has no JoinGroup/SyncGroup
+	// thresholds, so flexible-version frames would parse incorrectly.
 	case kafkaparser.APIKeyJoinGroup, kafkaparser.APIKeySyncGroup:
 		return processJoinGroupRequest(pkt, hdr, offset)
 	default:
-		return nil, true, errors.New("unsupported Kafka API key")
+		return nil, true, kafkaparser.ErrUnsupportedAPIKey
 	}
 }
 
@@ -210,7 +217,7 @@ func ProcessKafkaRequest(pkt []byte, kafkaTopicUUIDToName *simplelru.LRU[kafkapa
 	case kafkaparser.APIKeyFetch:
 		return processFetchRequest(pkt, hdr, offset, kafkaTopicUUIDToName)
 	default:
-		return nil, true, errors.New("unsupported Kafka API key")
+		return nil, true, kafkaparser.ErrUnsupportedAPIKey
 	}
 }
 

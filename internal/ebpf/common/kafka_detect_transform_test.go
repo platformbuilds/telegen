@@ -4,6 +4,8 @@
 package ebpfcommon
 
 import (
+	"encoding/binary"
+	"errors"
 	"testing"
 
 	"github.com/hashicorp/golang-lru/v2/simplelru"
@@ -238,4 +240,19 @@ func TestMatchKafkaFallbackHTTP2PrefaceNotKafka(t *testing.T) {
 	_, ignore, matched := matchKafkaFallback(&event, http2Preface, nil, cache)
 	assert.False(t, matched)
 	assert.False(t, ignore)
+}
+
+func TestProcessKafkaEvent_HeartbeatIsIgnoredNotInvalid(t *testing.T) {
+	packet := make([]byte, 14)
+	binary.BigEndian.PutUint32(packet[0:4], 100)   // MessageSize
+	binary.BigEndian.PutUint16(packet[4:6], 12)    // APIKey (Heartbeat)
+	binary.BigEndian.PutUint16(packet[6:8], 4)     // APIVersion
+	binary.BigEndian.PutUint32(packet[8:12], 4040) // CorrelationID
+	binary.BigEndian.PutUint16(packet[12:14], 0)   // ClientID length
+
+	cache, _ := simplelru.NewLRU[kafkaparser.UUID, string](1000, nil)
+	_, ignore, err := ProcessKafkaEvent(packet, nil, cache)
+	require.True(t, ignore)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, kafkaparser.ErrUnsupportedAPIKey))
 }

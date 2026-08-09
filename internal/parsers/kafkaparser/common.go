@@ -6,6 +6,7 @@ package kafkaparser // import "github.com/mirastacklabs-ai/telegen/internal/pars
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 )
 
 const (
@@ -35,6 +36,10 @@ const (
 	APIKeyJoinGroup    KafkaAPIKey = 11
 	APIKeySyncGroup    KafkaAPIKey = 14
 )
+
+// ErrUnsupportedAPIKey indicates a valid Kafka frame with an API key that
+// this parser currently does not model. Callers should treat it as ignorable.
+var ErrUnsupportedAPIKey = errors.New("unsupported Kafka API key")
 
 type (
 	UUID   [UUIDLen]byte
@@ -161,7 +166,7 @@ func validateKafkaRequestHeader(header *KafkaRequestHeader) error {
 			return errors.New("invalid Kafka request header: unsupported API key version for Metadata")
 		}
 	default:
-		return errors.New("invalid Kafka request header: unsupported API key")
+		return fmt.Errorf("invalid Kafka request header: %w: %d", ErrUnsupportedAPIKey, header.APIKey)
 	}
 	if header.CorrelationID < 0 {
 		return errors.New("invalid Kafka request header: correlation ID is negative")

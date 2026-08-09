@@ -10,6 +10,7 @@ import (
 
 	"github.com/mirastacklabs-ai/telegen/internal/appolly/app/request"
 	"github.com/mirastacklabs-ai/telegen/internal/obiconfig"
+	"github.com/mirastacklabs-ai/telegen/internal/parsers/kafkaparser"
 	"github.com/mirastacklabs-ai/telegen/internal/ringbuf"
 )
 
@@ -40,7 +41,8 @@ func ReadTCPRequestIntoSpan(parseCtx *EBPFParseContext, cfg *config.EBPFTracer, 
 	}
 
 	// Gate: suppress connections whose parse failure rate is too high.
-	if recordParseOutcome(parseCtx, event.ConnInfo, ParseIgnored) {
+	// Read-only check: do not mutate the parse window while gating.
+	if isConnSuppressed(parseCtx, event.ConnInfo) {
 		return request.Span{}, true, nil
 	}
 
@@ -79,6 +81,11 @@ func readTCPRequestIntoSpanInner(parseCtx *EBPFParseContext, cfg *config.EBPFTra
 		}
 		if err == nil {
 			return TCPToKafkaToSpan(event, k), false, nil
+		}
+		if errors.Is(err, kafkaparser.ErrUnsupportedAPIKey) {
+			// Unsupported API key here still means the Kafka frame is valid.
+			// Treat it as ignored so it does not raise parse-failure suppression.
+			return request.Span{}, true, nil
 		}
 		return request.Span{}, true, fmt.Errorf("failed to handle Kafka event: %w", err)
 	case ProtocolTypeMQTT:
