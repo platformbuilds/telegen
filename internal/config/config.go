@@ -28,6 +28,8 @@ import (
 	"github.com/mirastacklabs-ai/telegen/pkg/filter"
 )
 
+const CurrentConfigVersion = 1
+
 type TLS struct {
 	Enable             bool   `yaml:"enable"`
 	CAFile             string `yaml:"ca_file"`
@@ -36,7 +38,17 @@ type TLS struct {
 	InsecureSkipVerify bool   `yaml:"insecure_skip_verify"`
 }
 
+type SiteConfig struct {
+	ID       string `yaml:"id" env:"TELEGEN_SITE_ID"`
+	Name     string `yaml:"name" env:"TELEGEN_SITE_NAME"`
+	Timezone string `yaml:"timezone" env:"TELEGEN_SITE_TIMEZONE"`
+}
+
 type Config struct {
+	ConfigVersion int `yaml:"config_version" env:"TELEGEN_CONFIG_VERSION"`
+
+	Site SiteConfig `yaml:"site"`
+
 	Agent struct {
 		ServiceName      string        `yaml:"service_name"`
 		InstanceID       string        `yaml:"instance_id"`
@@ -878,6 +890,9 @@ func Load(path string) (*Config, error) {
 	if c.Agent.InstanceLockPath == "" {
 		c.Agent.InstanceLockPath = "/var/run/telegen.pid"
 	}
+	if c.ConfigVersion == 0 {
+		c.ConfigVersion = CurrentConfigVersion
+	}
 	applyInternalMetricsDefaults(&c)
 	if err := c.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
@@ -920,6 +935,21 @@ func (c *Config) Validate() error {
 
 	validateListen("selfTelemetry.listen", c.SelfTelemetry.Listen)
 	validateListen("selfTelemetry.health_listen", c.SelfTelemetry.HealthListen)
+	if c.ConfigVersion != CurrentConfigVersion {
+		errs = append(errs, fmt.Errorf(
+			"config_version must be %d, got %d",
+			CurrentConfigVersion,
+			c.ConfigVersion,
+		))
+	}
+
+	c.Site.Timezone = strings.TrimSpace(c.Site.Timezone)
+	if c.Site.Timezone != "" {
+		if _, err := time.LoadLocation(c.Site.Timezone); err != nil {
+			errs = append(errs, fmt.Errorf("site.timezone %q is invalid IANA timezone: %w", c.Site.Timezone, err))
+		}
+	}
+
 	if c.SelfTelemetry.MemoryLimitBytes < 0 {
 		errs = append(errs, fmt.Errorf("selfTelemetry.memory_limit_bytes must be >= 0"))
 	}

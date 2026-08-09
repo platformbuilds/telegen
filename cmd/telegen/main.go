@@ -16,6 +16,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/mirastacklabs-ai/telegen/internal/cloud/unified"
 	cloudproviders "github.com/mirastacklabs-ai/telegen/internal/cloud/unified/providers"

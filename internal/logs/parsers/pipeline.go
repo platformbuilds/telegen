@@ -2,6 +2,7 @@ package parsers
 
 import (
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/mirastacklabs-ai/telegen/internal/correlation"
@@ -39,6 +40,10 @@ type PipelineConfig struct {
 	// PreserveOriginalBody preserves the original body in body.original attribute
 	// when the body is modified (e.g., unescaped from JSON string)
 	PreserveOriginalBody bool `yaml:"preserve_original_body"`
+
+	// SiteTimezone is the IANA timezone used to interpret zoneless timestamps.
+	// Empty value falls back to UTC.
+	SiteTimezone string `yaml:"site_timezone"`
 }
 
 // DefaultPipelineConfig returns a default pipeline configuration
@@ -51,6 +56,7 @@ func DefaultPipelineConfig() PipelineConfig {
 		TraceContextTolerance:        1 * time.Second,
 		ApplicationParsers:           []string{}, // Empty means all
 		DefaultSeverity:              "INFO",
+		SiteTimezone:                 "",
 	}
 }
 
@@ -74,6 +80,8 @@ type Pipeline struct {
 
 	// Trace context correlator (optional, for eBPF correlation)
 	traceCorrelator *correlation.LogTraceCorrelator
+
+	parserLocation *time.Location
 }
 
 // NewPipeline creates a new parser pipeline
@@ -88,10 +96,20 @@ func NewPipelineWithCorrelator(config PipelineConfig, logger *slog.Logger, corre
 		logger = slog.Default()
 	}
 
+	parserLocation := time.UTC
+	if tz := strings.TrimSpace(config.SiteTimezone); tz != "" {
+		if loc, err := time.LoadLocation(tz); err == nil {
+			parserLocation = loc
+		} else {
+			logger.Warn("invalid parser site timezone, falling back to UTC", "timezone", tz, "error", err)
+		}
+	}
+
 	p := &Pipeline{
 		config:          config,
 		logger:          logger,
 		traceCorrelator: correlator,
+		parserLocation:  parserLocation,
 	}
 
 	// Initialize runtime router if enabled
@@ -139,13 +157,13 @@ func (p *Pipeline) initApplicationParsers() {
 
 	// Add parsers in order of specificity (most specific first)
 	if enableAll || enabledParsers["spring_boot"] {
-		p.appParsers = append(p.appParsers, NewSpringBootParser())
+		p.appParsers = append(p.appParsers, NewSpringBootParserWithLocation(p.parserLocation))
 	}
 	if enableAll || enabledParsers["log4j"] {
-		p.appParsers = append(p.appParsers, NewLog4jParser())
+		p.appParsers = append(p.appParsers, NewLog4jParserWithLocation(p.parserLocation))
 	}
 	if enableAll || enabledParsers["json"] {
-		p.appParsers = append(p.appParsers, NewJSONLogParser())
+		p.appParsers = append(p.appParsers, NewJSONLogParserWithLocation(p.parserLocation))
 	}
 	if enableAll || enabledParsers["fixml"] {
 		p.appParsers = append(p.appParsers, NewFIXMLParser())
@@ -154,10 +172,10 @@ func (p *Pipeline) initApplicationParsers() {
 		p.appParsers = append(p.appParsers, NewISO8583Parser())
 	}
 	if enableAll || enabledParsers["xml"] {
-		p.appParsers = append(p.appParsers, NewXMLLogParser())
+		p.appParsers = append(p.appParsers, NewXMLLogParserWithLocation(p.parserLocation))
 	}
 	if enableAll || enabledParsers["generic"] {
-		p.appParsers = append(p.appParsers, NewGenericTimestampParser())
+		p.appParsers = append(p.appParsers, NewGenericTimestampParserWithLocation(p.parserLocation))
 	}
 }
 

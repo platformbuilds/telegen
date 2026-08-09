@@ -20,6 +20,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 
 	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
 )
 
 // OTLPBridge bridges node_exporter metrics to telegen's OTLP export pipeline.
@@ -83,6 +84,7 @@ func buildResource(env *DetectedEnvironment) (*resource.Resource, error) {
 			attrs = append(attrs, attribute.String("cloud.label."+k, env.Labels[k]))
 		}
 	}
+	attrs = append(attrs, otelcfg.SiteResourceAttributes()...)
 
 	return resource.NewSchemaless(attrs...), nil
 }

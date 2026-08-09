@@ -20,6 +20,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 
 	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
 )
 
 // StreamingConfig holds configuration for streaming export to OTLP
@@ -137,6 +138,7 @@ func buildKubeResource() (*resource.Resource, error) {
 	if clusterName := getEnvOrDefault("KUBERNETES_CLUSTER_NAME", ""); clusterName != "" {
 		attrs = append(attrs, semconv.K8SClusterName(clusterName))
 	}
+	attrs = append(attrs, otelcfg.SiteResourceAttributes()...)
 
 	return resource.NewSchemaless(attrs...), nil
 }

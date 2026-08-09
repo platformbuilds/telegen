@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -60,9 +61,55 @@ const (
 )
 
 const (
+	MirastackSiteIDAttrKey       = "mirastack.site.id"
+	MirastackSiteNameAttrKey     = "mirastack.site.name"
+	MirastackSiteTimezoneAttrKey = "mirastack.site.timezone"
+)
+
+const (
 	UsualPortGRPC = "4317"
 	UsualPortHTTP = "4318"
 )
+
+var (
+	siteAttrsMu sync.RWMutex
+	siteAttrs   = struct {
+		id       string
+		name     string
+		timezone string
+	}{
+		id:       strings.TrimSpace(os.Getenv("TELEGEN_SITE_ID")),
+		name:     strings.TrimSpace(os.Getenv("TELEGEN_SITE_NAME")),
+		timezone: strings.TrimSpace(os.Getenv("TELEGEN_SITE_TIMEZONE")),
+	}
+)
+
+// SetSiteResourceAttributes configures site resource attributes for all OTLP signals.
+func SetSiteResourceAttributes(id, name, timezone string) {
+	siteAttrsMu.Lock()
+	defer siteAttrsMu.Unlock()
+	siteAttrs.id = strings.TrimSpace(id)
+	siteAttrs.name = strings.TrimSpace(name)
+	siteAttrs.timezone = strings.TrimSpace(timezone)
+}
+
+// SiteResourceAttributes returns configured mirastack site resource attributes.
+func SiteResourceAttributes() []attribute.KeyValue {
+	siteAttrsMu.RLock()
+	defer siteAttrsMu.RUnlock()
+
+	attrs := make([]attribute.KeyValue, 0, 3)
+	if siteAttrs.id != "" {
+		attrs = append(attrs, attribute.String(MirastackSiteIDAttrKey, siteAttrs.id))
+	}
+	if siteAttrs.name != "" {
+		attrs = append(attrs, attribute.String(MirastackSiteNameAttrKey, siteAttrs.name))
+	}
+	if siteAttrs.timezone != "" {
+		attrs = append(attrs, attribute.String(MirastackSiteTimezoneAttrKey, siteAttrs.timezone))
+	}
+	return attrs
+}
 
 // extractPortFromEndpoint extracts the port from an endpoint string.
 // Supports both URL format (http://host:port) and gRPC format (host:port).
@@ -148,6 +195,8 @@ func GetResourceAttrs(hostID string, service *svc.Attrs) []attribute.KeyValue {
 	if service.UID.Namespace != "" {
 		attrs = append(attrs, semconv.ServiceNamespace(service.UID.Namespace))
 	}
+
+	attrs = append(attrs, SiteResourceAttributes()...)
 
 	for k, v := range service.Metadata {
 		attrs = append(attrs, k.OTEL().String(v))

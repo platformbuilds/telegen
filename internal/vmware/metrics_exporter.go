@@ -14,6 +14,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 
 	"github.com/mirastacklabs-ai/telegen/internal/vmwaredef"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
 )
 
 // scopeName is the OTel instrumentation scope for VMware signals.
@@ -87,10 +88,12 @@ func exportMetrics(ctx context.Context, exp sdkmetric.Exporter, target string, e
 		}
 	}
 
-	res := resource.NewSchemaless(
+	resourceAttrs := []attribute.KeyValue{
 		semconv.ServiceName("telegen-vmware"),
 		attribute.String("vcenter", target),
-	)
+	}
+	resourceAttrs = append(resourceAttrs, otelcfg.SiteResourceAttributes()...)
+	res := resource.NewSchemaless(resourceAttrs...)
 
 	rm := &metricdata.ResourceMetrics{
 		Resource: res,

@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/mirastacklabs-ai/telegen/internal/storagedef"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
 )
 
 // OTLPExporter exports storage metrics via OTLP
@@ -88,12 +89,12 @@ func (e *OTLPExporter) Start(ctx context.Context) error {
 	}
 
 	// Create resource
-	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceName("telegen-storage"),
-			semconv.ServiceVersion("2.0.0"),
-		),
-	)
+	resourceAttrs := []attribute.KeyValue{
+		semconv.ServiceName("telegen-storage"),
+		semconv.ServiceVersion("2.0.0"),
+	}
+	resourceAttrs = append(resourceAttrs, otelcfg.SiteResourceAttributes()...)
+	res, err := resource.New(ctx, resource.WithAttributes(resourceAttrs...))
 	if err != nil {
 		return fmt.Errorf("failed to create resource: %w", err)
 	}

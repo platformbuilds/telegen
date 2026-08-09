@@ -217,3 +217,93 @@ agent:
 		t.Fatalf("expected explicit instance lock path to be preserved, got %q", cfg.Agent.InstanceLockPath)
 	}
 }
+
+func TestLoad_DefaultConfigVersionIsCurrent(t *testing.T) {
+	t.Parallel()
+
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte("agent:\n  service_name: test\n"), 0o600); err != nil {
+		t.Fatalf("write temp config: %v", err)
+	}
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.ConfigVersion != CurrentConfigVersion {
+		t.Fatalf("expected config version %d, got %d", CurrentConfigVersion, cfg.ConfigVersion)
+	}
+}
+
+func TestLoad_InvalidSiteTimezoneRejected(t *testing.T) {
+	t.Parallel()
+
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	yamlConfig := `
+agent:
+  service_name: test
+site:
+  timezone: "Mars/Olympus"
+`
+	if err := os.WriteFile(cfgPath, []byte(yamlConfig), 0o600); err != nil {
+		t.Fatalf("write temp config: %v", err)
+	}
+
+	_, err := Load(cfgPath)
+	if err == nil {
+		t.Fatal("expected invalid site timezone to fail")
+	}
+	if !strings.Contains(err.Error(), `site.timezone "Mars/Olympus" is invalid IANA timezone`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoad_SiteConfigFromEnv(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte("agent:\n  service_name: test\n"), 0o600); err != nil {
+		t.Fatalf("write temp config: %v", err)
+	}
+
+	t.Setenv("TELEGEN_SITE_ID", "dc-den-01")
+	t.Setenv("TELEGEN_SITE_NAME", "Denver")
+	t.Setenv("TELEGEN_SITE_TIMEZONE", "America/Denver")
+	t.Setenv("TELEGEN_CONFIG_VERSION", "1")
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.Site.ID != "dc-den-01" {
+		t.Fatalf("expected site id from env, got %q", cfg.Site.ID)
+	}
+	if cfg.Site.Name != "Denver" {
+		t.Fatalf("expected site name from env, got %q", cfg.Site.Name)
+	}
+	if cfg.Site.Timezone != "America/Denver" {
+		t.Fatalf("expected site timezone from env, got %q", cfg.Site.Timezone)
+	}
+}
+
+func TestLoad_UnsupportedConfigVersionRejected(t *testing.T) {
+	t.Parallel()
+
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	yamlConfig := `
+config_version: 2
+agent:
+  service_name: test
+`
+	if err := os.WriteFile(cfgPath, []byte(yamlConfig), 0o600); err != nil {
+		t.Fatalf("write temp config: %v", err)
+	}
+
+	_, err := Load(cfgPath)
+	if err == nil {
+		t.Fatal("expected unsupported config version to fail")
+	}
+	if !strings.Contains(err.Error(), "config_version must be 1, got 2") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

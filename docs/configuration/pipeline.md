@@ -126,126 +126,18 @@ pipeline:
 
 ## Signal Transformation
 
-### Transform Rules
+`pipeline.transform.rules` is not a valid runtime configuration key in current Telegen builds.
+The config loader uses strict YAML decoding (`KnownFields(true)`), so including this block causes startup to fail.
 
-Apply rule-based transformations to signals before export.
-
-```yaml
-pipeline:
-  transform:
-    enabled: true
-    rules:
-      # Add cluster information
-      - name: add-cluster-info
-        enabled: true
-        match:
-          signal_types: [metrics, traces, logs]
-        actions:
-          - type: set_attribute
-            set_attribute:
-              key: k8s.cluster.name
-              value: production
-
-      # Filter debug metrics
-      - name: drop-debug-metrics
-        enabled: true
-        match:
-          signal_types: [metrics]
-          metric_names:
-            - "^debug_.*"
-            - "^internal_.*"
-        actions:
-          - type: filter
-            filter:
-              drop: true
-
-      # Hash sensitive data
-      - name: hash-user-ids
-        enabled: true
-        match:
-          signal_types: [traces]
-          resource_attributes:
-            service.name: "user-service"
-        actions:
-          - type: hash_attribute
-            hash_attribute:
-              key: user.id
-              algorithm: sha256
-```
-
-#### Rule Structure
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | string | Rule identifier |
-| `enabled` | bool | Enable/disable rule |
-| `match` | object | Conditions for applying rule |
-| `actions` | []object | Actions to perform |
-
-#### Match Conditions
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `signal_types` | []string | Signal types: metrics, traces, logs |
-| `resource_attributes` | map | Match on resource attribute values |
-| `metric_names` | []string | Regex patterns for metric names |
-| `span_names` | []string | Regex patterns for span names |
-| `log_bodies` | []string | Regex patterns for log bodies |
-
-#### Action Types
-
-**set_attribute** - Add or update an attribute
+Use explicit configuration blocks that are part of `internal/config/config.go` instead.
+For timezone-aware enrichment and zoneless timestamp parsing, configure the `site` block:
 
 ```yaml
-- type: set_attribute
-  set_attribute:
-    key: environment
-    value: ${ENVIRONMENT}  # Supports env vars
-```
-
-**delete_attribute** - Remove an attribute
-
-```yaml
-- type: delete_attribute
-  delete_attribute:
-    key: internal.debug.info
-```
-
-**rename_attribute** - Rename an attribute key
-
-```yaml
-- type: rename_attribute
-  rename_attribute:
-    old_key: host.hostname
-    new_key: host.name
-```
-
-**hash_attribute** - Hash an attribute value
-
-```yaml
-- type: hash_attribute
-  hash_attribute:
-    key: user.id
-    algorithm: sha256  # sha256, sha512, xxhash
-    salt: ${HASH_SALT}  # Optional salt
-```
-
-**filter** - Drop matching signals
-
-```yaml
-- type: filter
-  filter:
-    drop: true
-```
-
-**transform** - Regex transformation
-
-```yaml
-- type: transform
-  transform:
-    key: http.url
-    pattern: "([?&])password=[^&]*"
-    replacement: "${1}password=***"
+config_version: 1
+site:
+  id: "dc-den-01"
+  name: "Denver primary"
+  timezone: "America/Denver"
 ```
 
 ---
@@ -486,15 +378,9 @@ pipeline:
       endpoint: ${OTLP_ENDPOINT:-otel-collector:4317}
       headers:
         Authorization: Bearer ${OTLP_TOKEN}
-  
-  transform:
-    rules:
-      - name: add-env
-        actions:
-          - type: set_attribute
-            set_attribute:
-              key: environment
-              value: ${ENVIRONMENT:-production}
+
+site:
+  timezone: ${TELEGEN_SITE_TIMEZONE:-UTC}
 ```
 
 | Variable | Description |
@@ -532,18 +418,6 @@ pipeline:
       protected_attributes:
         - service.name
         - k8s.namespace.name
-  
-  transform:
-    enabled: true
-    rules:
-      - name: add-cluster
-        match:
-          signal_types: [metrics, traces, logs]
-        actions:
-          - type: set_attribute
-            set_attribute:
-              key: k8s.cluster.name
-              value: ${CLUSTER_NAME:-default}
   
   pii_redaction:
     enabled: true

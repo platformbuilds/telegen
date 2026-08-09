@@ -8,10 +8,48 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
 )
+
+var (
+	logTimestampLocationMu sync.RWMutex
+	logTimestampLocation   = time.UTC
+)
+
+// SetTimestampLocation sets the timezone used for parsing zoneless timestamps.
+func SetTimestampLocation(location *time.Location) {
+	logTimestampLocationMu.Lock()
+	defer logTimestampLocationMu.Unlock()
+	if location == nil {
+		logTimestampLocation = time.UTC
+		return
+	}
+	logTimestampLocation = location
+}
+
+// SetTimestampLocationFromTimezone sets timestamp parsing location from IANA timezone.
+func SetTimestampLocationFromTimezone(timezone string) error {
+	tz := strings.TrimSpace(timezone)
+	if tz == "" {
+		SetTimestampLocation(time.UTC)
+		return nil
+	}
+	location, err := time.LoadLocation(tz)
+	if err != nil {
+		return err
+	}
+	SetTimestampLocation(location)
+	return nil
+}
+
+func currentTimestampLocation() *time.Location {
+	logTimestampLocationMu.RLock()
+	defer logTimestampLocationMu.RUnlock()
+	return logTimestampLocation
+}
 
 // LogFormat represents a detected log format.
 type LogFormat int
@@ -436,6 +474,7 @@ func parseLogfmtLog(logLine string, result *ParsedLogLine) {
 
 // parseTimestamp attempts to parse a timestamp from various formats.
 func parseTimestamp(v interface{}) time.Time {
+	location := currentTimestampLocation()
 	switch ts := v.(type) {
 	case string:
 		// Try common formats
@@ -447,7 +486,7 @@ func parseTimestamp(v interface{}) time.Time {
 			"2006-01-02T15:04:05",
 		}
 		for _, f := range formats {
-			if t, err := time.Parse(f, ts); err == nil {
+			if t, err := time.ParseInLocation(f, ts, location); err == nil {
 				return t
 			}
 		}

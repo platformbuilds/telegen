@@ -20,6 +20,8 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
 )
 
 // OTLPExporter exports SNMP metrics via OTLP
@@ -84,12 +86,12 @@ func (e *OTLPExporter) Start(ctx context.Context) error {
 	}
 
 	// Create resource
-	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceName("telegen-snmp"),
-			semconv.ServiceVersion("2.0.0"),
-		),
-	)
+	resourceAttrs := []attribute.KeyValue{
+		semconv.ServiceName("telegen-snmp"),
+		semconv.ServiceVersion("2.0.0"),
+	}
+	resourceAttrs = append(resourceAttrs, otelcfg.SiteResourceAttributes()...)
+	res, err := resource.New(ctx, resource.WithAttributes(resourceAttrs...))
 	if err != nil {
 		return fmt.Errorf("failed to create resource: %w", err)
 	}

@@ -73,6 +73,36 @@ var (
 	fixmlTimestampPatternLRU sync.Map // map[string]*regexp.Regexp
 )
 
+func normalizeParserLocation(location *time.Location) *time.Location {
+	if location == nil {
+		return time.UTC
+	}
+	return location
+}
+
+func parseTimestampInLocation(layout, value string, location *time.Location) (time.Time, error) {
+	return time.ParseInLocation(layout, value, normalizeParserLocation(location))
+}
+
+func inferSyslogYear(parsed time.Time, reference time.Time, location *time.Location) time.Time {
+	loc := normalizeParserLocation(location)
+	now := reference.In(loc)
+	candidate := time.Date(
+		now.Year(),
+		parsed.Month(),
+		parsed.Day(),
+		parsed.Hour(),
+		parsed.Minute(),
+		parsed.Second(),
+		parsed.Nanosecond(),
+		loc,
+	)
+	if candidate.After(now.Add(24 * time.Hour)) {
+		candidate = candidate.AddDate(-1, 0, 0)
+	}
+	return candidate
+}
+
 func fixmlTimestampPattern(field string) *regexp.Regexp {
 	if cached, ok := fixmlTimestampPatternLRU.Load(field); ok {
 		return cached.(*regexp.Regexp)
@@ -93,10 +123,17 @@ type SpringBootParser struct {
 
 	// Basic timestamp + level + message
 	basicPattern *regexp.Regexp
+
+	location *time.Location
 }
 
 // NewSpringBootParser creates a new Spring Boot log parser
 func NewSpringBootParser() *SpringBootParser {
+	return NewSpringBootParserWithLocation(time.UTC)
+}
+
+// NewSpringBootParserWithLocation creates a Spring Boot parser for a specific site timezone.
+func NewSpringBootParserWithLocation(location *time.Location) *SpringBootParser {
 	return &SpringBootParser{
 		// Full format with tracing: 2024-01-15 10:30:45.123 INFO [myapp, abc123, def456, true] 12345 --- [main] c.e.MyClass: message
 		fullPattern: regexp.MustCompile(
@@ -125,6 +162,7 @@ func NewSpringBootParser() *SpringBootParser {
 				`(\w+)\s+` + // level
 				`(.*)$`, // message
 		),
+		location: normalizeParserLocation(location),
 	}
 }
 
@@ -139,7 +177,7 @@ func (p *SpringBootParser) Parse(line string) (*ParsedLog, error) {
 	if matches := p.fullPattern.FindStringSubmatch(line); matches != nil {
 		log := NewParsedLog()
 		log.Format = "spring_boot"
-		log.Timestamp = parseSpringTimestamp(matches[1])
+		log.Timestamp = parseSpringTimestamp(matches[1], p.location)
 		log.Severity = normalizeSeverity(matches[2])
 		log.SeverityNumber = severityToNumber(log.Severity)
 		setParsedAttr(log, "service.name", strings.TrimSpace(matches[3]))
@@ -164,7 +202,7 @@ func (p *SpringBootParser) Parse(line string) (*ParsedLog, error) {
 	if matches := p.simplePattern.FindStringSubmatch(line); matches != nil {
 		log := NewParsedLog()
 		log.Format = "spring_boot"
-		log.Timestamp = parseSpringTimestamp(matches[1])
+		log.Timestamp = parseSpringTimestamp(matches[1], p.location)
 		log.Severity = normalizeSeverity(matches[2])
 		log.SeverityNumber = severityToNumber(log.Severity)
 		setParsedAttr(log, AttrThreadID, matches[3])
@@ -178,7 +216,7 @@ func (p *SpringBootParser) Parse(line string) (*ParsedLog, error) {
 	if matches := p.basicPattern.FindStringSubmatch(line); matches != nil {
 		log := NewParsedLog()
 		log.Format = "spring_boot"
-		log.Timestamp = parseSpringTimestamp(matches[1])
+		log.Timestamp = parseSpringTimestamp(matches[1], p.location)
 		log.Severity = normalizeSeverity(matches[2])
 		log.SeverityNumber = severityToNumber(log.Severity)
 		log.Body = strings.TrimSpace(matches[3])
@@ -190,7 +228,7 @@ func (p *SpringBootParser) Parse(line string) (*ParsedLog, error) {
 }
 
 // parseSpringTimestamp parses Spring Boot timestamp format
-func parseSpringTimestamp(ts string) time.Time {
+func parseSpringTimestamp(ts string, location *time.Location) time.Time {
 	// Normalize comma decimal separator to period
 	ts = strings.Replace(ts, ",", ".", 1)
 
@@ -202,12 +240,12 @@ func parseSpringTimestamp(ts string) time.Time {
 	}
 
 	for _, format := range formats {
-		if t, err := time.Parse(format, ts); err == nil {
+		if t, err := parseTimestampInLocation(format, ts, location); err == nil {
 			return t
 		}
 	}
 
-	return time.Now()
+	return time.Now().In(normalizeParserLocation(location))
 }
 
 // Log4jParser parses Log4j/Log4j2 formatted logs
@@ -217,10 +255,17 @@ type Log4jParser struct {
 
 	// Log4j2 pattern with markers: YYYY-MM-DD HH:MM:SS.mmm LEVEL [logger] [thread] message
 	log4j2Pattern *regexp.Regexp
+
+	location *time.Location
 }
 
 // NewLog4jParser creates a new Log4j parser
 func NewLog4jParser() *Log4jParser {
+	return NewLog4jParserWithLocation(time.UTC)
+}
+
+// NewLog4jParserWithLocation creates a Log4j parser for a specific site timezone.
+func NewLog4jParserWithLocation(location *time.Location) *Log4jParser {
 	return &Log4jParser{
 		// Log4j standard: 2024-01-15 10:30:45,123 INFO [main] com.example.MyClass - message
 		standardPattern: regexp.MustCompile(
@@ -239,6 +284,7 @@ func NewLog4jParser() *Log4jParser {
 				`\[([^\]]+)\]\s+` + // [thread]
 				`(.*)$`, // message
 		),
+		location: normalizeParserLocation(location),
 	}
 }
 
@@ -253,7 +299,7 @@ func (p *Log4jParser) Parse(line string) (*ParsedLog, error) {
 	if matches := p.standardPattern.FindStringSubmatch(line); matches != nil {
 		log := NewParsedLog()
 		log.Format = "log4j"
-		log.Timestamp = parseSpringTimestamp(matches[1]) // Same timestamp format
+		log.Timestamp = parseSpringTimestamp(matches[1], p.location) // Same timestamp format
 		log.Severity = normalizeSeverity(matches[2])
 		log.SeverityNumber = severityToNumber(log.Severity)
 		setParsedAttr(log, AttrThreadName, strings.TrimSpace(matches[3]))
@@ -266,7 +312,7 @@ func (p *Log4jParser) Parse(line string) (*ParsedLog, error) {
 	if matches := p.log4j2Pattern.FindStringSubmatch(line); matches != nil {
 		log := NewParsedLog()
 		log.Format = "log4j"
-		log.Timestamp = parseSpringTimestamp(matches[1])
+		log.Timestamp = parseSpringTimestamp(matches[1], p.location)
 		log.Severity = normalizeSeverity(matches[2])
 		log.SeverityNumber = severityToNumber(log.Severity)
 		setParsedAttr(log, AttrCodeNamespace, strings.TrimSpace(matches[3]))
@@ -286,11 +332,21 @@ type GenericTimestampParser struct {
 		layout   string
 		hasLevel bool
 	}
+	location *time.Location
+	now      func() time.Time
 }
 
 // NewGenericTimestampParser creates a generic timestamp parser
 func NewGenericTimestampParser() *GenericTimestampParser {
-	p := &GenericTimestampParser{}
+	return NewGenericTimestampParserWithLocation(time.UTC)
+}
+
+// NewGenericTimestampParserWithLocation creates a generic parser for a specific site timezone.
+func NewGenericTimestampParserWithLocation(location *time.Location) *GenericTimestampParser {
+	p := &GenericTimestampParser{
+		location: normalizeParserLocation(location),
+		now:      time.Now,
+	}
 
 	p.patterns = []struct {
 		name     string
@@ -345,13 +401,18 @@ func (p *GenericTimestampParser) Parse(line string) (*ParsedLog, error) {
 		}
 
 		// Parse timestamp
-		ts, err := time.Parse(pat.layout, matches[1])
+		ts, err := parseTimestampInLocation(pat.layout, matches[1], p.location)
 		if err != nil {
 			// Try RFC3339 for ISO8601 variants
-			if ts, err = time.Parse(time.RFC3339, matches[1]); err != nil {
+			if ts, err = parseTimestampInLocation(time.RFC3339, matches[1], p.location); err != nil {
 				continue
 			}
 		}
+
+		if pat.name == "syslog" {
+			ts = inferSyslogYear(ts, p.now(), p.location)
+		}
+
 		log := NewParsedLog()
 		log.Format = "generic"
 		log.Timestamp = ts
@@ -464,10 +525,17 @@ type XMLLogParser struct {
 
 	// Namespace prefix pattern
 	namespacePattern *regexp.Regexp
+
+	location *time.Location
 }
 
 // NewXMLLogParser creates a new XML log parser with comprehensive format support
 func NewXMLLogParser() *XMLLogParser {
+	return NewXMLLogParserWithLocation(time.UTC)
+}
+
+// NewXMLLogParserWithLocation creates an XML parser for a specific site timezone.
+func NewXMLLogParserWithLocation(location *time.Location) *XMLLogParser {
 	return &XMLLogParser{
 		// Log4j XML: <log4j:event level="INFO" timestamp="1234567890" ...>...</log4j:event>
 		log4jEventPattern:   regexp.MustCompile(`(?i)<log4j:event[^>]*>`),
@@ -501,6 +569,7 @@ func NewXMLLogParser() *XMLLogParser {
 
 		// Namespace prefix for stripping
 		namespacePattern: regexp.MustCompile(`^[\w]+:`),
+		location:         normalizeParserLocation(location),
 	}
 }
 
@@ -901,12 +970,11 @@ func (p *XMLLogParser) parseTimestampString(s string) time.Time {
 		"2006-01-02 15:04:05",
 		"2006-01-02T15:04:05",
 		"01/02/2006 15:04:05",
-		"02/01/2006 15:04:05",
 		"2006/01/02 15:04:05",
 	}
 
 	for _, format := range formats {
-		if ts, err := time.Parse(format, s); err == nil {
+		if ts, err := parseTimestampInLocation(format, s, p.location); err == nil {
 			return ts
 		}
 	}
@@ -1108,11 +1176,18 @@ func (p *XMLLogParser) tryParseXMLStructured(data string) bool {
 }
 
 // JSONLogParser attempts to parse JSON-formatted application logs
-type JSONLogParser struct{}
+type JSONLogParser struct {
+	location *time.Location
+}
 
 // NewJSONLogParser creates a new JSON log parser
 func NewJSONLogParser() *JSONLogParser {
-	return &JSONLogParser{}
+	return NewJSONLogParserWithLocation(time.UTC)
+}
+
+// NewJSONLogParserWithLocation creates a JSON parser for a specific site timezone.
+func NewJSONLogParserWithLocation(location *time.Location) *JSONLogParser {
+	return &JSONLogParser{location: normalizeParserLocation(location)}
 }
 
 // Name returns the parser name
@@ -1256,9 +1331,9 @@ func (p *JSONLogParser) Parse(line string) (*ParsedLog, error) {
 		if v, ok := data[key]; ok {
 			switch t := v.(type) {
 			case string:
-				if ts, err := time.Parse(time.RFC3339Nano, t); err == nil {
+				if ts, err := parseTimestampInLocation(time.RFC3339Nano, t, p.location); err == nil {
 					log.Timestamp = ts
-				} else if ts, err := time.Parse(time.RFC3339, t); err == nil {
+				} else if ts, err := parseTimestampInLocation(time.RFC3339, t, p.location); err == nil {
 					log.Timestamp = ts
 				}
 			case float64:

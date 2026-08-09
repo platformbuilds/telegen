@@ -1,3 +1,12 @@
+config_version: 1
+
+# Optional site metadata used for timezone-aware parsing and OTLP resource attributes.
+# Leave timezone empty to keep UTC parsing for zoneless timestamps.
+# site:
+#   id: "dc-den-01"
+#   name: "Denver primary"
+#   timezone: "America/Denver"
+
 agent:
   service_name: telegen
 

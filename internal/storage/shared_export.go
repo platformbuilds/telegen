@@ -14,6 +14,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 
 	"github.com/mirastacklabs-ai/telegen/internal/storagedef"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
 )
 
 const scopeName = "telegen.storage"
@@ -74,8 +75,11 @@ func exportSharedMetrics(ctx context.Context, exp sdkmetric.Exporter, metrics []
 		}
 	}
 
+	resourceAttrs := []attribute.KeyValue{semconv.ServiceName("telegen-storage")}
+	resourceAttrs = append(resourceAttrs, otelcfg.SiteResourceAttributes()...)
+
 	rm := &metricdata.ResourceMetrics{
-		Resource: resource.NewSchemaless(semconv.ServiceName("telegen-storage")),
+		Resource: resource.NewSchemaless(resourceAttrs...),
 		ScopeMetrics: []metricdata.ScopeMetrics{{
 			Scope:   instrumentation.Scope{Name: scopeName, Version: "1.0.0"},
 			Metrics: ms,

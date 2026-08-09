@@ -79,6 +79,8 @@ type ParserConfig struct {
 	EnableLog4j bool
 	// EnableGenericParsing enables generic timestamp/level parsing
 	EnableGenericParsing bool
+	// SiteTimezone is the IANA timezone used for zoneless log timestamps.
+	SiteTimezone string
 }
 
 // DefaultParserConfig returns parser config with all features enabled
@@ -90,6 +92,7 @@ func DefaultParserConfig() ParserConfig {
 		EnableSpringBoot:         true,
 		EnableLog4j:              true,
 		EnableGenericParsing:     true,
+		SiteTimezone:             "",
 	}
 }
 
@@ -160,6 +163,7 @@ func NewWithOptions(opts Options) *Tailer {
 		EnableK8sEnrichment:      opts.ParserConfig.EnableK8sMetadata,
 		EnableApplicationParsing: opts.ParserConfig.EnableApplicationParsers,
 		DefaultSeverity:          "INFO",
+		SiteTimezone:             opts.ParserConfig.SiteTimezone,
 	}
 
 	// Configure application parsers based on ParserConfig

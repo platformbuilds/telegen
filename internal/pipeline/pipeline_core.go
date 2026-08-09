@@ -28,10 +28,13 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 
 	localsvc "github.com/mirastacklabs-ai/telegen/internal/appolly/app/svc"
 	"github.com/mirastacklabs-ai/telegen/internal/config"
+	"github.com/mirastacklabs-ai/telegen/internal/correlation"
 	exportotlp "github.com/mirastacklabs-ai/telegen/internal/exporters/otlp"
 	"github.com/mirastacklabs-ai/telegen/internal/exporters/remotewrite"
 	"github.com/mirastacklabs-ai/telegen/internal/helpers"
@@ -302,6 +305,10 @@ func (p *UnifiedPipeline) Start(ctx context.Context) error {
 	)
 
 	// Initialize shared OTLP accessors used by downstream subsystems in main.go.
+	if p.config.RuntimeConfig != nil {
+		site := p.config.RuntimeConfig.Site
+		otelcfg.SetSiteResourceAttributes(site.ID, site.Name, site.Timezone)
+	}
 	if err := p.initSharedOTLPClients(ctx); err != nil {
 		p.logger.Warn("shared OTLP clients unavailable; some downstream integrations may degrade", "error", err)
 	}
@@ -1150,7 +1157,18 @@ func (p *UnifiedPipeline) initSharedOTLPClients(ctx context.Context) error {
 		opts.HTTP.Timeout = p.config.Exporter.Timeout
 	}
 
-	clients, err := exportotlp.New(ctx, opts, nil)
+	serviceName := "telegen"
+	if p.config.RuntimeConfig != nil {
+		if runtimeServiceName := strings.TrimSpace(p.config.RuntimeConfig.Agent.ServiceName); runtimeServiceName != "" {
+			serviceName = runtimeServiceName
+		}
+	}
+	resourceAttrs := []attribute.KeyValue{
+		semconv.ServiceName(serviceName),
+	}
+	resourceAttrs = append(resourceAttrs, otelcfg.SiteResourceAttributes()...)
+
+	clients, err := exportotlp.New(ctx, opts, resource.NewSchemaless(resourceAttrs...))
 	if err != nil {
 		return err
 	}
@@ -1164,6 +1182,9 @@ func (p *UnifiedPipeline) startRuntimeSources(ctx context.Context) error {
 	}
 	var errs []error
 	rcfg := p.config.RuntimeConfig
+	if err := correlation.SetTimestampLocationFromTimezone(rcfg.Site.Timezone); err != nil {
+		return fmt.Errorf("configure correlation timestamp timezone %q: %w", rcfg.Site.Timezone, err)
+	}
 
 	// Optional cloud metadata enrichment parity from the legacy pipeline.
 	if rcfg.Cloud.AWS.Enabled {
@@ -1238,6 +1259,7 @@ func (p *UnifiedPipeline) startRuntimeSources(ctx context.Context) error {
 				PollInterval:         fCfg.PollIntervalDuration(),
 				ParserConfig:         filetailer.DefaultParserConfig(),
 			}
+			opts.ParserConfig.SiteTimezone = rcfg.Site.Timezone
 			ft := filetailer.NewWithOptions(opts)
 			go func() {
 				if err := ft.Run(p.stopCh); err != nil {

@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/common/model"
 
 	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
+	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
 )
 
 // OTLPBridge converts Prometheus metrics to OTEL format and exports via OTLP
@@ -43,10 +44,12 @@ func NewOTLPBridge(
 	if res == nil {
 		// Use NewSchemaless to avoid schema URL conflicts with SDK internal detectors.
 		// The shared OTLP exporter already has the proper resource with schema URL.
-		res = resource.NewSchemaless(
+		attrs := []attribute.KeyValue{
 			semconv.ServiceName("telegen-kubemetrics"),
 			semconv.ServiceVersion("1.0.0"),
-		)
+		}
+		attrs = append(attrs, otelcfg.SiteResourceAttributes()...)
+		res = resource.NewSchemaless(attrs...)
 	}
 
 	return &OTLPBridge{

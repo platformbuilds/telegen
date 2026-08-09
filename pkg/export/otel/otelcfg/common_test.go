@@ -481,3 +481,25 @@ func TestResourceAttrsFromEnv(t *testing.T) {
 		})
 	}
 }
+
+func TestGetResourceAttrsIncludesSiteAttributes(t *testing.T) {
+	SetSiteResourceAttributes("dc-den-01", "Denver", "America/Denver")
+	t.Cleanup(func() {
+		SetSiteResourceAttributes("", "", "")
+	})
+
+	service := &svc.Attrs{
+		UID:      svc.UID{Name: "telegen"},
+		HostName: "host-01",
+	}
+
+	attrs := GetResourceAttrs("host-id-01", service)
+	got := map[string]string{}
+	for _, attrKV := range attrs {
+		got[string(attrKV.Key)] = attrKV.Value.Emit()
+	}
+
+	assert.Equal(t, "dc-den-01", got[MirastackSiteIDAttrKey])
+	assert.Equal(t, "Denver", got[MirastackSiteNameAttrKey])
+	assert.Equal(t, "America/Denver", got[MirastackSiteTimezoneAttrKey])
+}
