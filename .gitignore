@@ -13,3 +13,5 @@ telegen
 .kilo
 .kilo/*
 
+# Mac Local Cache
+.DS_Store
