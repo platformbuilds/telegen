@@ -17,6 +17,7 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/client"
 	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/jsonpath"
 	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/matrix"
+	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/plugins"
 	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/template"
 	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/templatefs"
 	"github.com/mirastacklabs-ai/telegen/internal/storagedef"
@@ -28,6 +29,7 @@ type Collector struct {
 	client    *client.Client
 	log       *slog.Logger
 	templates fs.FS
+	version   string // SANtricity version
 
 	mu      sync.RWMutex
 	running bool
@@ -71,15 +73,60 @@ func (c *Collector) Start(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	// connectivity probe — E-Series SANtricity REST
-	if _, err := c.client.GetBytes(ctx, "devmgr/v2/storage-systems"); err != nil {
+	body, err := c.client.GetBytes(ctx, "devmgr/v2/storage-systems")
+	if err != nil {
 		// some deployments use /storage-systems
-		if _, err2 := c.client.GetBytes(ctx, "storage-systems"); err2 != nil {
-			c.log.Warn("eseries probe soft-fail", "error", err, "error2", err2)
+		body, err = c.client.GetBytes(ctx, "storage-systems")
+		if err != nil {
+			c.log.Warn("eseries probe soft-fail", "error", err)
+			c.version = "12.00.0" // fallback
 		}
 	}
+	
+	// Probe SANtricity version from first storage system
+	if err == nil && len(body) > 0 {
+		c.version = c.probeSANtricityVersion(body)
+	}
+	if c.version == "" {
+		c.version = "12.00.0" // fallback
+	}
+	c.log.Info("eseries version detected", "version", c.version)
+	
 	c.running = true
 	c.health.Status = storagedef.HealthStatusHealthy
 	return nil
+}
+
+func (c *Collector) probeSANtricityVersion(body []byte) string {
+	// Try to extract SANtricity version from storage-systems response
+	var systems []map[string]any
+	if err := json.Unmarshal(body, &systems); err != nil {
+		return ""
+	}
+	if len(systems) == 0 {
+		return ""
+	}
+	// SANtricity version may be in fwVersion or sa_version
+	if ver, ok := systems[0]["fwVersion"].(string); ok && ver != "" {
+		return c.normalizeSANtricityVersion(ver)
+	}
+	if ver, ok := systems[0]["sa_version"].(string); ok && ver != "" {
+		return c.normalizeSANtricityVersion(ver)
+	}
+	return ""
+}
+
+func (c *Collector) normalizeSANtricityVersion(v string) string {
+	// SANtricity versions are like "11.60.0" or "11.60.0.R.1234.5678"
+	// Extract major.minor.patch
+	parts := strings.Split(v, ".")
+	if len(parts) >= 3 {
+		return strings.Join(parts[:3], ".")
+	}
+	if len(parts) >= 2 {
+		return strings.Join(parts, ".") + ".0"
+	}
+	return v
 }
 
 func (c *Collector) Stop(ctx context.Context) error {
@@ -114,7 +161,7 @@ func (c *Collector) CollectMetrics(ctx context.Context) ([]storagedef.Metric, er
 			continue
 		}
 		for objectName, fileName := range cat.Objects {
-			tmpl, _, err := template.LoadObjectTemplate(c.templates, kind, fileName, "12.00.0")
+			tmpl, _, err := template.LoadObjectTemplate(c.templates, kind, fileName, c.version)
 			if err != nil {
 				c.log.Warn("eseries template", "object", objectName, "error", err)
 				continue
@@ -190,7 +237,14 @@ func (c *Collector) poll(ctx context.Context, tmpl *template.Template, now time.
 			}
 		}
 	}
-	return mat.ToStorageMetrics(now), nil
+	
+	// Apply plugins (E-Series templates reference Volume, Pool, and others)
+	mats := plugins.ApplyAll(mat, tmpl.Plugins, c.log)
+	var out []storagedef.Metric
+	for _, m := range mats {
+		out = append(out, m.ToStorageMetrics(now)...)
+	}
+	return out, nil
 }
 
 func (c *Collector) ClientFetch(ctx context.Context, href string) ([]json.RawMessage, error) {
