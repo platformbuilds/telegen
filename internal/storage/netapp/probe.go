@@ -45,7 +45,9 @@ func ProbeCapabilities(ctx context.Context, c *client.Client, gcnv bool) (Capabi
 
 	disaggregated := false
 	if s, ok := jsonpath.GetString(rec, "disaggregated"); ok {
-		disaggregated, _ = strconv.ParseBool(strings.ToLower(strings.TrimSpace(s)))
+		if parsed, err := strconv.ParseBool(strings.ToLower(strings.TrimSpace(s))); err == nil {
+			disaggregated = parsed
+		}
 	}
 
 	cap := Capabilities{
