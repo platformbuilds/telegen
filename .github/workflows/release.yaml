@@ -227,8 +227,15 @@ jobs:
         run: |
           # Extract version from tag: release/mark-v1.0.0 -> 1.0.0
           VERSION="${GITHUB_REF_NAME#release/mark-v}"
+          CHART_VERSION="${VERSION}"
+          # Helm chart versions must be valid SemVer (e.g. 3.2.0-rc1, not 3.2.0rc1).
+          if [[ "${CHART_VERSION}" =~ ^([0-9]+\.[0-9]+\.[0-9]+)([A-Za-z].*)$ ]]; then
+            CHART_VERSION="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}"
+          fi
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "CHART_VERSION=${CHART_VERSION}" >> $GITHUB_OUTPUT
           echo "Releasing version: ${VERSION}"
+          echo "Helm chart version: ${CHART_VERSION}"
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
