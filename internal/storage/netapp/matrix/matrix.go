@@ -19,11 +19,13 @@ type Instance struct {
 
 // Metric stores numeric values keyed by instance key.
 type Metric struct {
-	Name       string
-	Display    string
-	MetricType string // counter | gauge | delta | etc
-	Exportable bool
-	Values     map[string]float64
+	Name         string
+	Display      string
+	MetricType   string // counter | gauge | rate - export type
+	Property     string // ONTAP property: raw | delta | rate | average | percent | string
+	Denominator  string // for average/percent: name of denominator metric
+	Exportable   bool
+	Values       map[string]float64
 }
 
 // Matrix is instances × metrics storage (Harvest-inspired).
@@ -132,11 +134,13 @@ func (m *Matrix) CloneForCollection() *Matrix {
 	}
 	for name, met := range m.Metrics {
 		out.Metrics[name] = &Metric{
-			Name:       met.Name,
-			Display:    met.Display,
-			MetricType: met.MetricType,
-			Exportable: met.Exportable,
-			Values:     make(map[string]float64),
+			Name:        met.Name,
+			Display:     met.Display,
+			MetricType:  met.MetricType,
+			Property:    met.Property,
+			Denominator: met.Denominator,
+			Exportable:  met.Exportable,
+			Values:      make(map[string]float64),
 		}
 	}
 	return out

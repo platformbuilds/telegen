@@ -31,16 +31,22 @@ type Collector struct {
 	Log          *slog.Logger
 	GlobalLabels map[string]string
 	BatchSize    string
-	prev         map[string]*matrix.Matrix    // object -> previous poll
-	schemaTypes  map[string]map[string]string // object -> counter -> type
+	prev         map[string]*matrix.Matrix   // object -> previous poll
+	schemaInfo   map[string]map[string]counterSchema // object -> counter -> schema
+}
+
+type counterSchema struct {
+	Type        string // ONTAP type field
+	Property    string // ONTAP property: raw | delta | rate | average | percent | string
+	Denominator string // for average/percent: denominator metric name
 }
 
 // NewCollector creates a RestPerf collector.
 func NewCollector() *Collector {
 	return &Collector{
-		prev:        make(map[string]*matrix.Matrix),
-		schemaTypes: make(map[string]map[string]string),
-		BatchSize:   "1000",
+		prev:       make(map[string]*matrix.Matrix),
+		schemaInfo: make(map[string]map[string]counterSchema),
+		BatchSize:  "1000",
 	}
 }
 
@@ -124,15 +130,37 @@ func (c *Collector) pollObject(ctx context.Context, objectName, fileName string,
 	for k, v := range c.GlobalLabels {
 		mat.GlobalLabels[k] = v
 	}
+	// Merge template-specific global labels
+	for k, v := range tmpl.GetGlobalLabels() {
+		mat.GlobalLabels[k] = v
+	}
 	mat.NewMetric(matrix.TimestampMetricName, matrix.TimestampMetricName, "gauge")
+	
+	// Parse template overrides
+	overrides := tmpl.GetOverrides()
+	
 	for _, m := range metrics {
-		mtype := "counter"
-		if st := c.schemaTypes[obj]; st != nil {
-			if t, ok := st[m.APIName]; ok {
-				mtype = mapSchemaType(t)
+		met := mat.NewMetric(m.APIName, m.Display, "counter")
+		// Apply schema info if available
+		if schema, ok := c.schemaInfo[obj][m.APIName]; ok {
+			met.Property = schema.Property
+			met.Denominator = schema.Denominator
+			// Set export MetricType based on property
+			switch schema.Property {
+			case "gauge", "string", "raw":
+				met.MetricType = "gauge"
+			default:
+				met.MetricType = "counter"
 			}
+		} else {
+			// Default for counters when schema unavailable
+			met.Property = "rate"
+			met.MetricType = "counter"
 		}
-		mat.NewMetric(m.APIName, m.Display, mtype)
+		// Apply template override (template wins over schema)
+		if overrideProp, ok := overrides[m.APIName]; ok {
+			met.Property = overrideProp
+		}
 	}
 
 	// Build rows query
@@ -191,6 +219,16 @@ func (c *Collector) pollObject(ctx context.Context, objectName, fileName string,
 		return nil, err
 	}
 	c.prev[obj] = mat
+	
+	// Apply export_data directive: when false, suppress parent instances
+	// (not plugin-created children). This bounds high-cardinality objects
+	// like Lock to their Aggregator rollups.
+	if tmpl.ExportData != nil && !*tmpl.ExportData {
+		for _, inst := range cooked.Instances {
+			inst.Exportable = false
+		}
+	}
+	
 	mats := plugins.ApplyAll(cooked, tmpl.Plugins, c.Log)
 	var out []storagedef.Metric
 	for _, m := range mats {
@@ -222,7 +260,7 @@ func hasPlugin(raw any, name string) bool {
 }
 
 func (c *Collector) ensureSchema(ctx context.Context, query, obj string, metrics []template.CounterDef) error {
-	if c.schemaTypes[obj] != nil {
+	if c.schemaInfo[obj] != nil {
 		return nil
 	}
 	href := client.NewHrefBuilder().APIPath(strings.TrimPrefix(query, "/")).MaxRecords("1").Build()
@@ -230,7 +268,7 @@ func (c *Collector) ensureSchema(ctx context.Context, query, obj string, metrics
 	if err != nil {
 		return err
 	}
-	types := map[string]string{}
+	info := make(map[string]counterSchema)
 	if len(records) > 0 {
 		// counter_schemas is array on the table object
 		var top map[string]any
@@ -242,22 +280,43 @@ func (c *Collector) ensureSchema(ctx context.Context, query, obj string, metrics
 						continue
 					}
 					name, _ := sm["name"].(string)
-					typ, _ := sm["type"].(string)
-					if name != "" {
-						types[name] = typ
+					if name == "" {
+						continue
 					}
+					
+					schema := counterSchema{
+						Type:     stringVal(sm, "type"),
+						Property: stringVal(sm, "type"), // ONTAP uses 'type' for property
+					}
+					
+					// Extract denominator if present
+					if den, ok := sm["denominator"].(map[string]any); ok {
+						schema.Denominator = stringVal(den, "name")
+					}
+					
+					info[name] = schema
 				}
 			}
 		}
 	}
-	// ensure requested metrics present
+	// Ensure requested metrics present with defaults
 	for _, m := range metrics {
-		if _, ok := types[m.APIName]; !ok {
-			types[m.APIName] = "counter"
+		if _, ok := info[m.APIName]; !ok {
+			info[m.APIName] = counterSchema{
+				Type:     "counter",
+				Property: "rate",
+			}
 		}
 	}
-	c.schemaTypes[obj] = types
+	c.schemaInfo[obj] = info
 	return nil
+}
+
+func stringVal(m map[string]any, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
 }
 
 // buildKey concatenates the declared instance keys. A key the row does not
@@ -364,15 +423,4 @@ func extractCounters(rec json.RawMessage, key string, mat *matrix.Matrix, metric
 			}
 		}
 	}
-}
-
-func mapSchemaType(t string) string {
-	lt := strings.ToLower(t)
-	if strings.Contains(lt, "string") {
-		return "label"
-	}
-	if strings.Contains(lt, "percent") || strings.Contains(lt, "average") || strings.Contains(lt, "gauge") {
-		return "gauge"
-	}
-	return "counter"
 }

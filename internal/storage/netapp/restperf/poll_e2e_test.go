@@ -34,6 +34,30 @@ func lunRows(readOps, writeOps int) string {
 ],"num_records":1}`
 }
 
+// lunRowsWithLatency includes both ops and latency counters for testing average cooking.
+func lunRowsWithLatency(readOps, readLatency int) string {
+	return `{"records":[
+  {"id":"node-01:svm_prod:/vol/vol_data01/lun0",
+   "properties":[
+     {"name":"node.name","value":"node-01"},
+     {"name":"svm.name","value":"svm_prod"}
+   ],
+   "counters":[
+     {"name":"read_ops","value":` + itoa(readOps) + `},
+     {"name":"read_latency","value":` + itoa(readLatency) + `}
+   ]}
+],"num_records":1}`
+}
+
+// lunSchema returns the counter schema including denominator for read_latency.
+func lunSchema() string {
+	return `{"records":[{"counter_schemas":[
+		{"name":"read_ops","type":"rate"},
+		{"name":"read_latency","type":"average","denominator":{"name":"read_ops"}},
+		{"name":"write_ops","type":"rate"}
+	]}],"num_records":1}`
+}
+
 func itoa(i int) string {
 	if i == 0 {
 		return "0"
@@ -134,3 +158,69 @@ func keys(m map[string]bool) []string {
 	}
 	return out
 }
+
+// TestPollObject_DenominatorCooking verifies that average counters with
+// denominators are cooked correctly as Δnumerator/Δdenominator rather than
+// being exported as raw cumulative values.
+func TestPollObject_DenominatorCooking(t *testing.T) {
+	schema := lunSchema()
+	body := lunRowsWithLatency(1000, 50000) // 50,000µs over 1,000 ops
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "/rows") {
+			_, _ = io.WriteString(w, body)
+			return
+		}
+		// Schema request
+		_, _ = io.WriteString(w, schema)
+	}))
+	defer srv.Close()
+
+	cl, err := client.New(client.Config{
+		BaseURL: srv.URL, Username: "u", Password: "p", Timeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("client: %v", err)
+	}
+
+	c := NewCollector()
+	c.Client = cl
+	c.Templates = configs.NetAppTemplates()
+	c.Version = "9.14.1"
+	c.Coverage = storagedef.CoverageFull
+	c.Log = slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	ctx := context.Background()
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	// First poll establishes the baseline
+	_, err = c.pollObject(ctx, "Lun", "lun.yaml", t0)
+	if err != nil {
+		t.Fatalf("first poll: %v", err)
+	}
+
+	// Second poll, 60s later:
+	// read_ops: 1000 -> 2000 (Δ = 1000)
+	// read_latency: 50000 -> 150000 (Δ = 100000µs)
+	// Expected: 100000/1000 = 100µs average latency
+	body = lunRowsWithLatency(2000, 150000)
+	second, err := c.pollObject(ctx, "Lun", "lun.yaml", t0.Add(60*time.Second))
+	if err != nil {
+		t.Fatalf("second poll: %v", err)
+	}
+
+	m, ok := findMetric(second, "lun_read_latency")
+	if !ok {
+		names := map[string]bool{}
+		for _, x := range second {
+			names[x.Name] = true
+		}
+		t.Fatalf("lun_read_latency missing; got %v", keys(names))
+	}
+	want := 100.0 // 100000µs / 1000 ops
+	if m.Value != want {
+		t.Errorf("lun_read_latency = %v, want %v (Δlatency/Δops = 100000/1000)", m.Value, want)
+	}
+}
+

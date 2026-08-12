@@ -26,6 +26,9 @@ type Template struct {
 	Plugins       any            `yaml:"plugins"`
 	ExportOptions *ExportOptions `yaml:"export_options"`
 	Endpoints     []Endpoint     `yaml:"endpoints"`
+	Override      []any          `yaml:"override"`      // list of {counter: property} maps
+	GlobalLabels  []any          `yaml:"global_labels"` // list of {key: value} maps
+	ExportData    *bool          `yaml:"export_data"`   // when false, suppress parent instances (not plugin children)
 	RawCounters   []CounterDef   `yaml:"-"`
 	// HiddenFields are counters-block `hidden_fields` entries. ONTAP omits
 	// these from a record unless they are named explicitly in `fields`.
@@ -33,6 +36,42 @@ type Template struct {
 	// CounterFilter are counters-block `filter` entries. They are query
 	// arguments, not counters, and merge with the top-level Filter.
 	CounterFilter []string `yaml:"-"`
+}
+
+// GetOverrides parses the Override field into a name->property map.
+func (t *Template) GetOverrides() map[string]string {
+	if t.Override == nil {
+		return nil
+	}
+	result := make(map[string]string)
+	for _, item := range t.Override {
+		if m, ok := item.(map[string]any); ok {
+			for k, v := range m {
+				if s, ok := v.(string); ok {
+					result[k] = s
+				}
+			}
+		}
+	}
+	return result
+}
+
+// GetGlobalLabels parses the GlobalLabels field into a key->value map.
+func (t *Template) GetGlobalLabels() map[string]string {
+	if t.GlobalLabels == nil {
+		return nil
+	}
+	result := make(map[string]string)
+	for _, item := range t.GlobalLabels {
+		if m, ok := item.(map[string]any); ok {
+			for k, v := range m {
+				if s, ok := v.(string); ok {
+					result[k] = s
+				}
+			}
+		}
+	}
+	return result
 }
 
 // Endpoint is an additional REST join query.

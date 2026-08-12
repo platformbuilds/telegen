@@ -126,6 +126,10 @@ func (c *Collector) pollObject(ctx context.Context, tmpl *template.Template, now
 	for k, v := range c.GlobalLabels {
 		mat.GlobalLabels[k] = v
 	}
+	// Merge template-specific global labels
+	for k, v := range tmpl.GetGlobalLabels() {
+		mat.GlobalLabels[k] = v
+	}
 
 	keys, labels, metrics := template.Partition(tmpl.RawCounters)
 	for _, m := range metrics {
@@ -179,6 +183,13 @@ func (c *Collector) pollObject(ctx context.Context, tmpl *template.Template, now
 		if err := fillMatrixEndpoint(mat, epRecords, epKeys, epLabels, epMetrics, ep.InstanceAdd); err != nil {
 			c.Log.Warn("endpoint matrix fill failed", "query", ep.Query, "error", err)
 			continue
+		}
+	}
+
+	// Apply export_data directive: when false, suppress parent instances
+	if tmpl.ExportData != nil && !*tmpl.ExportData {
+		for _, inst := range mat.Instances {
+			inst.Exportable = false
 		}
 	}
 

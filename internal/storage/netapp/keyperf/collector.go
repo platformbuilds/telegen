@@ -103,6 +103,10 @@ func (c *Collector) CollectObject(ctx context.Context, now time.Time) ([]storage
 	for k, v := range c.GlobalLabels {
 		mat.GlobalLabels[k] = v
 	}
+	// Merge template-specific global labels
+	for k, v := range tmpl.GetGlobalLabels() {
+		mat.GlobalLabels[k] = v
+	}
 	mat.NewMetric(matrix.TimestampMetricName, matrix.TimestampMetricName, "gauge")
 	for _, m := range metrics {
 		mat.NewMetric(m.APIName, m.Display, "counter")
@@ -208,6 +212,14 @@ func (c *Collector) CollectObject(ctx context.Context, now time.Time) ([]storage
 		c.prev = map[string]*matrix.Matrix{}
 	}
 	c.prev[obj] = mat
+	
+	// Apply export_data directive: when false, suppress parent instances
+	if tmpl.ExportData != nil && !*tmpl.ExportData {
+		for _, inst := range cooked.Instances {
+			inst.Exportable = false
+		}
+	}
+	
 	mats := plugins.ApplyAll(cooked, tmpl.Plugins, c.Log)
 	var out []storagedef.Metric
 	for _, m := range mats {
