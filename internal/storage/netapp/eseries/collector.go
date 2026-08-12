@@ -151,7 +151,7 @@ func (c *Collector) poll(ctx context.Context, tmpl *template.Template, now time.
 		obj = strings.ToLower(tmpl.Name)
 	}
 	mat := matrix.New(obj)
-	keys, labels, metrics := partition(tmpl.RawCounters)
+	keys, labels, metrics := template.Partition(tmpl.RawCounters)
 	for _, m := range metrics {
 		mat.NewMetric(m.APIName, m.Display, "gauge")
 	}
@@ -195,18 +195,4 @@ func (c *Collector) poll(ctx context.Context, tmpl *template.Template, now time.
 
 func (c *Collector) ClientFetch(ctx context.Context, href string) ([]json.RawMessage, error) {
 	return c.client.FetchAll(ctx, href)
-}
-
-func partition(defs []template.CounterDef) (keys, labels, metrics []template.CounterDef) {
-	for _, d := range defs {
-		switch d.Kind {
-		case "key":
-			keys = append(keys, d)
-		case "label":
-			labels = append(labels, d)
-		default:
-			metrics = append(metrics, d)
-		}
-	}
-	return
 }

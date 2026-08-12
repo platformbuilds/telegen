@@ -10,11 +10,11 @@ import (
 	"io/fs"
 	"log/slog"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/client"
-	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/jsonpath"
 	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/keyperf"
 	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/matrix"
 	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/plugins"
@@ -113,7 +113,7 @@ func (c *Collector) pollObject(ctx context.Context, objectName, fileName string,
 		obj = strings.ToLower(tmpl.Name)
 	}
 
-	keys, labels, metrics := partition(tmpl.RawCounters)
+	keys, labels, metrics := template.Partition(tmpl.RawCounters)
 
 	// PollCounter — schema
 	if err := c.ensureSchema(ctx, tmpl.Query, obj, metrics); err != nil {
@@ -142,7 +142,7 @@ func (c *Collector) pollObject(ctx context.Context, objectName, fileName string,
 	}
 	dataQuery := path.Join(strings.TrimPrefix(tmpl.Query, "/"), "rows")
 	filter := []string{"counters.name=" + strings.Join(counterNames, "|")}
-	filter = append(filter, tmpl.Filter...)
+	filter = append(filter, tmpl.QueryFilter()...)
 	href := client.NewHrefBuilder().
 		APIPath(dataQuery).
 		MaxRecords(c.BatchSize).
@@ -156,14 +156,15 @@ func (c *Collector) pollObject(ctx context.Context, objectName, fileName string,
 
 	ts := float64(now.Unix())
 	for _, rec := range records {
-		key := buildKey(rec, keys)
+		// A counter-table row carries its identity in a `properties` array of
+		// {name, value} pairs rather than as top-level fields, so this is the
+		// only place an instance key or label can be read from.
+		props := parseProps(rec)
+
+		key := buildKey(props, keys)
 		if key == "" {
-			// counter table rows often use id / key property
-			if s, ok := jsonpath.GetString(rec, "id"); ok {
-				key = s
-			} else if s, ok := jsonpath.GetString(rec, "key"); ok {
-				key = s
-			}
+			// Tables that declare no instance key are keyed by row identity.
+			key = props["id"]
 		}
 		if key == "" {
 			continue
@@ -173,20 +174,10 @@ func (c *Collector) pollObject(ctx context.Context, objectName, fileName string,
 			continue
 		}
 		for _, l := range labels {
-			if s, ok := jsonpath.GetString(rec, propertyPath(l.APIName)); ok {
-				inst.Labels[l.Display] = s
+			if v, ok := props[l.APIName]; ok {
+				inst.Labels[l.Display] = v
 			}
 		}
-		// also common properties
-		for _, p := range []string{"name", "node.name", "svm.name"} {
-			if s, ok := jsonpath.GetString(rec, "properties."+strings.ReplaceAll(p, ".", `\x`)); ok {
-				_ = s
-			}
-			if s, ok := jsonpath.GetString(rec, "properties"); ok {
-				_ = s
-			}
-		}
-		extractProperties(rec, inst)
 		if err := mat.SetValue(matrix.TimestampMetricName, key, ts); err != nil {
 			continue
 		}
@@ -269,46 +260,29 @@ func (c *Collector) ensureSchema(ctx context.Context, query, obj string, metrics
 	return nil
 }
 
-func partition(defs []template.CounterDef) (keys, labels, metrics []template.CounterDef) {
-	for _, d := range defs {
-		switch d.Kind {
-		case "key":
-			keys = append(keys, d)
-		case "label":
-			labels = append(labels, d)
-		default:
-			metrics = append(metrics, d)
-		}
-	}
-	return
-}
-
-func buildKey(rec json.RawMessage, keys []template.CounterDef) string {
+// buildKey concatenates the declared instance keys. A key the row does not
+// carry contributes nothing rather than voiding the whole key, so a row that
+// is missing one optional property still produces an instance.
+func buildKey(props map[string]string, keys []template.CounterDef) string {
 	var b strings.Builder
 	for _, k := range keys {
-		s, ok := jsonpath.GetString(rec, k.APIName)
-		if !ok {
-			s, ok = jsonpath.GetString(rec, "properties."+k.APIName)
-		}
-		if !ok {
-			return ""
-		}
-		b.WriteString(s)
+		b.WriteString(props[k.APIName])
 	}
 	return b.String()
 }
 
-func propertyPath(api string) string {
-	if strings.HasPrefix(api, "properties.") {
-		return api
-	}
-	return api
-}
+// parseProps flattens a counter-table row's `properties` array into a
+// name→value map, plus the row's `id`. Property names are the raw ONTAP names
+// the templates reference (`svm.name`, `node.name`, ...).
+func parseProps(rec json.RawMessage) map[string]string {
+	out := map[string]string{}
 
-func extractProperties(rec json.RawMessage, inst *matrix.Instance) {
 	var top map[string]any
 	if err := json.Unmarshal(rec, &top); err != nil {
-		return
+		return out
+	}
+	if id, ok := top["id"].(string); ok && id != "" {
+		out["id"] = id
 	}
 	props, _ := top["properties"].([]any)
 	for _, p := range props {
@@ -317,10 +291,34 @@ func extractProperties(rec json.RawMessage, inst *matrix.Instance) {
 			continue
 		}
 		name, _ := pm["name"].(string)
-		val, _ := pm["value"].(string)
-		if name != "" {
-			inst.Labels[sanitizeLabel(name)] = val
+		if name == "" {
+			continue
 		}
+		out[name] = propertyValue(pm["value"])
+	}
+	return out
+}
+
+// propertyValue renders a property value. ONTAP returns a list for
+// multi-valued properties, which is flattened to a comma-separated string.
+func propertyValue(v any) string {
+	switch t := v.(type) {
+	case string:
+		return t
+	case []any:
+		parts := make([]string, 0, len(t))
+		for _, e := range t {
+			if s, ok := e.(string); ok {
+				parts = append(parts, s)
+			}
+		}
+		return strings.Join(parts, ",")
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	case bool:
+		return strconv.FormatBool(t)
+	default:
+		return ""
 	}
 }
 
@@ -377,8 +375,4 @@ func mapSchemaType(t string) string {
 		return "gauge"
 	}
 	return "counter"
-}
-
-func sanitizeLabel(s string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(s, ".", "_"), "-", "_")
 }

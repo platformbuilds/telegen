@@ -3,19 +3,27 @@
 
 package keyperf
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
-func TestTemplateBaseDefaultsToKeyperf(t *testing.T) {
+func TestTemplateBasesDefaultToKeyperf(t *testing.T) {
 	c := NewCollector()
-	if got := c.templateBase(); got != "keyperf" {
-		t.Fatalf("templateBase() = %q, want %q", got, "keyperf")
+	if got := c.templateBases(); !slices.Equal(got, []string{"keyperf"}) {
+		t.Fatalf("templateBases() = %v, want [keyperf]", got)
 	}
 }
 
-func TestTemplateBaseHonoursResolvedBase(t *testing.T) {
+// TestTemplateBasesKeepBaseFallback pins the ASA r2 overlay contract: the
+// model-specific tree is searched first, but the base tree must remain in the
+// list or every object it does not redefine is silently dropped.
+func TestTemplateBasesHonourResolvedBases(t *testing.T) {
 	c := NewCollector()
-	c.base = "keyperf/asar2"
-	if got := c.templateBase(); got != "keyperf/asar2" {
-		t.Fatalf("templateBase() = %q, want %q", got, "keyperf/asar2")
+	c.bases = []string{"keyperf/asar2", "keyperf"}
+
+	got := c.templateBases()
+	if !slices.Equal(got, []string{"keyperf/asar2", "keyperf"}) {
+		t.Fatalf("templateBases() = %v, want [keyperf/asar2 keyperf]", got)
 	}
 }

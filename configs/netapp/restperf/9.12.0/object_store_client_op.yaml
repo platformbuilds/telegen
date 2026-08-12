@@ -3,14 +3,12 @@ name:                     ObjectStoreClient
 query:                    api/cluster/counter/tables/object_store_client_op
 object:                   fabricpool
 
-instance_key:             uuid
-
 counters:
+  - ^^instance_uuid
+  - ^instance_name         => fabricpool
+  - ^node_name             => node
   - average_latency
   - get_throughput_bytes
-  - instance_name
-  - instance_uuid
-  - node_name              => node
   - put_throughput_bytes
   - stats
   - throughput_ops

@@ -27,6 +27,60 @@ func LoadCatalog(fsys fs.FS, name string) (*Catalog, error) {
 	return &c, nil
 }
 
+// LoadCatalogMerged loads catalogs in order and merges their object maps. A
+// later catalog overrides an object of the same name and contributes any new
+// ones, so a model-specific catalog such as `rest/asar2/default.yaml` layers
+// on top of the base catalog instead of replacing it. Missing catalogs after
+// the first are skipped; the first must exist.
+func LoadCatalogMerged(fsys fs.FS, names ...string) (*Catalog, error) {
+	if len(names) == 0 {
+		return nil, fmt.Errorf("no catalog specified")
+	}
+	base, err := LoadCatalog(fsys, names[0])
+	if err != nil {
+		return nil, err
+	}
+	merged := &Catalog{
+		Collector: base.Collector,
+		Schedule:  base.Schedule,
+		Objects:   make(map[string]string, len(base.Objects)),
+	}
+	for k, v := range base.Objects {
+		merged.Objects[k] = v
+	}
+	for _, name := range names[1:] {
+		overlay, err := LoadCatalog(fsys, name)
+		if err != nil {
+			continue
+		}
+		for k, v := range overlay.Objects {
+			merged.Objects[k] = v
+		}
+	}
+	return merged, nil
+}
+
+// LoadObjectTemplateFrom resolves an object template against an ordered list of
+// base directories, returning the first that yields a template. A model
+// specific tree such as `rest/asar2` holds only the objects that differ, so
+// every other object must fall back to the base tree rather than be dropped.
+func LoadObjectTemplateFrom(fsys fs.FS, bases []string, objectFile, version string) (*Template, string, error) {
+	if len(bases) == 0 {
+		return nil, "", fmt.Errorf("no template base directory specified")
+	}
+	var firstErr error
+	for _, base := range bases {
+		tmpl, path, err := LoadObjectTemplate(fsys, base, objectFile, version)
+		if err == nil {
+			return tmpl, path, nil
+		}
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
+	return nil, "", firstErr
+}
+
 // LoadObjectTemplate loads and flattens an object template with per-file version best-fit.
 // Harvest keeps a template only in the ONTAP version dir where it was introduced; older
 // objects live in older dirs. We pick the highest version directory <= requested that
@@ -45,7 +99,26 @@ func LoadObjectTemplate(fsys fs.FS, baseDir, objectFile, version string) (*Templ
 		return nil, "", err
 	}
 	t.RawCounters = FlattenCounters(t.Counters)
+	t.HiddenFields, t.CounterFilter = ExtractDirectives(t.Counters)
 	return &t, tmplPath, nil
+}
+
+// QueryFilter merges the top-level `filter` block with the counters-block
+// `filter` directive, matching Harvest's precedence-free union.
+func (t *Template) QueryFilter() []string {
+	if len(t.CounterFilter) == 0 {
+		return t.Filter
+	}
+	out := make([]string, 0, len(t.Filter)+len(t.CounterFilter))
+	out = append(out, t.Filter...)
+	return append(out, t.CounterFilter...)
+}
+
+// IsPublicAPI reports whether a query targets ONTAP's public REST surface.
+// The private CLI passthrough rejects the `fields` values that hidden_fields
+// contributes, so Harvest only applies them to public endpoints.
+func IsPublicAPI(query string) bool {
+	return !strings.Contains(query, "private")
 }
 
 func resolveTemplatePath(fsys fs.FS, baseDir, objectFile, version string) (string, error) {

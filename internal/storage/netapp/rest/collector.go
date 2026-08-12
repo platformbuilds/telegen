@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -34,18 +35,19 @@ type Collector struct {
 
 // CollectAll loads the Rest catalog and polls every enabled object.
 func (c *Collector) CollectAll(ctx context.Context) ([]storagedef.Metric, error) {
-	base := "rest"
+	// On ASA r2 the model-specific tree carries only the objects that differ.
+	// It layers on top of the base catalog and base templates; it does not
+	// replace them, or the cluster would lose every object the ASA r2 tree
+	// does not redefine.
+	bases := []string{"rest"}
+	catalogPaths := []string{"rest/default.yaml"}
 	if c.ASAr2 {
-		// Use best fit ASAR2 path if available
-		if newBase, ok := template.BestFitASAR2(c.Templates, base); ok {
-			base = newBase
+		if asar2Base, ok := template.BestFitASAR2(c.Templates, "rest"); ok {
+			bases = []string{asar2Base, "rest"}
+			catalogPaths = append(catalogPaths, "rest/asar2/default.yaml")
 		}
 	}
-	catalogPath := "rest/default.yaml"
-	if c.ASAr2 {
-		catalogPath = "rest/asar2/default.yaml"
-	}
-	cat, err := template.LoadCatalog(c.Templates, catalogPath)
+	cat, err := template.LoadCatalogMerged(c.Templates, catalogPaths...)
 	if err != nil {
 		return nil, fmt.Errorf("load rest catalog: %w", err)
 	}
@@ -70,7 +72,7 @@ func (c *Collector) CollectAll(ctx context.Context) ([]storagedef.Metric, error)
 		if strings.HasPrefix(strings.TrimSpace(fileName), "#") {
 			continue
 		}
-		tmpl, _, err := template.LoadObjectTemplate(c.Templates, base, fileName, c.Version)
+		tmpl, _, err := template.LoadObjectTemplateFrom(c.Templates, bases, fileName, c.Version)
 		if err != nil {
 			c.Log.Warn("skip rest object", "object", objectName, "error", err)
 			continue
@@ -125,12 +127,12 @@ func (c *Collector) pollObject(ctx context.Context, tmpl *template.Template, now
 		mat.GlobalLabels[k] = v
 	}
 
-	keys, labels, metrics := partitionCounters(tmpl.RawCounters)
+	keys, labels, metrics := template.Partition(tmpl.RawCounters)
 	for _, m := range metrics {
 		mat.NewMetric(m.APIName, m.Display, metricTypeOrGauge(m.MetricType))
 	}
 
-	fields := collectFields(tmpl.RawCounters)
+	fields := sanitizeFields(tmpl.Query, collectFields(tmpl.RawCounters))
 	batch := c.BatchSize
 	if batch == "" {
 		batch = "1000"
@@ -138,8 +140,9 @@ func (c *Collector) pollObject(ctx context.Context, tmpl *template.Template, now
 	href := client.NewHrefBuilder().
 		APIPath(strings.TrimPrefix(tmpl.Query, "/")).
 		Fields(fields).
+		HiddenFields(hiddenFieldsFor(tmpl.Query, tmpl.HiddenFields)).
 		MaxRecords(batch).
-		Filter(tmpl.Filter).
+		Filter(tmpl.QueryFilter()).
 		Build()
 
 	records, err := c.Client.FetchAll(ctx, href)
@@ -153,24 +156,27 @@ func (c *Collector) pollObject(ctx context.Context, tmpl *template.Template, now
 	// endpoints joins
 	for _, ep := range tmpl.Endpoints {
 		epCounters := template.FlattenCounters(ep.Counters)
-		epKeys, epLabels, epMetrics := partitionCounters(epCounters)
+		epHidden, epFilter := template.ExtractDirectives(ep.Counters)
+		epKeys, epLabels, epMetrics := template.Partition(epCounters)
 		for _, m := range epMetrics {
 			if mat.GetMetric(m.APIName) == nil {
 				mat.NewMetric(m.APIName, m.Display, metricTypeOrGauge(m.MetricType))
 			}
 		}
-		epFields := collectFields(epCounters)
+		epFields := sanitizeFields(ep.Query, collectFields(epCounters))
 		epHref := client.NewHrefBuilder().
 			APIPath(strings.TrimPrefix(ep.Query, "/")).
 			Fields(epFields).
+			HiddenFields(hiddenFieldsFor(ep.Query, epHidden)).
 			MaxRecords(batch).
+			Filter(epFilter).
 			Build()
 		epRecords, err := c.Client.FetchAll(ctx, epHref)
 		if err != nil {
 			c.Log.Warn("endpoint poll failed", "query", ep.Query, "error", err)
 			continue
 		}
-		if err := fillMatrixImmutable(mat, epRecords, epKeys, epLabels, epMetrics); err != nil {
+		if err := fillMatrixEndpoint(mat, epRecords, epKeys, epLabels, epMetrics, ep.InstanceAdd); err != nil {
 			c.Log.Warn("endpoint matrix fill failed", "query", ep.Query, "error", err)
 			continue
 		}
@@ -184,18 +190,47 @@ func (c *Collector) pollObject(ctx context.Context, tmpl *template.Template, now
 	return out, nil
 }
 
-func partitionCounters(defs []template.CounterDef) (keys, labels, metrics []template.CounterDef) {
-	for _, d := range defs {
-		switch d.Kind {
-		case "key":
-			keys = append(keys, d)
-		case "label":
-			labels = append(labels, d)
-		default:
-			metrics = append(metrics, d)
+// hiddenFieldsFor drops hidden fields for private CLI passthrough queries,
+// which reject them, and keeps them for the public REST surface.
+func hiddenFieldsFor(query string, hidden []string) []string {
+	if !template.IsPublicAPI(query) {
+		return nil
+	}
+	return hidden
+}
+
+// ontapFieldRe matches the dotted identifiers ONTAP accepts in `fields`.
+// Counter paths may also carry gjson syntax — array selectors and multi-path
+// braces — which are meaningful when reading a response but are not field
+// names, and ONTAP rejects the whole request if one is sent.
+var ontapFieldRe = regexp.MustCompile(`^([a-zA-Z_]\w*\.)*[a-zA-Z_]\w*$`)
+
+// sanitizeFields keeps a malformed counter path from taking down an entire
+// object. A public query falls back to `*`, which returns a superset and lets
+// the hidden fields still be requested alongside it. The private CLI
+// passthrough does not accept `*`, so there the offending field is dropped and
+// the rest of the explicit list is preserved.
+func sanitizeFields(query string, fields []string) []string {
+	valid := true
+	for _, f := range fields {
+		if f != "*" && !ontapFieldRe.MatchString(f) {
+			valid = false
+			break
 		}
 	}
-	return
+	if valid {
+		return fields
+	}
+	if template.IsPublicAPI(query) {
+		return []string{"*"}
+	}
+	out := make([]string, 0, len(fields))
+	for _, f := range fields {
+		if f == "*" || ontapFieldRe.MatchString(f) {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 func collectFields(defs []template.CounterDef) []string {
@@ -248,12 +283,25 @@ func fillMatrix(mat *matrix.Matrix, records []json.RawMessage, keys, labels, met
 	return nil
 }
 
-func fillMatrixImmutable(mat *matrix.Matrix, records []json.RawMessage, keys, labels, metrics []template.CounterDef) error {
+// fillMatrixEndpoint decorates instances from a join query. Labels set by the
+// primary poll are preserved, so this never resets an instance the way the
+// primary fill does. When the template marks the endpoint `instance_add`, the
+// join may also introduce instances the primary query did not return.
+func fillMatrixEndpoint(mat *matrix.Matrix, records []json.RawMessage, keys, labels, metrics []template.CounterDef, instanceAdd bool) error {
 	for _, rec := range records {
 		key := buildKey(rec, keys)
+		if key == "" {
+			continue
+		}
 		inst := mat.GetInstance(key)
 		if inst == nil {
-			continue
+			if !instanceAdd {
+				continue
+			}
+			var err error
+			if inst, err = mat.NewInstance(key); err != nil {
+				continue
+			}
 		}
 		for _, l := range labels {
 			if s, ok := jsonpath.GetString(rec, l.APIName); ok {

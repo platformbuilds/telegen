@@ -32,7 +32,7 @@ type Collector struct {
 	ObjectFile   string // when set, collect only this template file
 	BatchSize    string
 	prev         map[string]*matrix.Matrix
-	base         string // resolved template base; empty defaults to keyperf
+	bases        []string // ordered template roots; empty defaults to keyperf
 }
 
 // NewCollector constructs a KeyPerf collector.
@@ -42,16 +42,18 @@ func NewCollector() *Collector {
 
 // CollectAll polls KeyPerf catalog.
 func (c *Collector) CollectAll(ctx context.Context) ([]storagedef.Metric, error) {
-	catalogPath := "keyperf/default.yaml"
-	base := "keyperf"
+	// As with Rest, the ASA r2 tree is an overlay: it redefines a handful of
+	// objects and inherits the rest from the base catalog and templates.
+	bases := []string{"keyperf"}
+	catalogPaths := []string{"keyperf/default.yaml"}
 	if c.ASAr2 {
-		if p, ok := template.BestFitASAR2(c.Templates, base); ok {
-			base = p
-			catalogPath = "keyperf/asar2/default.yaml"
+		if asar2Base, ok := template.BestFitASAR2(c.Templates, "keyperf"); ok {
+			bases = []string{asar2Base, "keyperf"}
+			catalogPaths = append(catalogPaths, "keyperf/asar2/default.yaml")
 		}
 	}
-	c.base = base
-	cat, err := template.LoadCatalog(c.Templates, catalogPath)
+	c.bases = bases
+	cat, err := template.LoadCatalogMerged(c.Templates, catalogPaths...)
 	if err != nil {
 		return nil, err
 	}
@@ -73,11 +75,14 @@ func (c *Collector) CollectAll(ctx context.Context) ([]storagedef.Metric, error)
 	return all, nil
 }
 
-func (c *Collector) templateBase() string {
-	if c.base == "" {
-		return "keyperf"
+// templateBases returns the ordered template roots for this cluster. It is
+// populated by CollectAll; a direct CollectObject call (RestPerf delegates
+// Volume to KeyPerf this way) falls back to the base tree.
+func (c *Collector) templateBases() []string {
+	if len(c.bases) == 0 {
+		return []string{"keyperf"}
 	}
-	return c.base
+	return c.bases
 }
 
 // CollectObject polls a single KeyPerf template file.
@@ -85,7 +90,7 @@ func (c *Collector) CollectObject(ctx context.Context, now time.Time) ([]storage
 	if c.ObjectFile == "" {
 		return nil, fmt.Errorf("no object file")
 	}
-	tmpl, _, err := template.LoadObjectTemplate(c.Templates, c.templateBase(), c.ObjectFile, c.Version)
+	tmpl, _, err := template.LoadObjectTemplateFrom(c.Templates, c.templateBases(), c.ObjectFile, c.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +98,7 @@ func (c *Collector) CollectObject(ctx context.Context, now time.Time) ([]storage
 	if obj == "" {
 		obj = strings.ToLower(tmpl.Name)
 	}
-	keys, labels, metrics := partition(tmpl.RawCounters)
+	keys, labels, metrics := template.Partition(tmpl.RawCounters)
 	mat := matrix.New(obj)
 	for k, v := range c.GlobalLabels {
 		mat.GlobalLabels[k] = v
@@ -103,12 +108,15 @@ func (c *Collector) CollectObject(ctx context.Context, now time.Time) ([]storage
 		mat.NewMetric(m.APIName, m.Display, "counter")
 	}
 
+	// `fields=*` does not expand to hidden fields, so the `statistics` block
+	// KeyPerf is built around only arrives when it is named explicitly.
 	fields := []string{"*"}
 	href := client.NewHrefBuilder().
 		APIPath(strings.TrimPrefix(tmpl.Query, "/")).
 		Fields(fields).
+		HiddenFields(hiddenFieldsFor(tmpl.Query, tmpl.HiddenFields)).
 		MaxRecords(c.BatchSize).
-		Filter(tmpl.Filter).
+		Filter(tmpl.QueryFilter()).
 		Build()
 	records, err := c.Client.FetchAll(ctx, href)
 	if err != nil {
@@ -153,11 +161,14 @@ func (c *Collector) CollectObject(ctx context.Context, now time.Time) ([]storage
 
 	for _, ep := range tmpl.Endpoints {
 		epCounters := template.FlattenCounters(ep.Counters)
-		_, epLabels, epMetrics := partition(epCounters)
+		epHidden, epFilter := template.ExtractDirectives(ep.Counters)
+		_, epLabels, epMetrics := template.Partition(epCounters)
 		epHref := client.NewHrefBuilder().
 			APIPath(strings.TrimPrefix(ep.Query, "/")).
 			Fields([]string{"*"}).
+			HiddenFields(hiddenFieldsFor(ep.Query, epHidden)).
 			MaxRecords(c.BatchSize).
+			Filter(epFilter).
 			Build()
 		epRecs, err := c.Client.FetchAll(ctx, epHref)
 		if err != nil {
@@ -226,18 +237,13 @@ func hasPlugin(raw any, name string) bool {
 	return false
 }
 
-func partition(defs []template.CounterDef) (keys, labels, metrics []template.CounterDef) {
-	for _, d := range defs {
-		switch d.Kind {
-		case "key":
-			keys = append(keys, d)
-		case "label":
-			labels = append(labels, d)
-		default:
-			metrics = append(metrics, d)
-		}
+// hiddenFieldsFor drops hidden fields for private CLI passthrough queries,
+// which reject them, and keeps them for the public REST surface.
+func hiddenFieldsFor(query string, hidden []string) []string {
+	if !template.IsPublicAPI(query) {
+		return nil
 	}
-	return
+	return hidden
 }
 
 func buildKey(rec json.RawMessage, keys []template.CounterDef) string {

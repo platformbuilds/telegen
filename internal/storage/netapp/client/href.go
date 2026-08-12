@@ -13,6 +13,7 @@ import (
 type HrefBuilder struct {
 	apiPath                      string
 	fields                       []string
+	hiddenFields                 []string
 	maxRecords                   string
 	returnTimeout                *int
 	filter                       []string
@@ -31,6 +32,13 @@ func (b *HrefBuilder) APIPath(path string) *HrefBuilder {
 
 func (b *HrefBuilder) Fields(fields []string) *HrefBuilder {
 	b.fields = append([]string(nil), fields...)
+	return b
+}
+
+// HiddenFields names fields ONTAP omits from a record unless they are
+// requested explicitly. They are merged into `fields` at build time.
+func (b *HrefBuilder) HiddenFields(fields []string) *HrefBuilder {
+	b.hiddenFields = append([]string(nil), fields...)
 	return b
 }
 
@@ -61,25 +69,35 @@ func (b *HrefBuilder) Build() string {
 	}
 	path := b.apiPath
 	q := url.Values{}
-	if len(b.fields) > 0 {
-		q.Set("fields", strings.Join(b.fields, ","))
-	}
-	if b.maxRecords != "" {
-		q.Set("max_records", b.maxRecords)
+
+	fields := mergeHiddenFields(b.fields, b.hiddenFields)
+	if len(fields) > 0 {
+		q.Set("fields", strings.Join(fields, ","))
 	}
 	if b.returnTimeout != nil {
 		q.Set("return_timeout", strconv.Itoa(*b.returnTimeout))
 	}
+
+	// A filter may carry its own max_records, which must win over the
+	// collector's batch size rather than being sent alongside it.
+	hasMaxRecords := false
 	for _, f := range b.filter {
 		if f == "" {
 			continue
 		}
 		// filter entries are raw "key=value" pairs
 		if i := strings.IndexByte(f, '='); i > 0 {
-			q.Add(f[:i], f[i+1:])
+			key := f[:i]
+			if key == "max_records" {
+				hasMaxRecords = true
+			}
+			q.Add(key, f[i+1:])
 		} else {
 			q.Add(f, "")
 		}
+	}
+	if !hasMaxRecords && b.maxRecords != "" {
+		q.Set("max_records", b.maxRecords)
 	}
 	if b.isIgnoreUnknownFieldsEnabled {
 		q.Set("ignore_unknown_fields", "true")
@@ -89,4 +107,36 @@ func (b *HrefBuilder) Build() string {
 		return path
 	}
 	return path + "?" + enc
+}
+
+// mergeHiddenFields appends hidden fields to the requested field set, skipping
+// any that a counter already covers. Order is preserved so the resulting URL is
+// stable across polls.
+func mergeHiddenFields(fields, hidden []string) []string {
+	if len(hidden) == 0 {
+		return fields
+	}
+	seen := make(map[string]struct{}, len(fields)+len(hidden))
+	out := make([]string, 0, len(fields)+len(hidden))
+	for _, f := range fields {
+		if f == "" {
+			continue
+		}
+		if _, ok := seen[f]; ok {
+			continue
+		}
+		seen[f] = struct{}{}
+		out = append(out, f)
+	}
+	for _, h := range hidden {
+		if h == "" {
+			continue
+		}
+		if _, ok := seen[h]; ok {
+			continue
+		}
+		seen[h] = struct{}{}
+		out = append(out, h)
+	}
+	return out
 }

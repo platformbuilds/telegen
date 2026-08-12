@@ -6,7 +6,6 @@ object:           security_audit_destination
 counters:
   - ^^address     => address
   - ^^port        => port
-  - port          => port
   - ^^protocol    => protocol
 
 
