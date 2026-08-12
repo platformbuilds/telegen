@@ -15,3 +15,6 @@ telegen
 
 # Mac Local Cache
 .DS_Store
+
+# Internal developer notes (local only)
+developer/
