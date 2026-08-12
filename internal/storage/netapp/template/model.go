@@ -6,6 +6,7 @@ package template
 import (
 	"sort"
 	"strconv"
+	"time"
 )
 
 // Catalog is a collector default.yaml object map.
@@ -29,6 +30,7 @@ type Template struct {
 	Override      []any          `yaml:"override"`      // list of {counter: property} maps
 	GlobalLabels  []any          `yaml:"global_labels"` // list of {key: value} maps
 	ExportData    *bool          `yaml:"export_data"`   // when false, suppress parent instances (not plugin children)
+	ClientTimeout string         `yaml:"client_timeout"` // per-object HTTP timeout (e.g., "2m", "90s")
 	RawCounters   []CounterDef   `yaml:"-"`
 	// HiddenFields are counters-block `hidden_fields` entries. ONTAP omits
 	// these from a record unless they are named explicitly in `fields`.
@@ -72,6 +74,19 @@ func (t *Template) GetGlobalLabels() map[string]string {
 		}
 	}
 	return result
+}
+
+// GetTimeout parses ClientTimeout into a time.Duration. Returns 0 if unset or
+// invalid, which signals callers to use the default client timeout.
+func (t *Template) GetTimeout() time.Duration {
+	if t.ClientTimeout == "" {
+		return 0
+	}
+	d, err := time.ParseDuration(t.ClientTimeout)
+	if err != nil {
+		return 0
+	}
+	return d
 }
 
 // Endpoint is an additional REST join query.

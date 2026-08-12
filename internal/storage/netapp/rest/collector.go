@@ -119,6 +119,13 @@ func isOptInObject(name string) bool {
 }
 
 func (c *Collector) pollObject(ctx context.Context, tmpl *template.Template, now time.Time) ([]storagedef.Metric, error) {
+	// Apply per-object timeout if specified
+	if timeout := tmpl.GetTimeout(); timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	
 	mat := matrix.New(tmpl.Object)
 	if mat.Object == "" {
 		mat.Object = strings.ToLower(tmpl.Name)

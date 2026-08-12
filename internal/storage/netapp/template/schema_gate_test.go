@@ -31,6 +31,7 @@ func TestTemplateSchemaGate(t *testing.T) {
 		"override":       true,
 		"global_labels":  true,
 		"export_data":    true,
+		"client_timeout": true,
 	}
 
 	// Fields that appear in templates but are not yet implemented.
@@ -41,8 +42,6 @@ func TestTemplateSchemaGate(t *testing.T) {
 	allowlisted := map[string]bool{
 		// Aggregator plugin behavior control - plugin-specific config, not template-level
 		"allow_partial_aggregation": true,
-		// Per-object HTTP timeout - should be added to Template as ClientTimeout time.Duration
-		"client_timeout": true,
 		// QoS workload label mapping - workload plugin-specific config
 		"qos_labels": true,
 		// Catalog-file only fields (not in per-object templates)
