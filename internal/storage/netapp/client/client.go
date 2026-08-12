@@ -22,17 +22,17 @@ import (
 
 // Config configures the ONTAP REST client.
 type Config struct {
-	BaseURL     string
-	Timeout     time.Duration
-	VerifySSL   bool
-	Username    string
-	Password    string
-	AuthToken   string
-	AuthStyle   string // basic | bearer | certificate
-	GCNVMode    bool
-	CAFile      string
-	ClientCert  string
-	ClientKey   string
+	BaseURL    string
+	Timeout    time.Duration
+	VerifySSL  bool
+	Username   string
+	Password   string
+	AuthToken  string
+	AuthStyle  string // basic | bearer | certificate
+	GCNVMode   bool
+	CAFile     string
+	ClientCert string
+	ClientKey  string
 }
 
 // Metadata tracks request volume for collector health.
@@ -56,7 +56,6 @@ type recordsEnvelope struct {
 			Href string `json:"href"`
 		} `json:"next"`
 	} `json:"_links"`
-	NumRecords int `json:"num_records"`
 }
 
 // New creates an ONTAP REST client.
@@ -172,18 +171,6 @@ func (c *Client) GetBytes(ctx context.Context, pathOrURL string) ([]byte, error)
 		return nil, &APIError{StatusCode: resp.StatusCode, Message: string(body)}
 	}
 	return c.unwrapGCNV(body), nil
-}
-
-// GetJSON GET and unmarshal into result.
-func (c *Client) GetJSON(ctx context.Context, path string, result any) error {
-	body, err := c.GetBytes(ctx, path)
-	if err != nil {
-		return err
-	}
-	if result == nil || len(body) == 0 {
-		return nil
-	}
-	return json.Unmarshal(body, result)
 }
 
 // FetchAll paginates through all records for a list endpoint.

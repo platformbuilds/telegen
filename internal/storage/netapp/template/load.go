@@ -5,8 +5,8 @@ package template
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
+	"io/fs"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,8 +15,8 @@ import (
 )
 
 // LoadCatalog loads a collector default.yaml.
-func LoadCatalog(path string) (*Catalog, error) {
-	data, err := os.ReadFile(path)
+func LoadCatalog(fsys fs.FS, name string) (*Catalog, error) {
+	data, err := fs.ReadFile(fsys, name)
 	if err != nil {
 		return nil, err
 	}
@@ -31,12 +31,12 @@ func LoadCatalog(path string) (*Catalog, error) {
 // Harvest keeps a template only in the ONTAP version dir where it was introduced; older
 // objects live in older dirs. We pick the highest version directory <= requested that
 // actually contains objectFile.
-func LoadObjectTemplate(baseDir, objectFile, version string) (*Template, string, error) {
-	path, err := resolveTemplatePath(baseDir, objectFile, version)
+func LoadObjectTemplate(fsys fs.FS, baseDir, objectFile, version string) (*Template, string, error) {
+	tmplPath, err := resolveTemplatePath(fsys, baseDir, objectFile, version)
 	if err != nil {
 		return nil, "", err
 	}
-	data, err := os.ReadFile(path)
+	data, err := fs.ReadFile(fsys, tmplPath)
 	if err != nil {
 		return nil, "", err
 	}
@@ -45,12 +45,12 @@ func LoadObjectTemplate(baseDir, objectFile, version string) (*Template, string,
 		return nil, "", err
 	}
 	t.RawCounters = FlattenCounters(t.Counters)
-	return &t, path, nil
+	return &t, tmplPath, nil
 }
 
-func resolveTemplatePath(baseDir, objectFile, version string) (string, error) {
+func resolveTemplatePath(fsys fs.FS, baseDir, objectFile, version string) (string, error) {
 	want := parseVersion(version)
-	entries, err := os.ReadDir(baseDir)
+	entries, err := fs.ReadDir(fsys, baseDir)
 	if err != nil {
 		return "", err
 	}
@@ -68,8 +68,8 @@ func resolveTemplatePath(baseDir, objectFile, version string) (string, error) {
 		if !v.ok {
 			continue
 		}
-		p := filepath.Join(baseDir, e.Name(), objectFile)
-		if _, err := os.Stat(p); err != nil {
+		p := path.Join(baseDir, e.Name(), objectFile)
+		if _, err := fs.Stat(fsys, p); err != nil {
 			continue
 		}
 		// Prefer versions <= requested; if none, fall back to any available
@@ -88,8 +88,8 @@ func resolveTemplatePath(baseDir, objectFile, version string) (string, error) {
 	}
 	if len(pool) == 0 {
 		// flat file in baseDir
-		p := filepath.Join(baseDir, objectFile)
-		if _, err := os.Stat(p); err == nil {
+		p := path.Join(baseDir, objectFile)
+		if _, err := fs.Stat(fsys, p); err == nil {
 			return p, nil
 		}
 		return "", fmt.Errorf("template %s not found under %s for version %s", objectFile, baseDir, version)
@@ -99,9 +99,9 @@ func resolveTemplatePath(baseDir, objectFile, version string) (string, error) {
 }
 
 // BestFitASAR2 returns baseDir/asar2 if it exists.
-func BestFitASAR2(baseDir string) (string, bool) {
-	p := filepath.Join(baseDir, "asar2")
-	if st, err := os.Stat(p); err == nil && st.IsDir() {
+func BestFitASAR2(fsys fs.FS, baseDir string) (string, bool) {
+	p := path.Join(baseDir, "asar2")
+	if st, err := fs.Stat(fsys, p); err == nil && st.IsDir() {
 		return p, true
 	}
 	return "", false

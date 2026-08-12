@@ -11,52 +11,55 @@ import (
 	"strings"
 
 	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/client"
+	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/jsonpath"
 )
 
 // Capabilities describes ONTAP cluster features relevant to collector selection.
 type Capabilities struct {
-	VersionFull    string
-	Generation     int
-	Major          int
-	Minor          int
-	UUID           string
-	Name           string
-	HasRESTPerf    bool
+	VersionFull     string
+	Generation      int
+	Major           int
+	Minor           int
+	UUID            string
+	Name            string
+	HasRESTPerf     bool
 	IsDisaggregated bool
-	IsASAr2        bool
-	GCNVMode       bool
-}
-
-type clusterInfo struct {
-	UUID    string `json:"uuid"`
-	Name    string `json:"name"`
-	Version struct {
-		Full       string `json:"full"`
-		Generation int    `json:"generation"`
-		Major      int    `json:"major"`
-		Minor      int    `json:"minor"`
-	} `json:"version"`
-	Disaggregated bool `json:"disaggregated"`
+	IsASAr2         bool
+	GCNVMode        bool
 }
 
 // ProbeCapabilities queries the cluster and counter-tables availability.
 func ProbeCapabilities(ctx context.Context, c *client.Client, gcnv bool) (Capabilities, error) {
-	var info clusterInfo
-	if err := c.GetJSON(ctx, "api/cluster", &info); err != nil {
+	raw, err := c.GetBytes(ctx, "api/cluster")
+	if err != nil {
 		return Capabilities{}, fmt.Errorf("probe cluster: %w", err)
 	}
+	rec := json.RawMessage(raw)
+
+	uuid, _ := jsonpath.GetString(rec, "uuid")
+	name, _ := jsonpath.GetString(rec, "name")
+	full, _ := jsonpath.GetString(rec, "version.full")
+	gen, _ := jsonpath.GetFloat(rec, "version.generation")
+	major, _ := jsonpath.GetFloat(rec, "version.major")
+	minor, _ := jsonpath.GetFloat(rec, "version.minor")
+
+	disaggregated := false
+	if s, ok := jsonpath.GetString(rec, "disaggregated"); ok {
+		disaggregated, _ = strconv.ParseBool(strings.ToLower(strings.TrimSpace(s)))
+	}
+
 	cap := Capabilities{
-		VersionFull:     info.Version.Full,
-		Generation:      info.Version.Generation,
-		Major:           info.Version.Major,
-		Minor:           info.Version.Minor,
-		UUID:            info.UUID,
-		Name:            info.Name,
-		IsDisaggregated: info.Disaggregated,
+		VersionFull:     full,
+		Generation:      int(gen),
+		Major:           int(major),
+		Minor:           int(minor),
+		UUID:            uuid,
+		Name:            name,
+		IsDisaggregated: disaggregated,
 		GCNVMode:        gcnv,
 	}
 	// ASA r2 heuristic: disaggregated storage units style clusters
-	cap.IsASAr2 = info.Disaggregated
+	cap.IsASAr2 = disaggregated
 
 	// Probe REST perf counter tables (available ~9.11.1+)
 	if !gcnv && !cap.IsASAr2 {
@@ -93,6 +96,3 @@ func parseVersionFromFull(full string) string {
 func (c Capabilities) UseRestPerf() bool {
 	return c.HasRESTPerf && !c.IsASAr2 && !c.GCNVMode
 }
-
-// DecodeRecords is a helper for tests.
-func DecodeRecords(raw []json.RawMessage) []json.RawMessage { return raw }

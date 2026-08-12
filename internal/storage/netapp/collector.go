@@ -7,9 +7,8 @@ package netapp
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -22,20 +21,22 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/keyperf"
 	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/rest"
 	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/restperf"
+	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/templatefs"
 	"github.com/mirastacklabs-ai/telegen/internal/storagedef"
 )
 
 // ONTAPCollector is the StorageCollector facade for a single ONTAP cluster.
 type ONTAPCollector struct {
-	config       storagedef.NetAppConfig
-	client       *client.Client
-	log          *slog.Logger
-	caps         Capabilities
-	templatesDir string
-	logsProvider *sdklog.LoggerProvider
-	emsCollector *ems.Collector
-	restPerf     *restperf.Collector
-	keyPerf      *keyperf.Collector
+	config          storagedef.NetAppConfig
+	client          *client.Client
+	log             *slog.Logger
+	caps            Capabilities
+	templates       fs.FS
+	templatesSource string
+	logsProvider    *sdklog.LoggerProvider
+	emsCollector    *ems.Collector
+	restPerf        *restperf.Collector
+	keyPerf         *keyperf.Collector
 
 	mu      sync.RWMutex
 	running bool
@@ -60,10 +61,7 @@ func NewONTAPCollector(cfg storagedef.NetAppConfig, log *slog.Logger, opts ...Op
 	if cfg.Coverage == "" {
 		cfg.Coverage = storagedef.CoverageFull
 	}
-	templatesDir := cfg.TemplatesDir
-	if templatesDir == "" {
-		templatesDir = defaultTemplatesDir()
-	}
+	templatesFS, templatesSrc := templatefs.Resolve(cfg.TemplatesDir)
 
 	c, err := client.New(client.Config{
 		BaseURL:    cfg.Address,
@@ -83,38 +81,19 @@ func NewONTAPCollector(cfg storagedef.NetAppConfig, log *slog.Logger, opts ...Op
 	}
 
 	col := &ONTAPCollector{
-		config:       cfg,
-		client:       c,
-		log:          log,
-		templatesDir: templatesDir,
-		health:       &storagedef.CollectorHealth{Status: storagedef.HealthStatusUnknown},
-		restPerf:     restperf.NewCollector(),
-		keyPerf:      keyperf.NewCollector(),
+		config:          cfg,
+		client:          c,
+		log:             log,
+		templates:       templatesFS,
+		templatesSource: templatesSrc,
+		health:          &storagedef.CollectorHealth{Status: storagedef.HealthStatusUnknown},
+		restPerf:        restperf.NewCollector(),
+		keyPerf:         keyperf.NewCollector(),
 	}
 	if len(opts) > 0 {
 		col.logsProvider = opts[0].LoggerProvider
 	}
 	return col, nil
-}
-
-func defaultTemplatesDir() string {
-	candidates := []string{
-		"configs/netapp",
-		"/etc/telegen/configs/netapp",
-	}
-	if exe, err := os.Executable(); err == nil {
-		candidates = append([]string{filepath.Join(filepath.Dir(exe), "configs", "netapp")}, candidates...)
-	}
-	for _, c := range candidates {
-		if st, err := os.Stat(filepath.Join(c, "rest", "default.yaml")); err == nil && !st.IsDir() {
-			abs, err := filepath.Abs(c)
-			if err != nil {
-				return c
-			}
-			return abs
-		}
-	}
-	return "configs/netapp"
 }
 
 func (c *ONTAPCollector) Name() string                  { return c.config.Name }
@@ -136,11 +115,12 @@ func (c *ONTAPCollector) Start(ctx context.Context) error {
 		"has_restperf", caps.HasRESTPerf,
 		"asar2", caps.IsASAr2,
 		"gcnv", caps.GCNVMode,
+		"templates", c.templatesSource,
 	)
 
 	c.emsCollector = &ems.Collector{
 		Client:       c.client,
-		TemplatesDir: c.templatesDir,
+		Templates:    c.templates,
 		Version:      caps.VersionString(),
 		Log:          c.log,
 		GlobalLabels: c.commonLabels(),
@@ -155,14 +135,14 @@ func (c *ONTAPCollector) Start(ctx context.Context) error {
 	}
 
 	c.restPerf.Client = c.client
-	c.restPerf.TemplatesDir = c.templatesDir
+	c.restPerf.Templates = c.templates
 	c.restPerf.Version = caps.VersionString()
 	c.restPerf.Coverage = c.config.Coverage
 	c.restPerf.Log = c.log
 	c.restPerf.GlobalLabels = c.commonLabels()
 
 	c.keyPerf.Client = c.client
-	c.keyPerf.TemplatesDir = c.templatesDir
+	c.keyPerf.Templates = c.templates
 	c.keyPerf.Version = caps.VersionString()
 	c.keyPerf.Coverage = c.config.Coverage
 	c.keyPerf.ASAr2 = caps.IsASAr2
@@ -249,7 +229,7 @@ func (c *ONTAPCollector) CollectMetrics(ctx context.Context) ([]storagedef.Metri
 	if enabled["rest"] {
 		rc := &rest.Collector{
 			Client:       c.client,
-			TemplatesDir: c.templatesDir,
+			Templates:    c.templates,
 			Version:      c.caps.VersionString(),
 			Coverage:     c.config.Coverage,
 			ASAr2:        c.caps.IsASAr2,

@@ -7,9 +7,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -25,7 +25,7 @@ import (
 // Collector collects RestPerf counter-table metrics.
 type Collector struct {
 	Client       *client.Client
-	TemplatesDir string
+	Templates    fs.FS
 	Version      string
 	Coverage     string
 	Log          *slog.Logger
@@ -46,7 +46,7 @@ func NewCollector() *Collector {
 
 // CollectAll polls all RestPerf catalog objects.
 func (c *Collector) CollectAll(ctx context.Context) ([]storagedef.Metric, error) {
-	cat, err := template.LoadCatalog(filepath.Join(c.TemplatesDir, "restperf", "default.yaml"))
+	cat, err := template.LoadCatalog(c.Templates, "restperf/default.yaml")
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (c *Collector) CollectAll(ctx context.Context) ([]storagedef.Metric, error)
 			kpFile := strings.TrimPrefix(fileName, "KeyPerf:")
 			kp := &keyperf.Collector{
 				Client:       c.Client,
-				TemplatesDir: c.TemplatesDir,
+				Templates:    c.Templates,
 				Version:      c.Version,
 				Log:          c.Log,
 				GlobalLabels: c.GlobalLabels,
@@ -101,7 +101,7 @@ func isOptIn(name string) bool {
 }
 
 func (c *Collector) pollObject(ctx context.Context, objectName, fileName string, now time.Time) ([]storagedef.Metric, error) {
-	tmpl, _, err := template.LoadObjectTemplate(filepath.Join(c.TemplatesDir, "restperf"), fileName, c.Version)
+	tmpl, _, err := template.LoadObjectTemplate(c.Templates, "restperf", fileName, c.Version)
 	if err != nil {
 		return nil, err
 	}

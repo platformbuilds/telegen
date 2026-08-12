@@ -7,8 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log/slog"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -23,7 +23,7 @@ import (
 // Collector collects ONTAP inventory/config metrics from REST templates.
 type Collector struct {
 	Client       *client.Client
-	TemplatesDir string
+	Templates    fs.FS
 	Version      string
 	Coverage     string
 	ASAr2        bool
@@ -34,18 +34,18 @@ type Collector struct {
 
 // CollectAll loads the Rest catalog and polls every enabled object.
 func (c *Collector) CollectAll(ctx context.Context) ([]storagedef.Metric, error) {
-	base := filepath.Join(c.TemplatesDir, "rest")
+	base := "rest"
 	if c.ASAr2 {
 		// Use best fit ASAR2 path if available
-		if newBase, ok := template.BestFitASAR2(base); ok {
+		if newBase, ok := template.BestFitASAR2(c.Templates, base); ok {
 			base = newBase
 		}
 	}
-	catalogPath := filepath.Join(c.TemplatesDir, "rest", "default.yaml")
+	catalogPath := "rest/default.yaml"
 	if c.ASAr2 {
-		catalogPath = filepath.Join(c.TemplatesDir, "rest", "asar2", "default.yaml")
+		catalogPath = "rest/asar2/default.yaml"
 	}
-	cat, err := template.LoadCatalog(catalogPath)
+	cat, err := template.LoadCatalog(c.Templates, catalogPath)
 	if err != nil {
 		return nil, fmt.Errorf("load rest catalog: %w", err)
 	}
@@ -70,7 +70,7 @@ func (c *Collector) CollectAll(ctx context.Context) ([]storagedef.Metric, error)
 		if strings.HasPrefix(strings.TrimSpace(fileName), "#") {
 			continue
 		}
-		tmpl, _, err := template.LoadObjectTemplate(base, fileName, c.Version)
+		tmpl, _, err := template.LoadObjectTemplate(c.Templates, base, fileName, c.Version)
 		if err != nil {
 			c.Log.Warn("skip rest object", "object", objectName, "error", err)
 			continue

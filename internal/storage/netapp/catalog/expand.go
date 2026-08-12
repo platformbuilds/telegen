@@ -7,7 +7,8 @@ package catalog
 
 import (
 	"fmt"
-	"path/filepath"
+	"io/fs"
+	"path"
 	"strings"
 
 	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/template"
@@ -15,7 +16,7 @@ import (
 
 // ExpandOptions controls catalog enumeration.
 type ExpandOptions struct {
-	TemplatesDir string
+	Templates    fs.FS
 	Version      string
 	IncludeASAr2 bool
 }
@@ -110,11 +111,11 @@ func Expand(opts ExpandOptions) (map[string]struct{}, error) {
 }
 
 func expandKind(out map[string]struct{}, opts ExpandOptions, kind string, optIns map[string]string, asar2 bool) error {
-	catPath := filepath.Join(opts.TemplatesDir, kind, "default.yaml")
+	catPath := path.Join(kind, "default.yaml")
 	if asar2 {
-		catPath = filepath.Join(opts.TemplatesDir, kind, "asar2", "default.yaml")
+		catPath = path.Join(kind, "asar2", "default.yaml")
 	}
-	cat, err := template.LoadCatalog(catPath)
+	cat, err := template.LoadCatalog(opts.Templates, catPath)
 	if err != nil {
 		if asar2 {
 			return nil
@@ -130,9 +131,9 @@ func expandKind(out map[string]struct{}, opts ExpandOptions, kind string, optIns
 			objects[k] = v
 		}
 	}
-	base := filepath.Join(opts.TemplatesDir, kind)
+	base := kind
 	if asar2 {
-		base = filepath.Join(opts.TemplatesDir, kind, "asar2")
+		base = path.Join(kind, "asar2")
 	}
 	for objName, file := range objects {
 		file = strings.TrimSpace(file)
@@ -144,15 +145,15 @@ func expandKind(out map[string]struct{}, opts ExpandOptions, kind string, optIns
 		if strings.HasPrefix(file, "KeyPerf:") {
 			file = strings.TrimPrefix(file, "KeyPerf:")
 			kindDir = "keyperf"
-			loadBase = filepath.Join(opts.TemplatesDir, "keyperf")
+			loadBase = "keyperf"
 			if asar2 {
-				loadBase = filepath.Join(opts.TemplatesDir, "keyperf", "asar2")
+				loadBase = path.Join("keyperf", "asar2")
 			}
 		}
-		tmpl, _, err := template.LoadObjectTemplate(loadBase, file, opts.Version)
+		tmpl, _, err := template.LoadObjectTemplate(opts.Templates, loadBase, file, opts.Version)
 		if err != nil {
 			// try non-asar2 for opt-ins
-			tmpl, _, err = template.LoadObjectTemplate(filepath.Join(opts.TemplatesDir, kindDir), file, opts.Version)
+			tmpl, _, err = template.LoadObjectTemplate(opts.Templates, kindDir, file, opts.Version)
 			if err != nil {
 				continue
 			}

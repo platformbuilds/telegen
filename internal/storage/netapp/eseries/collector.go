@@ -7,8 +7,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log/slog"
-	"path/filepath"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -17,15 +18,16 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/jsonpath"
 	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/matrix"
 	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/template"
+	"github.com/mirastacklabs-ai/telegen/internal/storage/netapp/templatefs"
 	"github.com/mirastacklabs-ai/telegen/internal/storagedef"
 )
 
 // Collector collects NetApp E-Series metrics using Harvest-compatible templates.
 type Collector struct {
-	config       storagedef.ESeriesConfig
-	client       *client.Client
-	log          *slog.Logger
-	templatesDir string
+	config    storagedef.ESeriesConfig
+	client    *client.Client
+	log       *slog.Logger
+	templates fs.FS
 
 	mu      sync.RWMutex
 	running bool
@@ -41,10 +43,8 @@ func NewCollector(cfg storagedef.ESeriesConfig, log *slog.Logger) (*Collector, e
 	if cfg.Timeout == 0 {
 		cfg.Timeout = 30 * time.Second
 	}
-	templatesDir := cfg.TemplatesDir
-	if templatesDir == "" {
-		templatesDir = "configs/netapp"
-	}
+	tmplFS, tmplSource := templatefs.Resolve(cfg.TemplatesDir)
+	log.Info("eseries templates resolved", "source", tmplSource)
 	c, err := client.New(client.Config{
 		BaseURL:   cfg.Address,
 		Timeout:   cfg.Timeout,
@@ -56,11 +56,11 @@ func NewCollector(cfg storagedef.ESeriesConfig, log *slog.Logger) (*Collector, e
 		return nil, err
 	}
 	return &Collector{
-		config:       cfg,
-		client:       c,
-		log:          log,
-		templatesDir: templatesDir,
-		health:       &storagedef.CollectorHealth{Status: storagedef.HealthStatusUnknown},
+		config:    cfg,
+		client:    c,
+		log:       log,
+		templates: tmplFS,
+		health:    &storagedef.CollectorHealth{Status: storagedef.HealthStatusUnknown},
 	}, nil
 }
 
@@ -107,14 +107,14 @@ func (c *Collector) CollectMetrics(ctx context.Context) ([]storagedef.Metric, er
 	var all []storagedef.Metric
 	now := time.Now()
 	for _, kind := range []string{"eseries", "eseriesperf"} {
-		catPath := filepath.Join(c.templatesDir, kind, "default.yaml")
-		cat, err := template.LoadCatalog(catPath)
+		catPath := path.Join(kind, "default.yaml")
+		cat, err := template.LoadCatalog(c.templates, catPath)
 		if err != nil {
 			c.log.Warn("eseries catalog", "kind", kind, "error", err)
 			continue
 		}
 		for objectName, fileName := range cat.Objects {
-			tmpl, _, err := template.LoadObjectTemplate(filepath.Join(c.templatesDir, kind), fileName, "12.00.0")
+			tmpl, _, err := template.LoadObjectTemplate(c.templates, kind, fileName, "12.00.0")
 			if err != nil {
 				c.log.Warn("eseries template", "object", objectName, "error", err)
 				continue

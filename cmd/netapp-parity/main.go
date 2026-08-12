@@ -25,7 +25,7 @@ func main() {
 	flag.Parse()
 
 	telegenNames, err := catalog.Expand(catalog.ExpandOptions{
-		TemplatesDir: *templatesDir,
+		Templates:    os.DirFS(*templatesDir),
 		Version:      *version,
 		IncludeASAr2: true,
 	})

@@ -7,8 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log/slog"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -23,7 +23,7 @@ import (
 // Collector collects KeyPerf statistics.* metrics from resource endpoints.
 type Collector struct {
 	Client       *client.Client
-	TemplatesDir string
+	Templates    fs.FS
 	Version      string
 	Coverage     string
 	ASAr2        bool
@@ -32,6 +32,7 @@ type Collector struct {
 	ObjectFile   string // when set, collect only this template file
 	BatchSize    string
 	prev         map[string]*matrix.Matrix
+	base         string // resolved template base; empty defaults to keyperf
 }
 
 // NewCollector constructs a KeyPerf collector.
@@ -41,15 +42,16 @@ func NewCollector() *Collector {
 
 // CollectAll polls KeyPerf catalog.
 func (c *Collector) CollectAll(ctx context.Context) ([]storagedef.Metric, error) {
-	catalogPath := filepath.Join(c.TemplatesDir, "keyperf", "default.yaml")
-	base := filepath.Join(c.TemplatesDir, "keyperf")
+	catalogPath := "keyperf/default.yaml"
+	base := "keyperf"
 	if c.ASAr2 {
-		if p, ok := template.BestFitASAR2(base); ok {
+		if p, ok := template.BestFitASAR2(c.Templates, base); ok {
 			base = p
-			catalogPath = filepath.Join(c.TemplatesDir, "keyperf", "asar2", "default.yaml")
+			catalogPath = "keyperf/asar2/default.yaml"
 		}
 	}
-	cat, err := template.LoadCatalog(catalogPath)
+	c.base = base
+	cat, err := template.LoadCatalog(c.Templates, catalogPath)
 	if err != nil {
 		return nil, err
 	}
@@ -68,8 +70,14 @@ func (c *Collector) CollectAll(ctx context.Context) ([]storagedef.Metric, error)
 		}
 		all = append(all, metrics...)
 	}
-	_ = base
 	return all, nil
+}
+
+func (c *Collector) templateBase() string {
+	if c.base == "" {
+		return "keyperf"
+	}
+	return c.base
 }
 
 // CollectObject polls a single KeyPerf template file.
@@ -77,7 +85,7 @@ func (c *Collector) CollectObject(ctx context.Context, now time.Time) ([]storage
 	if c.ObjectFile == "" {
 		return nil, fmt.Errorf("no object file")
 	}
-	tmpl, _, err := template.LoadObjectTemplate(filepath.Join(c.TemplatesDir, "keyperf"), c.ObjectFile, c.Version)
+	tmpl, _, err := template.LoadObjectTemplate(c.Templates, c.templateBase(), c.ObjectFile, c.Version)
 	if err != nil {
 		return nil, err
 	}

@@ -7,9 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -23,7 +22,7 @@ import (
 // Collector polls ONTAP EMS events.
 type Collector struct {
 	Client       *client.Client
-	TemplatesDir string
+	Templates    fs.FS
 	Version      string
 	Log          *slog.Logger
 	GlobalLabels map[string]string
@@ -59,25 +58,21 @@ type emsTemplate struct {
 
 // LoadFilters loads EMS event catalog from templates.
 func (c *Collector) LoadFilters() error {
-	tmpl, _, err := template.LoadObjectTemplate(filepath.Join(c.TemplatesDir, "ems"), "ems.yaml", c.Version)
+	tmpl, _, err := template.LoadObjectTemplate(c.Templates, "ems", "ems.yaml", c.Version)
 	if err != nil {
 		// try fixed 9.6.0 path
-		data, err2 := readFile(filepath.Join(c.TemplatesDir, "ems", "9.6.0", "ems.yaml"))
+		data, err2 := fs.ReadFile(c.Templates, "ems/9.6.0/ems.yaml")
 		if err2 != nil {
 			return fmt.Errorf("load ems template: %v / %v", err, err2)
 		}
 		return c.parseEMSYAML(data)
 	}
 	_ = tmpl
-	data, err := readFile(filepath.Join(c.TemplatesDir, "ems", "9.6.0", "ems.yaml"))
+	data, err := fs.ReadFile(c.Templates, "ems/9.6.0/ems.yaml")
 	if err != nil {
 		return err
 	}
 	return c.parseEMSYAML(data)
-}
-
-func readFile(path string) ([]byte, error) {
-	return os.ReadFile(path)
 }
 
 // Collect returns new EMS log records since last watermark.

@@ -159,6 +159,8 @@ COPY --from=perfmap-build /src/perf-map-agent/out/libperfmap.so /opt/perf-map-ag
 
 # Copy default configuration
 COPY api/config.example.yaml /etc/telegen/config.yaml
+# NetApp ONTAP / E-Series templates (also embedded in binary).
+COPY configs/netapp /etc/telegen/configs/netapp
 
 # Set environment for perf-map-agent (used by profiling subsystem)
 ENV PERF_MAP_AGENT_JAR=/opt/perf-map-agent/attach-main.jar
@@ -204,6 +206,8 @@ COPY --from=build /out/telegen /telegen
 # Copy Java agent jar (must be in same directory as telegen executable)
 COPY --from=java-build /src/internal/java/build/obi-java-agent.jar /obi-java-agent.jar
 COPY api/config.example.yaml /etc/telegen/config.yaml
+# NetApp ONTAP / E-Series templates (also embedded in binary).
+COPY configs/netapp /etc/telegen/configs/netapp
 
 EXPOSE 19090
 
@@ -232,6 +236,8 @@ COPY --from=java-build /src/internal/java/build/obi-java-agent.jar /obi-java-age
 COPY --from=perfmap-build /src/perf-map-agent/out/attach-main.jar /opt/perf-map-agent/attach-main.jar
 COPY --from=perfmap-build /src/perf-map-agent/out/libperfmap.so /opt/perf-map-agent/libperfmap.so
 COPY api/config.example.yaml /etc/telegen/config.yaml
+# NetApp ONTAP / E-Series templates (also embedded in binary).
+COPY configs/netapp /etc/telegen/configs/netapp
 
 # Set environment for perf-map-agent
 ENV PERF_MAP_AGENT_JAR=/opt/perf-map-agent/attach-main.jar

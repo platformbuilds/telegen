@@ -4,19 +4,13 @@
 package catalog
 
 import (
-	"path/filepath"
-	"runtime"
 	"testing"
+
+	"github.com/mirastacklabs-ai/telegen/configs"
 )
 
 func TestExpandCoversCoreFamilies(t *testing.T) {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
-	// internal/storage/netapp/catalog -> repo root configs/netapp
-	dir := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", "configs", "netapp"))
-	out, err := Expand(ExpandOptions{TemplatesDir: dir, Version: "9.16.1", IncludeASAr2: true})
+	out, err := Expand(ExpandOptions{Templates: configs.NetAppTemplates(), Version: "9.16.1", IncludeASAr2: true})
 	if err != nil {
 		t.Fatal(err)
 	}
