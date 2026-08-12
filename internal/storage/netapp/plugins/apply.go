@@ -115,6 +115,117 @@ var registry = map[string]pluginFunc{
 	"clustersoftware": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
 		return ClusterSoftware(src, cfg, log)
 	},
+	"snapshot": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return Snapshot(src, cfg, log)
+	},
+	"cluster": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return Cluster(src, cfg, log)
+	},
+	"snapmirror": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return Snapmirror(src, cfg, log)
+	},
+	"certificate": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return Certificate(src, cfg, log)
+	},
+	"netroute": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return NetRoute(src, cfg, log)
+	},
+	"snapshotpolicy": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return SnapshotPolicy(src, cfg, log)
+	},
+	"interface": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return Interface(src, cfg, log)
+	},
+	"lif": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return LIF(src, cfg, log)
+	},
+	"igroup": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return Igroup(src, cfg, log)
+	},
+	"host": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return Host(src, cfg, log)
+	},
+	"controller": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return Controller(src, cfg, log)
+	},
+	"quota": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return Quota(src, cfg, log)
+	},
+	"svm": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return SVM(src, cfg, log)
+	},
+	"flexcache": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return FlexCache(src, cfg, log)
+	},
+	"headroom": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return Headroom(src, cfg, log)
+	},
+	"workload": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return Workload(src, cfg, log)
+	},
+	"cachehitratio": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return CacheHitRatio(src, cfg, log)
+	},
+	"cifssession": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return CIFSSession(src, cfg, log)
+	},
+	"auditlog": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return AuditLog(src, cfg, log)
+	},
+	"clusterschedule": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return ClusterSchedule(src, cfg, log)
+	},
+	"systemnode": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return SystemNode(src, cfg, log)
+	},
+	"volumemapping": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return VolumeMapping(src, cfg, log)
+	},
+	"volumesnaplock": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return VolumeSnaplock(src, cfg, log)
+	},
+	"securityaccount": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return SecurityAccount(src, cfg, log)
+	},
+	"ontaps3service": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return OntapS3Service(src, cfg, log)
+	},
+	"ssdcachecapacity": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return SsdCacheCapacity(src, cfg, log)
+	},
+	"ssdcachestats": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return SsdCacheStats(src, cfg, log)
+	},
+	"metroclustercheck": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return MetroclusterCheck(src, cfg, log)
+	},
+	"fcvi": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return FCVI(src, cfg, log)
+	},
+	"hardware": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return Hardware(src, cfg, log)
+	},
+	"storageunit": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return StorageUnit(src, cfg, log)
+	},
+	"drive": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return Drive(src, cfg, log)
+	},
+	"pool": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return Pool(src, cfg, log)
+	},
+	"disk": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return Disk(src, cfg, log)
+	},
+	"vscanpool": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return VscanPool(src, cfg, log)
+	},
+	"volumeanalytics": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return VolumeAnalytics(src, cfg, log)
+	},
+	"mav": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return MAV(src, cfg, log)
+	},
 	"volumetopclients": func(src *matrix.Matrix, _ any, _ *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
 		// The RestPerf collector raises these families via VolumeTopMetrics
 		// because they come from a separate private-CLI query.
