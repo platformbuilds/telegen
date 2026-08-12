@@ -109,6 +109,12 @@ var registry = map[string]pluginFunc{
 	"vscan": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
 		return Vscan(src, cfg, log), nil
 	},
+	"license": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return License(src, cfg, log)
+	},
+	"clustersoftware": func(src *matrix.Matrix, cfg any, log *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
+		return ClusterSoftware(src, cfg, log)
+	},
 	"volumetopclients": func(src *matrix.Matrix, _ any, _ *slog.Logger) (*matrix.Matrix, []*matrix.Matrix) {
 		// The RestPerf collector raises these families via VolumeTopMetrics
 		// because they come from a separate private-CLI query.
