@@ -55,48 +55,48 @@ data:
     #       global_max_series: 100000
     #       series_ttl: 1h
     #       on_limit: drop
-        
-        # Rate limiter controls ingestion rate
-        rate:
-          enabled: true
-          metrics_per_second: 100000
-          traces_per_second: 50000
-          logs_per_second: 200000
-          burst_multiplier: 2.0
-          on_limit: drop
-        
-        # Attribute limiter controls payload sizes
-        attributes:
-          enabled: true
-          max_resource_attributes: 128
-          max_attribute_value_size: 4096
-      
-      # Transformation rules
-      transform:
-        enabled: true
-        pii_redaction:
-          enabled: true
-          scan_log_bodies: true
-          redaction_string: "[REDACTED]"
-      
-      # Export configuration
-      export:
-        batch_size: 1000
-        batch_timeout: 5s
-        retry:
-          enabled: true
-          max_attempts: 3
-          initial_backoff: 1s
-      
-      # Operational features
-      operations:
-        hot_reload:
-          enabled: true
-          check_interval: 30s
-          enable_sighup: true
-        graceful_shutdown:
-          timeout: 30s
-          drain_timeout: 10s
+    #
+    #     # Rate limiter controls ingestion rate
+    #     rate:
+    #       enabled: true
+    #       metrics_per_second: 100000
+    #       traces_per_second: 50000
+    #       logs_per_second: 200000
+    #       burst_multiplier: 2.0
+    #       on_limit: drop
+    #
+    #     # Attribute limiter controls payload sizes
+    #     attributes:
+    #       enabled: true
+    #       max_resource_attributes: 128
+    #       max_attribute_value_size: 4096
+    #
+    #   # Transformation rules
+    #   transform:
+    #     enabled: true
+    #     pii_redaction:
+    #       enabled: true
+    #       scan_log_bodies: true
+    #       redaction_string: "[REDACTED]"
+    #
+    #   # Export configuration
+    #   export:
+    #     batch_size: 1000
+    #     batch_timeout: 5s
+    #     retry:
+    #       enabled: true
+    #       max_attempts: 3
+    #       initial_backoff: 1s
+    #
+    #   # Operational features
+    #   operations:
+    #     hot_reload:
+    #       enabled: true
+    #       check_interval: 30s
+    #       enable_sighup: true
+    #     graceful_shutdown:
+    #       timeout: 30s
+    #       drain_timeout: 10s
 
     # -----------------------------------------------------------------------------
     # Node Exporter Configuration (Prometheus node_exporter compatible)
@@ -334,49 +334,49 @@ data:
     #   - k8s_deployment_name: Deployment name (glob pattern)
     #   - k8s_pod_labels: Map of label key to glob pattern
     #   - containers_only: Only match processes inside containers
-    # discovery:
-    #   exclude_otel_instrumented_services: true
-    #   exclude_otel_instrumented_services_span_metrics: false
-    #   skip_go_specific_tracers: false
-    #   bpf_pid_filter_off: false
-      
-      # Instrument by port (recommended) or path
-      # Examples:
-      #   - open_ports: "8080-8089"          # Range of ports
-      #   - open_ports: "80,443,3000"        # Multiple ports
-      #   - open_ports: "8080"               # Single port
-      #     exe_path: "*myapp*"              # Combined (AND logic)
-      #   - k8s_namespace: "production"      # K8s-aware
-      #     open_ports: "8080"
-      #   - k8s_pod_labels:                  # Match by labels
-      #       app: "frontend*"
-      instrument:
-        # Default: instrument all processes
-        - exe_path: "*"
-        # Uncomment for port-based discovery:
-        # - open_ports: "8080-8089"
-        # - open_ports: "3000,5000,8000-8999"
-      
-      # Exclude specific services
-      exclude_instrument: []
-        # - k8s_namespace: "kube-system"
-        # - open_ports: "9090"
-      
-      # Default exclusions (telegen and observability tools)
-      default_exclude_instrument:
-        - exe_path: "*telegen*"
-        - exe_path: "*alloy*"
-        - exe_path: "*otelcol*"
-        - k8s_namespace: "kube-system"
-        - k8s_namespace: "monitoring"
-      
-      min_process_age: 5s
-      poll_interval: 5s
-      default_otlp_grpc_port: 4317
-      route_harvester_timeout: 10s
-      disabled_route_harvesters: []
-      route_harvester_advanced:
-        java_harvest_delay: 60s
+      discovery:
+        # exclude_otel_instrumented_services: true
+        # exclude_otel_instrumented_services_span_metrics: false
+        # skip_go_specific_tracers: false
+        # bpf_pid_filter_off: false
+
+        # Instrument by port (recommended) or path
+        # Examples:
+        #   - open_ports: "8080-8089"          # Range of ports
+        #   - open_ports: "80,443,3000"        # Multiple ports
+        #   - open_ports: "8080"               # Single port
+        #     exe_path: "*myapp*"              # Combined (AND logic)
+        #   - k8s_namespace: "production"      # K8s-aware
+        #     open_ports: "8080"
+        #   - k8s_pod_labels:                  # Match by labels
+        #       app: "frontend*"
+        instrument:
+          # Default: instrument all processes
+          - exe_path: "*"
+          # Uncomment for port-based discovery:
+          # - open_ports: "8080-8089"
+          # - open_ports: "3000,5000,8000-8999"
+
+        # Exclude specific services
+        exclude_instrument: []
+          # - k8s_namespace: "kube-system"
+          # - open_ports: "9090"
+
+        # Default exclusions (telegen and observability tools)
+        default_exclude_instrument:
+          - exe_path: "*telegen*"
+          - exe_path: "*alloy*"
+          - exe_path: "*otelcol*"
+          - k8s_namespace: "kube-system"
+          - k8s_namespace: "monitoring"
+
+        min_process_age: 5s
+        poll_interval: 5s
+        default_otlp_grpc_port: 4317
+        route_harvester_timeout: 10s
+        disabled_route_harvesters: []
+        route_harvester_advanced:
+          java_harvest_delay: 60s
 
     # -----------------------------------------------------------------------------
     # Kubernetes Metrics Configuration (kube-state-metrics + cAdvisor equivalent)

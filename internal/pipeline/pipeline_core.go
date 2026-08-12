@@ -1118,6 +1118,16 @@ func (p *UnifiedPipeline) initSharedOTLPClients(ctx context.Context) error {
 	if p.sharedOTLP != nil {
 		return nil
 	}
+	// Compression is operator-controlled via exports.otlp.{grpc,http}.compression,
+	// which config.Load has already normalized. Fall back to gzip when no runtime
+	// config is attached (embedded/test callers).
+	grpcCompression := config.CompressionGzip
+	httpCompression := config.CompressionGzip
+	if p.config.RuntimeConfig != nil {
+		grpcCompression = p.config.RuntimeConfig.Exports.OTLP.GRPC.Compression
+		httpCompression = p.config.RuntimeConfig.Exports.OTLP.HTTP.Compression
+	}
+
 	opts := exportotlp.TraceOpts{}
 	opts.Mode = "failover"
 	opts.TLS.Enable = !p.config.Exporter.Insecure
@@ -1126,7 +1136,7 @@ func (p *UnifiedPipeline) initSharedOTLPClients(ctx context.Context) error {
 	opts.GRPC.Endpoint = p.config.Exporter.Endpoint
 	opts.GRPC.Headers = p.config.Exporter.Headers
 	opts.GRPC.Insecure = p.config.Exporter.Insecure
-	opts.GRPC.Gzip = true
+	opts.GRPC.Compression = grpcCompression
 	opts.GRPC.Timeout = p.config.Exporter.Timeout
 
 	// Best-effort HTTP fallback when endpoint is URL-formatted.
@@ -1153,7 +1163,7 @@ func (p *UnifiedPipeline) initSharedOTLPClients(ctx context.Context) error {
 		opts.HTTP.LogsURL = httpLogsPath
 		opts.HTTP.MetricsURL = httpMetricsPath
 		opts.HTTP.Headers = p.config.Exporter.Headers
-		opts.HTTP.Gzip = true
+		opts.HTTP.Compression = httpCompression
 		opts.HTTP.Timeout = p.config.Exporter.Timeout
 	}
 

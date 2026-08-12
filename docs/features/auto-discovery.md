@@ -338,17 +338,19 @@ discovery:
 ### Enabling/Disabling Discovery
 
 ```yaml
-agent:
+ebpf:
   discovery:
-    enabled: true
-    interval: 30s
-    
-    # What to discover
-    detect_cloud: true
-    detect_kubernetes: true
-    detect_runtimes: true
-    detect_databases: true
-    detect_message_queues: true
+    # How often the process table is re-scanned
+    poll_interval: 30s
+    # Ignore processes younger than this
+    min_process_age: 5s
+
+cloud:
+  auto_detect: true
+  detection_interval: 5m
+
+kubernetes:
+  enable: true
 ```
 
 ### Cloud-Specific Settings
@@ -368,41 +370,39 @@ cloud:
   
   gcp:
     enabled: true
-    timeout: 200ms
-    refresh_interval: 15m
-  
+    metadata_timeout: 200ms
+
   azure:
     enabled: true
-    timeout: 200ms
-    refresh_interval: 15m
+    imds_timeout: 200ms
 ```
 
 ### Kubernetes Settings
 
 ```yaml
-agent:
-  kubernetes:
-    enabled: true
-    
-    # Metadata to collect
-    pod_metadata: true
-    node_metadata: true
-    service_metadata: true
-    
-    # Label filtering
-    label_allowlist:
-      - "app.kubernetes.io/*"
-      - "helm.sh/*"
-      - "app"
-      - "version"
-      - "team"
-    
-    # Namespace filtering
-    namespace_include: []  # Empty = all
-    namespace_exclude:
-      - kube-system
-      - kube-public
-      - kube-node-lease
+kubernetes:
+  enable: true
+  cluster_name: "prod-us-east-1"
+
+  # Which pod/node labels are copied onto resource attributes
+  resource_labels:
+    - "app.kubernetes.io/name"
+    - "app.kubernetes.io/version"
+    - "app"
+    - "version"
+    - "team"
+
+  informers_sync_timeout: "30s"
+  informers_resync_period: "30m"
+
+# Namespace scoping is expressed as a discovery exclusion, not a
+# kubernetes-section field.
+ebpf:
+  discovery:
+    exclude_instrument:
+      - k8s_namespace: "kube-system"
+      - k8s_namespace: "kube-public"
+      - k8s_namespace: "kube-node-lease"
 ```
 
 ---
@@ -456,13 +456,14 @@ All discovered metadata is attached as OpenTelemetry resource attributes:
 Avoid collecting unnecessary labels that increase cardinality:
 
 ```yaml
-agent:
-  kubernetes:
-    label_allowlist:
-      - "app"
-      - "version"
-      - "team"
-    # NOT: "*" (collects everything)
+kubernetes:
+  enable: true
+  resource_labels:
+    - "app"
+    - "version"
+    - "team"
+  # Keep this list short. Every label becomes a resource attribute on every
+  # signal from the pod.
 ```
 
 ### 2. Set Reasonable Timeouts
@@ -481,13 +482,13 @@ cloud:
 Reduce noise from infrastructure components:
 
 ```yaml
-agent:
-  kubernetes:
-    namespace_exclude:
-      - kube-system
-      - kube-public
-      - monitoring
-      - logging
+ebpf:
+  discovery:
+    exclude_instrument:
+      - k8s_namespace: "kube-system"
+      - k8s_namespace: "kube-public"
+      - k8s_namespace: "monitoring"
+      - k8s_namespace: "logging"
 ```
 
 ---

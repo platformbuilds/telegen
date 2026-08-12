@@ -48,33 +48,10 @@ Track GPU usage per process:
 
 ### Configuration
 
-```yaml
-agent:
-  gpu:
-    enabled: true
-    
-    # NVIDIA support
-    nvidia: true
-    
-    # AMD support (via ROCm SMI)
-    amd: false
-    
-    # Polling interval
-    poll_interval: 10s
-    
-    # Metrics to collect
-    metrics:
-      utilization: true
-      memory: true
-      temperature: true
-      power: true
-      clock: true
-      pcie_throughput: true
-      encoder_decoder: true
-      
-    # Per-process tracking
-    per_process: true
-```
+GPU collection is automatic. The GPU adapter is registered at startup and
+activates whenever a supported device and its driver library are present, so
+there is no `gpu` configuration section, no polling interval, and no per-metric
+toggle. Adding those keys stops the agent from starting.
 
 ---
 
@@ -93,14 +70,8 @@ For AMD GPUs, Telegen uses ROCm SMI:
 
 ### Configuration
 
-```yaml
-agent:
-  gpu:
-    enabled: true
-    nvidia: false
-    amd: true
-    poll_interval: 10s
-```
+AMD collection follows the same rule as NVIDIA: it is detected and enabled
+automatically, with no configuration section.
 
 ---
 
@@ -310,31 +281,14 @@ Telegen uses the [OpenTelemetry GenAI semantic conventions](https://opentelemetr
 
 ### vLLM Integration
 
-```yaml
-agent:
-  aiml:
-    frameworks:
-      vllm:
-        enabled: true
-        # Collect all vLLM metrics
-        metrics:
-          - request_duration
-          - time_to_first_token
-          - tokens_per_second
-          - kv_cache_usage
-          - batch_size
-```
+vLLM is recognised from its serving process, and request duration, time to first
+token, tokens per second, KV cache usage, and batch size are collected without
+configuration. There is no `aiml` section to enable or tune it.
 
 ### Triton Integration
 
-```yaml
-agent:
-  aiml:
-    frameworks:
-      triton:
-        enabled: true
-        metrics_endpoint: "http://localhost:8002/metrics"
-```
+Triton is likewise detected automatically. Its metrics endpoint is discovered
+from the running server rather than configured.
 
 ---
 
@@ -356,21 +310,9 @@ Monitor ML training jobs:
 
 ### Configuration
 
-```yaml
-agent:
-  aiml:
-    training:
-      enabled: true
-      
-      # Detect common training frameworks
-      detect_frameworks:
-        - pytorch
-        - tensorflow
-        - jax
-      
-      # Log training metrics to OTLP
-      export_metrics: true
-```
+PyTorch, TensorFlow, and JAX training jobs are detected from the running
+process. Training metrics are exported through the normal metrics pipeline with
+no dedicated configuration section.
 
 ---
 
@@ -544,15 +486,10 @@ histogram_quantile(0.99, sum(rate(llm_request_duration_seconds_bucket[5m])) by (
 
 ## Best Practices
 
-### 1. Enable Per-Process Tracking
+### 1. Use Per-Process Tracking
 
-Identify which processes use GPU resources:
-
-```yaml
-agent:
-  gpu:
-    per_process: true
-```
+Per-process GPU attribution is always on. Use the `gpu_process_*` metrics to
+identify which processes consume GPU resources.
 
 ### 2. Monitor KV Cache
 
@@ -565,14 +502,8 @@ llm_kv_cache_usage_bytes / llm_kv_cache_capacity_bytes > 0.9
 
 ### 3. Correlate with Traces
 
-Link inference metrics to traces:
-
-```yaml
-agent:
-  aiml:
-    # Add trace context to LLM metrics
-    trace_correlation: true
-```
+Inference metrics carry the trace context of the request that produced them, so
+they join to spans on `trace_id` without any extra configuration.
 
 ---
 

@@ -53,15 +53,21 @@ When a send and receive on the same `hchan` address are detected within a time w
 
 ## Configuration
 
-Go channel-link events are enabled via the Go tracer configuration:
+Channel-link events come from the Go uprobes, which attach automatically to Go
+binaries once eBPF instrumentation is on. There is no `gotracer` section, and
+the send/receive matching window is fixed:
 
 ```yaml
-agent:
-  gotracer:
-    enabled: true
-    channel_link_events: true   # Enable channel-link span links
-    # Optional: time window for matching send/receive (default 100ms)
-    channel_link_window: "100ms"
+ebpf:
+  enabled: true
+```
+
+To opt out for a host, keep the generic tracers only:
+
+```yaml
+ebpf:
+  discovery:
+    skip_go_specific_tracers: true
 ```
 
 ---

@@ -51,62 +51,30 @@ telegen:
 ebpf:
   # Enable eBPF instrumentation
   enabled: true
-  
-  # Network tracing
+
+  # Network flow observability. Protocol parsers for HTTP, gRPC, and the
+  # database and messaging wire formats are active whenever this is on.
   network:
     enabled: true
-    # Enable HTTP/gRPC parsing
-    http:
-      enabled: true
-      # Maximum buffer size for HTTP body capture
-      max_body_size: 1048576
-    # Enable database query parsing
-    database:
-      enabled: true
-      # Supported: mysql, postgres, redis, mongodb
-      protocols:
-        - mysql
-        - postgres
-        - redis
-  
-  # Syscall tracing
-  syscalls:
-    enabled: true
-    # Trace specific syscalls (empty = all)
-    include: []
-    # Exclude syscalls from tracing
-    exclude:
-      - futex
-      - nanosleep
-  
-  # Process tracking
-  process:
-    enabled: true
-    # Track process lifecycle events
-    lifecycle: true
-    # Track file operations
-    file_ops: true
-  
-  # Memory allocation tracking
-  memory:
-    enabled: false
-    # Track allocations larger than this size
-    min_size: 1024
-  
-  # eBPF ring buffer size (must be power of 2)
-  ringbuf_size: 16777216  # 16MB
-  
-  # Per-CPU buffer size for perf events
-  perf_buffer_size: 8192
-  
-  # Maximum number of concurrent tracked connections
-  max_connections: 100000
-  
-  # BPF filesystem mount point
-  bpf_fs: "/sys/fs/bpf"
-  
-  # Pin BPF objects for persistence
-  pin_objects: false
+
+  tracer:
+    # BPF filesystem mount point
+    bpf_fs_path: "/sys/fs/bpf"
+
+    # Map sizing. Each step doubles every BPF map, so it also raises the
+    # concurrent-connection ceiling.
+    maps_config:
+      global_scale_factor: 0
+
+    # Per-protocol capture buffers, in bytes. 0 uses the built-in default.
+    buffer_sizes:
+      http: 0
+      mysql: 0
+      postgres: 0
+      mssql: 0
+      kafka: 0
+      mq: 0
+      tcp: 0
 ```
 
 ## Discovery Configuration
@@ -178,63 +146,54 @@ discovery:
 profiling:
   # Enable continuous profiling
   enabled: true
-  
+
   # CPU profiling
   cpu:
     enabled: true
     # Sample rate (samples per second)
     sample_rate: 99
     # Stack depth limit
-    stack_depth: 128
-  
+    max_stack_depth: 127
+
   # Memory profiling
   memory:
     enabled: true
-    # Profile allocations
-    allocations: true
-    # Profile live objects
-    live_objects: true
-    # Minimum allocation size to track
-    min_size: 1024
-  
-  # Goroutine profiling (Go applications)
-  goroutine:
-    enabled: true
-    # Profile interval
-    interval: 10s
-  
-  # Block profiling (Go applications)
-  block:
-    enabled: false
-    # Block profile rate
-    rate: 1
-  
-  # Mutex profiling (Go applications)
+    # Minimum allocation size to track, in bytes
+    min_alloc_size: 1024
+
+  # Mutex contention profiling
   mutex:
     enabled: false
-    # Mutex profile fraction
-    fraction: 1
-  
+    # Only record waits longer than this, in nanoseconds
+    contention_threshold_ns: 1000000
+
   # Off-CPU profiling
   off_cpu:
     enabled: true
-    # Minimum off-CPU time to record
-    min_duration: 1ms
-  
+    # Minimum off-CPU time to record, in nanoseconds
+    min_block_time_ns: 1000000
+
+  # Wall-clock profiling
+  wall:
+    enabled: false
+    sample_rate: 99
+
   # Symbol resolution
   symbols:
-    # Use DWARF debug info
-    dwarf: true
-    # Use Go symbol table
+    # Read DWARF debug info when present
+    debug_info_enabled: true
+    # Demangle Rust and C++ symbols
+    demangling_enabled: true
+    # Use the Go symbol table
     go_symbols: true
     # Use kernel symbols
     kernel_symbols: true
     # Cache size for symbol resolution
     cache_size: 10000
-  
-  # Profile aggregation interval
-  aggregation_interval: 10s
-  
+
+  # How often a profile is collected
+  collection_interval: 10s
+
   # Profile upload interval
   upload_interval: 60s
 ```
@@ -505,80 +464,51 @@ a shared OTLP exporter, ensuring consistent behavior and simplified management:
 
 ```yaml
 exports:
+  # Attach category, subcategory, and source-module metadata to every signal
+  include_signal_metadata: true
+  metadata_fields:
+    enable_category: true
+    enable_subcategory: true
+    enable_source_module: true
+    enable_bpf_component: true
+    enable_description: false
+    enable_collector_type: true
+
   # OTLP export
   otlp:
+    # TLS applies to both transports below
+    tls:
+      enable: false
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      insecure_skip_verify: false
+
     # gRPC endpoint
     grpc:
       enabled: true
       endpoint: "localhost:4317"
-      # Use TLS
-      tls:
-        enabled: false
-        # CA certificate file
-        ca_file: ""
-        # Client certificate file
-        cert_file: ""
-        # Client key file
-        key_file: ""
-        # Skip server verification (insecure)
-        insecure_skip_verify: false
-      # Connection timeout
-      timeout: 30s
-      # Retry settings
-      retry:
-        enabled: true
-        initial_interval: 1s
-        max_interval: 30s
-        max_elapsed_time: 5m
-      # Headers
+      insecure: true
+      timeout: "30s"
       headers: {}
-      # Compression: none, gzip
-      compression: gzip
-    
-    # HTTP endpoint
+      # Compression: "gzip" or "none"
+      compression: "gzip"
+
+    # HTTP endpoint. Shares the tls block above.
     http:
       enabled: false
       endpoint: "http://localhost:4318"
-      # Same TLS options as gRPC
-  
+      insecure: true
+      timeout: "30s"
+      compression: "gzip"
+
   # Prometheus remote write
-  prometheus:
-    enabled: false
-    endpoint: "http://prometheus:9090/api/v1/write"
-    # Basic auth
-    basic_auth:
-      username: ""
-      password: ""
-  
-  # Pyroscope export for profiles
-  pyroscope:
-    enabled: false
-    endpoint: "http://pyroscope:4040"
-    # Tenant ID for multi-tenancy
-    tenant_id: ""
-  
-  # Loki export for logs
-  loki:
-    enabled: false
-    endpoint: "http://loki:3100/loki/api/v1/push"
-    # Batch size
-    batch_size: 1000
-    # Batch wait time
-    batch_wait: 1s
-  
-  # Batch settings (global)
-  batch:
-    # Maximum batch size
-    max_size: 8192
-    # Maximum batch wait time
-    timeout: 5s
-  
-  # Queue settings (global)
-  queue:
-    # Queue size
-    size: 5000
-    # Number of consumers
-    num_consumers: 10
+  remoteWrite:
+    mode: "direct"
+    endpoints:
+      - url: "http://prometheus:9090/api/v1/write"
+        timeout: "30s"
+        compression: "snappy"
 ```
 
 ## Self-Telemetry Configuration

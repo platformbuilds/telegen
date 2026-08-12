@@ -167,7 +167,7 @@ pipelines:
       enable_runtime_parsing: true
       enable_application_parsing: true
       default_severity: "INFO"
-      extract_trace_context: true
+      enable_trace_context_enrichment: true
     
     # Batching
     batch:
@@ -181,7 +181,7 @@ pipelines:
       password: "pass"
     
     tls:
-      enabled: false
+      enable: false
       ca_file: "/etc/kafka/ca.crt"
     
     # Error handling

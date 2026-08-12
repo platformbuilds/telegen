@@ -106,88 +106,70 @@ node_procs_blocked
 ### Enable/Disable Collectors
 
 ```yaml
-agent:
-  nodeexporter:
-    enabled: true
-    
-    # Listen address for /metrics endpoint
-    listen_address: ":9100"
-    
-    # Metric namespace (default: node)
-    namespace: "node"
-    
-    # Collectors to enable
-    collectors:
-      loadavg: true
-      cpu: true
-      meminfo: true
-      diskstats: true
-      filesystem: true
-      netdev: true
-      stat: true
-      
-      # P1 collectors
-      netstat: true
-      sockstat: true
-      vmstat: true
-      
-      # P2 collectors
-      hwmon: false      # Hardware monitoring
-      thermal: false    # Thermal zones
-      pressure: true    # PSI metrics
+node_exporter:
+  enabled: true
+
+  # Metric namespace (default: node)
+  namespace: "node"
+
+  # Listen address for the /metrics endpoint
+  endpoint:
+    port: 9100
+    path: "/metrics"
+
+  # Collectors to enable. Collectors with their own options are blocks;
+  # the rest are plain booleans.
+  collectors:
+    loadavg: true
+    meminfo: true
+    cpu:
+      enabled: true
+    diskstats:
+      enabled: true
+    filesystem:
+      enabled: true
+    netdev:
+      enabled: true
+    stat:
+      enabled: true
+
+    # P1 collectors
+    netstat: true
+    sockstat: true
+    vmstat: true
+
+    # P2 collectors
+    hwmon: false      # Hardware monitoring
+    thermal: false    # Thermal zones
+    pressure: true    # PSI metrics
 ```
 
 ### Device Filtering
 
-Filter which devices to collect metrics from:
+Filter which devices to collect metrics from. Include and exclude lists are
+single regular expressions, not YAML lists.
 
 ```yaml
-agent:
-  nodeexporter:
+node_exporter:
+  collectors:
     filesystem:
+      enabled: true
       # Ignore these filesystem types
-      ignored_fs_types:
-        - autofs
-        - binfmt_misc
-        - cgroup
-        - configfs
-        - debugfs
-        - devpts
-        - devtmpfs
-        - fusectl
-        - hugetlbfs
-        - mqueue
-        - nsfs
-        - overlay
-        - proc
-        - procfs
-        - pstore
-        - securityfs
-        - sysfs
-        - tmpfs
-        - tracefs
-      
+      fs_types_exclude: "^(autofs|binfmt_misc|cgroup|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|securityfs|sysfs|tmpfs|tracefs)$"
       # Ignore these mount points
-      ignored_mount_points:
-        - "^/(dev|proc|sys|var/lib/docker/.+)($|/)"
-    
+      mount_points_exclude: "^/(dev|proc|sys|var/lib/docker/.+)($|/)"
+
     diskstats:
+      enabled: true
       # Only these devices
-      device_include:
-        - "^sd[a-z]+$"
-        - "^nvme[0-9]+n[0-9]+$"
-      
+      accept_devices: "^(sd[a-z]+|nvme[0-9]+n[0-9]+)$"
       # Ignore these devices
-      device_exclude:
-        - "^loop[0-9]+$"
-        - "^ram[0-9]+$"
-    
+      ignored_devices: "^(loop|ram)[0-9]+$"
+
     netdev:
+      enabled: true
       # Ignore these interfaces
-      device_exclude:
-        - "^veth.*"
-        - "^docker.*"
-        - "^br-.*"
+      device_exclude: "^(veth.*|docker.*|br-.*)$"
 ```
 
 ### TLS/mTLS Configuration
@@ -195,23 +177,23 @@ agent:
 Secure the metrics endpoint with TLS and optional mutual TLS (mTLS):
 
 ```yaml
-agent:
-  nodeexporter:
-    enabled: true
-    listen_address: ":9100"
-    
+node_exporter:
+  enabled: true
+
+  endpoint:
+    port: 9100
+    path: "/metrics"
+
     # TLS configuration
     tls:
       enabled: true
-      
+
       # Server certificate and key
       cert_file: "/etc/telegen/certs/server.crt"
       key_file: "/etc/telegen/certs/server.key"
-      
-      # Enable mTLS (client certificate verification)
-      client_auth: true
-      
-      # CA certificate for verifying client certs
+
+      # Supplying a client CA turns on mTLS: clients must present a
+      # certificate signed by it.
       client_ca_file: "/etc/telegen/certs/ca.crt"
 ```
 
@@ -228,17 +210,17 @@ agent:
 Control metric cardinality to prevent explosion from high-cardinality labels:
 
 ```yaml
-agent:
-  nodeexporter:
-    enabled: true
-    
-    # Cardinality controls
+node_exporter:
+  enabled: true
+
+  # Cardinality controls live under the scrape section
+  scrape:
     cardinality:
       enabled: true
-      
+
       # Maximum number of metric families
       max_metrics: 1000
-      
+
       # Include only these metrics (regex patterns)
       include_metrics:
         - "node_cpu_.*"
@@ -247,12 +229,12 @@ agent:
         - "node_filesystem_.*"
         - "node_network_.*"
         - "node_load.*"
-      
+
       # Exclude these metrics (regex patterns)
       exclude_metrics:
         - "node_scrape_.*"
         - "go_.*"
-      
+
       # Drop these labels from all metrics
       drop_labels:
         - "id"
@@ -388,13 +370,17 @@ Telegen adds eBPF-based metrics beyond standard node_exporter:
 
 ### Enable eBPF Enhancements
 
+There is no `ebpf_enhanced` switch on the node exporter. These metrics appear
+when both subsystems are running:
+
 ```yaml
-agent:
-  nodeexporter:
+node_exporter:
+  enabled: true
+
+ebpf:
+  enabled: true
+  network:
     enabled: true
-    
-    # Enable eBPF-enhanced metrics
-    ebpf_enhanced: true
 ```
 
 ---
@@ -444,8 +430,8 @@ Once verified, remove node_exporter.
 Import custom metrics from files:
 
 ```yaml
-agent:
-  nodeexporter:
+node_exporter:
+  collectors:
     textfile:
       enabled: true
       directory: "/var/lib/node_exporter/textfile_collector"
@@ -477,16 +463,14 @@ node_custom_metric{label="value"} 42
 For large systems (many disks, interfaces):
 
 ```yaml
-agent:
-  nodeexporter:
+node_exporter:
+  scrape:
     # Increase scrape timeout
     timeout: 10s
-    
-    # Reduce collection frequency
-    collector_interval: 30s
-    
-    # Limit concurrent collectors
-    max_procs: 2
+
+  export:
+    # Reduce collection and export frequency
+    interval: 30s
 ```
 
 ---

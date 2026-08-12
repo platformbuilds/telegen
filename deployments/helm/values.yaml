@@ -9,7 +9,9 @@ otlp:
   endpoint: "otel-collector:4317"
   protocol: "grpc"  # grpc or http
   insecure: true
+  # gzip is the legacy boolean. Set compression to "gzip" or "none" to override it.
   gzip: true
+  compression: ""
   timeout: "10s"
   headers: {}
   tls:

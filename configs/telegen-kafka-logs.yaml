@@ -14,7 +14,6 @@
 
 agent:
   service_name: my-app
-  environment: production
 
 pipelines:
   kafka:
@@ -58,9 +57,9 @@ pipelines:
     parser:
       enable_runtime_parsing: true       # Auto-detect Docker JSON, CRI-O, containerd formats
       enable_application_parsing: true   # Parse Spring Boot, Log4j, JSON, etc.
-      default_severity: "INFO"           # Default severity for unparsed logs
-      extract_trace_context: true        # Extract trace_id/span_id from logs
-      enable_kube_metadata_extract: true # Extract K8s metadata from pod containers
+      default_severity: "INFO"                # Default severity for unparsed logs
+      enable_trace_context_enrichment: true   # Correlate trace_id/span_id from eBPF
+      enable_k8s_enrichment: true             # Extract K8s metadata from pod containers
 
     # Message batching
     batch:
@@ -70,23 +69,24 @@ pipelines:
 
     # Telemetry/metrics to emit
     telemetry:
-      emit_records_processed_metric: true       # Track records consumed/parsed/exported
-      emit_lag_metric: true                     # Track consumer lag per partition
-      emit_client_lag_metric: true              # Track overall client lag
-      emit_partition_level_metrics: false       # Per-partition metrics (verbose)
-      emit_processing_delay_metric: true        # Track end-to-end latency
-      emit_broker_rebalance_event_metric: true  # Track rebalancing events
+      kafka_receiver_records: true        # Track records consumed/parsed/exported
+      kafka_receiver_offset_lag: true     # Track consumer lag per partition
+      kafka_receiver_records_delay: true  # Track end-to-end latency
+      kafka_broker_connects: true         # Track broker connects (rebalance signal)
+      kafka_broker_disconnects: true      # Track broker disconnects
+      kafka_broker_read_latency: false    # Per-broker read latency (verbose)
+      kafka_fetch_batch_metrics: false    # Per-fetch batch metrics (verbose)
 
-    # Authentication (optional)
+    # SASL authentication (optional)
     auth:
-      sasl:
-        mechanism: "PLAIN"        # Options: PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, none
-        username: "kafka_user"
-        password: "kafka_password"
+      enabled: false
+      mechanism: "PLAIN"        # Options: PLAIN, SCRAM-SHA-256, SCRAM-SHA-512
+      username: "kafka_user"
+      password: "kafka_password"
 
     # TLS configuration (optional)
     tls:
-      enabled: false
+      enable: false
       # ca_file: "/etc/kafka/ca.crt"
       # cert_file: "/etc/kafka/client.crt"
       # key_file: "/etc/kafka/client.key"
@@ -98,7 +98,19 @@ pipelines:
       initial_interval: "1s"      # Initial wait time before retry
       max_interval: "30s"         # Maximum wait time between retries
       multiplier: 2.0             # Backoff multiplier (exponential)
-      jitter: true                # Add randomization to prevent thundering herd
+      jitter: 0.2                 # Randomization fraction to prevent thundering herd
+
+  # Filelog tailing alongside the Kafka receiver
+  logs:
+    enabled: true
+    filelog:
+      include:
+        - "/var/log/**/*.log"
+      exclude:
+        - "/var/log/telegen/**"
+      position_file: "/var/lib/telegen/logs.pos"
+      poll_interval: "5s"
+      ship_historical_events: false
 
 exports:
   otlp:
@@ -122,17 +134,6 @@ exports:
     #   gzip: true
     #   headers:
     #     Authorization: "Bearer <token>"
-
-logs:
-  enabled: true
-  filelog:
-    include:
-      - "/var/log/**/*.log"
-    exclude:
-      - "/var/log/telegen/**"
-    position_file: "/var/lib/telegen/logs.pos"
-    poll_interval_duration: "5s"
-    ship_historical_events: false
 
 # VMware vSphere (optional collector/unified signal source)
 vmware:

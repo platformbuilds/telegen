@@ -36,95 +36,76 @@ Use Agent Mode when you want to:
 ## Minimal Agent Configuration
 
 ```yaml
-telegen:
+agent:
   mode: agent
 
-otlp:
-  endpoint: "otel-collector:4317"
+exports:
+  otlp:
+    grpc:
+      enabled: true
+      endpoint: "otel-collector:4317"
+      insecure: true
 ```
 
 ---
 
 ## eBPF Configuration
 
-### Ring Buffer Sizing
+All eBPF tuning lives under `ebpf.tracer`. `ebpf` itself is a top-level section — it is not nested under `agent`.
 
-Ring buffers are used for high-throughput event streaming from kernel to userspace:
+### BPF Map Sizing
+
+BPF map capacity is scaled as a whole rather than tuned per buffer. `global_scale_factor` moves every map in powers of two: `1` doubles them, `-1` halves them, `0` leaves the defaults.
 
 ```yaml
-agent:
-  ebpf:
-    # Ring buffer size - must be power of 2
-    # Larger = more buffer, less event loss
-    # Smaller = less memory usage
-    ringbuf_size: 16777216  # 16MB (default)
+ebpf:
+  tracer:
+    maps_config:
+      global_scale_factor: 0
 ```
 
-| Size | Use Case |
-|------|----------|
-| 4MB | Low-throughput environments |
-| 16MB | Default, balanced |
-| 64MB | High-throughput, many connections |
-| 256MB | Very high volume, latency-sensitive |
+| Value | Use Case |
+|-------|----------|
+| -1 | Low-throughput environments, tight memory budgets |
+| 0 | Default, balanced |
+| 1 | High-throughput, many connections |
+| 2 | Very high volume, latency-sensitive |
 
-### Perf Buffer Sizing
-
-Perf buffers are used for per-CPU event collection:
+Individual protocol ring buffers can be overridden when a single protocol dominates. `0` means "use the built-in default".
 
 ```yaml
-agent:
-  ebpf:
-    perf_buffer_size: 8192  # 8KB per CPU (default)
+ebpf:
+  tracer:
+    buffer_sizes:
+      http: 0
+      mysql: 0
+      postgres: 0
+      kafka: 0
+      tcp: 0
+```
+
+### Event Batching
+
+Batching controls how often the tracer drains events to userspace:
+
+```yaml
+ebpf:
+  tracer:
+    batch_length: 100
+    batch_timeout: 1s
 ```
 
 ---
 
 ## Network Tracing
 
-```yaml
-agent:
-  ebpf:
-    network:
-      enabled: true
-      
-      # Protocol tracing
-      http: true     # HTTP/1.1 and HTTP/2
-      grpc: true     # gRPC over HTTP/2
-      dns: true      # DNS queries/responses
-      
-      # TCP metrics
-      tcp_metrics: true  # RTT, retransmits, connections
-      
-      # Interface filtering (empty = all interfaces)
-      interfaces: []
-      
-      # Exclude by port
-      exclude_ports:
-        - 22    # SSH
-        - 2379  # etcd
-```
-
----
-
-## Syscall Tracing
+Network flow observability is an on/off switch. Protocol selection is driven by
+`ebpf.otel_traces_export.instrumentations`, not by per-protocol network flags.
 
 ```yaml
-agent:
-  ebpf:
-    syscalls:
-      enabled: true
-      
-      # Include specific syscalls (empty = all)
-      include: []
-      
-      # Exclude noisy syscalls
-      exclude:
-        - futex
-        - nanosleep
-        - clock_gettime
-        - poll
-        - select
-        - epoll_wait
+ebpf:
+  network:
+    enabled: true
 ```
 
 ---
@@ -136,7 +117,7 @@ Telegen discovers which processes to instrument using **port-based** and/or **pa
 ### Basic Discovery
 
 ```yaml
-agent:
+ebpf:
   discovery:
     # Skip services already instrumented with OTel SDKs
     exclude_otel_instrumented_services: true
@@ -151,7 +132,7 @@ agent:
 Port-based discovery is more reliable in containerized environments:
 
 ```yaml
-agent:
+ebpf:
   discovery:
     instrument:
       # Single port
@@ -169,7 +150,7 @@ agent:
 Discover by executable path pattern (glob syntax):
 
 ```yaml
-agent:
+ebpf:
   discovery:
     instrument:
       # All Java processes
@@ -185,7 +166,7 @@ agent:
 ### Kubernetes-Aware Discovery
 
 ```yaml
-agent:
+ebpf:
   discovery:
     instrument:
       # By namespace
@@ -208,7 +189,7 @@ agent:
 ### Excluding Services
 
 ```yaml
-agent:
+ebpf:
   discovery:
     instrument:
       - open_ports: "8080-8089"
@@ -233,7 +214,7 @@ agent:
 ### Full Discovery Example
 
 ```yaml
-agent:
+ebpf:
   discovery:
     exclude_otel_instrumented_services: true
     skip_go_specific_tracers: false
@@ -261,18 +242,22 @@ agent:
 
 ### Metadata Discovery
 
-Automatic detection of cloud and runtime environments:
+Cloud environment detection is configured under the top-level `cloud` section. Runtime, database, and message-queue detection is automatic and has no configuration surface.
 
 ```yaml
-agent:
-  metadata_discovery:
-    enabled: true
-    interval: 30s
-    detect_cloud: true        # AWS, GCP, Azure
-    detect_kubernetes: true   # K8s metadata
-    detect_runtimes: true     # Go, Java, Python, Node.js
-    detect_databases: true    # MySQL, PostgreSQL, MongoDB
-    detect_message_queues: true  # Kafka, RabbitMQ, Redis
+cloud:
+  auto_detect: true
+  detection_timeout: 5s
+  detection_interval: 5m
+  discover_resources: true
+  resource_interval: 5m
+```
+
+Kubernetes metadata decoration is configured separately:
+
+```yaml
+kubernetes:
+  enable: true
 ```
 
 ### Runtime Detection
@@ -296,249 +281,149 @@ Telegen automatically detects and instruments:
 Enable CPU, memory, and off-CPU profiling:
 
 ```yaml
-agent:
-  profiling:
+profiling:
+  enabled: true
+
+  # How often a profile is collected, and how often profiles are shipped
+  collection_interval: 10s
+  upload_interval: 60s
+
+  # Profile types. Each is configured independently.
+  cpu:
     enabled: true
-    
-    # Sampling rate in Hz
-    sample_rate: 99  # 99 Hz is common to avoid aliasing
-    
-    # Profile types
-    cpu: true          # On-CPU time
-    off_cpu: true      # Off-CPU waiting time
-    memory: true       # Heap allocations
-    mutex: true        # Lock contention (Go, Java)
-    block: true        # Blocking operations (Go)
-    goroutine: true    # Goroutine profiles (Go only)
-    
-    # Each profile sample duration
-    duration: 10s
-    
-    # How often to upload profiles
-    upload_interval: 60s
-    
-    # Symbol resolution
-    symbols:
-      demangle_rust: true
-      demangle_cpp: true
+    sample_rate: 99       # 99 Hz avoids aliasing with periodic workloads
+    max_stack_depth: 127
+  off_cpu:
+    enabled: true
+    min_block_time_ns: 1000000
+  memory:
+    enabled: true
+    min_alloc_size: 1024
+  mutex:
+    enabled: true
+    contention_threshold_ns: 1000000
+
+  # Symbol resolution
+  symbols:
+    demangling_enabled: true
+    go_symbols: true
+    kernel_symbols: true
 ```
 
 ---
 
 ## Security Monitoring
 
-Enable runtime security monitoring:
-
-```yaml
-agent:
-  security:
-    enabled: true
-    
-    # Syscall auditing
-    syscall_audit:
-      enabled: true
-      syscalls:
-        - execve       # Process execution
-        - execveat
-        - ptrace       # Debugging/tracing
-        - setuid       # Privilege changes
-        - setgid
-        - mount        # Filesystem mounts
-        - umount
-        - init_module  # Kernel modules
-        - finit_module
-        - delete_module
-        - open_by_handle_at  # Filesystem escape
-    
-    # File integrity monitoring
-    file_integrity:
-      enabled: true
-      paths:
-        - /etc/passwd
-        - /etc/shadow
-        - /etc/sudoers
-        - /etc/ssh/sshd_config
-        - /root/.ssh
-        - /etc/cron.d
-        - /etc/crontab
-      recursive: true
-      events:
-        - create
-        - modify
-        - delete
-        - chmod
-        - chown
-    
-    # Container escape detection
-    container_escape:
-      enabled: true
+```{warning}
+Runtime security monitoring has **no configuration surface** today. There is no
+`security` section in the agent config; adding one stops the agent from starting,
+because unknown keys are rejected.
 ```
 
 ---
 
 ## Log Collection
 
+File tailing lives under `pipelines.logs.filelog`. Include and exclude are glob lists; container logs are picked up by including their path.
+
 ```yaml
-agent:
+pipelines:
   logs:
     enabled: true
-    
-    # File paths to tail
-    paths:
-      - /var/log/syslog
-      - /var/log/auth.log
-      - /var/log/*.log
-      - /var/log/**/*.log
-    
-    # Collect container logs
-    container_logs: true
-    
-    # Exclude patterns
-    exclude:
-      - "*.gz"
-      - "*.zip"
-      - "*.old"
-      - "lastlog"
-      - "wtmp"
-      - "btmp"
-    
-    # Multiline log handling
-    multiline:
-      enabled: true
-      pattern: "^\\d{4}-\\d{2}-\\d{2}"  # ISO date
-      negate: true
-      match: after
-      max_lines: 500
-      timeout: 5s
+    filelog:
+      include:
+        - /var/log/syslog
+        - /var/log/auth.log
+        - /var/log/*.log
+        - /var/log/**/*.log
+      exclude:
+        - "*.gz"
+        - "*.zip"
+        - "*.old"
+        - "**/lastlog"
+        - "**/wtmp"
+        - "**/btmp"
+      position_file: /var/lib/telegen/logs.pos
+      poll_interval: "5s"
+      ship_historical_events: false
+```
+
+```{note}
+Multiline assembly and per-format parsing are applied automatically by the log
+parsers. They are not configurable from the agent config today.
 ```
 
 ---
 
 ## GPU Monitoring
 
-```yaml
-agent:
-  gpu:
-    enabled: true
-    
-    # NVIDIA GPU support (via NVML)
-    nvidia: true
-    
-    # AMD GPU support (via ROCm SMI)
-    amd: false
-    
-    # Polling interval
-    poll_interval: 10s
-    
-    # Metrics to collect
-    metrics:
-      utilization: true      # GPU utilization %
-      memory: true           # Memory usage
-      temperature: true      # GPU temperature
-      power: true            # Power consumption
-      clock: true            # Clock speeds
-      pcie_throughput: true  # PCIe bandwidth
-```
+GPU metrics are collected by the host metrics collector when a supported device is present. There is no `gpu` configuration section; NVML-backed collection is automatic.
 
 ---
 
 ## Resource Limits
 
+The agent bounds its own memory through the Go runtime memory limit. CPU and per-signal rate limiting are not configurable from the agent config today.
+
 ```yaml
-agent:
-  resources:
-    # CPU limit (number of cores)
-    cpu_limit: 1.0
-    
-    # Memory limit
-    memory_limit: "512Mi"
-    
-    # Limit concurrent eBPF programs
-    max_ebpf_programs: 100
-    
-    # Rate limiting
-    rate_limit:
-      spans_per_second: 10000
-      metrics_per_second: 50000
-      logs_per_second: 5000
+selfTelemetry:
+  # Soft memory ceiling for the agent process, in bytes
+  memory_limit_bytes: 536870912
 ```
 
 ---
 
 ## Kubernetes-Specific
 
-When running in Kubernetes, additional features are available:
+When running in Kubernetes, metadata decoration is available:
 
 ```yaml
-agent:
-  kubernetes:
-    enabled: true
-    
-    # Enrich with pod metadata
-    pod_metadata: true
-    
-    # Enrich with node metadata
-    node_metadata: true
-    
-    # Label filtering
-    label_allowlist:
-      - "app.kubernetes.io/*"
-      - "helm.sh/*"
-      - "app"
-      - "version"
-    
-    # Namespace filtering
-    namespace_include: []  # Empty = all
-    namespace_exclude:
-      - kube-system
-      - kube-public
+kubernetes:
+  enable: true
+  cluster_name: "prod-us-east-1"
+  informers_sync_timeout: "30s"
+  informers_resync_period: "30m"
+
+  # Which pod/node labels are copied onto resources
+  resource_labels:
+    - "app.kubernetes.io/name"
+    - "app.kubernetes.io/version"
+    - "app"
+    - "version"
 ```
 
 ---
 
-## Example: High-Security Environment
+## Example: Mutual TLS to the Collector
 
 ```yaml
-telegen:
-  mode: agent
-  log_level: info
-
-otlp:
-  endpoint: "otel-collector:4317"
-  tls:
-    enabled: true
-    ca_file: "/etc/ssl/certs/ca.crt"
-    cert_file: "/etc/ssl/certs/client.crt"
-    key_file: "/etc/ssl/certs/client.key"
-
 agent:
-  ebpf:
+  mode: agent
+  log_level: INFO
+
+exports:
+  otlp:
+    tls:
+      enable: true
+      ca_file: "/etc/ssl/certs/ca.crt"
+      cert_file: "/etc/ssl/certs/client.crt"
+      key_file: "/etc/ssl/certs/client.key"
+    grpc:
+      enabled: true
+      endpoint: "otel-collector:4317"
+      insecure: false
+
+ebpf:
+  enabled: true
+  network:
     enabled: true
-    network:
-      enabled: true
-      http: true
-      dns: true
-    syscalls:
-      enabled: true
-  
-  security:
+
+profiling:
+  enabled: true
+  cpu:
     enabled: true
-    syscall_audit:
-      enabled: true
-    file_integrity:
-      enabled: true
-      paths:
-        - /etc
-        - /root
-        - /home
-      recursive: true
-    container_escape:
-      enabled: true
-  
-  profiling:
+  memory:
     enabled: true
-    cpu: true
-    memory: true
 ```
 
 ---
@@ -546,33 +431,32 @@ agent:
 ## Example: Performance-Optimized
 
 ```yaml
-telegen:
-  mode: agent
-  log_level: warn
-
-otlp:
-  endpoint: "otel-collector:4317"
-  compression: gzip
-
 agent:
-  ebpf:
-    enabled: true
-    ringbuf_size: 67108864  # 64MB
-    perf_buffer_size: 16384  # 16KB
-    
-    network:
+  mode: agent
+  log_level: WARN
+
+exports:
+  otlp:
+    grpc:
       enabled: true
-      exclude_ports: [22, 2379, 2380]
-    
-    syscalls:
-      enabled: false  # Disable for performance
-  
-  resources:
-    cpu_limit: 2.0
-    memory_limit: "1Gi"
-    rate_limit:
-      spans_per_second: 50000
-      metrics_per_second: 100000
+      endpoint: "otel-collector:4317"
+      insecure: true
+      compression: "gzip"
+
+ebpf:
+  enabled: true
+  network:
+    enabled: true
+  tracer:
+    # Grow every BPF map one power of two for high event volume
+    maps_config:
+      global_scale_factor: 1
+    # Drain larger batches less often
+    batch_length: 500
+    batch_timeout: 5s
+
+selfTelemetry:
+  memory_limit_bytes: 1073741824
 ```
 
 ---

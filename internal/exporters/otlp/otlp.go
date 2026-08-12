@@ -7,10 +7,12 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/config/configcompression"
 	"go.opentelemetry.io/collector/config/configgrpc"
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/config/configopaque"
@@ -65,12 +67,13 @@ type TraceOpts struct {
 		InsecureSkipVerify        bool
 	}
 	GRPC struct {
-		Enabled  bool
-		Endpoint string
-		Insecure bool
-		Gzip     bool
-		Headers  map[string]string
-		Timeout  time.Duration
+		Enabled bool
+		// Compression is the wire codec: "gzip" or "none". Empty means none.
+		Compression string
+		Endpoint    string
+		Insecure    bool
+		Headers     map[string]string
+		Timeout     time.Duration
 	}
 	HTTP struct {
 		Enabled    bool
@@ -80,9 +83,28 @@ type TraceOpts struct {
 		LogsURL    string
 		MetricsURL string
 		Headers    map[string]string
-		Gzip       bool
-		Timeout    time.Duration
+		// Compression is the wire codec: "gzip" or "none". Empty means none.
+		Compression string
+		Timeout     time.Duration
 	}
+}
+
+// gzipCodec is the only compression codec the OTLP transports support today.
+const gzipCodec = "gzip"
+
+// wantsGzip reports whether the configured codec selects gzip.
+func wantsGzip(codec string) bool {
+	return strings.EqualFold(strings.TrimSpace(codec), gzipCodec)
+}
+
+// collectorCompression maps the codec onto the Collector exporter's type.
+// The uncompressed case is the zero Type; configcompression keeps its "none"
+// and "" constants unexported.
+func collectorCompression(codec string) configcompression.Type {
+	if wantsGzip(codec) {
+		return configcompression.TypeGzip
+	}
+	return configcompression.Type("")
 }
 
 // Clients contains the OTLP exporters for all signal types.
@@ -109,6 +131,9 @@ func New(ctx context.Context, o TraceOpts, res *resource.Resource) (*Clients, er
 	var tp *sdktrace.TracerProvider
 	if o.GRPC.Enabled {
 		opts := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(o.GRPC.Endpoint)}
+		if wantsGzip(o.GRPC.Compression) {
+			opts = append(opts, otlptracegrpc.WithCompressor(gzipCodec))
+		}
 		if o.TLS.Enable && !o.GRPC.Insecure {
 			creds, err := buildTLS(o.TLS.CAFile, o.TLS.CertFile, o.TLS.KeyFile, o.TLS.InsecureSkipVerify)
 			if err != nil {
@@ -133,6 +158,9 @@ func New(ctx context.Context, o TraceOpts, res *resource.Resource) (*Clients, er
 			otlptracehttp.WithURLPath(o.HTTP.TracesURL),
 			otlptracehttp.WithHeaders(o.HTTP.Headers),
 		}
+		if wantsGzip(o.HTTP.Compression) {
+			httpTraceOpts = append(httpTraceOpts, otlptracehttp.WithCompression(otlptracehttp.GzipCompression))
+		}
 		if !o.TLS.Enable || o.HTTP.Insecure {
 			httpTraceOpts = append(httpTraceOpts, otlptracehttp.WithInsecure())
 		}
@@ -152,6 +180,9 @@ func New(ctx context.Context, o TraceOpts, res *resource.Resource) (*Clients, er
 	var lp *sdklog.LoggerProvider
 	if o.GRPC.Enabled {
 		lopts := []otlploggrpc.Option{otlploggrpc.WithEndpoint(o.GRPC.Endpoint)}
+		if wantsGzip(o.GRPC.Compression) {
+			lopts = append(lopts, otlploggrpc.WithCompressor(gzipCodec))
+		}
 		if o.TLS.Enable && !o.GRPC.Insecure {
 			creds, err := buildTLS(o.TLS.CAFile, o.TLS.CertFile, o.TLS.KeyFile, o.TLS.InsecureSkipVerify)
 			if err == nil {
@@ -177,6 +208,9 @@ func New(ctx context.Context, o TraceOpts, res *resource.Resource) (*Clients, er
 			otlploghttp.WithURLPath(o.HTTP.LogsURL),
 			otlploghttp.WithHeaders(o.HTTP.Headers),
 		}
+		if wantsGzip(o.HTTP.Compression) {
+			httpLogOpts = append(httpLogOpts, otlploghttp.WithCompression(otlploghttp.GzipCompression))
+		}
 		if !o.TLS.Enable || o.HTTP.Insecure {
 			httpLogOpts = append(httpLogOpts, otlploghttp.WithInsecure())
 		}
@@ -197,6 +231,9 @@ func New(ctx context.Context, o TraceOpts, res *resource.Resource) (*Clients, er
 	var mexp sdkmetric.Exporter
 	if o.GRPC.Enabled {
 		mopts := []otlpmetricgrpc.Option{otlpmetricgrpc.WithEndpoint(o.GRPC.Endpoint)}
+		if wantsGzip(o.GRPC.Compression) {
+			mopts = append(mopts, otlpmetricgrpc.WithCompressor(gzipCodec))
+		}
 		if o.TLS.Enable && !o.GRPC.Insecure {
 			creds, err := buildTLS(o.TLS.CAFile, o.TLS.CertFile, o.TLS.KeyFile, o.TLS.InsecureSkipVerify)
 			if err == nil {
@@ -216,6 +253,9 @@ func New(ctx context.Context, o TraceOpts, res *resource.Resource) (*Clients, er
 		httpMetricOpts := []otlpmetrichttp.Option{
 			otlpmetrichttp.WithEndpoint(o.HTTP.Endpoint),
 			otlpmetrichttp.WithHeaders(o.HTTP.Headers),
+		}
+		if wantsGzip(o.HTTP.Compression) {
+			httpMetricOpts = append(httpMetricOpts, otlpmetrichttp.WithCompression(otlpmetrichttp.GzipCompression))
 		}
 		if o.HTTP.MetricsURL != "" {
 			httpMetricOpts = append(httpMetricOpts, otlpmetrichttp.WithURLPath(o.HTTP.MetricsURL))
@@ -321,7 +361,8 @@ func createGRPCCollectorTracesExporter(ctx context.Context, o TraceOpts) (export
 			Insecure:           o.GRPC.Insecure || !o.TLS.Enable,
 			InsecureSkipVerify: o.TLS.InsecureSkipVerify,
 		},
-		Headers: convertHeadersToOpaque(o.GRPC.Headers),
+		Headers:     convertHeadersToOpaque(o.GRPC.Headers),
+		Compression: collectorCompression(o.GRPC.Compression),
 	}
 
 	// Add TLS config if enabled
@@ -374,7 +415,8 @@ func createHTTPCollectorTracesExporter(ctx context.Context, o TraceOpts) (export
 			Insecure:           o.HTTP.Insecure || !o.TLS.Enable,
 			InsecureSkipVerify: o.TLS.InsecureSkipVerify,
 		},
-		Headers: convertHeadersToOpaque(o.HTTP.Headers),
+		Headers:     convertHeadersToOpaque(o.HTTP.Headers),
+		Compression: collectorCompression(o.HTTP.Compression),
 	}
 
 	// Add TLS config if enabled

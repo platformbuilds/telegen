@@ -148,67 +148,43 @@ otlp:
 
 ## Agent Configuration
 
+```{tip}
+`configs/telegen-full.yaml` in the repository is the exhaustive, machine-verified
+reference. Every key below is checked against the config struct in CI.
+```
+
 ```yaml
 agent:
   # Service name for telemetry
   service_name: "telegen"
-  
-  # eBPF configuration
-  ebpf:
+
+ebpf:
+  enabled: true
+
+  # Network flow observability. Protocol parsers (HTTP, gRPC, DNS, SQL,
+  # messaging) are always active when this is on.
+  network:
     enabled: true
-    
-    # Ring buffer size (must be power of 2)
-    ringbuf_size: 16777216  # 16MB
-    
-    # Per-CPU perf buffer size
-    perf_buffer_size: 8192  # 8KB
-    
-    # Network tracing
-    network:
-      enabled: true
-      http: true
-      grpc: true
-      dns: true
-      tcp_metrics: true
-    
-    # Syscall tracing
-    syscalls:
-      enabled: true
-      include: []  # Empty = all syscalls
-      exclude:
-        - futex
-        - nanosleep
-        - clock_gettime
-    
-    # Process lifecycle tracking
-    process:
-      enabled: true
-      lifecycle: true
-      file_ops: true
-    
-    # Parse failure rate suppression
-    # Connections where the ratio of failed parse attempts exceeds the threshold
-    # within a rolling window are silently dropped to reduce noise.
-    parse_failure_rate_threshold: 0.4   # 0–1.0; default 0.4 (40%)
-    parse_failure_rate_window: 20        # Rolling window size (number of events)
-    
-    # Connection byte-count statistics
-    # Emits telegen.connection.bytes_sent / bytes_received counters on TCP close.
-    conn_stats:
-      enabled: true
-    
-    # Go crypto/tls uprobe
-    # Captures plaintext payload before encryption / after decryption for
-    # Go applications using the standard crypto/tls package.
-    go_tls_uprobe:
-      enabled: true
-    
-    # gRPC-C uprobe
-    # Captures spans from native C gRPC applications (libgrpc.so) without
-    # requiring any SDK instrumentation.
-    grpc_c_uprobe:
-      enabled: true
-  
+
+  tracer:
+    # BPF map sizing. Each step of the scale factor doubles every map.
+    maps_config:
+      global_scale_factor: 0
+
+    # Per-protocol capture buffer budgets, in bytes. 0 uses the built-in default.
+    buffer_sizes:
+      http: 0
+      mysql: 0
+      postgres: 0
+      mssql: 0
+      kafka: 0
+      mq: 0
+      tcp: 0
+
+    # Event draining
+    batch_length: 100
+    batch_timeout: 1s
+
   # Auto-discovery (process selection)
   discovery:
     # Skip services already instrumented with OpenTelemetry SDKs
@@ -291,251 +267,146 @@ agent:
     disabled_route_harvesters: []
     route_harvester_advanced:
       java_harvest_delay: 60s
-  
-  # Cloud/K8s metadata discovery (automatic)
-  metadata_discovery:
+
+  # Which protocols produce spans
+  otel_traces_export:
+    instrumentations:
+      - "*"
+
+  # Drop noisy endpoints by attribute
+  filter:
+    application:
+      url.path:
+        not_match: "/{health,ready,metrics}*"
+
+# Continuous profiling
+profiling:
+  enabled: false
+  collection_interval: 10s
+  upload_interval: 60s
+  cpu:
     enabled: true
-    interval: 30s
-    detect_cloud: true
-    detect_kubernetes: true
-    detect_runtimes: true
-    detect_databases: true
-    detect_message_queues: true
-  
-  # Continuous profiling
-  profiling:
-    enabled: false
-    sample_rate: 99  # Hz
-    
-    # Profile types
-    cpu: true
-    off_cpu: true
-    memory: true
-    mutex: true
-    block: true
-    goroutine: true
-    
-    # Duration for each profile
-    duration: 10s
-    
-    # Upload interval
-    upload_interval: 60s
-  
-  # Security monitoring
-  security:
-    enabled: false
-    
-    # Syscall auditing
-    syscall_audit:
-      enabled: true
-      syscalls:
-        - execve
-        - execveat
-        - ptrace
-        - setuid
-        - setgid
-        - mount
-        - umount
-        - init_module
-        - finit_module
-        - delete_module
-    
-    # File integrity monitoring
-    file_integrity:
-      enabled: true
-      paths:
-        - /etc/passwd
-        - /etc/shadow
-        - /etc/sudoers
-        - /etc/ssh/sshd_config
-        - /root/.ssh
-      recursive: true
-    
-    # Container escape detection
-    container_escape:
-      enabled: true
-  
-  # Network observability
-  network:
+    sample_rate: 99      # Hz
+    max_stack_depth: 127
+  off_cpu:
     enabled: true
-    
-    # DNS tracing
-    dns:
-      enabled: true
-      capture_queries: true
-      capture_responses: true
-    
-    # TCP metrics
-    tcp:
-      enabled: true
-      rtt: true
-      retransmits: true
-      connection_tracking: true
-    
-    # XDP packet tracing
-    xdp:
-      enabled: false
-      sample_rate: 1000  # 1 in N packets
-      interfaces: []  # Empty = all interfaces
-    
-    # Layer 7 protocol parsing
-    # Each protocol can be toggled independently.
-    # Newly supported protocols: amqp, cql, nats
-    protocols:
-      http: { enabled: true, parse_headers: true, max_body_size: 65536 }
-      grpc: { enabled: true }
-      mysql: { enabled: true, capture_query: true }
-      postgres: { enabled: true, capture_query: true }
-      redis: { enabled: true, capture_command: true }
-      mongodb: { enabled: true, capture_query: true }
-      kafka: { enabled: true }
-      rabbitmq: { enabled: true }
-      mqtt: { enabled: true }
-      # AMQP 0-9-1 wire protocol (RabbitMQ clients)
-      amqp: { enabled: true }
-      # Cassandra Query Language (CQL v3–v5)
-      cql: { enabled: true, capture_query: true }
-      # NATS lightweight pub/sub messaging
-      nats: { enabled: true, capture_subject: true }
-      dns: { enabled: true }
-  
-  # Log collection
+    min_block_time_ns: 1000000
+  memory:
+    enabled: true
+    min_alloc_size: 1024
+  mutex:
+    enabled: true
+    contention_threshold_ns: 1000000
+  symbols:
+    demangling_enabled: true
+    go_symbols: true
+    kernel_symbols: true
+
+# Log collection
+pipelines:
   logs:
     enabled: true
-    
-    # File paths to tail
-    paths:
-      - /var/log/*.log
-      - /var/log/**/*.log
-    
-    # Container logs
-    container_logs: true
-    
-    # Exclude patterns
-    exclude:
-      - "*.gz"
-      - "*.zip"
-    
-    # Multiline configuration
-    multiline:
-      enabled: true
-      pattern: "^\\d{4}-\\d{2}-\\d{2}"
-      negate: true
-      match: after
-  
-  # GPU monitoring
-  gpu:
-    enabled: true
-    nvidia: true
-    poll_interval: 10s
+    filelog:
+      include:
+        - /var/log/*.log
+        - /var/log/**/*.log
+      exclude:
+        - "*.gz"
+        - "*.zip"
+      position_file: /var/lib/telegen/logs.pos
+      poll_interval: "5s"
+```
+
+```{note}
+Protocol parsing, DNS capture, TCP metrics, XDP, syscall auditing, file
+integrity monitoring, container-escape detection, and GPU polling have no
+configuration surface. They are either always active with network
+observability, or not configurable at all. Unknown keys stop the agent from
+starting, so do not invent sections for them.
 ```
 
 ---
 
 ## Collector Configuration
 
+Collector mode does not use a `collector:` wrapper. Each remote-collection
+subsystem is its own top-level section. The shipped examples
+(`configs/snmp_receiver.example.yaml`, `configs/storage.yaml`,
+`configs/netinfra-firewalls.yaml`) carry the exhaustive field lists.
+
 ```yaml
-collector:
-  # SNMP configuration
-  snmp:
-    enabled: false
-    poll_interval: 60s
+# SNMP polling and trap reception
+snmp_receiver:
+  enabled: true
+
+  trap_receiver:
+    enabled: true
+    listen_address: "0.0.0.0:162"
+    community_strings:
+      - "public"
+
+  polling:
+    enabled: true
+    default_interval: 60s
     timeout: 10s
     retries: 3
-    
-    # SNMP targets
-    targets:
-      - name: "core-switch-01"
-        address: "10.0.1.1:161"
-        version: "v2c"  # v1, v2c, v3
-        community: "public"
-        modules:
-          - if_mib
-          - entity_mib
-        labels:
-          location: "dc1"
-      
-      - name: "router-01"
-        address: "10.0.1.2:161"
-        version: "v3"
-        security:
-          user: "monitor"
-          auth_protocol: "SHA256"
-          auth_password: "${SNMP_AUTH_PASSWORD}"
-          priv_protocol: "AES256"
-          priv_password: "${SNMP_PRIV_PASSWORD}"
-        modules:
-          - if_mib
-          - bgp4_mib
-    
-    # SNMP trap receiver
-    trap_receiver:
-      enabled: true
-      listen_address: ":162"
-    
-    # Network discovery
-    discovery:
-      enabled: false
-      networks:
-        - "10.0.0.0/16"
-      interval: 1h
-  
-  # Storage array monitoring
-  storage:
-    # Dell PowerStore/PowerScale
-    dell:
-      enabled: false
-      poll_interval: 60s
-      targets:
-        - name: "powerstore-01"
-          address: "https://10.0.10.100"
-          username: "monitor"
-          password: "${DELL_PASSWORD}"
-          verify_ssl: true
-    
-    # Pure Storage FlashArray
-    pure:
-      enabled: false
-      poll_interval: 60s
-      targets:
-        - name: "pure-01"
-          address: "https://10.0.10.110"
-          api_token: "${PURE_TOKEN}"
-    
-    # NetApp ONTAP
-    netapp:
-      enabled: false
-      poll_interval: 60s
-      targets:
-        - name: "ontap-01"
-          address: "https://10.0.10.120"
-          username: "monitor"
-          password: "${NETAPP_PASSWORD}"
-    
-    # HPE Primera/3PAR
-    hpe:
-      enabled: false
-      poll_interval: 60s
-      targets:
-        - name: "primera-01"
-          address: "https://10.0.10.130"
-          username: "monitor"
-          password: "${HPE_PASSWORD}"
-  
-  # Network infrastructure
-  network_infra:
-    # Arista CloudVision
-    arista:
-      enabled: false
-      address: "https://cloudvision.example.com"
-      token: "${ARISTA_TOKEN}"
-    
-    # Cisco ACI
-    cisco_aci:
-      enabled: false
-      address: "https://apic.example.com"
+    max_concurrent: 100
+
+  targets:
+    - name: "core-switch-01"
+      address: "10.0.1.1:161"
+      version: "v2c"
+      community: "public"
+      interval: 30s
+      modules:
+        - "if_mib"
+        - "system"
+      labels:
+        location: "dc1"
+
+# Storage arrays. Each vendor is a list of targets, not an enabled/targets pair.
+storage:
+  enabled: true
+  collect_interval: 60s
+
+  dell_powerstore:
+    - name: "powerstore-01"
+      address: "https://10.0.10.100"
       username: "monitor"
+      password: "${DELL_PASSWORD}"
+      verify_ssl: true
+      collect: [capacity, performance, volumes, hosts]
+
+  pure_flasharray:
+    - name: "pure-01"
+      address: "https://10.0.10.110"
+      api_token: "${PURE_TOKEN}"
+      verify_ssl: true
+
+  netapp_ontap:
+    - name: "ontap-01"
+      address: "https://10.0.10.120"
+      username: "monitor"
+      password: "${NETAPP_PASSWORD}"
+      verify_ssl: true
+
+# Network infrastructure devices
+netinfra:
+  enabled: true
+  collect_interval: 30s
+
+  cloudvision:
+    - name: "cvp-prod"
+      cvp_url: "https://cloudvision.example.com"
+      token: "${ARISTA_CVP_TOKEN}"
+      verify_ssl: true
+
+  aci:
+    - name: "aci-fabric-a"
+      apic_url: "https://apic.example.com"
+      username: "${ACI_USERNAME}"
       password: "${ACI_PASSWORD}"
+      verify_ssl: true
 ```
 
 ---
@@ -548,19 +419,16 @@ queues:
   traces:
     mem_limit: "256Mi"
     max_age: "6h"
-    batch_size: 512
-  
+
   # Metrics queue
   metrics:
     mem_limit: "128Mi"
     max_age: "5m"
-    batch_size: 1000
-  
+
   # Logs queue
   logs:
     mem_limit: "256Mi"
     max_age: "24h"
-    batch_size: 1000
 ```
 
 ---
@@ -573,7 +441,6 @@ backoff:
   max: "30s"
   multiplier: 2.0
   jitter: 0.2
-  max_retries: 5
 ```
 
 ---
@@ -606,6 +473,15 @@ selfTelemetry:
 
 ```yaml
 cloud:
+  # Probe the instance metadata service to identify the provider
+  auto_detect: true
+  detection_timeout: 5s
+  detection_interval: 5m
+
+  # Discover cloud resources attached to this instance
+  discover_resources: true
+  resource_interval: 5m
+
   # AWS configuration
   aws:
     enabled: true
@@ -616,18 +492,22 @@ cloud:
       - "app_*"
       - "env"
       - "team"
-  
-  # GCP configuration  
+    imdsv2_only: true
+    imds_timeout: 200ms
+
+  # GCP configuration
   gcp:
     enabled: true
-    timeout: "200ms"
-    refresh_interval: "15m"
-  
+    project: ""
+    zone: ""
+    metadata_timeout: 200ms
+
   # Azure configuration
   azure:
     enabled: true
-    timeout: "200ms"
-    refresh_interval: "15m"
+    subscription_id: ""
+    resource_group: ""
+    imds_timeout: 200ms
 ```
 
 ---

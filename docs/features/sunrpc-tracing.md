@@ -85,10 +85,14 @@ When both client and server are on the same host (or server is instrumented), Te
 SunRPC tracing is controlled via the instrumentation filter:
 
 ```yaml
-exports:
-  otlp:
-    instrumentation:
-      sunrpc: true   # Enable SunRPC tracing (default: false)
+ebpf:
+  otel_traces_export:
+    # SunRPC is not part of the default set, so name it explicitly.
+    instrumentations:
+      - http
+      - grpc
+      - sql
+      - sunrpc
 ```
 
 SunRPC tracing is **disabled by default** because it generates high-volume spans for chatty NFS workloads. Enable only when NFS/RPC observability is needed.

@@ -27,7 +27,9 @@ Telegen replaces the traditional Prometheus-scraped kube-state-metrics deploymen
 ```yaml
 kube_metrics:
   enabled: true
-  collect_interval: 30s
+
+  # Skip collection when the agent is not running inside a cluster
+  auto_detect: true
 
   # Streaming OTLP export
   streaming:
@@ -37,10 +39,18 @@ kube_metrics:
     flush_timeout: "5s"    # Max wait before flush
     use_otlp: true         # Use shared OTLP exporter
 
-  # Optional: legacy Prometheus endpoint (for backward compatibility)
-  prometheus:
-    enabled: false
-    port: 8080
+  # Object-state metrics
+  kube_state:
+    enabled: true
+    resync_period: 30s
+
+  # Container resource metrics
+  cadvisor:
+    enabled: true
+
+  # Optional legacy scrape endpoint, for backward compatibility
+  listen_address: ":8080"
+  metrics_path: "/metrics"
 ```
 
 ### Metrics Collected

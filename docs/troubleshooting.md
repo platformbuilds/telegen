@@ -507,16 +507,20 @@ curl -s http://localhost:19090/metrics | grep -E "(drop|lost)"
 **Solutions:**
 
 ```yaml
-# Increase buffer sizes
+# Grow the BPF maps and drain events in larger batches
 ebpf:
-  ringbuf_size: 33554432  # 32MB
-  perf_buffer_size: 16384
+  tracer:
+    maps_config:
+      global_scale_factor: 1
+    batch_length: 500
+    batch_timeout: 5s
 
-# Increase queue size
-exports:
-  queue:
-    size: 10000
-    num_consumers: 20
+# Give the persistent queues more headroom
+queues:
+  traces:
+    mem_limit: "512Mi"
+  logs:
+    mem_limit: "512Mi"
 ```
 
 ## Feature-Specific Issues

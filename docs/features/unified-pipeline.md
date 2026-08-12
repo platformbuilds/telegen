@@ -168,18 +168,15 @@ Each endpoint has an independent circuit breaker:
 - **Open** — Requests fail fast (after threshold failures)
 - **Half-Open** — Probe with single request to test recovery
 
-Circuit breaker configuration:
+The circuit breaker is built into the export pipeline with fixed thresholds. It
+is not exposed in the agent config, so there is no `multi_endpoint` section to
+set:
 
-```yaml
-exports:
-  otlp:
-    multi_endpoint:
-      circuit_breaker:
-        enabled: true
-        failure_threshold: 5      # Failures before open
-        success_threshold: 2      # Successes to close
-        timeout: "30s"            # Open → half-open wait
-```
+| Setting | Value |
+|---------|-------|
+| Failures before open | 5 |
+| Successes to close | 2 |
+| Open to half-open wait | 30s |
 
 ### Shared OTLP Clients
 
@@ -223,18 +220,10 @@ The unified pipeline starts runtime sources based on configuration:
 
 ## Multi-Worker Export
 
-Configurable `worker_count` goroutines per signal type:
+Each signal type is exported by a dedicated pool of worker goroutines. The pool
+size is set internally by the pipeline and is not exposed in the agent config.
 
-```yaml
-exports:
-  otlp:
-    worker_count:
-      traces: 4
-      logs: 2
-      metrics: 2
-```
-
-Batch channels with back-pressure to persistent queues when full.
+Batch channels apply back-pressure to the persistent queues when full.
 
 ---
 

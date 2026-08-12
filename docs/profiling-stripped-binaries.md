@@ -64,8 +64,8 @@ For kernel code (when profiling shows kernel addresses):
 # In telegen config
 profiling:
   symbols:
-    kernel: true
-    kallsyms_path: /proc/kallsyms
+    # Resolve kernel addresses from /proc/kallsyms
+    kernel_symbols: true
 ```
 
 ### 4. Java Applications with JIT Compilation

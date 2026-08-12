@@ -174,26 +174,27 @@ metadata:
     app.kubernetes.io/component: collector
 data:
   collector.yaml: |
-    telegen:
+    agent:
       mode: collector
       service_name: "telegen-collector"
-    
+
     selfTelemetry:
       listen: ":19090"
       health_listen: ":8080"
-    
-    collector:
-      snmp:
+
+    snmp_receiver:
+      enabled: true
+      polling:
         enabled: true
-        poll_interval: "60s"
-        targets: []
-        traps:
-          enabled: true
-          listen_address: ":1162"
-      
-      storage:
-        enabled: false
-    
+        default_interval: "60s"
+      targets: []
+      trap_receiver:
+        enabled: true
+        listen_address: ":1162"
+
+    storage:
+      enabled: false
+
     exports:
       # Signal metadata for indexing (can be disabled to reduce storage costs)
       include_signal_metadata: true

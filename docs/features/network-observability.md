@@ -49,16 +49,13 @@ Network observability includes:
 
 ### Configuration
 
+Network flow observability is a single switch. DNS capture is part of it and is
+not separately configurable.
+
 ```yaml
-agent:
+ebpf:
   network:
-    dns:
-      enabled: true
-      capture_queries: true
-      capture_responses: true
-      
-      # Capture query/response content
-      capture_content: true
+    enabled: true
 ```
 
 ---
@@ -77,7 +74,7 @@ agent:
 
 ### Connection Tracking
 
-```yaml
+```text
 # Metrics example
 tcp_rtt_us{
   src_ip="10.0.1.50",
@@ -96,17 +93,13 @@ tcp_retransmits_total{
 
 ### Configuration
 
+TCP metrics are emitted whenever network observability is enabled. Per-metric
+toggles and connection sampling are not configurable.
+
 ```yaml
-agent:
+ebpf:
   network:
-    tcp:
-      enabled: true
-      rtt: true
-      retransmits: true
-      connection_tracking: true
-      
-      # Flow sampling (1 in N connections)
-      sample_rate: 1  # Capture all
+    enabled: true
 ```
 
 ---
@@ -135,27 +128,25 @@ agent:
 
 ### Configuration
 
+Protocol coverage is selected through the traces exporter's instrumentation
+list, and noisy endpoints are dropped with an attribute filter rather than a
+path list.
+
 ```yaml
-agent:
-  ebpf:
-    network:
-      enabled: true
-      http: true
-      grpc: true
-      
-      # URL/path filtering
-      exclude_paths:
-        - "/health"
-        - "/healthz"
-        - "/ready"
-        - "/metrics"
-        - "/favicon.ico"
-      
-      # Capture request/response headers
-      capture_headers:
-        - "content-type"
-        - "user-agent"
-        - "x-request-id"
+ebpf:
+  network:
+    enabled: true
+
+  otel_traces_export:
+    instrumentations:
+      - http
+      - grpc
+
+  # Drop health and readiness probes
+  filter:
+    application:
+      url.path:
+        not_match: "/{health,healthz,ready,metrics,favicon.ico}*"
 ```
 
 ---
@@ -225,32 +216,10 @@ For high-performance packet inspection at the NIC level:
 
 ### Configuration
 
-```yaml
-agent:
-  network:
-    xdp:
-      enabled: true
-      
-      # Sample rate (1 in N packets)
-      sample_rate: 1000  # 0.1% of packets
-      
-      # Interfaces to attach
-      interfaces:
-        - eth0
-        - eth1
-      
-      # Packet filters
-      filters:
-        # Only specific ports
-        ports:
-          - 80
-          - 443
-          - 8080
-        
-        # Only specific protocols
-        protocols:
-          - tcp
-          - udp
+```{warning}
+XDP packet analysis has **no configuration surface** today. There is no
+`xdp` section; sample rate, interface selection, and packet filters are not
+configurable. Adding these keys stops the agent from starting.
 ```
 
 ### Use Cases
@@ -312,47 +281,25 @@ sum(rate(telegen_dns_queries_total{response_code!="NOERROR"}[5m]))
 
 ## Interface Filtering
 
-Control which network interfaces are monitored:
-
-```yaml
-agent:
-  network:
-    # Include specific interfaces
-    interfaces:
-      - eth0
-      - ens5
-    
-    # Or exclude interfaces
-    exclude_interfaces:
-      - lo        # Loopback
-      - docker0   # Docker bridge
-      - veth*     # Container veths
+```{warning}
+Interface include/exclude lists have **no configuration surface** today. Network
+observability attaches to all interfaces.
 ```
 
 ---
 
 ## Port Filtering
 
-Focus on specific ports:
+Ports are not filtered at capture time. Narrow the data instead by restricting
+which processes are instrumented, using discovery:
 
 ```yaml
-agent:
-  ebpf:
-    network:
-      # Only trace these ports
-      include_ports:
-        - 80
-        - 443
-        - 8080
-        - 3000
-        - 5432
-        - 6379
-      
-      # Or exclude ports
-      exclude_ports:
-        - 22    # SSH
-        - 2379  # etcd
-        - 2380  # etcd peer
+ebpf:
+  discovery:
+    instrument:
+      - open_ports: "80,443,8080,3000,5432,6379"
+    exclude_instrument:
+      - open_ports: "22,2379,2380"
 ```
 
 ---
@@ -361,23 +308,10 @@ agent:
 
 ### Suspicious Connection Detection
 
-```yaml
-agent:
-  network:
-    security:
-      enabled: true
-      
-      # Detect connections to unusual ports
-      suspicious_ports:
-        - 4444   # Common reverse shell
-        - 31337  # Elite port
-      
-      # Detect connections to external IPs
-      external_connection_alerts: true
-      
-      # Known bad IP lists
-      blocklists:
-        - "/etc/telegen/ip-blocklist.txt"
+```{warning}
+Suspicious-connection detection has **no configuration surface** today. There is
+no `network.security` section; suspicious port lists, external-connection
+alerting, and IP blocklists are not configurable.
 ```
 
 ### Example Alert
@@ -413,20 +347,15 @@ agent:
 
 ### Reducing Overhead
 
+Shrink the BPF maps and drain events in larger, less frequent batches:
+
 ```yaml
-agent:
-  network:
-    # Reduce ring buffer size
-    ring_buffer_size: 8388608  # 8MB instead of 16MB
-    
-    # Increase sampling
-    tcp:
-      sample_rate: 10  # 1 in 10 connections
-    
-    # Limit captured data
-    http:
-      max_body_capture: 0  # Don't capture bodies
-      max_headers: 5       # Limit headers
+ebpf:
+  tracer:
+    maps_config:
+      global_scale_factor: -1
+    batch_length: 500
+    batch_timeout: 5s
 ```
 
 ---
@@ -435,32 +364,26 @@ agent:
 
 ### 1. Filter Noisy Traffic
 
-Exclude health checks and internal traffic:
+Drop health and readiness probes with an attribute filter:
 
 ```yaml
-agent:
-  ebpf:
-    network:
-      exclude_paths:
-        - "/health*"
-        - "/ready*"
-        - "/metrics"
-      exclude_ports:
-        - 2379  # etcd
-        - 10250 # kubelet
+ebpf:
+  filter:
+    application:
+      url.path:
+        not_match: "/{health,ready,metrics}*"
 ```
 
-### 2. Use Appropriate Sampling
+### 2. Narrow What Is Instrumented
 
-For high-traffic environments:
+For high-traffic environments, instrument fewer processes rather than sampling
+connections — there is no connection or packet sampling knob:
 
 ```yaml
-agent:
-  network:
-    tcp:
-      sample_rate: 100  # 1% of connections
-    xdp:
-      sample_rate: 10000  # 0.01% of packets
+ebpf:
+  discovery:
+    exclude_instrument:
+      - open_ports: "2379,10250"
 ```
 
 ### 3. Monitor Key Services
@@ -468,13 +391,10 @@ agent:
 Focus on critical paths:
 
 ```yaml
-agent:
-  network:
-    include_ports:
-      - 80    # HTTP
-      - 443   # HTTPS
-      - 5432  # PostgreSQL
-      - 6379  # Redis
+ebpf:
+  discovery:
+    instrument:
+      - open_ports: "80,443,5432,6379"
 ```
 
 ---
@@ -529,8 +449,9 @@ The span operation type is normalized (`publish`, `receive`, `settle`, `create`,
 
 ```yaml
 ebpf:
-  buffer_sizes:
-    mq: 0   # shared large-buffer budget for AMQP/OpenWire/STOMP
+  tracer:
+    buffer_sizes:
+      mq: 0   # shared large-buffer budget for AMQP/OpenWire/STOMP
 ```
 
 #### Limits and caveats
@@ -581,13 +502,13 @@ NATS is a lightweight, text-based publish/subscribe messaging system. Telegen ca
 
 #### Configuration
 
+NATS parsing is active whenever network observability is enabled. There is no
+per-protocol toggle.
+
 ```yaml
-agent:
+ebpf:
   network:
-    protocols:
-      nats:
-        enabled: true
-        capture_subject: true
+    enabled: true
 ```
 
 ---
@@ -608,10 +529,9 @@ These metrics are emitted when a TCP connection closes and complement the per-re
 ### Configuration
 
 ```yaml
-agent:
-  ebpf:
-    conn_stats:
-      enabled: true
+ebpf:
+  network:
+    enabled: true
 ```
 
 ---

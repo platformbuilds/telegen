@@ -18,6 +18,7 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/nodeexporter"
 	obiconfig "github.com/mirastacklabs-ai/telegen/internal/obiconfig"
 	"github.com/mirastacklabs-ai/telegen/internal/profiler"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 	"github.com/mirastacklabs-ai/telegen/internal/snmp"
 	"github.com/mirastacklabs-ai/telegen/internal/storagedef"
 	"github.com/mirastacklabs-ai/telegen/internal/transform"
@@ -93,8 +94,10 @@ type Config struct {
 		Jitter     float64 `yaml:"jitter"`
 	} `yaml:"backoff"`
 	Exports struct {
-		RemoteWrite RemoteWrite `yaml:"remoteWrite"`
-		OTLP        OTLP        `yaml:"otlp"`
+		IncludeSignalMetadata bool                        `yaml:"include_signal_metadata"`
+		MetadataFields        sigdef.MetadataFieldsConfig `yaml:"metadata_fields"`
+		RemoteWrite           RemoteWrite                 `yaml:"remoteWrite"`
+		OTLP                  OTLP                        `yaml:"otlp"`
 	} `yaml:"exports"`
 	Pipelines struct {
 		Metrics struct {
@@ -837,8 +840,12 @@ type OTLP struct {
 		Endpoint string            `yaml:"endpoint"`
 		Headers  map[string]string `yaml:"headers"`
 		Insecure bool              `yaml:"insecure"`
-		Gzip     bool              `yaml:"gzip"`
-		Timeout  string            `yaml:"timeout"`
+		// Gzip is the legacy boolean toggle. Prefer Compression.
+		Gzip bool `yaml:"gzip"`
+		// Compression selects the wire codec: "gzip" or "none".
+		// When empty it is derived from Gzip during Load.
+		Compression string `yaml:"compression"`
+		Timeout     string `yaml:"timeout"`
 	} `yaml:"grpc"`
 	HTTP struct {
 		Enabled     bool              `yaml:"enabled"`
@@ -848,9 +855,33 @@ type OTLP struct {
 		LogsPath    string            `yaml:"logs_path"`
 		MetricsPath string            `yaml:"metrics_path"`
 		Headers     map[string]string `yaml:"headers"`
-		Gzip        bool              `yaml:"gzip"`
-		Timeout     string            `yaml:"timeout"`
+		// Gzip is the legacy boolean toggle. Prefer Compression.
+		Gzip bool `yaml:"gzip"`
+		// Compression selects the wire codec: "gzip" or "none".
+		// When empty it is derived from Gzip during Load.
+		Compression string `yaml:"compression"`
+		Timeout     string `yaml:"timeout"`
 	} `yaml:"http"`
+}
+
+// OTLP compression codecs accepted by exports.otlp.{grpc,http}.compression.
+const (
+	CompressionGzip = "gzip"
+	CompressionNone = "none"
+)
+
+// normalizeOTLPCompression resolves the compression codec for one OTLP
+// transport. An explicit compression value always wins; otherwise the value is
+// derived from the legacy gzip boolean, which Load seeds to true so that a
+// config omitting both keys compresses and "gzip: false" still disables it.
+func normalizeOTLPCompression(compression string, gzip bool) string {
+	if c := strings.ToLower(strings.TrimSpace(compression)); c != "" {
+		return c
+	}
+	if gzip {
+		return CompressionGzip
+	}
+	return CompressionNone
 }
 
 func Load(path string) (*Config, error) {
@@ -867,6 +898,12 @@ func Load(path string) (*Config, error) {
 	c.Pipelines.Metrics.CardinalityLimit = 2000
 	c.EBPF.InternalMetrics.Exporter = imetrics.InternalMetricsExporterPrometheus
 	c.EBPF.InternalMetrics.Prometheus.Path = "/metrics"
+	// Seeded before decode so an omitted key keeps today's behaviour and a
+	// partial metadata_fields map merges instead of zeroing the other fields.
+	c.Exports.IncludeSignalMetadata = true
+	c.Exports.MetadataFields = sigdef.DefaultMetadataFieldsConfig()
+	c.Exports.OTLP.GRPC.Gzip = true
+	c.Exports.OTLP.HTTP.Gzip = true
 
 	dec := yaml.NewDecoder(strings.NewReader(expanded))
 	dec.KnownFields(true)
@@ -893,6 +930,10 @@ func Load(path string) (*Config, error) {
 	if c.ConfigVersion == 0 {
 		c.ConfigVersion = CurrentConfigVersion
 	}
+	c.Exports.OTLP.GRPC.Compression = normalizeOTLPCompression(
+		c.Exports.OTLP.GRPC.Compression, c.Exports.OTLP.GRPC.Gzip)
+	c.Exports.OTLP.HTTP.Compression = normalizeOTLPCompression(
+		c.Exports.OTLP.HTTP.Compression, c.Exports.OTLP.HTTP.Gzip)
 	applyInternalMetricsDefaults(&c)
 	if err := c.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
@@ -951,6 +992,19 @@ func (c *Config) Validate() error {
 			c.Site.Timezone = canonicalizeIANATimezone(c.Site.Timezone)
 		}
 	}
+
+	validateCompression := func(fieldName, codec string) {
+		switch codec {
+		case "", CompressionGzip, CompressionNone:
+		default:
+			errs = append(errs, fmt.Errorf(
+				"%s must be %q or %q, got %q",
+				fieldName, CompressionGzip, CompressionNone, codec,
+			))
+		}
+	}
+	validateCompression("exports.otlp.grpc.compression", c.Exports.OTLP.GRPC.Compression)
+	validateCompression("exports.otlp.http.compression", c.Exports.OTLP.HTTP.Compression)
 
 	if c.SelfTelemetry.MemoryLimitBytes < 0 {
 		errs = append(errs, fmt.Errorf("selfTelemetry.memory_limit_bytes must be >= 0"))

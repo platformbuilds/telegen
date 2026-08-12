@@ -32,6 +32,7 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/pipeline"
 	"github.com/mirastacklabs-ai/telegen/internal/profiler"
 	"github.com/mirastacklabs-ai/telegen/internal/selftelemetry"
+	"github.com/mirastacklabs-ai/telegen/internal/sigdef"
 	"github.com/mirastacklabs-ai/telegen/internal/snmp"
 	storage "github.com/mirastacklabs-ai/telegen/internal/storage"
 	"github.com/mirastacklabs-ai/telegen/internal/version"
@@ -92,6 +93,13 @@ func main() {
 		os.Exit(1)
 	}
 	configureRuntimeLogger(cfg.Agent.LogLevel, cfg.Agent.LogFormat)
+
+	// Publish the signal-metadata policy before any emitter reads the global.
+	if cfg.Exports.IncludeSignalMetadata {
+		sigdef.SetGlobalMetadataConfig(cfg.Exports.MetadataFields)
+	} else {
+		sigdef.SetGlobalMetadataConfig(sigdef.DisabledMetadataFieldsConfig())
+	}
 
 	effectiveMode, err := resolveMode(*modeFlag, cfg.Agent.Mode)
 	if err != nil {

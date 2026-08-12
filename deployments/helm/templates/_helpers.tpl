@@ -112,8 +112,8 @@ agent:
 # Self-Telemetry Configuration
 # -----------------------------------------------------------------------------
 selfTelemetry:
-  listen: ":{{ .Values.selfTelemetry.listen | default .Values.service.port | default 19090 }}"
-  health_listen: ":{{ .Values.selfTelemetry.healthListen | default .Values.service.healthPort | default 8080 }}"
+  listen: {{ .Values.selfTelemetry.listen | default (printf ":%v" (.Values.service.port | default 19090)) | quote }}
+  health_listen: {{ .Values.selfTelemetry.healthListen | default (printf ":%v" (.Values.service.healthPort | default 8080)) | quote }}
   prometheus_namespace: {{ .Values.selfTelemetry.prometheusNamespace | default "telegen" | quote }}
   pprof_enabled: {{ .Values.selfTelemetry.pprofEnabled | default false }}
   pprof_port: {{ .Values.selfTelemetry.pprofPort | default 6060 }}
@@ -803,6 +803,9 @@ exports:
       headers: {{ .Values.otlp.headers | default dict | toJson }}
       insecure: {{ .Values.otlp.insecure | default true }}
       gzip: {{ .Values.otlp.gzip | default true }}
+      {{- with .Values.otlp.compression }}
+      compression: {{ . | quote }}
+      {{- end }}
       timeout: {{ .Values.otlp.timeout | default "10s" | quote }}
     http:
       enabled: {{ eq (.Values.otlp.protocol | default "grpc") "http" }}
@@ -813,6 +816,9 @@ exports:
       metrics_path: "/v1/metrics"
       headers: {{ .Values.otlp.headers | default dict | toJson }}
       gzip: {{ .Values.otlp.gzip | default true }}
+      {{- with .Values.otlp.compression }}
+      compression: {{ . | quote }}
+      {{- end }}
       timeout: {{ .Values.otlp.timeout | default "10s" | quote }}
 
 # -----------------------------------------------------------------------------
@@ -1072,6 +1078,9 @@ exports:
       headers: {{ .Values.otlp.headers | default dict | toJson }}
       insecure: {{ .Values.otlp.insecure | default true }}
       gzip: {{ .Values.otlp.gzip | default true }}
+      {{- with .Values.otlp.compression }}
+      compression: {{ . | quote }}
+      {{- end }}
       timeout: {{ .Values.otlp.timeout | default "10s" | quote }}
     http:
       enabled: {{ eq (.Values.otlp.protocol | default "grpc") "http" }}
@@ -1082,6 +1091,9 @@ exports:
       metrics_path: "/v1/metrics"
       headers: {{ .Values.otlp.headers | default dict | toJson }}
       gzip: {{ .Values.otlp.gzip | default true }}
+      {{- with .Values.otlp.compression }}
+      compression: {{ . | quote }}
+      {{- end }}
       timeout: {{ .Values.otlp.timeout | default "10s" | quote }}
 
 # -----------------------------------------------------------------------------

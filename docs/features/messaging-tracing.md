@@ -245,17 +245,12 @@ Messaging tracing requires no explicit configuration — it is enabled automatic
 To filter messaging spans, use the instrumentation options:
 
 ```yaml
-exports:
-  otlp:
-    instrumentation:
-      # Enable/disable specific messaging protocols
-      kafka: true
-      amqp: true        # AMQP 0-9-1
-      amqp1: true       # AMQP 1.0
-      openwire: true
-      stomp: true
-      nats: true
-      mqtt: true
+ebpf:
+  otel_traces_export:
+    # Naming a subset restricts spans to those protocols. Use "*" for all.
+    instrumentations:
+      - kafka
+      - mqtt
 ```
 
 ---

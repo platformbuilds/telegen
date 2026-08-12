@@ -74,50 +74,51 @@ Telegen uses statistical sampling to minimize overhead:
 ### Enable Profiling
 
 ```yaml
-agent:
-  profiling:
-    enabled: true
+profiling:
+  enabled: true
 ```
 
 ### Full Configuration
 
 ```yaml
-agent:
-  profiling:
-    enabled: true
-    
-    # Sampling rate in Hz
-    sample_rate: 99  # 99 Hz avoids aliasing with timers
-    
-    # Profile types
-    cpu: true          # On-CPU time
-    off_cpu: true      # Off-CPU waiting time
-    memory: true       # Heap allocations
-    mutex: true        # Lock contention (Go, Java)
-    block: true        # Blocking operations (Go)
-    goroutine: true    # Goroutine stacks (Go only)
-    
-    # Duration of each profile sample
-    duration: 10s
-    
-    # How often to upload profiles
-    upload_interval: 60s
-    
-    # Symbol resolution
-    symbols:
-      demangle_rust: true
-      demangle_cpp: true
-      include_kernel: false  # Include kernel symbols
-      
-    # Filtering
-    filters:
-      # Minimum samples to include
-      min_samples: 1
-      
-      # Exclude system functions
-      exclude_patterns:
-        - "runtime.*"  # Go runtime
-        - "java.lang.*"  # Java internals
+profiling:
+  enabled: true
+
+  # How often a profile is collected, and how often profiles are shipped
+  collection_interval: 10s
+  upload_interval: 60s
+
+  # Profile types. Each carries its own threshold, so they are blocks
+  # rather than booleans.
+  cpu:
+    enabled: true            # On-CPU time
+    sample_rate: 99          # Hz. 99 avoids aliasing with periodic timers.
+    max_stack_depth: 127
+  off_cpu:
+    enabled: true            # Off-CPU waiting time
+    min_block_time_ns: 1000000
+  memory:
+    enabled: true            # Heap allocations
+    min_alloc_size: 1024
+  mutex:
+    enabled: true            # Lock contention
+    contention_threshold_ns: 1000000
+  wall:
+    enabled: false           # Wall-clock time
+    sample_rate: 99
+
+  # Symbol resolution
+  symbols:
+    demangling_enabled: true   # Rust and C++ names
+    debug_info_enabled: true   # Read DWARF when present
+    go_symbols: true
+    kernel_symbols: false
+    cache_size: 10000
+
+  # Targeting. Leave empty to profile everything the agent can see.
+  target_process_names:
+    - "java"
+    - "python"
 ```
 
 ---
@@ -179,12 +180,11 @@ Memory profiling tracks heap allocations.
 ### Configuration
 
 ```yaml
-agent:
-  profiling:
-    memory: true
-    
-    # Track allocations or in-use memory
-    memory_mode: alloc  # alloc or inuse
+profiling:
+  memory:
+    enabled: true
+    # Ignore allocations smaller than this, in bytes
+    min_alloc_size: 1024
 ```
 
 ### Sample Output
@@ -204,15 +204,16 @@ Flat      Flat%   Sum%    Cum       Cum%    Name
 
 ### Go Profiling
 
-Full goroutine and runtime profiling:
+Go binaries get symbolised stacks from the Go symbol table, and lock contention
+from the mutex profile. There is no separate goroutine or block profile type.
 
 ```yaml
-agent:
-  profiling:
-    # Go-specific profile types
-    goroutine: true    # Goroutine stacks
-    mutex: true        # Mutex contention
-    block: true        # Blocking operations
+profiling:
+  mutex:
+    enabled: true
+    contention_threshold_ns: 1000000
+  symbols:
+    go_symbols: true
 ```
 
 ### Java Profiling
@@ -220,15 +221,23 @@ agent:
 Integration with JFR (Java Flight Recorder):
 
 ```yaml
-agent:
-  profiling:
-    java:
-      jfr_enabled: true
-      # JFR event types
-      cpu: true
-      memory: true
-      gc: true
-      locks: true
+# JFR is its own pipeline, not a profiling sub-section. Point it at the
+# directory your JVMs write recordings to.
+pipelines:
+  jfr:
+    enabled: true
+    input_dirs:
+      - /var/lib/telegen/jfr
+    recursive: true
+    poll_interval: "10s"
+    use_native_parser: true
+    workers: 2
+
+# Restrict CPU profiling to JVMs
+profiling:
+  enabled: true
+  target_process_names:
+    - "java"
 ```
 
 ### Python Profiling
@@ -236,12 +245,13 @@ agent:
 Frame-based profiling:
 
 ```yaml
-agent:
-  profiling:
-    python:
-      enabled: true
-      # AsyncIO support
-      asyncio: true
+profiling:
+  enabled: true
+  # Python frames are unwound automatically. Scope the profiler to
+  # interpreters rather than enabling a Python-specific mode.
+  target_process_names:
+    - "python"
+    - "python3"
 ```
 
 ---
@@ -462,18 +472,22 @@ Telegen profiling is designed for production:
 ### Reducing Overhead
 
 ```yaml
-agent:
-  profiling:
-    # Lower sample rate
-    sample_rate: 49  # Instead of 99
-    
-    # Increase upload interval
-    upload_interval: 120s  # Instead of 60s
-    
-    # Disable unused profile types
-    mutex: false
-    block: false
-    goroutine: false
+profiling:
+  # Lower sample rate
+  cpu:
+    enabled: true
+    sample_rate: 49        # Instead of 99
+
+  # Increase upload interval
+  upload_interval: 120s    # Instead of 60s
+
+  # Turn off profile types you are not reading
+  mutex:
+    enabled: false
+  memory:
+    enabled: false
+  wall:
+    enabled: false
 ```
 
 ---
@@ -485,11 +499,12 @@ agent:
 These two profiles cover most performance issues:
 
 ```yaml
-agent:
-  profiling:
+profiling:
+  enabled: true
+  cpu:
     enabled: true
-    cpu: true
-    off_cpu: true
+  off_cpu:
+    enabled: true
 ```
 
 ### 2. Use Appropriate Sample Rates

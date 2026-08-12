@@ -264,42 +264,39 @@ otlp:
 ### Network Filtering
 
 ```yaml
-agent:
-  ebpf:
-    network:
-      enabled: true
-      http: true
-      grpc: true
-      
-      # Exclude noisy endpoints
-      exclude_paths:
-        - "/health"
-        - "/healthz"
-        - "/ready"
-        - "/metrics"
-      
-      # Exclude by port
-      exclude_ports:
-        - 22    # SSH
-        - 2379  # etcd
+ebpf:
+  network:
+    enabled: true
+
+  otel_traces_export:
+    instrumentations:
+      - http
+      - grpc
+
+  # Exclude noisy endpoints
+  filter:
+    application:
+      url.path:
+        not_match: "/{health,healthz,ready,metrics}*"
+
+  # Exclude by port, at discovery time
+  discovery:
+    exclude_instrument:
+      - open_ports: "22,2379"
 ```
 
 ### Database Query Settings
 
+Query text is captured and sanitized unconditionally; parameter values are never
+recorded. What you control is how many bytes of each statement are captured:
+
 ```yaml
-agent:
-  database:
-    # Capture full query text
-    capture_queries: true
-    
-    # Sanitize sensitive data
-    sanitize_queries: true
-    
-    # Max query length
-    max_query_length: 1024
-    
-    # Capture query parameters
-    capture_parameters: false  # Privacy consideration
+ebpf:
+  tracer:
+    buffer_sizes:
+      postgres: 1024
+      mysql: 1024
+      mssql: 1024
 ```
 
 ---

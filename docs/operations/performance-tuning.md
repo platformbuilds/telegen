@@ -44,9 +44,11 @@ The ring buffer is the primary channel for eBPF events.
 ### Configuration
 
 ```yaml
-agent:
-  ebpf:
-    ringbuf_size: 16777216  # 16MB (default)
+ebpf:
+  tracer:
+    # Map sizing. 0 is the built-in default; each step doubles every BPF map.
+    maps_config:
+      global_scale_factor: 0
 ```
 
 ### Signs You Need Larger Buffer
@@ -59,9 +61,10 @@ rate(telegen_ebpf_ringbuf_lost_total[5m]) > 100
 If events are being lost, increase buffer size:
 
 ```yaml
-agent:
-  ebpf:
-    ringbuf_size: 67108864  # 64MB
+ebpf:
+  tracer:
+    maps_config:
+      global_scale_factor: 2   # Quadruple every map
 ```
 
 ---
@@ -102,9 +105,12 @@ agent:
 ### Parallel Processing
 
 ```yaml
-agent:
-  processing:
-    workers: 4  # Match available CPU cores
+ebpf:
+  tracer:
+    # Drain more events per wakeup instead of adding worker goroutines,
+    # which are sized internally.
+    batch_length: 500
+    batch_timeout: 5s
 ```
 
 ---
@@ -118,17 +124,14 @@ queues:
   traces:
     mem_limit: "128Mi"
     max_age: "1h"
-    batch_size: 256
-  
+
   metrics:
     mem_limit: "64Mi"
     max_age: "5m"
-    batch_size: 500
-  
+
   logs:
     mem_limit: "128Mi"
     max_age: "6h"
-    batch_size: 500
 ```
 
 ### Reduce Cardinality
@@ -136,23 +139,24 @@ queues:
 High cardinality labels increase memory:
 
 ```yaml
-agent:
-  kubernetes:
-    # Only essential labels
-    label_allowlist:
-      - "app"
-      - "version"
-    # NOT: "*"
+kubernetes:
+  enable: true
+  # Only essential labels. Every entry becomes a resource attribute on
+  # every signal from the pod.
+  resource_labels:
+    - "app"
+    - "version"
 ```
 
 ### Limit Active Connections Tracked
 
 ```yaml
-agent:
-  ebpf:
-    network:
-      # Limit tracked connections
-      max_connections: 50000  # Default: 100000
+ebpf:
+  tracer:
+    # The connection table is sized by the map scale factor. Lower it to
+    # track fewer concurrent connections.
+    maps_config:
+      global_scale_factor: -1
 ```
 
 ---
@@ -168,11 +172,14 @@ otlp:
 
 ### Batching
 
+Export batching is driven by how fast events are drained from the kernel, not by
+a queue-side batch size:
+
 ```yaml
-queues:
-  traces:
-    batch_size: 512     # Larger batches = fewer requests
-    flush_interval: 5s  # Don't wait too long
+ebpf:
+  tracer:
+    batch_length: 512   # Larger batches = fewer requests
+    batch_timeout: 5s   # Don't wait too long
 ```
 
 ### Connection Pooling
@@ -224,53 +231,44 @@ processors:
 ### Profiling
 
 ```yaml
-agent:
-  profiling:
-    # Lower sample rate for less overhead
+profiling:
+  # Lower sample rate for less overhead
+  cpu:
+    enabled: true
     sample_rate: 49  # Hz
-    
-    # Longer upload interval
-    upload_interval: 120s
-    
-    # Disable unused profile types
-    mutex: false
-    block: false
-    goroutine: false
+
+  # Longer upload interval
+  upload_interval: 120s
+
+  # Turn off profile types you are not reading
+  mutex:
+    enabled: false
+  memory:
+    enabled: false
+  wall:
+    enabled: false
 ```
 
 ### Security Monitoring
 
-```yaml
-agent:
-  security:
-    # Focus on critical syscalls only
-    syscall_audit:
-      syscalls:
-        - execve
-        - setuid
-        - ptrace
-      # NOT all syscalls
-    
-    # Limit file paths
-    file_integrity:
-      paths:
-        - /etc/passwd
-        - /etc/shadow
-      # NOT: /var/**
-```
+Security monitoring is not wired into the agent config, so it carries no tuning
+cost and no knobs. See {doc}`../features/security-observability`.
 
 ### Network Monitoring
 
+There is no connection or packet sampling. For high-volume hosts, reduce the
+number of instrumented processes and drop noisy endpoints instead:
+
 ```yaml
-agent:
-  network:
-    # Use sampling for high-volume
-    tcp:
-      sample_rate: 10  # 1 in 10 connections
-    
-    # XDP sampling
-    xdp:
-      sample_rate: 1000  # 0.1% of packets
+ebpf:
+  discovery:
+    exclude_instrument:
+      - open_ports: "2379,2380,10250"
+
+  filter:
+    application:
+      url.path:
+        not_match: "/{health,ready,metrics}*"
 ```
 
 ---

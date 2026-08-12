@@ -31,110 +31,16 @@ All events are exported as OpenTelemetry logs with security-specific attributes.
 
 ## Configuration
 
-### Enable Security Monitoring
+```{warning}
+Security monitoring is **not reachable from the agent config today.** The
+`internal/security` package carries a full configuration struct
+(`syscall_audit`, `file_integrity`, `container_escape`, `alerting`), but it is
+not mounted onto the top-level agent config, so there is no `security:` key to
+set. The agent rejects unknown keys at startup, which means adding one stops it
+from booting.
 
-```yaml
-agent:
-  security:
-    enabled: true
-```
-
-### Full Configuration
-
-```yaml
-agent:
-  security:
-    enabled: true
-    
-    # Syscall auditing
-    syscall_audit:
-      enabled: true
-      syscalls:
-        # Process execution
-        - execve
-        - execveat
-        
-        # Privilege changes
-        - setuid
-        - setgid
-        - setreuid
-        - setregid
-        - setresuid
-        - setresgid
-        
-        # Debugging/tracing
-        - ptrace
-        
-        # Filesystem mounting
-        - mount
-        - umount
-        - umount2
-        
-        # Kernel modules
-        - init_module
-        - finit_module
-        - delete_module
-        
-        # Container escape vectors
-        - open_by_handle_at
-        - name_to_handle_at
-        
-        # Network
-        - socket
-        - connect
-        - bind
-    
-    # File integrity monitoring
-    file_integrity:
-      enabled: true
-      paths:
-        # Authentication
-        - /etc/passwd
-        - /etc/shadow
-        - /etc/group
-        - /etc/gshadow
-        - /etc/sudoers
-        - /etc/sudoers.d
-        
-        # SSH
-        - /etc/ssh/sshd_config
-        - /root/.ssh
-        - /home/*/.ssh
-        
-        # System configuration
-        - /etc/hosts
-        - /etc/resolv.conf
-        - /etc/crontab
-        - /etc/cron.d
-        
-        # Binaries
-        - /usr/bin
-        - /usr/sbin
-        - /bin
-        - /sbin
-      
-      recursive: true
-      
-      events:
-        - create
-        - modify
-        - delete
-        - chmod
-        - chown
-        - rename
-    
-    # Container escape detection
-    container_escape:
-      enabled: true
-      
-      # Monitor namespace operations
-      namespaces: true
-      
-      # Monitor cgroup escapes
-      cgroups: true
-      
-      # Monitor privileged operations in containers
-      privileged_ops: true
+Everything below describes the event model the package implements. Treat it as
+a design reference, not as configuration you can apply.
 ```
 
 ---
@@ -375,61 +281,25 @@ groups:
 
 ---
 
-## Best Practices
+## Design Notes
 
-### 1. Focus on High-Value Syscalls
+These are the intended tuning axes of the security package. None of them are
+settable from the agent config today (see the warning above); they are recorded
+here so the shape is understood when the section is wired up.
 
-Don't trace everything—focus on security-relevant syscalls:
+**Focus on high-value syscalls.** Auditing every syscall is prohibitively
+expensive. The valuable set is process execution (`execve`), privilege change
+(`setuid`), debugging (`ptrace`), module loading (`init_module`), and mounting
+(`mount`).
 
-```yaml
-agent:
-  security:
-    syscall_audit:
-      syscalls:
-        # Start with these critical syscalls
-        - execve
-        - setuid
-        - ptrace
-        - init_module
-        - mount
-```
+**Monitor critical paths only.** File integrity monitoring is priced by the
+number of watched inodes, so specific files such as `/etc/passwd`,
+`/etc/shadow`, and `/etc/sudoers` are cheap, while broad trees like `/home` or
+`/var` are both expensive and noisy.
 
-### 2. Monitor Critical Paths Only
-
-File integrity monitoring on large directories is expensive:
-
-```yaml
-agent:
-  security:
-    file_integrity:
-      paths:
-        # Good: Specific critical files
-        - /etc/passwd
-        - /etc/shadow
-        - /etc/sudoers
-        
-        # Avoid: Large directories
-        # - /home  # Too broad
-        # - /var   # Too noisy
-```
-
-### 3. Tune for Your Environment
-
-Reduce noise by excluding known-good patterns:
-
-```yaml
-agent:
-  security:
-    syscall_audit:
-      exclude:
-        # Exclude package manager updates
-        - executable: "/usr/bin/apt*"
-          syscall: execve
-        
-        # Exclude container runtime
-        - executable: "/usr/bin/containerd*"
-          syscall: mount
-```
+**Exclude known-good actors.** Package managers and container runtimes trip
+execve and mount rules constantly during normal operation, so they are the
+first candidates for exclusion by executable path.
 
 ---
 

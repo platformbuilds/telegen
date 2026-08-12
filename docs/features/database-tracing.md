@@ -279,41 +279,23 @@ span:
 
 ### Enable Database Tracing
 
-Database tracing is enabled by default. Configure specific options:
+Database wire protocols are parsed whenever eBPF network observability is on.
+There is no `database` section and no per-engine toggle: what you control is how
+much of each statement is captured, through the per-protocol buffer budget.
 
 ```yaml
-agent:
-  database:
+ebpf:
+  enabled: true
+  network:
     enabled: true
-    
-    # Query capture settings
-    capture_queries: true
-    max_query_length: 1024
-    
-    # Sanitization (recommended for production)
-    sanitize_queries: true
-    
-    # Capture parameters (privacy consideration)
-    capture_parameters: false
-    
-    # Per-database settings
-    postgresql:
-      enabled: true
-      trace_prepared_statements: true
-      trace_transactions: true
-    
-    mysql:
-      enabled: true
-      trace_prepared_statements: true
-    
-    mongodb:
-      enabled: true
-      capture_aggregation_pipeline: true
-    
-    redis:
-      enabled: true
-      trace_pubsub: true
-      trace_cluster: true
+
+  tracer:
+    # Bytes captured per statement. 0 uses the built-in default.
+    buffer_sizes:
+      mysql: 0
+      postgres: 0
+      mssql: 0
+```
 ```
 
 ### Query Sanitization
@@ -328,25 +310,9 @@ SELECT * FROM users WHERE email = 'john@example.com' AND password = 'secret123'
 SELECT * FROM users WHERE email = ? AND password = ?
 ```
 
-Configure sanitization:
-
-```yaml
-agent:
-  database:
-    sanitization:
-      # Replace literals with ?
-      sanitize_literals: true
-      
-      # Truncate long queries
-      max_length: 2048
-      
-      # Additional patterns to sanitize
-      patterns:
-        - "password"
-        - "secret"
-        - "token"
-        - "api_key"
-```
+Sanitization is unconditional: literals are replaced with `?` before the
+statement ever leaves the kernel, so no credential or PII value is buffered.
+There is no way to turn it off and no pattern list to maintain.
 
 ---
 
@@ -384,23 +350,14 @@ histogram_quantile(0.95,
 
 ## Slow Query Detection
 
-Telegen automatically flags slow queries:
+Every query span carries its duration, so "slow" is a query-time decision rather
+than a collection-time one. There is no `slow_query` configuration section and
+no EXPLAIN capture. Alert on the span duration instead:
 
-```yaml
-agent:
-  database:
-    slow_query:
-      enabled: true
-      
-      # Thresholds by database type
-      thresholds:
-        postgresql: 100ms
-        mysql: 100ms
-        mongodb: 50ms
-        redis: 10ms
-      
-      # Capture EXPLAIN for slow queries
-      explain: true
+```promql
+histogram_quantile(0.99,
+  sum(rate(db_client_operation_duration_bucket[5m])) by (le, db_system)
+) > 0.1
 ```
 
 ### Slow Query Event
@@ -424,38 +381,33 @@ agent:
 
 ## Best Practices
 
-### 1. Enable Query Sanitization
+### 1. Rely on Built-in Sanitization
 
-Always sanitize in production:
+Literals are stripped in the kernel before capture, and parameter values are
+never recorded. Nothing needs to be enabled for this.
+
+### 2. Bound Captured Query Length
+
+Long statements are truncated at the per-protocol buffer budget. Lower it if
+your workload issues very large statements and you do not need the full text:
 
 ```yaml
-agent:
-  database:
-    sanitize_queries: true
-    capture_parameters: false
+ebpf:
+  tracer:
+    buffer_sizes:
+      postgres: 1024
+      mysql: 1024
 ```
 
-### 2. Set Appropriate Query Length Limits
+### 3. Alert on Duration, Not Configuration
 
-Prevent excessive storage:
+Slow-query thresholds belong in your alerting rules, since every span already
+carries its duration:
 
-```yaml
-agent:
-  database:
-    max_query_length: 1024  # Truncate long queries
-```
-
-### 3. Use Slow Query Thresholds
-
-Focus on problematic queries:
-
-```yaml
-agent:
-  database:
-    slow_query:
-      enabled: true
-      thresholds:
-        postgresql: 100ms
+```promql
+histogram_quantile(0.99,
+  sum(rate(db_client_operation_duration_bucket{db_system="postgresql"}[5m])) by (le)
+) > 0.1
 ```
 
 ### 4. Monitor Connection Pools
@@ -573,17 +525,10 @@ span:
 ### Configuration
 
 ```yaml
-agent:
+ebpf:
+  enabled: true
   network:
-    protocols:
-      cql:
-        enabled: true
-        capture_query: true
-
-  ebpf:
-    buffer_sizes:
-      cql: 0  # 0 = auto-size
-    cql_prepared_statements_cache_size: 1024
+    enabled: true
 ```
 
 ---
