@@ -35,7 +35,7 @@ func lunRows(readOps, writeOps int) string {
 }
 
 // lunRowsWithLatency includes both ops and latency counters for testing average cooking.
-func lunRowsWithLatency(readOps, readLatency int) string {
+func lunRowsWithLatency(readOps, avgReadLatency int) string {
 	return `{"records":[
   {"id":"node-01:svm_prod:/vol/vol_data01/lun0",
    "properties":[
@@ -44,16 +44,16 @@ func lunRowsWithLatency(readOps, readLatency int) string {
    ],
    "counters":[
      {"name":"read_ops","value":` + itoa(readOps) + `},
-     {"name":"read_latency","value":` + itoa(readLatency) + `}
+     {"name":"average_read_latency","value":` + itoa(avgReadLatency) + `}
    ]}
 ],"num_records":1}`
 }
 
-// lunSchema returns the counter schema including denominator for read_latency.
+// lunSchema returns the counter schema including denominator for average_read_latency.
 func lunSchema() string {
 	return `{"records":[{"counter_schemas":[
 		{"name":"read_ops","type":"rate"},
-		{"name":"read_latency","type":"average","denominator":{"name":"read_ops"}},
+		{"name":"average_read_latency","type":"average","denominator":{"name":"read_ops"}},
 		{"name":"write_ops","type":"rate"}
 	]}],"num_records":1}`
 }
@@ -202,7 +202,7 @@ func TestPollObject_DenominatorCooking(t *testing.T) {
 
 	// Second poll, 60s later:
 	// read_ops: 1000 -> 2000 (Δ = 1000)
-	// read_latency: 50000 -> 150000 (Δ = 100000µs)
+	// average_read_latency: 50000 -> 150000 (Δ = 100000µs)
 	// Expected: 100000/1000 = 100µs average latency
 	body = lunRowsWithLatency(2000, 150000)
 	second, err := c.pollObject(ctx, "Lun", "lun.yaml", t0.Add(60*time.Second))
@@ -210,17 +210,17 @@ func TestPollObject_DenominatorCooking(t *testing.T) {
 		t.Fatalf("second poll: %v", err)
 	}
 
-	m, ok := findMetric(second, "lun_read_latency")
+	m, ok := findMetric(second, "lun_avg_read_latency")
 	if !ok {
 		names := map[string]bool{}
 		for _, x := range second {
 			names[x.Name] = true
 		}
-		t.Fatalf("lun_read_latency missing; got %v", keys(names))
+		t.Fatalf("lun_avg_read_latency missing; got %v", keys(names))
 	}
 	want := 100.0 // 100000µs / 1000 ops
 	if m.Value != want {
-		t.Errorf("lun_read_latency = %v, want %v (Δlatency/Δops = 100000/1000)", m.Value, want)
+		t.Errorf("lun_avg_read_latency = %v, want %v (Δlatency/Δops = 100000/1000)", m.Value, want)
 	}
 }
 

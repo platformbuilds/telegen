@@ -27,7 +27,7 @@ type Template struct {
 	Plugins       any            `yaml:"plugins"`
 	ExportOptions *ExportOptions `yaml:"export_options"`
 	Endpoints     []Endpoint     `yaml:"endpoints"`
-	Override      []any          `yaml:"override"`      // list of {counter: property} maps
+	Override      any            `yaml:"override"`      // list or map of {counter: property}
 	GlobalLabels  []any          `yaml:"global_labels"` // list of {key: value} maps
 	ExportData    *bool          `yaml:"export_data"`   // when false, suppress parent instances (not plugin children)
 	ClientTimeout string         `yaml:"client_timeout"` // per-object HTTP timeout (e.g., "2m", "90s")
@@ -41,20 +41,38 @@ type Template struct {
 }
 
 // GetOverrides parses the Override field into a name->property map.
+// Handles both Harvest formats:
+//   - List: override: [{counter: prop}, ...]
+//   - Map:  override: {counter: prop, ...}  (used only in lif.yaml)
 func (t *Template) GetOverrides() map[string]string {
 	if t.Override == nil {
 		return nil
 	}
 	result := make(map[string]string)
-	for _, item := range t.Override {
-		if m, ok := item.(map[string]any); ok {
-			for k, v := range m {
-				if s, ok := v.(string); ok {
-					result[k] = s
+	
+	// Try list format first (23 templates)
+	if list, ok := t.Override.([]any); ok {
+		for _, item := range list {
+			if m, ok := item.(map[string]any); ok {
+				for k, v := range m {
+					if s, ok := v.(string); ok {
+						result[k] = s
+					}
 				}
 			}
 		}
+		return result
 	}
+	
+	// Fall back to map format (1 template: lif.yaml)
+	if m, ok := t.Override.(map[string]any); ok {
+		for k, v := range m {
+			if s, ok := v.(string); ok {
+				result[k] = s
+			}
+		}
+	}
+	
 	return result
 }
 

@@ -103,7 +103,13 @@ func CookRates(prev, cur *Matrix) (*Matrix, error) {
 				continue
 			}
 
-			switch met.Property {
+			// Backward compatibility: infer Property from MetricType when Property is empty
+			prop := met.Property
+			if prop == "" && met.MetricType == "counter" {
+				prop = "rate"
+			}
+
+			switch prop {
 			case "raw", "string", "":
 				// Passthrough raw values
 				outMet.Values[ik] = curV
