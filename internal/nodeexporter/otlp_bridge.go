@@ -278,13 +278,21 @@ func (b *OTLPBridge) convertHistogram(name, help string, metrics []*dto.Metric, 
 			bucketCounts = append(bucketCounts, *h.SampleCount-prevCount)
 		}
 
+		// Cumulative histograms must anchor to when accumulation actually began.
+		// A rolling "one minute ago" moves the start on every scrape, which
+		// defeats reset detection and makes rate anchoring meaningless.
+		startTime := b.processStart
+		if startTime.IsZero() {
+			// Only reachable if the bridge was built without its constructor.
+			// Collapsing to the sample instant is a degenerate-but-valid window;
+			// emitting the zero time would claim accumulation began in 1970.
+			startTime = timestamp
+		}
+
 		dp := metricdata.HistogramDataPoint[float64]{
 			Attributes: attrs,
-			// Cumulative histograms must anchor to when accumulation actually
-			// began. A rolling "one minute ago" moves the start on every scrape,
-			// which defeats reset detection and makes rate anchoring meaningless.
-			StartTime: b.processStart,
-			Time:      timestamp,
+			StartTime:  startTime,
+			Time:       timestamp,
 			Count:        h.GetSampleCount(),
 			Sum:          h.GetSampleSum(),
 			Bounds:       boundaries,
