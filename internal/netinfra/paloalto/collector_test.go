@@ -4,7 +4,13 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
+
+// fixedCollectionInstant is the hoisted per-cycle instant the collector would
+// pass in. Tests assert it survives onto every emitted metric so a regression
+// back to per-metric time.Now() is caught.
+var fixedCollectionInstant = time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
 
 func TestParseSystemInfoFixture(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("testdata", "system_info.xml"))
@@ -13,9 +19,14 @@ func TestParseSystemInfoFixture(t *testing.T) {
 	}
 
 	base := map[string]string{"vendor": "paloalto", "device": "pa-1"}
-	metrics, err := parseSystemInfo(data, base)
+	metrics, err := parseSystemInfo(data, base, fixedCollectionInstant)
 	if err != nil {
 		t.Fatalf("parseSystemInfo failed: %v", err)
+	}
+	for i, m := range metrics {
+		if !m.Timestamp.Equal(fixedCollectionInstant) {
+			t.Fatalf("metric %d: expected hoisted timestamp %v, got %v", i, fixedCollectionInstant, m.Timestamp)
+		}
 	}
 	if len(metrics) != 2 {
 		t.Fatalf("expected 2 metrics (info + uptime), got %d", len(metrics))
@@ -42,12 +53,17 @@ func TestParseInterfacesFixture(t *testing.T) {
 	}
 
 	base := map[string]string{"vendor": "paloalto", "device": "pa-1"}
-	metrics, err := parseInterfaces(data, base)
+	metrics, err := parseInterfaces(data, base, fixedCollectionInstant)
 	if err != nil {
 		t.Fatalf("parseInterfaces failed: %v", err)
 	}
 	if len(metrics) != 2 {
 		t.Fatalf("expected 2 interface metrics, got %d", len(metrics))
+	}
+	for i, m := range metrics {
+		if !m.Timestamp.Equal(fixedCollectionInstant) {
+			t.Fatalf("metric %d: expected hoisted timestamp %v, got %v", i, fixedCollectionInstant, m.Timestamp)
+		}
 	}
 
 	if metrics[0].Labels["interface"] != "ethernet1/1" || metrics[0].Value != 1 {
