@@ -5,7 +5,6 @@ package netinfra
 
 import (
 	"context"
-	"time"
 
 	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
 	"go.opentelemetry.io/otel/attribute"
@@ -27,7 +26,6 @@ func exportWithSharedMetricsExporter(ctx context.Context, exp sdkmetric.Exporter
 	}
 	buckets := map[string]*bucket{}
 	order := make([]string, 0, len(metrics))
-	now := time.Now()
 
 	for _, m := range metrics {
 		if m == nil || m.Name == "" {
@@ -41,7 +39,7 @@ func exportWithSharedMetricsExporter(ctx context.Context, exp sdkmetric.Exporter
 		}
 		dp := metricdata.DataPoint[float64]{
 			Attributes: labelsToAttrSet(m.Labels),
-			Time:       now,
+			Time:       m.Timestamp, // Use source timestamp (from gNMI, SNMP, etc.), not collection instant
 			Value:      m.Value,
 		}
 		if m.Type == types.MetricTypeCounter {

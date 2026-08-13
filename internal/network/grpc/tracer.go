@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/mirastacklabs-ai/telegen/internal/timeutil"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -332,8 +333,14 @@ func (t *Tracer) ProcessHTTP2Event(event *HTTP2Event) {
 		return
 	}
 
+	// Convert kernel monotonic timestamp to wallclock (UTC)
+	// event.Timestamp is uint64 nanoseconds from kernel monotonic clock
+	timestamp := timeutil.MonotonicToWallClock(event.Timestamp, func() time.Duration {
+		return time.Since(time.Time{})
+	})
+
 	grpcEvent := &GRPCEvent{
-		Timestamp:    time.Now(),
+		Timestamp:    timestamp,
 		Service:      bytesToString(event.GRPCService[:]),
 		Method:       bytesToString(event.GRPCMethod[:]),
 		FullMethod:   bytesToString(event.Path[:]),

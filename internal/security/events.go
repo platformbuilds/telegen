@@ -91,32 +91,35 @@ type Alert struct {
 	Metadata    map[string]interface{}
 }
 
-// NewSecurityEvent creates a new SecurityEvent from raw eBPF data
-func NewSecurityEvent(eventType EventType, severity Severity) *SecurityEvent {
+// NewSecurityEvent creates a new SecurityEvent from raw eBPF data.
+// timestamp should be the kernel event timestamp (monotonic converted to wallclock).
+func NewSecurityEvent(eventType EventType, severity Severity, timestamp time.Time) *SecurityEvent {
 	return &SecurityEvent{
-		Timestamp: time.Now(),
+		Timestamp: timestamp,
 		Type:      eventType,
 		Severity:  severity,
 		Details:   make(map[string]interface{}),
 	}
 }
 
-// NewSyscallEvent creates a new SyscallEvent
-func NewSyscallEvent() *SyscallEvent {
+// NewSyscallEvent creates a new SyscallEvent.
+// timestamp should be the kernel event timestamp (monotonic converted to wallclock).
+func NewSyscallEvent(timestamp time.Time) *SyscallEvent {
 	return &SyscallEvent{
 		SecurityEvent: SecurityEvent{
-			Timestamp: time.Now(),
+			Timestamp: timestamp,
 			Type:      EventTypeSyscall,
 			Details:   make(map[string]interface{}),
 		},
 	}
 }
 
-// NewExecveEvent creates a new ExecveEvent
-func NewExecveEvent() *ExecveEvent {
+// NewExecveEvent creates a new ExecveEvent.
+// timestamp should be the kernel event timestamp (monotonic converted to wallclock).
+func NewExecveEvent(timestamp time.Time) *ExecveEvent {
 	return &ExecveEvent{
 		SecurityEvent: SecurityEvent{
-			Timestamp: time.Now(),
+			Timestamp: timestamp,
 			Type:      EventTypeExecve,
 			Details:   make(map[string]interface{}),
 		},
@@ -124,8 +127,9 @@ func NewExecveEvent() *ExecveEvent {
 	}
 }
 
-// NewFileEvent creates a new FileEvent
-func NewFileEvent(op FileOperation) *FileEvent {
+// NewFileEvent creates a new FileEvent.
+// timestamp should be the kernel event timestamp (monotonic converted to wallclock).
+func NewFileEvent(op FileOperation, timestamp time.Time) *FileEvent {
 	eventType := EventTypeFileWrite
 	switch op {
 	case FileOpUnlink:
@@ -140,7 +144,7 @@ func NewFileEvent(op FileOperation) *FileEvent {
 
 	return &FileEvent{
 		SecurityEvent: SecurityEvent{
-			Timestamp: time.Now(),
+			Timestamp: timestamp,
 			Type:      eventType,
 			Details:   make(map[string]interface{}),
 		},
@@ -148,11 +152,12 @@ func NewFileEvent(op FileOperation) *FileEvent {
 	}
 }
 
-// NewEscapeEvent creates a new EscapeEvent
-func NewEscapeEvent(escapeType EscapeType) *EscapeEvent {
+// NewEscapeEvent creates a new EscapeEvent.
+// timestamp should be the kernel event timestamp (monotonic converted to wallclock).
+func NewEscapeEvent(escapeType EscapeType, timestamp time.Time) *EscapeEvent {
 	return &EscapeEvent{
 		SecurityEvent: SecurityEvent{
-			Timestamp: time.Now(),
+			Timestamp: timestamp,
 			Type:      EventTypeContainerEscape,
 			Details:   make(map[string]interface{}),
 		},

@@ -22,8 +22,9 @@ import (
 // VM collectors run their common + instanced perf scrapes in two goroutines
 // (see collectHost/collectVM), so the sink must be safe for concurrent add.
 type metricSink struct {
-	mu  sync.Mutex
-	out []vmwaredef.Metric
+	mu        sync.Mutex
+	out       []vmwaredef.Metric
+	timestamp time.Time // Per-cycle instant captured once per collection cycle
 }
 
 func (s *metricSink) add(m vmwaredef.Metric) {
@@ -88,6 +89,8 @@ func emitPerformanceMetrics(
 	countersSpec map[string]*types.PerfCounterInfo,
 	targetNames map[string]string,
 	metrics []performance.EntityMetric,
+	fallbackInstant time.Time,
+	logger *slog.Logger,
 ) {
 	for _, metric := range metrics {
 		labelMap := map[string]string{"vcenter": vcenter}
@@ -135,6 +138,25 @@ func emitPerformanceMetrics(
 				labels[k] = v
 			}
 
+			// Use vCenter sample timestamp (last sample = newest), fallback to cycle instant
+			var timestamp time.Time
+			if len(metric.SampleInfo) > 0 {
+				lastSample := metric.SampleInfo[len(metric.SampleInfo)-1]
+				if !lastSample.Timestamp.IsZero() {
+					timestamp = lastSample.Timestamp.UTC()
+				} else {
+					timestamp = fallbackInstant
+					logger.Warn("vCenter SampleInfo timestamp is zero, using fallback",
+						"entity", metric.Entity.Value,
+						"counter", value.Name)
+				}
+			} else {
+				timestamp = fallbackInstant
+				logger.Warn("vCenter SampleInfo is empty, using fallback",
+					"entity", metric.Entity.Value,
+					"counter", value.Name)
+			}
+
 			sink.add(vmwaredef.Metric{
 				Name: namespace + "_" + subsystem + "_" + strings.ReplaceAll(value.Name, ".", "_"),
 				Help: counterInfo.UnitInfo.GetElementDescription().Label + " in " +
@@ -142,7 +164,7 @@ func emitPerformanceMetrics(
 				Type:      vmwaredef.MetricTypeGauge,
 				Value:     float64(avg),
 				Labels:    labels,
-				Timestamp: time.Now(),
+				Timestamp: timestamp,
 			})
 		}
 	}
@@ -204,5 +226,7 @@ func scrapePerformance(ctx context.Context, sink *metricSink, logger *slog.Logge
 
 	logger.Debug("time to fetch perfman samples", "type", moType, "duration_seconds", time.Since(begin).Seconds())
 
-	emitPerformanceMetrics(sink, vcenter, moType, subsystem, instance, countersSpec, targetNames, metrics)
+	// Capture fallback instant once per cycle for consistent timestamps when vCenter doesn't provide them
+	fallbackInstant := time.Now().UTC()
+	emitPerformanceMetrics(sink, vcenter, moType, subsystem, instance, countersSpec, targetNames, metrics, fallbackInstant, logger)
 }

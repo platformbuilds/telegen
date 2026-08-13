@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
 )
@@ -57,6 +58,9 @@ func NewNodeCollector(aci *ACICollector) *NodeCollector {
 
 // Collect gathers fabric node metrics
 func (c *NodeCollector) Collect(ctx context.Context) ([]*types.NetworkMetric, error) {
+	// Hoist per-cycle instant once for all metrics
+	now := time.Now().UTC()
+
 	var allMetrics []*types.NetworkMetric
 
 	// Collect node inventory
@@ -73,7 +77,7 @@ func (c *NodeCollector) Collect(ctx context.Context) ([]*types.NetworkMetric, er
 	}
 
 	// Build metrics
-	allMetrics = append(allMetrics, c.buildMetrics(nodes, healthMap)...)
+	allMetrics = append(allMetrics, c.buildMetrics(nodes, healthMap, now)...)
 
 	return allMetrics, nil
 }
@@ -170,7 +174,7 @@ func (c *NodeCollector) getNodeHealth(ctx context.Context) (map[string]NodeHealt
 }
 
 // buildMetrics converts node data to metrics
-func (c *NodeCollector) buildMetrics(nodes []FabricNode, healthMap map[string]NodeHealth) []*types.NetworkMetric {
+func (c *NodeCollector) buildMetrics(nodes []FabricNode, healthMap map[string]NodeHealth, timestamp time.Time) []*types.NetworkMetric {
 	var metrics []*types.NetworkMetric
 
 	// Track counts by role
@@ -197,35 +201,35 @@ func (c *NodeCollector) buildMetrics(nodes []FabricNode, healthMap map[string]No
 		} else {
 			stateDown++
 		}
-		metrics = append(metrics, types.NewMetric("aci_node_up", up, labels))
+		metrics = append(metrics, types.NewMetricAt("aci_node_up", up, labels, timestamp))
 
 		// Admin state
 		adminUp := 0.0
 		if node.AdminState == "in-service" {
 			adminUp = 1.0
 		}
-		metrics = append(metrics, types.NewMetric("aci_node_admin_state", adminUp, labels))
+		metrics = append(metrics, types.NewMetricAt("aci_node_admin_state", adminUp, labels, timestamp))
 
 		// Health score
 		if health, ok := healthMap[node.DN]; ok {
 			healthScore := parseFloat(health.Health)
-			metrics = append(metrics, types.NewMetric("aci_node_health", healthScore, labels))
+			metrics = append(metrics, types.NewMetricAt("aci_node_health", healthScore, labels, timestamp))
 		}
 	}
 
 	// Summary metrics
 	baseLabels := c.aci.BaseLabels()
 	metrics = append(metrics,
-		types.NewMetric("aci_nodes_total", float64(len(nodes)), baseLabels),
-		types.NewMetric("aci_nodes_up", float64(stateUp), baseLabels),
-		types.NewMetric("aci_nodes_down", float64(stateDown), baseLabels),
+		types.NewMetricAt("aci_nodes_total", float64(len(nodes)), baseLabels, timestamp),
+		types.NewMetricAt("aci_nodes_up", float64(stateUp), baseLabels, timestamp),
+		types.NewMetricAt("aci_nodes_down", float64(stateDown), baseLabels, timestamp),
 	)
 
 	// Nodes by role
 	for role, count := range roleCounts {
 		labels := c.aci.BaseLabels()
 		labels["role"] = role
-		metrics = append(metrics, types.NewMetric("aci_nodes_by_role", float64(count), labels))
+		metrics = append(metrics, types.NewMetricAt("aci_nodes_by_role", float64(count), labels, timestamp))
 	}
 
 	return metrics

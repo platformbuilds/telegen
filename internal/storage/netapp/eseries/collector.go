@@ -207,6 +207,9 @@ func (c *Collector) poll(ctx context.Context, tmpl *template.Template, now time.
 	if err != nil {
 		return nil, err
 	}
+	// Extract per-record timestamps if observedTimeInMS is present
+	recordTimestamps := make(map[string]time.Time)
+
 	for _, rec := range records {
 		key := ""
 		for _, k := range keys {
@@ -229,7 +232,18 @@ func (c *Collector) poll(ctx context.Context, tmpl *template.Template, now time.
 				inst.Labels[l.Display] = s
 			}
 		}
+
+		// Extract observedTimeInMS as timestamp (not as a metric value)
+		// SANtricity API returns epoch milliseconds in this field
+		if observedMs, ok := jsonpath.GetFloat(rec, "observedTimeInMS"); ok && observedMs > 0 {
+			recordTimestamps[key] = time.Unix(int64(observedMs)/1000, (int64(observedMs)%1000)*1e6).UTC()
+		}
+
 		for _, m := range metrics {
+			// Skip observedTimeInMS - we're using it as timestamp, not as a metric
+			if m.APIName == "observedTimeInMS" {
+				continue
+			}
 			if f, ok := jsonpath.GetFloat(rec, m.APIName); ok {
 				if err := mat.SetValue(m.APIName, key, f); err != nil {
 					continue
@@ -242,7 +256,17 @@ func (c *Collector) poll(ctx context.Context, tmpl *template.Template, now time.
 	mats := plugins.ApplyAll(mat, tmpl.Plugins, c.log)
 	var out []storagedef.Metric
 	for _, m := range mats {
-		out = append(out, m.ToStorageMetrics(now)...)
+		metrics := m.ToStorageMetrics(now)
+		// Apply per-record timestamps if we extracted them
+		for i := range metrics {
+			// Extract instance key from labels to match with recordTimestamps
+			if instanceKey, ok := metrics[i].Labels["instance"]; ok {
+				if ts, found := recordTimestamps[instanceKey]; found {
+					metrics[i].Timestamp = ts
+				}
+			}
+		}
+		out = append(out, metrics...)
 	}
 	return out, nil
 }

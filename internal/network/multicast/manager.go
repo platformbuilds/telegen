@@ -11,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/mirastacklabs-ai/telegen/internal/timeutil"
 )
 
 // MulticastType classifies multicast traffic patterns
@@ -381,8 +383,14 @@ func (m *Manager) processMulticast(event *PacketEvent) {
 
 // processBroadcast handles broadcast packet processing (NET-009)
 func (m *Manager) processBroadcast(event *PacketEvent) {
+	// Convert kernel monotonic timestamp to wallclock (UTC)
+	// event.Timestamp is uint64 nanoseconds from kernel monotonic clock
+	timestamp := timeutil.MonotonicToWallClock(event.Timestamp, func() time.Duration {
+		return time.Since(time.Time{})
+	})
+
 	broadcastEvent := BroadcastEvent{
-		Timestamp: time.Now(),
+		Timestamp: timestamp,
 		SrcMAC:    net.HardwareAddr(event.SrcMAC[:]),
 		DstMAC:    net.HardwareAddr(event.DstMAC[:]),
 		SrcIP:     uint32ToIP(event.SaddrV4),

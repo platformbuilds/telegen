@@ -1749,6 +1749,7 @@ func (p *FIXMLParser) extractFIXMLTimestamp(log *ParsedLog, line string) {
 // parseFIXTimestamp parses FIX timestamp formats
 func (p *FIXMLParser) parseFIXTimestamp(s string) time.Time {
 	// FIX timestamp formats
+	// FIX UTCTimestamp formats are explicitly in UTC; others with zone offsets parse in their declared zone
 	formats := []string{
 		time.RFC3339Nano,
 		time.RFC3339,
@@ -1762,7 +1763,9 @@ func (p *FIXMLParser) parseFIXTimestamp(s string) time.Time {
 	}
 
 	for _, format := range formats {
-		if ts, err := time.Parse(format, s); err == nil {
+		// Parse in UTC to avoid local-time misinterpretation
+		// FIX protocol timestamps without explicit zone are defined as UTC
+		if ts, err := time.ParseInLocation(format, s, time.UTC); err == nil {
 			return ts
 		}
 	}

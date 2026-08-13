@@ -173,7 +173,7 @@ func (m *Manager) collectTarget(ctx context.Context, t vmwaredef.Target) {
 	defer s.close(log)
 
 	// Metrics collection.
-	sink := &metricSink{}
+	sink := &metricSink{timestamp: time.Now().UTC()} // Hoist per-cycle instant once for all gauges
 	st := m.stateFor(name)
 	useSharedInventory := m.cfg.Events.StateChanges &&
 		(m.cfg.Collectors.Enabled("host") ||

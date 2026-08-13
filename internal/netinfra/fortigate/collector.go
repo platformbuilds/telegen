@@ -125,6 +125,9 @@ func (c *Collector) Collect(ctx context.Context) ([]*types.NetworkMetric, error)
 		return nil, fmt.Errorf("collector not started")
 	}
 
+	// Hoist per-cycle instant once for all metrics
+	now := time.Now().UTC()
+
 	var out []*types.NetworkMetric
 	for _, item := range c.config.Collect {
 		switch item {
@@ -134,7 +137,7 @@ func (c *Collector) Collect(ctx context.Context) ([]*types.NetworkMetric, error)
 				c.log.Warn("system status request failed", "error", err)
 				continue
 			}
-			metrics, err := parseSystemStatus(data, c.baseLabels())
+			metrics, err := parseSystemStatus(data, c.baseLabels(), now)
 			if err != nil {
 				c.log.Warn("system status parse failed", "error", err)
 				continue
@@ -146,7 +149,7 @@ func (c *Collector) Collect(ctx context.Context) ([]*types.NetworkMetric, error)
 				c.log.Warn("interface request failed", "error", err)
 				continue
 			}
-			metrics, err := parseInterfaces(data, c.baseLabels())
+			metrics, err := parseInterfaces(data, c.baseLabels(), now)
 			if err != nil {
 				c.log.Warn("interface parse failed", "error", err)
 				continue
@@ -199,7 +202,7 @@ func (c *Collector) apiGET(ctx context.Context, path string) ([]byte, error) {
 	return body, nil
 }
 
-func parseSystemStatus(data []byte, base map[string]string) ([]*types.NetworkMetric, error) {
+func parseSystemStatus(data []byte, base map[string]string, timestamp time.Time) ([]*types.NetworkMetric, error) {
 	type resp struct {
 		Results struct {
 			Hostname string      `json:"hostname"`
@@ -229,16 +232,16 @@ func parseSystemStatus(data []byte, base map[string]string) ([]*types.NetworkMet
 	}
 
 	metrics := []*types.NetworkMetric{
-		types.NewMetric("netinfra_fortigate_device_info", 1, labels),
+		types.NewMetricAt("netinfra_fortigate_device_info", 1, labels, timestamp),
 	}
 
 	if secs := parseUptime(out.Results.Uptime); secs > 0 {
-		metrics = append(metrics, types.NewMetric("netinfra_fortigate_uptime_seconds", secs, copyLabels(labels)))
+		metrics = append(metrics, types.NewMetricAt("netinfra_fortigate_uptime_seconds", secs, copyLabels(labels), timestamp))
 	}
 	return metrics, nil
 }
 
-func parseInterfaces(data []byte, base map[string]string) ([]*types.NetworkMetric, error) {
+func parseInterfaces(data []byte, base map[string]string, timestamp time.Time) ([]*types.NetworkMetric, error) {
 	type iface struct {
 		Name   string `json:"name"`
 		Status string `json:"status"`
@@ -258,7 +261,7 @@ func parseInterfaces(data []byte, base map[string]string) ([]*types.NetworkMetri
 		if strings.EqualFold(strings.TrimSpace(inf.Status), "up") {
 			v = 1.0
 		}
-		metrics = append(metrics, types.NewMetric("netinfra_fortigate_interface_up", v, labels))
+		metrics = append(metrics, types.NewMetricAt("netinfra_fortigate_interface_up", v, labels, timestamp))
 	}
 	return metrics, nil
 }

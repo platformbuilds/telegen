@@ -19,12 +19,13 @@ const (
 
 // Metric represents a collected storage metric
 type Metric struct {
-	Name      string
-	Help      string
-	Type      MetricType
-	Value     float64
-	Labels    map[string]string
-	Timestamp time.Time
+	Name              string
+	Help              string
+	Type              MetricType
+	Value             float64
+	Labels            map[string]string
+	Timestamp         time.Time // Source timestamp (from ONTAP, E-Series, etc.)
+	ObservedTimestamp time.Time // Collection instant (time.Now() at collection time)
 }
 
 // HealthStatus represents the health status of a collector

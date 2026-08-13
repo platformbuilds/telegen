@@ -137,6 +137,9 @@ func (c *Collector) Collect(ctx context.Context) ([]*types.NetworkMetric, error)
 		return nil, fmt.Errorf("collector not started")
 	}
 
+	// Hoist per-cycle instant once for all metrics
+	now := time.Now().UTC()
+
 	var out []*types.NetworkMetric
 	for _, item := range c.config.Collect {
 		switch item {
@@ -146,7 +149,7 @@ func (c *Collector) Collect(ctx context.Context) ([]*types.NetworkMetric, error)
 				c.log.Warn("system info request failed", "error", err)
 				continue
 			}
-			metrics, err := parseSystemInfo(data, c.baseLabels())
+			metrics, err := parseSystemInfo(data, c.baseLabels(), now)
 			if err != nil {
 				c.log.Warn("system info parse failed", "error", err)
 				continue
@@ -158,7 +161,7 @@ func (c *Collector) Collect(ctx context.Context) ([]*types.NetworkMetric, error)
 				c.log.Warn("interface request failed", "error", err)
 				continue
 			}
-			metrics, err := parseInterfaces(data, c.baseLabels())
+			metrics, err := parseInterfaces(data, c.baseLabels(), now)
 			if err != nil {
 				c.log.Warn("interface parse failed", "error", err)
 				continue
@@ -265,7 +268,7 @@ func (c *Collector) opRequest(ctx context.Context, cmd string) ([]byte, error) {
 	return body, nil
 }
 
-func parseSystemInfo(data []byte, base map[string]string) ([]*types.NetworkMetric, error) {
+func parseSystemInfo(data []byte, base map[string]string, timestamp time.Time) ([]*types.NetworkMetric, error) {
 	type systemInfoResponse struct {
 		Result struct {
 			System struct {
@@ -296,16 +299,16 @@ func parseSystemInfo(data []byte, base map[string]string) ([]*types.NetworkMetri
 	}
 
 	metrics := []*types.NetworkMetric{
-		types.NewMetric("netinfra_paloalto_device_info", 1, labels),
+		types.NewMetricAt("netinfra_paloalto_device_info", 1, labels, timestamp),
 	}
 
 	if secs := parseUptimeSeconds(out.Result.System.Uptime); secs > 0 {
-		metrics = append(metrics, types.NewMetric("netinfra_paloalto_uptime_seconds", secs, copyLabels(labels)))
+		metrics = append(metrics, types.NewMetricAt("netinfra_paloalto_uptime_seconds", secs, copyLabels(labels), timestamp))
 	}
 	return metrics, nil
 }
 
-func parseInterfaces(data []byte, base map[string]string) ([]*types.NetworkMetric, error) {
+func parseInterfaces(data []byte, base map[string]string, timestamp time.Time) ([]*types.NetworkMetric, error) {
 	type ifaceEntry struct {
 		Name  string `xml:"name,attr"`
 		State string `xml:"state"`
@@ -331,7 +334,7 @@ func parseInterfaces(data []byte, base map[string]string) ([]*types.NetworkMetri
 		if state == "up" {
 			value = 1.0
 		}
-		metrics = append(metrics, types.NewMetric("netinfra_paloalto_interface_up", value, labels))
+		metrics = append(metrics, types.NewMetricAt("netinfra_paloalto_interface_up", value, labels, timestamp))
 	}
 	return metrics, nil
 }

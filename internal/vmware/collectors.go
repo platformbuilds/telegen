@@ -55,7 +55,7 @@ func (s *metricSink) addGauge(subsystem, field, help string, value float64, labe
 		Type:      vmwaredef.MetricTypeGauge,
 		Value:     value,
 		Labels:    labels,
-		Timestamp: time.Now(),
+		Timestamp: s.timestamp, // Use per-cycle instant hoisted at sink creation
 	})
 }
 

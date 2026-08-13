@@ -112,11 +112,16 @@ func (rb *ResourceBuilder) Build() pcommon.Resource {
 }
 
 // TimestampFromTime converts time.Time to pcommon.Timestamp.
+// Note: This is an OTLP-specific helper that returns pcommon.Timestamp.
+// For general timestamp operations, use internal/timeutil instead.
 func TimestampFromTime(t time.Time) pcommon.Timestamp {
 	return pcommon.NewTimestampFromTime(t)
 }
 
-// Now returns the current timestamp.
+// Now returns the current timestamp as pcommon.Timestamp.
+// Note: This should only be used for ObservedTimestamp or when source timestamps
+// are unavailable. For metrics/logs/traces, prefer using source timestamps.
+// See AGENTS.md "Timestamp Provenance" section.
 func Now() pcommon.Timestamp {
 	return TimestampFromTime(time.Now())
 }

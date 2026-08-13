@@ -11,11 +11,12 @@ import (
 
 // NetworkMetric represents a metric collected from network infrastructure
 type NetworkMetric struct {
-	Name      string            `json:"name"`
-	Value     float64           `json:"value"`
-	Labels    map[string]string `json:"labels"`
-	Timestamp time.Time         `json:"timestamp"`
-	Type      MetricType        `json:"type"`
+	Name              string            `json:"name"`
+	Value             float64           `json:"value"`
+	Labels            map[string]string `json:"labels"`
+	Timestamp         time.Time         `json:"timestamp"`           // Source timestamp (from gNMI, SNMP, etc.)
+	ObservedTimestamp time.Time         `json:"observed_timestamp"`  // Collection instant (time.Now() at collection time)
+	Type              MetricType        `json:"type"`
 }
 
 // MetricType represents the type of metric
@@ -28,24 +29,40 @@ const (
 	MetricTypeCounter MetricType = "counter"
 )
 
-// NewMetric creates a new network metric with default values
+// NewMetric creates a new network metric with default values.
+// DEPRECATED: Use NewMetricAt() with an explicit timestamp to avoid per-metric clock smear.
+// See telegen/AGENTS.md "Timestamp Provenance" section.
 func NewMetric(name string, value float64, labels map[string]string) *NetworkMetric {
+	return NewMetricAt(name, value, labels, time.Now().UTC())
+}
+
+// NewMetricAt creates a new gauge metric with an explicit timestamp.
+// Use this variant in collector implementations to hoist one instant per cycle.
+func NewMetricAt(name string, value float64, labels map[string]string, timestamp time.Time) *NetworkMetric {
 	return &NetworkMetric{
 		Name:      name,
 		Value:     value,
 		Labels:    labels,
-		Timestamp: time.Now(),
+		Timestamp: timestamp,
 		Type:      MetricTypeGauge,
 	}
 }
 
-// NewCounterMetric creates a new counter metric
+// NewCounterMetric creates a new counter metric.
+// DEPRECATED: Use NewCounterMetricAt() with an explicit timestamp to avoid per-metric clock smear.
+// See telegen/AGENTS.md "Timestamp Provenance" section.
 func NewCounterMetric(name string, value float64, labels map[string]string) *NetworkMetric {
+	return NewCounterMetricAt(name, value, labels, time.Now().UTC())
+}
+
+// NewCounterMetricAt creates a new counter metric with an explicit timestamp.
+// Use this variant in collector implementations to hoist one instant per cycle.
+func NewCounterMetricAt(name string, value float64, labels map[string]string, timestamp time.Time) *NetworkMetric {
 	return &NetworkMetric{
 		Name:      name,
 		Value:     value,
 		Labels:    labels,
-		Timestamp: time.Now(),
+		Timestamp: timestamp,
 		Type:      MetricTypeCounter,
 	}
 }

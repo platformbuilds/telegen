@@ -209,9 +209,10 @@ func (e *LogExporter) Export(ctx context.Context, profile *Profile) error {
 	return e.logExporter.ExportBatch(ctx, events)
 }
 
-// ExportSample exports a single sample as OTLP log
-func (e *LogExporter) ExportSample(ctx context.Context, sample StackSample, profileType ProfileType) error {
-	event := e.sampleToEvent(sample, profileType, time.Now())
+// ExportSample exports a single sample as OTLP log with an explicit timestamp.
+// The timestamp should be the kernel event timestamp (monotonic converted to wallclock).
+func (e *LogExporter) ExportSample(ctx context.Context, sample StackSample, profileType ProfileType, timestamp time.Time) error {
+	event := e.sampleToEvent(sample, profileType, timestamp)
 	return e.logExporter.Export(ctx, event)
 }
 

@@ -103,7 +103,7 @@ func (c *Collector) Collect(ctx context.Context) ([]storagedef.LogRecord, []stor
 
 	var logs []storagedef.LogRecord
 	var metrics []storagedef.Metric
-	now := time.Now()
+	collectionTime := time.Now() // Fallback for bookend expiry checks
 	severityCounts := map[string]float64{}
 
 	for _, rec := range records {
@@ -122,6 +122,16 @@ func (c *Collector) Collect(ctx context.Context) ([]storagedef.LogRecord, []stor
 		if !c.matchesCatalog(msg, rec) {
 			continue
 		}
+
+		// Parse ONTAP event time field (ISO-8601 with offset, e.g., "2026-08-13T14:30:00-07:00")
+		// Fields=* is requested at line ~94-98, so the time field should be present
+		eventTime := collectionTime // fallback
+		if timeStr, ok := jsonpath.GetString(rec, "time"); ok && timeStr != "" {
+			if t, err := time.Parse(time.RFC3339, timeStr); err == nil {
+				eventTime = t.UTC()
+			}
+		}
+
 		attrs := map[string]string{
 			"message":   msg,
 			"severity":  sev,
@@ -135,7 +145,7 @@ func (c *Collector) Collect(ctx context.Context) ([]storagedef.LogRecord, []stor
 		extractParams(rec, attrs)
 
 		logs = append(logs, storagedef.LogRecord{
-			Timestamp:  now,
+			Timestamp:  eventTime, // Per-event timestamp from ONTAP
 			Severity:   sev,
 			Body:       body,
 			Attributes: attrs,
@@ -145,7 +155,7 @@ func (c *Collector) Collect(ctx context.Context) ([]storagedef.LogRecord, []stor
 		// bookend open
 		for _, f := range c.filters {
 			if f.Message == msg && f.Bookend {
-				c.bookends[msg+"|"+node] = bookendState{OpenedAt: now, Message: msg, Attrs: attrs}
+				c.bookends[msg+"|"+node] = bookendState{OpenedAt: eventTime, Message: msg, Attrs: attrs}
 			}
 			if f.ResolveWhen != "" && f.ResolveWhen == msg {
 				key := f.Message + "|" + node
@@ -154,7 +164,7 @@ func (c *Collector) Collect(ctx context.Context) ([]storagedef.LogRecord, []stor
 					resolveAttrs := copyMap(attrs)
 					resolveAttrs["resolved"] = "true"
 					logs = append(logs, storagedef.LogRecord{
-						Timestamp:  now,
+						Timestamp:  eventTime, // Use the resolve event's timestamp
 						Severity:   "info",
 						Body:       "resolved: " + f.Message,
 						Attributes: resolveAttrs,
@@ -169,11 +179,11 @@ func (c *Collector) Collect(ctx context.Context) ([]storagedef.LogRecord, []stor
 
 	// expire bookends
 	for k, b := range c.bookends {
-		if now.Sub(b.OpenedAt) > c.ResolveAfter {
+		if collectionTime.Sub(b.OpenedAt) > c.ResolveAfter {
 			attrs := copyMap(b.Attrs)
 			attrs["resolved"] = "timeout"
 			logs = append(logs, storagedef.LogRecord{
-				Timestamp:  now,
+				Timestamp:  collectionTime, // Synthetic resolution event uses collection time
 				Severity:   "info",
 				Body:       "resolved_after: " + b.Message,
 				Attributes: attrs,
@@ -191,7 +201,7 @@ func (c *Collector) Collect(ctx context.Context) ([]storagedef.LogRecord, []stor
 			Type:      storagedef.MetricTypeGauge,
 			Value:     count,
 			Labels:    labels,
-			Timestamp: now,
+			Timestamp: collectionTime, // Summary metric uses collection time
 		})
 	}
 	return logs, metrics, nil

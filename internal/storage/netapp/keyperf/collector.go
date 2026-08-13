@@ -134,7 +134,9 @@ func (c *Collector) CollectObject(ctx context.Context, now time.Time) ([]storage
 	if err != nil {
 		return nil, err
 	}
-	ts := float64(now.Unix())
+	// Fallback timestamp for records that lack statistics.timestamp
+	fallbackTS := float64(now.Unix())
+
 	for _, rec := range records {
 		key := buildKey(rec, keys)
 		if key == "" {
@@ -149,6 +151,26 @@ func (c *Collector) CollectObject(ctx context.Context, now time.Time) ([]storage
 				inst.Labels[l.Display] = s
 			}
 		}
+
+		// Use source timestamp (statistics.timestamp) if available, per record.
+		// This field is ISO-8601 string in ONTAP API responses.
+		// See configs/netapp/keyperf/9.15.0/*.yaml line ~34: "statistics.timestamp(timestamp) => timestamp"
+		// The template filters out records with statistics.timestamp="-", so most records will have it.
+		var ts float64
+		if timestampStr, ok := jsonpath.GetString(rec, "statistics.timestamp"); ok && timestampStr != "" && timestampStr != "-" {
+			// Parse ISO-8601 timestamp from ONTAP (e.g., "2026-08-13T14:30:00-0700")
+			// ONTAP uses ISO-8601 without colon in offset.
+			if t, err := time.Parse("2006-01-02T15:04:05-0700", timestampStr); err == nil {
+				ts = float64(t.UTC().Unix())
+			} else {
+				// Fallback on parse failure
+				ts = fallbackTS
+			}
+		} else {
+			// Fallback when field is missing
+			ts = fallbackTS
+		}
+
 		if err := mat.SetValue(matrix.TimestampMetricName, key, ts); err != nil {
 			continue
 		}
