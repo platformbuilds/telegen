@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
 )
@@ -86,7 +87,9 @@ func (c *ContractCollector) Collect(ctx context.Context) ([]*types.NetworkMetric
 	}
 
 	// Build metrics
-	allMetrics = append(allMetrics, c.buildMetrics(contracts, stats)...)
+	// APIC contract objects carry no per-sample time, so one hoisted instant
+	// stamps the whole cycle (telegen/AGENTS.md "Timestamp Provenance").
+	allMetrics = append(allMetrics, c.buildMetrics(contracts, stats, time.Now().UTC())...)
 
 	return allMetrics, nil
 }
@@ -170,7 +173,7 @@ func (c *ContractCollector) getContractStats(ctx context.Context) (map[string]Co
 }
 
 // buildMetrics converts contract data to metrics
-func (c *ContractCollector) buildMetrics(contracts []Contract, stats map[string]ContractStats) []*types.NetworkMetric {
+func (c *ContractCollector) buildMetrics(contracts []Contract, stats map[string]ContractStats, timestamp time.Time) []*types.NetworkMetric {
 	var metrics []*types.NetworkMetric
 
 	// Count by scope
@@ -188,7 +191,7 @@ func (c *ContractCollector) buildMetrics(contracts []Contract, stats map[string]
 		labels["scope"] = contract.Scope
 
 		// Contract exists metric
-		metrics = append(metrics, types.NewMetric("aci_contract_info", 1.0, labels))
+		metrics = append(metrics, types.NewMetricAt("aci_contract_info", 1.0, labels, timestamp))
 	}
 
 	// Add stats from contract rules
@@ -197,22 +200,22 @@ func (c *ContractCollector) buildMetrics(contracts []Contract, stats map[string]
 		labels["rule_dn"] = stat.DN
 
 		metrics = append(metrics,
-			types.NewCounterMetric("aci_contract_permit_bytes_total", parseFloat(stat.PermitBytes), labels),
-			types.NewCounterMetric("aci_contract_permit_packets_total", parseFloat(stat.PermitPackets), labels),
-			types.NewCounterMetric("aci_contract_deny_bytes_total", parseFloat(stat.DenyBytes), labels),
-			types.NewCounterMetric("aci_contract_deny_packets_total", parseFloat(stat.DenyPackets), labels),
+			types.NewCounterMetricAt("aci_contract_permit_bytes_total", parseFloat(stat.PermitBytes), labels, timestamp),
+			types.NewCounterMetricAt("aci_contract_permit_packets_total", parseFloat(stat.PermitPackets), labels, timestamp),
+			types.NewCounterMetricAt("aci_contract_deny_bytes_total", parseFloat(stat.DenyBytes), labels, timestamp),
+			types.NewCounterMetricAt("aci_contract_deny_packets_total", parseFloat(stat.DenyPackets), labels, timestamp),
 		)
 	}
 
 	// Summary metrics
 	baseLabels := c.aci.BaseLabels()
-	metrics = append(metrics, types.NewMetric("aci_contracts_total", float64(len(contracts)), baseLabels))
+	metrics = append(metrics, types.NewMetricAt("aci_contracts_total", float64(len(contracts)), baseLabels, timestamp))
 
 	// Contracts by scope
 	for scope, count := range scopeCounts {
 		labels := c.aci.BaseLabels()
 		labels["scope"] = scope
-		metrics = append(metrics, types.NewMetric("aci_contracts_by_scope", float64(count), labels))
+		metrics = append(metrics, types.NewMetricAt("aci_contracts_by_scope", float64(count), labels, timestamp))
 	}
 
 	return metrics

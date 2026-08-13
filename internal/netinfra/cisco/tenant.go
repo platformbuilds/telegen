@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
 )
@@ -101,6 +102,8 @@ func (c *TenantCollector) CollectTenantHealth(ctx context.Context) ([]*types.Net
 	}
 
 	var metrics []*types.NetworkMetric
+	// One hoisted instant per cycle — APIC health objects carry no sample time.
+	now := time.Now().UTC()
 
 	for _, item := range result.Imdata {
 		tenant := item.FvTenant.Attributes
@@ -113,7 +116,7 @@ func (c *TenantCollector) CollectTenantHealth(ctx context.Context) ([]*types.Net
 			if child.HealthInst.Attributes.Cur != "" {
 				healthScore := parseFloat(child.HealthInst.Attributes.Cur)
 				labels["max_severity"] = child.HealthInst.Attributes.MaxSev
-				metrics = append(metrics, types.NewMetric("aci_tenant_health", healthScore, labels))
+				metrics = append(metrics, types.NewMetricAt("aci_tenant_health", healthScore, labels, now))
 				break
 			}
 		}
@@ -121,7 +124,7 @@ func (c *TenantCollector) CollectTenantHealth(ctx context.Context) ([]*types.Net
 
 	// Summary metric
 	baseLabels := c.aci.BaseLabels()
-	metrics = append(metrics, types.NewMetric("aci_tenants_total", float64(len(result.Imdata)), baseLabels))
+	metrics = append(metrics, types.NewMetricAt("aci_tenants_total", float64(len(result.Imdata)), baseLabels, now))
 
 	return metrics, nil
 }
@@ -166,6 +169,8 @@ func (c *TenantCollector) CollectEPGHealth(ctx context.Context) ([]*types.Networ
 	}
 
 	var metrics []*types.NetworkMetric
+	// One hoisted instant per cycle — APIC health objects carry no sample time.
+	now := time.Now().UTC()
 	epgCount := 0
 
 	for _, item := range result.Imdata {
@@ -186,7 +191,7 @@ func (c *TenantCollector) CollectEPGHealth(ctx context.Context) ([]*types.Networ
 			if child.HealthInst.Attributes.Cur != "" {
 				healthScore := parseFloat(child.HealthInst.Attributes.Cur)
 				labels["max_severity"] = child.HealthInst.Attributes.MaxSev
-				metrics = append(metrics, types.NewMetric("aci_epg_health", healthScore, labels))
+				metrics = append(metrics, types.NewMetricAt("aci_epg_health", healthScore, labels, now))
 				break
 			}
 		}
@@ -194,7 +199,7 @@ func (c *TenantCollector) CollectEPGHealth(ctx context.Context) ([]*types.Networ
 
 	// Summary metric
 	baseLabels := c.aci.BaseLabels()
-	metrics = append(metrics, types.NewMetric("aci_epgs_total", float64(epgCount), baseLabels))
+	metrics = append(metrics, types.NewMetricAt("aci_epgs_total", float64(epgCount), baseLabels, now))
 
 	return metrics, nil
 }
@@ -237,7 +242,8 @@ func (c *TenantCollector) CollectEndpoints(ctx context.Context) ([]*types.Networ
 
 	if len(result.Imdata) > 0 {
 		count := parseFloat(result.Imdata[0].MoCount.Attributes.Count)
-		metrics = append(metrics, types.NewMetric("aci_endpoints_total", count, baseLabels))
+		// Endpoint count is an aggregate with no sample time of its own.
+		metrics = append(metrics, types.NewMetricAt("aci_endpoints_total", count, baseLabels, time.Now().UTC()))
 	}
 
 	return metrics, nil

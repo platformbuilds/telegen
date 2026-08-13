@@ -5,6 +5,7 @@ package vmware
 
 import (
 	"context"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/instrumentation"
@@ -13,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 
+	"github.com/mirastacklabs-ai/telegen/internal/timeutil"
 	"github.com/mirastacklabs-ai/telegen/internal/vmwaredef"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
 )
@@ -26,7 +28,7 @@ const scopeName = "telegen.vmware"
 // Reference pattern: internal/snmp/otlp_exporter.go:284-341 (ExportDirect).
 // Unlike that implementation, this emits one metricdata.Metrics per unique
 // metric name so metric identity is preserved end-to-end.
-func exportMetrics(ctx context.Context, exp sdkmetric.Exporter, target string, extra map[string]string, metrics []vmwaredef.Metric) error {
+func exportMetrics(ctx context.Context, exp sdkmetric.Exporter, target string, extra map[string]string, metrics []vmwaredef.Metric, skewWarn time.Duration, logger timeutil.SkewLogger) error {
 	if len(metrics) == 0 {
 		return nil
 	}
@@ -41,7 +43,18 @@ func exportMetrics(ctx context.Context, exp sdkmetric.Exporter, target string, e
 	order := make([]string, 0)
 	buckets := make(map[string]*bucket)
 
-	for _, m := range metrics {
+	// One export instant for the whole batch. Kept separate from each metric's
+	// Timestamp (which is the vCenter sample time where available) so collection
+	// lag stays measurable instead of being erased.
+	observedAt := time.Now().UTC()
+	sourceTimestamps := make([]time.Time, 0, len(metrics))
+
+	for i := range metrics {
+		m := metrics[i]
+		if metrics[i].ObservedTimestamp.IsZero() {
+			metrics[i].ObservedTimestamp = observedAt
+		}
+		sourceTimestamps = append(sourceTimestamps, m.Timestamp)
 		attrs := buildAttributes(m.Labels, extra)
 		dp := metricdata.DataPoint[float64]{
 			Attributes: attribute.NewSet(attrs...),
@@ -93,6 +106,13 @@ func exportMetrics(ctx context.Context, exp sdkmetric.Exporter, target string, e
 		attribute.String("vcenter", target),
 	}
 	resourceAttrs = append(resourceAttrs, otelcfg.SiteResourceAttributes()...)
+	// Ride the same OTLP batch as the domain metrics so a bad clock announces
+	// itself in the pipeline that actually reaches VictoriaMetrics. On the
+	// Phoenix host this gauge would have read roughly -21600.
+	provenance := timeutil.InspectBatch(observedAt, sourceTimestamps)
+	provenance.WarnIfSkewed("vmware", skewWarn, logger)
+	ms = append(ms, provenance.Metrics("vmware", observedAt)...)
+
 	res := resource.NewSchemaless(resourceAttrs...)
 
 	rm := &metricdata.ResourceMetrics{

@@ -31,15 +31,19 @@ linters:
           msg: "avoid process-fatal logging outside main/tests"
         - pattern: '\bos\.Exit\('
           msg: "avoid process exits outside main/tests"
-        # Timestamp provenance rules - See telegen/AGENTS.md "Timestamp Provenance" section
-        - pattern: '\btime\.Now\(\)'
-          msg: "use source timestamps in collectors; hoist per-cycle instant; convert kernel monotonic timestamps; see telegen/AGENTS.md"
-        - pattern: '\btime\.Parse\('
-          msg: "use time.ParseInLocation with explicit timezone; time.Parse treats timestamps as local time; see telegen/AGENTS.md"
-        - pattern: 'types\.NewMetric\('
-          msg: "use types.NewMetricAt() with explicit timestamp to avoid per-metric smear; see telegen/AGENTS.md"
-        - pattern: 'types\.NewCounterMetric\('
-          msg: "use types.NewCounterMetricAt() with explicit timestamp to avoid per-metric smear; see telegen/AGENTS.md"
+        # Timestamp provenance is NOT enforced here — see telegen/AGENTS.md
+        # "Timestamp Provenance".
+        #
+        # forbidigo matches the call expression text WITHOUT its argument list,
+        # so a bare `time.Now()` presents as `time.Now` while a chained call
+        # presents as `time.Now().Add`. A `time.Now()` pattern therefore matches
+        # only chained deadline/TTL/backoff arithmetic (all legitimate) and never
+        # the bare per-metric clock read it was meant to catch. Regex also cannot
+        # see whether a call sits inside an emit loop, which is the real
+        # invariant. Enforcement lives where it can be exact:
+        #   - types.NewMetricAt / NewCounterMetricAt take a mandatory timestamp,
+        #     so the compiler rejects any per-metric clock read.
+        #   - collector tests assert the hoisted instant reaches every metric.
     staticcheck:
       checks:
         - all
@@ -62,15 +66,6 @@ linters:
       - path: ^cmd/.*/main\.go
         linters:
           - forbidigo
-      # internal/timeutil is allowed to use time.Now() and time.Parse (it's the abstraction layer)
-      - path: ^internal/timeutil/
-        text: "time\\.Now|time\\.Parse"
-      # Pipeline converters use OTLP-specific helpers (TimestampFromTime, Now)
-      - path: ^internal/pipeline/converters/
-        text: "time\\.Now"
-      # Test fixtures and benchmarks need time.Now() for timing measurements
-      - path: ^internal/.*benchmark.*\.go
-        text: "time\\.Now"
       # Ignore errcheck for defer statements
       - source: "defer .*\\.Close\\(\\)"
         linters:

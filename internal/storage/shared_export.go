@@ -5,6 +5,7 @@ package storage
 
 import (
 	"context"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/instrumentation"
@@ -14,12 +15,13 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 
 	"github.com/mirastacklabs-ai/telegen/internal/storagedef"
+	"github.com/mirastacklabs-ai/telegen/internal/timeutil"
 	"github.com/mirastacklabs-ai/telegen/pkg/export/otel/otelcfg"
 )
 
 const scopeName = "telegen.storage"
 
-func exportSharedMetrics(ctx context.Context, exp sdkmetric.Exporter, metrics []storagedef.Metric) error {
+func exportSharedMetrics(ctx context.Context, exp sdkmetric.Exporter, metrics []storagedef.Metric, skewWarn time.Duration, logger timeutil.SkewLogger) error {
 	if exp == nil || len(metrics) == 0 {
 		return nil
 	}
@@ -32,7 +34,17 @@ func exportSharedMetrics(ctx context.Context, exp sdkmetric.Exporter, metrics []
 	order := make([]string, 0)
 	buckets := map[string]*bucket{}
 
-	for _, m := range metrics {
+	// One export instant for the whole batch. Kept separate from each metric's
+	// Timestamp so collection lag stays measurable instead of being erased.
+	observedAt := time.Now().UTC()
+	sourceTimestamps := make([]time.Time, 0, len(metrics))
+
+	for i := range metrics {
+		m := metrics[i]
+		if metrics[i].ObservedTimestamp.IsZero() {
+			metrics[i].ObservedTimestamp = observedAt
+		}
+		sourceTimestamps = append(sourceTimestamps, m.Timestamp)
 		attrs := make([]attribute.KeyValue, 0, len(m.Labels))
 		for k, v := range m.Labels {
 			attrs = append(attrs, attribute.String(k, v))
@@ -74,6 +86,12 @@ func exportSharedMetrics(ctx context.Context, exp sdkmetric.Exporter, metrics []
 			})
 		}
 	}
+
+	// Ride the same OTLP batch as the domain metrics so a bad clock announces
+	// itself in the pipeline that actually reaches VictoriaMetrics.
+	provenance := timeutil.InspectBatch(observedAt, sourceTimestamps)
+	provenance.WarnIfSkewed("storage", skewWarn, logger)
+	ms = append(ms, provenance.Metrics("storage", observedAt)...)
 
 	resourceAttrs := []attribute.KeyValue{semconv.ServiceName("telegen-storage")}
 	resourceAttrs = append(resourceAttrs, otelcfg.SiteResourceAttributes()...)

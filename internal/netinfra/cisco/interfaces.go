@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
 )
@@ -91,7 +92,10 @@ func (c *InterfaceCollector) Collect(ctx context.Context) ([]*types.NetworkMetri
 	}
 
 	// Build metrics
-	allMetrics = append(allMetrics, c.buildMetrics(interfaces, counters, errors)...)
+	// APIC interface objects carry no per-sample time, so one hoisted instant
+	// stamps the whole cycle. This matters most for the counters below: a smear
+	// across the cycle divides deltas by a wrong dt and corrupts every rate.
+	allMetrics = append(allMetrics, c.buildMetrics(interfaces, counters, errors, time.Now().UTC())...)
 
 	return allMetrics, nil
 }
@@ -214,7 +218,7 @@ func (c *InterfaceCollector) getInterfaceErrors(ctx context.Context) (map[string
 }
 
 // buildMetrics converts interface data to metrics
-func (c *InterfaceCollector) buildMetrics(interfaces []PhysInterface, counters map[string]InterfaceCounters, errors map[string]InterfaceErrors) []*types.NetworkMetric {
+func (c *InterfaceCollector) buildMetrics(interfaces []PhysInterface, counters map[string]InterfaceCounters, errors map[string]InterfaceErrors, timestamp time.Time) []*types.NetworkMetric {
 	var metrics []*types.NetworkMetric
 
 	operUpCount := 0
@@ -240,35 +244,35 @@ func (c *InterfaceCollector) buildMetrics(interfaces []PhysInterface, counters m
 		} else {
 			operDownCount++
 		}
-		metrics = append(metrics, types.NewMetric("aci_interface_oper_status", operUp, labels))
+		metrics = append(metrics, types.NewMetricAt("aci_interface_oper_status", operUp, labels, timestamp))
 
 		// Admin status
 		adminUp := 0.0
 		if iface.AdminState == "up" {
 			adminUp = 1.0
 		}
-		metrics = append(metrics, types.NewMetric("aci_interface_admin_status", adminUp, labels))
+		metrics = append(metrics, types.NewMetricAt("aci_interface_admin_status", adminUp, labels, timestamp))
 
 		// MTU
 		mtu := parseFloat(iface.MTU)
 		if mtu > 0 {
-			metrics = append(metrics, types.NewMetric("aci_interface_mtu", mtu, labels))
+			metrics = append(metrics, types.NewMetricAt("aci_interface_mtu", mtu, labels, timestamp))
 		}
 
 		// Find matching counters
 		for counterDN, counter := range counters {
 			if dnMatches(counterDN, iface.DN) {
 				metrics = append(metrics,
-					types.NewCounterMetric("aci_interface_rx_bytes_total", parseFloat(counter.RxBytes), labels),
-					types.NewCounterMetric("aci_interface_tx_bytes_total", parseFloat(counter.TxBytes), labels),
-					types.NewCounterMetric("aci_interface_rx_packets_total", parseFloat(counter.RxPackets), labels),
-					types.NewCounterMetric("aci_interface_tx_packets_total", parseFloat(counter.TxPackets), labels),
-					types.NewCounterMetric("aci_interface_rx_unicast_total", parseFloat(counter.RxUcast), labels),
-					types.NewCounterMetric("aci_interface_tx_unicast_total", parseFloat(counter.TxUcast), labels),
-					types.NewCounterMetric("aci_interface_rx_multicast_total", parseFloat(counter.RxMcast), labels),
-					types.NewCounterMetric("aci_interface_tx_multicast_total", parseFloat(counter.TxMcast), labels),
-					types.NewCounterMetric("aci_interface_rx_broadcast_total", parseFloat(counter.RxBcast), labels),
-					types.NewCounterMetric("aci_interface_tx_broadcast_total", parseFloat(counter.TxBcast), labels),
+					types.NewCounterMetricAt("aci_interface_rx_bytes_total", parseFloat(counter.RxBytes), labels, timestamp),
+					types.NewCounterMetricAt("aci_interface_tx_bytes_total", parseFloat(counter.TxBytes), labels, timestamp),
+					types.NewCounterMetricAt("aci_interface_rx_packets_total", parseFloat(counter.RxPackets), labels, timestamp),
+					types.NewCounterMetricAt("aci_interface_tx_packets_total", parseFloat(counter.TxPackets), labels, timestamp),
+					types.NewCounterMetricAt("aci_interface_rx_unicast_total", parseFloat(counter.RxUcast), labels, timestamp),
+					types.NewCounterMetricAt("aci_interface_tx_unicast_total", parseFloat(counter.TxUcast), labels, timestamp),
+					types.NewCounterMetricAt("aci_interface_rx_multicast_total", parseFloat(counter.RxMcast), labels, timestamp),
+					types.NewCounterMetricAt("aci_interface_tx_multicast_total", parseFloat(counter.TxMcast), labels, timestamp),
+					types.NewCounterMetricAt("aci_interface_rx_broadcast_total", parseFloat(counter.RxBcast), labels, timestamp),
+					types.NewCounterMetricAt("aci_interface_tx_broadcast_total", parseFloat(counter.TxBcast), labels, timestamp),
 				)
 				break
 			}
@@ -278,13 +282,13 @@ func (c *InterfaceCollector) buildMetrics(interfaces []PhysInterface, counters m
 		for errorDN, errStats := range errors {
 			if dnMatches(errorDN, iface.DN) {
 				metrics = append(metrics,
-					types.NewCounterMetric("aci_interface_crc_errors_total", parseFloat(errStats.CRCErrors), labels),
-					types.NewCounterMetric("aci_interface_in_errors_total", parseFloat(errStats.InErrors), labels),
-					types.NewCounterMetric("aci_interface_out_errors_total", parseFloat(errStats.OutErrors), labels),
-					types.NewCounterMetric("aci_interface_in_discards_total", parseFloat(errStats.InDiscards), labels),
-					types.NewCounterMetric("aci_interface_out_discards_total", parseFloat(errStats.OutDiscards), labels),
-					types.NewCounterMetric("aci_interface_giants_total", parseFloat(errStats.Giants), labels),
-					types.NewCounterMetric("aci_interface_runts_total", parseFloat(errStats.Runts), labels),
+					types.NewCounterMetricAt("aci_interface_crc_errors_total", parseFloat(errStats.CRCErrors), labels, timestamp),
+					types.NewCounterMetricAt("aci_interface_in_errors_total", parseFloat(errStats.InErrors), labels, timestamp),
+					types.NewCounterMetricAt("aci_interface_out_errors_total", parseFloat(errStats.OutErrors), labels, timestamp),
+					types.NewCounterMetricAt("aci_interface_in_discards_total", parseFloat(errStats.InDiscards), labels, timestamp),
+					types.NewCounterMetricAt("aci_interface_out_discards_total", parseFloat(errStats.OutDiscards), labels, timestamp),
+					types.NewCounterMetricAt("aci_interface_giants_total", parseFloat(errStats.Giants), labels, timestamp),
+					types.NewCounterMetricAt("aci_interface_runts_total", parseFloat(errStats.Runts), labels, timestamp),
 				)
 				break
 			}
@@ -294,9 +298,9 @@ func (c *InterfaceCollector) buildMetrics(interfaces []PhysInterface, counters m
 	// Summary metrics
 	baseLabels := c.aci.BaseLabels()
 	metrics = append(metrics,
-		types.NewMetric("aci_interfaces_total", float64(len(interfaces)), baseLabels),
-		types.NewMetric("aci_interfaces_oper_up", float64(operUpCount), baseLabels),
-		types.NewMetric("aci_interfaces_oper_down", float64(operDownCount), baseLabels),
+		types.NewMetricAt("aci_interfaces_total", float64(len(interfaces)), baseLabels, timestamp),
+		types.NewMetricAt("aci_interfaces_oper_up", float64(operUpCount), baseLabels, timestamp),
+		types.NewMetricAt("aci_interfaces_oper_down", float64(operDownCount), baseLabels, timestamp),
 	)
 
 	return metrics

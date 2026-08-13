@@ -166,7 +166,7 @@ func (p *Pipeline) initApplicationParsers() {
 		p.appParsers = append(p.appParsers, NewJSONLogParserWithLocation(p.parserLocation))
 	}
 	if enableAll || enabledParsers["fixml"] {
-		p.appParsers = append(p.appParsers, NewFIXMLParser())
+		p.appParsers = append(p.appParsers, NewFIXMLParserWithLocation(p.parserLocation))
 	}
 	if enableAll || enabledParsers["iso8583"] {
 		p.appParsers = append(p.appParsers, NewISO8583Parser())

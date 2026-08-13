@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
 )
@@ -70,11 +71,13 @@ func (i *InventoryCollector) Collect(ctx context.Context) ([]*types.NetworkMetri
 		return nil, fmt.Errorf("failed to decode inventory: %w", err)
 	}
 
-	return i.buildMetrics(inventory), nil
+	// CVP inventory objects carry no per-sample time, so one hoisted instant
+	// stamps the whole cycle (telegen/AGENTS.md "Timestamp Provenance").
+	return i.buildMetrics(inventory, time.Now().UTC()), nil
 }
 
 // buildMetrics converts inventory data to metrics
-func (i *InventoryCollector) buildMetrics(inventory DeviceInventory) []*types.NetworkMetric {
+func (i *InventoryCollector) buildMetrics(inventory DeviceInventory, timestamp time.Time) []*types.NetworkMetric {
 	var metrics []*types.NetworkMetric
 
 	// Track counts by status and model
@@ -101,28 +104,29 @@ func (i *InventoryCollector) buildMetrics(inventory DeviceInventory) []*types.Ne
 		if device.Status == "Registered" {
 			healthy = 1.0
 		}
-		metrics = append(metrics, types.NewMetric("arista_device_healthy", healthy, labels))
+		metrics = append(metrics, types.NewMetricAt("arista_device_healthy", healthy, labels, timestamp))
 
 		// Streaming status metric
 		streaming := 0.0
 		if device.StreamingStatus == "Active" {
 			streaming = 1.0
 		}
-		metrics = append(metrics, types.NewMetric("arista_device_streaming", streaming, labels))
+		metrics = append(metrics, types.NewMetricAt("arista_device_streaming", streaming, labels, timestamp))
 
 		// ZTP mode metric
 		ztpEnabled := 0.0
 		if device.ZtpMode == "true" || device.ZtpMode == "enabled" {
 			ztpEnabled = 1.0
 		}
-		metrics = append(metrics, types.NewMetric("arista_device_ztp_enabled", ztpEnabled, labels))
+		metrics = append(metrics, types.NewMetricAt("arista_device_ztp_enabled", ztpEnabled, labels, timestamp))
 
 		// Uptime metric (if bootup timestamp is available)
 		if device.BootupTimestamp > 0 {
-			metrics = append(metrics, types.NewCounterMetric(
+			metrics = append(metrics, types.NewCounterMetricAt(
 				"arista_device_boot_timestamp_seconds",
 				float64(device.BootupTimestamp),
 				labels,
+				timestamp,
 			))
 		}
 	}
@@ -131,20 +135,22 @@ func (i *InventoryCollector) buildMetrics(inventory DeviceInventory) []*types.Ne
 	baseLabels := i.cvp.BaseLabels()
 
 	// Total devices
-	metrics = append(metrics, types.NewMetric(
+	metrics = append(metrics, types.NewMetricAt(
 		"arista_devices_total",
 		float64(len(inventory.Devices)),
 		baseLabels,
+		timestamp,
 	))
 
 	// Devices by status
 	for status, count := range statusCounts {
 		labels := i.cvp.BaseLabels()
 		labels["status"] = status
-		metrics = append(metrics, types.NewMetric(
+		metrics = append(metrics, types.NewMetricAt(
 			"arista_devices_by_status",
 			float64(count),
 			labels,
+			timestamp,
 		))
 	}
 
@@ -152,10 +158,11 @@ func (i *InventoryCollector) buildMetrics(inventory DeviceInventory) []*types.Ne
 	for model, count := range modelCounts {
 		labels := i.cvp.BaseLabels()
 		labels["model"] = model
-		metrics = append(metrics, types.NewMetric(
+		metrics = append(metrics, types.NewMetricAt(
 			"arista_devices_by_model",
 			float64(count),
 			labels,
+			timestamp,
 		))
 	}
 
@@ -163,10 +170,11 @@ func (i *InventoryCollector) buildMetrics(inventory DeviceInventory) []*types.Ne
 	for version, count := range versionCounts {
 		labels := i.cvp.BaseLabels()
 		labels["version"] = version
-		metrics = append(metrics, types.NewMetric(
+		metrics = append(metrics, types.NewMetricAt(
 			"arista_devices_by_version",
 			float64(count),
 			labels,
+			timestamp,
 		))
 	}
 

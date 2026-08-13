@@ -32,6 +32,10 @@ type OTLPBridge struct {
 	environment *DetectedEnvironment
 	logger      *slog.Logger
 	mu          sync.Mutex
+
+	// processStart anchors cumulative data points. Captured once so it is
+	// stable across scrapes rather than sliding with each export.
+	processStart time.Time
 }
 
 // NewOTLPBridge creates a new OTLP bridge for node exporter metrics.
@@ -55,6 +59,9 @@ func NewOTLPBridge(
 		resource:    res,
 		environment: env,
 		logger:      logger,
+		// Anchor cumulative series to bridge construction, which is the earliest
+		// instant at which this process could have observed a counter.
+		processStart: time.Now().UTC(),
 	}, nil
 }
 
@@ -272,9 +279,12 @@ func (b *OTLPBridge) convertHistogram(name, help string, metrics []*dto.Metric, 
 		}
 
 		dp := metricdata.HistogramDataPoint[float64]{
-			Attributes:   attrs,
-			StartTime:    timestamp.Add(-time.Minute), // Approximation
-			Time:         timestamp,
+			Attributes: attrs,
+			// Cumulative histograms must anchor to when accumulation actually
+			// began. A rolling "one minute ago" moves the start on every scrape,
+			// which defeats reset detection and makes rate anchoring meaningless.
+			StartTime: b.processStart,
+			Time:      timestamp,
 			Count:        h.GetSampleCount(),
 			Sum:          h.GetSampleSum(),
 			Bounds:       boundaries,

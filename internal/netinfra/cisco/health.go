@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
 )
@@ -62,13 +63,15 @@ func (c *HealthCollector) CollectFabricHealth(ctx context.Context) ([]*types.Net
 
 	var metrics []*types.NetworkMetric
 	labels := c.aci.BaseLabels()
+	// One hoisted instant per cycle — APIC health objects carry no sample time.
+	now := time.Now().UTC()
 
 	if len(result.Imdata) > 0 {
 		health := result.Imdata[0].FabricHealthTotal.Attributes
 		metrics = append(metrics,
-			types.NewMetric("aci_fabric_health_avg", parseFloat(health.HealthAvg), labels),
-			types.NewMetric("aci_fabric_health_max", parseFloat(health.HealthMax), labels),
-			types.NewMetric("aci_fabric_health_min", parseFloat(health.HealthMin), labels),
+			types.NewMetricAt("aci_fabric_health_avg", parseFloat(health.HealthAvg), labels, now),
+			types.NewMetricAt("aci_fabric_health_max", parseFloat(health.HealthMax), labels, now),
+			types.NewMetricAt("aci_fabric_health_min", parseFloat(health.HealthMin), labels, now),
 		)
 	}
 
@@ -124,6 +127,8 @@ func (c *HealthCollector) collectPodHealth(ctx context.Context) ([]*types.Networ
 	}
 
 	var metrics []*types.NetworkMetric
+	// One hoisted instant per cycle — APIC health objects carry no sample time.
+	now := time.Now().UTC()
 
 	for _, item := range result.Imdata {
 		pod := item.FabricPod
@@ -132,10 +137,11 @@ func (c *HealthCollector) collectPodHealth(ctx context.Context) ([]*types.Networ
 
 		for _, child := range pod.Children {
 			if child.HealthInst.Attributes.Cur != "" {
-				metrics = append(metrics, types.NewMetric(
+				metrics = append(metrics, types.NewMetricAt(
 					"aci_pod_health",
 					parseFloat(child.HealthInst.Attributes.Cur),
 					labels,
+					now,
 				))
 				break
 			}
@@ -197,6 +203,8 @@ func (c *HealthCollector) collectCapacity(ctx context.Context) ([]*types.Network
 	}
 
 	var metrics []*types.NetworkMetric
+	// One hoisted instant per cycle — eqptCapacity carries no sample time.
+	now := time.Now().UTC()
 
 	for _, item := range result.Imdata {
 		cap := item.EqptCapacity.Attributes
@@ -206,9 +214,9 @@ func (c *HealthCollector) collectCapacity(ctx context.Context) ([]*types.Network
 		labels["node"] = nodeID
 
 		metrics = append(metrics,
-			types.NewMetric("aci_tcam_entries_current", parseFloat(cap.TcamEntryCur), labels),
-			types.NewMetric("aci_tcam_entries_max", parseFloat(cap.TcamEntryMax), labels),
-			types.NewMetric("aci_tcam_utilization_percent", parseFloat(cap.TcamEntryPct), labels),
+			types.NewMetricAt("aci_tcam_entries_current", parseFloat(cap.TcamEntryCur), labels, now),
+			types.NewMetricAt("aci_tcam_entries_max", parseFloat(cap.TcamEntryMax), labels, now),
+			types.NewMetricAt("aci_tcam_utilization_percent", parseFloat(cap.TcamEntryPct), labels, now),
 		)
 	}
 

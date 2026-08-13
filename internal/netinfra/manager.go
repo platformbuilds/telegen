@@ -50,6 +50,20 @@ type Config struct {
 	FortiGate []fortigate.Config `mapstructure:"fortigate" yaml:"fortigate"`
 	// Exporter configuration
 	Exporter ExporterConfig `mapstructure:"exporter" yaml:"exporter"`
+	// ClockSkewWarn is the |collector clock - newest source timestamp| past
+	// which a warning is logged. Defaults to 5m.
+	ClockSkewWarn time.Duration `mapstructure:"clock_skew_warn_threshold" yaml:"clock_skew_warn_threshold"`
+}
+
+// EffectiveClockSkewWarn returns the clock-skew warning threshold, defaulting
+// to 5 minutes. This matters most for gNMI, where the device supplies its own
+// nanosecond sample time and a drifting collector clock would otherwise be
+// invisible.
+func (c Config) EffectiveClockSkewWarn() time.Duration {
+	if c.ClockSkewWarn <= 0 {
+		return 5 * time.Minute
+	}
+	return c.ClockSkewWarn
 }
 
 // DefaultConfig returns sensible default configuration
@@ -289,7 +303,7 @@ func (m *Manager) distributeMetrics() {
 			}
 			var err error
 			if m.shared != nil {
-				err = exportWithSharedMetricsExporter(m.ctx, m.shared, metrics)
+				err = exportWithSharedMetricsExporter(m.ctx, m.shared, metrics, m.config.EffectiveClockSkewWarn(), m.log)
 			} else {
 				err = m.exporter.Export(m.ctx, metrics)
 			}

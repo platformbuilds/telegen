@@ -76,11 +76,14 @@ func (c *FaultCollector) Collect(ctx context.Context) ([]*types.NetworkMetric, e
 		faults = append(faults, item.FaultInst.Attributes)
 	}
 
-	return c.buildMetrics(faults), nil
+	// APIC fault attributes carry no per-sample time, so the whole cycle is
+	// stamped with one hoisted instant (telegen/AGENTS.md "Timestamp Provenance").
+	return c.buildMetrics(faults, time.Now().UTC()), nil
 }
 
-// buildMetrics converts fault data to metrics
-func (c *FaultCollector) buildMetrics(faults []Fault) []*types.NetworkMetric {
+// buildMetrics converts fault data to metrics, stamping every metric with the
+// caller's hoisted per-cycle instant.
+func (c *FaultCollector) buildMetrics(faults []Fault, timestamp time.Time) []*types.NetworkMetric {
 	var metrics []*types.NetworkMetric
 
 	// Count faults by severity
@@ -111,17 +114,19 @@ func (c *FaultCollector) buildMetrics(faults []Fault) []*types.NetworkMetric {
 
 			// Calculate age
 			age := c.calculateFaultAge(fault.Created)
-			metrics = append(metrics, types.NewMetric(
+			metrics = append(metrics, types.NewMetricAt(
 				"aci_fault_age_seconds",
 				age.Seconds(),
 				labels,
+				timestamp,
 			))
 
 			// Fault present metric
-			metrics = append(metrics, types.NewMetric(
+			metrics = append(metrics, types.NewMetricAt(
 				"aci_fault_active",
 				1.0,
 				labels,
+				timestamp,
 			))
 		}
 	}
@@ -129,30 +134,30 @@ func (c *FaultCollector) buildMetrics(faults []Fault) []*types.NetworkMetric {
 	// Summary metrics
 	baseLabels := c.aci.BaseLabels()
 	metrics = append(metrics,
-		types.NewMetric("aci_faults_total", float64(len(faults)), baseLabels),
-		types.NewMetric("aci_faults_acknowledged", float64(acknowledgedCount), baseLabels),
-		types.NewMetric("aci_faults_unacknowledged", float64(len(faults)-acknowledgedCount), baseLabels),
+		types.NewMetricAt("aci_faults_total", float64(len(faults)), baseLabels, timestamp),
+		types.NewMetricAt("aci_faults_acknowledged", float64(acknowledgedCount), baseLabels, timestamp),
+		types.NewMetricAt("aci_faults_unacknowledged", float64(len(faults)-acknowledgedCount), baseLabels, timestamp),
 	)
 
 	// Faults by severity
 	for severity, count := range severityCounts {
 		labels := c.aci.BaseLabels()
 		labels["severity"] = severity
-		metrics = append(metrics, types.NewMetric("aci_faults_by_severity", float64(count), labels))
+		metrics = append(metrics, types.NewMetricAt("aci_faults_by_severity", float64(count), labels, timestamp))
 	}
 
 	// Faults by domain
 	for domain, count := range domainCounts {
 		labels := c.aci.BaseLabels()
 		labels["domain"] = domain
-		metrics = append(metrics, types.NewMetric("aci_faults_by_domain", float64(count), labels))
+		metrics = append(metrics, types.NewMetricAt("aci_faults_by_domain", float64(count), labels, timestamp))
 	}
 
 	// Faults by type
 	for faultType, count := range typeCounts {
 		labels := c.aci.BaseLabels()
 		labels["type"] = faultType
-		metrics = append(metrics, types.NewMetric("aci_faults_by_type", float64(count), labels))
+		metrics = append(metrics, types.NewMetricAt("aci_faults_by_type", float64(count), labels, timestamp))
 	}
 
 	return metrics

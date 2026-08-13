@@ -5,8 +5,10 @@ package netinfra
 
 import (
 	"context"
+	"time"
 
 	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
+	"github.com/mirastacklabs-ai/telegen/internal/timeutil"
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -14,7 +16,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 )
 
-func exportWithSharedMetricsExporter(ctx context.Context, exp sdkmetric.Exporter, metrics []*types.NetworkMetric) error {
+func exportWithSharedMetricsExporter(ctx context.Context, exp sdkmetric.Exporter, metrics []*types.NetworkMetric, skewWarn time.Duration, logger timeutil.SkewLogger) error {
 	if exp == nil || len(metrics) == 0 {
 		return nil
 	}
@@ -27,10 +29,20 @@ func exportWithSharedMetricsExporter(ctx context.Context, exp sdkmetric.Exporter
 	buckets := map[string]*bucket{}
 	order := make([]string, 0, len(metrics))
 
+	// One export instant for the whole batch. This is the collector's own clock
+	// reading, kept separate from each metric's Timestamp so collection lag
+	// stays measurable instead of being erased.
+	observedAt := time.Now().UTC()
+	sourceTimestamps := make([]time.Time, 0, len(metrics))
+
 	for _, m := range metrics {
 		if m == nil || m.Name == "" {
 			continue
 		}
+		if m.ObservedTimestamp.IsZero() {
+			m.ObservedTimestamp = observedAt
+		}
+		sourceTimestamps = append(sourceTimestamps, m.Timestamp)
 		b, ok := buckets[m.Name]
 		if !ok {
 			b = &bucket{typ: m.Type}
@@ -69,6 +81,12 @@ func exportWithSharedMetricsExporter(ctx context.Context, exp sdkmetric.Exporter
 			})
 		}
 	}
+
+	// Ride the same OTLP batch as the domain metrics so a bad clock announces
+	// itself in the pipeline that actually reaches VictoriaMetrics.
+	provenance := timeutil.InspectBatch(observedAt, sourceTimestamps)
+	provenance.WarnIfSkewed("netinfra", skewWarn, logger)
+	ms = append(ms, provenance.Metrics("netinfra", observedAt)...)
 
 	rm := &metricdata.ResourceMetrics{
 		Resource: resource.NewSchemaless(

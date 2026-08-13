@@ -29,15 +29,17 @@ const (
 	MetricTypeCounter MetricType = "counter"
 )
 
-// NewMetric creates a new network metric with default values.
-// DEPRECATED: Use NewMetricAt() with an explicit timestamp to avoid per-metric clock smear.
-// See telegen/AGENTS.md "Timestamp Provenance" section.
-func NewMetric(name string, value float64, labels map[string]string) *NetworkMetric {
-	return NewMetricAt(name, value, labels, time.Now().UTC())
-}
-
 // NewMetricAt creates a new gauge metric with an explicit timestamp.
-// Use this variant in collector implementations to hoist one instant per cycle.
+//
+// The timestamp is mandatory by design. A clock-reading constructor used to
+// exist here and was removed: because it sampled the clock once per metric, a
+// collection cycle that walked hundreds of interfaces smeared its metrics
+// across the cycle's full duration, and for counters that smear divides the
+// delta by a wrong dt and corrupts every derived rate.
+//
+// Callers pass one instant hoisted per collection cycle, or the source
+// system's own sample time when it provides one. See telegen/AGENTS.md
+// "Timestamp Provenance".
 func NewMetricAt(name string, value float64, labels map[string]string, timestamp time.Time) *NetworkMetric {
 	return &NetworkMetric{
 		Name:      name,
@@ -48,15 +50,8 @@ func NewMetricAt(name string, value float64, labels map[string]string, timestamp
 	}
 }
 
-// NewCounterMetric creates a new counter metric.
-// DEPRECATED: Use NewCounterMetricAt() with an explicit timestamp to avoid per-metric clock smear.
-// See telegen/AGENTS.md "Timestamp Provenance" section.
-func NewCounterMetric(name string, value float64, labels map[string]string) *NetworkMetric {
-	return NewCounterMetricAt(name, value, labels, time.Now().UTC())
-}
-
 // NewCounterMetricAt creates a new counter metric with an explicit timestamp.
-// Use this variant in collector implementations to hoist one instant per cycle.
+// The timestamp is mandatory for the reasons documented on NewMetricAt.
 func NewCounterMetricAt(name string, value float64, labels map[string]string, timestamp time.Time) *NetworkMetric {
 	return &NetworkMetric{
 		Name:      name,

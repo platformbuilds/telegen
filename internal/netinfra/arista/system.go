@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
 )
@@ -151,6 +152,8 @@ func (c *SystemCollector) collectCPUMemory(ctx context.Context) ([]*types.Networ
 	}
 
 	var metrics []*types.NetworkMetric
+	// One hoisted instant per cycle — CVP returns no per-sample time.
+	now := time.Now().UTC()
 
 	for _, stats := range response.Data {
 		labels := c.cvp.BaseLabels()
@@ -158,32 +161,35 @@ func (c *SystemCollector) collectCPUMemory(ctx context.Context) ([]*types.Networ
 		labels["hostname"] = stats.Hostname
 
 		// CPU utilization
-		metrics = append(metrics, types.NewMetric(
+		metrics = append(metrics, types.NewMetricAt(
 			"arista_cpu_utilization_percent",
 			stats.CPUUtilization,
 			labels,
+			now,
 		))
 
 		// Memory metrics
 		metrics = append(metrics,
-			types.NewMetric("arista_memory_total_bytes", float64(stats.MemoryTotal), labels),
-			types.NewMetric("arista_memory_used_bytes", float64(stats.MemoryUsed), labels),
-			types.NewMetric("arista_memory_free_bytes", float64(stats.MemoryFree), labels),
-			types.NewMetric("arista_memory_utilization_percent", stats.MemoryUtilization, labels),
+			types.NewMetricAt("arista_memory_total_bytes", float64(stats.MemoryTotal), labels, now),
+			types.NewMetricAt("arista_memory_used_bytes", float64(stats.MemoryUsed), labels, now),
+			types.NewMetricAt("arista_memory_free_bytes", float64(stats.MemoryFree), labels, now),
+			types.NewMetricAt("arista_memory_utilization_percent", stats.MemoryUtilization, labels, now),
 		)
 
 		// Uptime
-		metrics = append(metrics, types.NewCounterMetric(
+		metrics = append(metrics, types.NewCounterMetricAt(
 			"arista_system_uptime_seconds",
 			float64(stats.SystemUptime),
 			labels,
+			now,
 		))
 
 		// Process count
-		metrics = append(metrics, types.NewMetric(
+		metrics = append(metrics, types.NewMetricAt(
 			"arista_process_count",
 			float64(stats.ProcessCount),
 			labels,
+			now,
 		))
 	}
 
@@ -215,6 +221,8 @@ func (c *SystemCollector) collectTemperature(ctx context.Context) ([]*types.Netw
 	}
 
 	var metrics []*types.NetworkMetric
+	// One hoisted instant per cycle — CVP returns no per-sample time.
+	now := time.Now().UTC()
 
 	for _, sensor := range response.Data {
 		labels := c.cvp.BaseLabels()
@@ -223,10 +231,11 @@ func (c *SystemCollector) collectTemperature(ctx context.Context) ([]*types.Netw
 		labels["description"] = sensor.Description
 
 		// Temperature reading
-		metrics = append(metrics, types.NewMetric(
+		metrics = append(metrics, types.NewMetricAt(
 			"arista_temperature_celsius",
 			sensor.Temperature,
 			labels,
+			now,
 		))
 
 		// Alert status
@@ -234,18 +243,20 @@ func (c *SystemCollector) collectTemperature(ctx context.Context) ([]*types.Netw
 		if sensor.AlertStatus == "alert" || sensor.AlertStatus == "critical" {
 			alertActive = 1.0
 		}
-		metrics = append(metrics, types.NewMetric(
+		metrics = append(metrics, types.NewMetricAt(
 			"arista_temperature_alert",
 			alertActive,
 			labels,
+			now,
 		))
 
 		// Threshold
 		if sensor.MaxThreshold > 0 {
-			metrics = append(metrics, types.NewMetric(
+			metrics = append(metrics, types.NewMetricAt(
 				"arista_temperature_threshold_celsius",
 				sensor.MaxThreshold,
 				labels,
+				now,
 			))
 		}
 	}
@@ -278,6 +289,8 @@ func (c *SystemCollector) collectPowerSupply(ctx context.Context) ([]*types.Netw
 	}
 
 	var metrics []*types.NetworkMetric
+	// One hoisted instant per cycle — CVP returns no per-sample time.
+	now := time.Now().UTC()
 
 	for _, psu := range response.Data {
 		labels := c.cvp.BaseLabels()
@@ -290,17 +303,18 @@ func (c *SystemCollector) collectPowerSupply(ctx context.Context) ([]*types.Netw
 		if psu.Status == "ok" || psu.Status == "powerOutput" {
 			statusOk = 1.0
 		}
-		metrics = append(metrics, types.NewMetric(
+		metrics = append(metrics, types.NewMetricAt(
 			"arista_power_supply_status",
 			statusOk,
 			labels,
+			now,
 		))
 
 		// Power metrics
 		metrics = append(metrics,
-			types.NewMetric("arista_power_supply_input_voltage", psu.InputVoltage, labels),
-			types.NewMetric("arista_power_supply_output_voltage", psu.OutputVoltage, labels),
-			types.NewMetric("arista_power_supply_output_watts", psu.OutputPower, labels),
+			types.NewMetricAt("arista_power_supply_input_voltage", psu.InputVoltage, labels, now),
+			types.NewMetricAt("arista_power_supply_output_voltage", psu.OutputVoltage, labels, now),
+			types.NewMetricAt("arista_power_supply_output_watts", psu.OutputPower, labels, now),
 		)
 	}
 
@@ -332,6 +346,8 @@ func (c *SystemCollector) collectFans(ctx context.Context) ([]*types.NetworkMetr
 	}
 
 	var metrics []*types.NetworkMetric
+	// One hoisted instant per cycle — CVP returns no per-sample time.
+	now := time.Now().UTC()
 
 	for _, fan := range response.Data {
 		labels := c.cvp.BaseLabels()
@@ -344,16 +360,17 @@ func (c *SystemCollector) collectFans(ctx context.Context) ([]*types.NetworkMetr
 		if fan.Status == "ok" {
 			statusOk = 1.0
 		}
-		metrics = append(metrics, types.NewMetric(
+		metrics = append(metrics, types.NewMetricAt(
 			"arista_fan_status",
 			statusOk,
 			labels,
+			now,
 		))
 
 		// Speed metrics
 		metrics = append(metrics,
-			types.NewMetric("arista_fan_speed_rpm", float64(fan.Speed), labels),
-			types.NewMetric("arista_fan_speed_percent", fan.SpeedPct, labels),
+			types.NewMetricAt("arista_fan_speed_rpm", float64(fan.Speed), labels, now),
+			types.NewMetricAt("arista_fan_speed_percent", fan.SpeedPct, labels, now),
 		)
 	}
 

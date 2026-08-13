@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
 )
@@ -77,11 +78,14 @@ func (c *InterfaceCollector) Collect(ctx context.Context) ([]*types.NetworkMetri
 		return nil, fmt.Errorf("failed to decode interfaces: %w", err)
 	}
 
-	return c.buildMetrics(response.Data), nil
+	// CVP interface stats carry no per-sample time, so one hoisted instant
+	// stamps the whole cycle. The octet/packet counters below depend on it: a
+	// smear divides their deltas by a wrong dt and corrupts every rate.
+	return c.buildMetrics(response.Data, time.Now().UTC()), nil
 }
 
 // buildMetrics converts interface data to metrics
-func (c *InterfaceCollector) buildMetrics(interfaces []InterfaceStats) []*types.NetworkMetric {
+func (c *InterfaceCollector) buildMetrics(interfaces []InterfaceStats, timestamp time.Time) []*types.NetworkMetric {
 	var metrics []*types.NetworkMetric
 
 	// Track interface status counts
@@ -105,7 +109,7 @@ func (c *InterfaceCollector) buildMetrics(interfaces []InterfaceStats) []*types.
 		} else {
 			operDownCount++
 		}
-		metrics = append(metrics, types.NewMetric("arista_interface_oper_status", operUp, labels))
+		metrics = append(metrics, types.NewMetricAt("arista_interface_oper_status", operUp, labels, timestamp))
 
 		// Admin status
 		adminUp := 0.0
@@ -115,62 +119,65 @@ func (c *InterfaceCollector) buildMetrics(interfaces []InterfaceStats) []*types.
 		} else {
 			adminDownCount++
 		}
-		metrics = append(metrics, types.NewMetric("arista_interface_admin_status", adminUp, labels))
+		metrics = append(metrics, types.NewMetricAt("arista_interface_admin_status", adminUp, labels, timestamp))
 
 		// Speed
-		metrics = append(metrics, types.NewMetric(
+		metrics = append(metrics, types.NewMetricAt(
 			"arista_interface_speed_bps",
 			float64(iface.Speed),
 			labels,
+			timestamp,
 		))
 
 		// MTU
-		metrics = append(metrics, types.NewMetric(
+		metrics = append(metrics, types.NewMetricAt(
 			"arista_interface_mtu",
 			float64(iface.MTU),
 			labels,
+			timestamp,
 		))
 
 		// Traffic counters (as counters)
 		metrics = append(metrics,
-			types.NewCounterMetric("arista_interface_in_octets_total", float64(iface.InOctets), labels),
-			types.NewCounterMetric("arista_interface_out_octets_total", float64(iface.OutOctets), labels),
-			types.NewCounterMetric("arista_interface_in_packets_total", float64(iface.InPackets), labels),
-			types.NewCounterMetric("arista_interface_out_packets_total", float64(iface.OutPackets), labels),
+			types.NewCounterMetricAt("arista_interface_in_octets_total", float64(iface.InOctets), labels, timestamp),
+			types.NewCounterMetricAt("arista_interface_out_octets_total", float64(iface.OutOctets), labels, timestamp),
+			types.NewCounterMetricAt("arista_interface_in_packets_total", float64(iface.InPackets), labels, timestamp),
+			types.NewCounterMetricAt("arista_interface_out_packets_total", float64(iface.OutPackets), labels, timestamp),
 		)
 
 		// Error and discard counters
 		metrics = append(metrics,
-			types.NewCounterMetric("arista_interface_in_errors_total", float64(iface.InErrors), labels),
-			types.NewCounterMetric("arista_interface_out_errors_total", float64(iface.OutErrors), labels),
-			types.NewCounterMetric("arista_interface_in_discards_total", float64(iface.InDiscards), labels),
-			types.NewCounterMetric("arista_interface_out_discards_total", float64(iface.OutDiscards), labels),
+			types.NewCounterMetricAt("arista_interface_in_errors_total", float64(iface.InErrors), labels, timestamp),
+			types.NewCounterMetricAt("arista_interface_out_errors_total", float64(iface.OutErrors), labels, timestamp),
+			types.NewCounterMetricAt("arista_interface_in_discards_total", float64(iface.InDiscards), labels, timestamp),
+			types.NewCounterMetricAt("arista_interface_out_discards_total", float64(iface.OutDiscards), labels, timestamp),
 		)
 
 		// Broadcast/Multicast counters
 		metrics = append(metrics,
-			types.NewCounterMetric("arista_interface_in_broadcast_total", float64(iface.InBroadcast), labels),
-			types.NewCounterMetric("arista_interface_out_broadcast_total", float64(iface.OutBroadcast), labels),
-			types.NewCounterMetric("arista_interface_in_multicast_total", float64(iface.InMulticast), labels),
-			types.NewCounterMetric("arista_interface_out_multicast_total", float64(iface.OutMulticast), labels),
+			types.NewCounterMetricAt("arista_interface_in_broadcast_total", float64(iface.InBroadcast), labels, timestamp),
+			types.NewCounterMetricAt("arista_interface_out_broadcast_total", float64(iface.OutBroadcast), labels, timestamp),
+			types.NewCounterMetricAt("arista_interface_in_multicast_total", float64(iface.InMulticast), labels, timestamp),
+			types.NewCounterMetricAt("arista_interface_out_multicast_total", float64(iface.OutMulticast), labels, timestamp),
 		)
 
 		// Unknown protocol counter
-		metrics = append(metrics, types.NewCounterMetric(
+		metrics = append(metrics, types.NewCounterMetricAt(
 			"arista_interface_in_unknown_protos_total",
 			float64(iface.InUnknownProtos),
 			labels,
+			timestamp,
 		))
 	}
 
 	// Add summary metrics
 	baseLabels := c.cvp.BaseLabels()
 	metrics = append(metrics,
-		types.NewMetric("arista_interfaces_total", float64(len(interfaces)), baseLabels),
-		types.NewMetric("arista_interfaces_oper_up", float64(operUpCount), baseLabels),
-		types.NewMetric("arista_interfaces_oper_down", float64(operDownCount), baseLabels),
-		types.NewMetric("arista_interfaces_admin_up", float64(adminUpCount), baseLabels),
-		types.NewMetric("arista_interfaces_admin_down", float64(adminDownCount), baseLabels),
+		types.NewMetricAt("arista_interfaces_total", float64(len(interfaces)), baseLabels, timestamp),
+		types.NewMetricAt("arista_interfaces_oper_up", float64(operUpCount), baseLabels, timestamp),
+		types.NewMetricAt("arista_interfaces_oper_down", float64(operDownCount), baseLabels, timestamp),
+		types.NewMetricAt("arista_interfaces_admin_up", float64(adminUpCount), baseLabels, timestamp),
+		types.NewMetricAt("arista_interfaces_admin_down", float64(adminDownCount), baseLabels, timestamp),
 	)
 
 	return metrics

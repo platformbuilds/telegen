@@ -206,6 +206,20 @@ type Config struct {
 
 	// OTLP export configuration (legacy fallback; prefer shared pipeline exporter)
 	OTLP OTLPConfig `mapstructure:"otlp" yaml:"otlp"`
+
+	// ClockSkewWarn is the |collector clock - newest source timestamp| past
+	// which a warning is logged. Defaults to 5m.
+	ClockSkewWarn time.Duration `mapstructure:"clock_skew_warn_threshold" yaml:"clock_skew_warn_threshold"`
+}
+
+// EffectiveClockSkewWarn returns the clock-skew warning threshold, defaulting
+// to 5 minutes so a misconfigured NTP announces itself rather than silently
+// backdating every array metric.
+func (c Config) EffectiveClockSkewWarn() time.Duration {
+	if c.ClockSkewWarn <= 0 {
+		return 5 * time.Minute
+	}
+	return c.ClockSkewWarn
 }
 
 // MetricExporter is the interface for metric exporters

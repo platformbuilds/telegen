@@ -46,7 +46,7 @@ func TestExportMetricsGroupsByName(t *testing.T) {
 		{Name: "vmware_host_cpu_usagemhz_average", Type: vmwaredef.MetricTypeGauge, Value: 512, Labels: map[string]string{"host": "esx-1", "vcenter": "vc"}, Timestamp: now},
 	}
 
-	if err := exportMetrics(context.Background(), exp, "vc", map[string]string{"env": "test"}, metrics); err != nil {
+	if err := exportMetrics(context.Background(), exp, "vc", map[string]string{"env": "test"}, metrics, 0, nil); err != nil {
 		t.Fatalf("exportMetrics: %v", err)
 	}
 	if exp.last == nil {

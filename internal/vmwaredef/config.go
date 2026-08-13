@@ -44,7 +44,8 @@ type Config struct {
 	InsecureTLS      bool              `yaml:"insecure_tls"`      // maps to soap Insecure
 	Collectors       Collectors        `yaml:"collectors"`
 	Events           EventsConfig      `yaml:"events"`
-	ExtraLabels      map[string]string `yaml:"extra_labels"` // added to every metric/log
+	ExtraLabels      map[string]string `yaml:"extra_labels"`           // added to every metric/log
+	ClockSkewWarn    time.Duration     `yaml:"clock_skew_warn_threshold"` // warn past this |collector - source| skew (default 5m)
 }
 
 // EffectiveInterval returns the polling interval, defaulting to 60s.
@@ -70,6 +71,17 @@ func (c Config) EffectiveTimeout() time.Duration {
 		t = 5 * time.Second
 	}
 	return t
+}
+
+// EffectiveClockSkewWarn returns the clock-skew warning threshold, defaulting
+// to 5 minutes. Skew is the collector's clock minus the newest vCenter sample
+// timestamp; past this magnitude the collector logs a warning so a
+// misconfigured NTP announces itself instead of silently backdating data.
+func (c Config) EffectiveClockSkewWarn() time.Duration {
+	if c.ClockSkewWarn <= 0 {
+		return 5 * time.Minute
+	}
+	return c.ClockSkewWarn
 }
 
 // EffectivePerfInterval returns the perf query IntervalId in seconds, defaulting to 20.

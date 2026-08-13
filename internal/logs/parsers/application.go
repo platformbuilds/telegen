@@ -1542,10 +1542,28 @@ type FIXMLParser struct {
 
 	// Common FIXML field mappings to human-readable names
 	fieldMappings map[string]string
+
+	// Zone used to interpret zoneless FIXML layouts. FIX LocalMktDate
+	// ("20060102") is a local market date, so parsing it without a zone
+	// silently reinterprets it as UTC midnight.
+	location *time.Location
 }
 
-// NewFIXMLParser creates a new FIXML parser for trading system messages
+// NewFIXMLParser creates a new FIXML parser for trading system messages,
+// interpreting zoneless timestamps as UTC.
 func NewFIXMLParser() *FIXMLParser {
+	return NewFIXMLParserWithLocation(time.UTC)
+}
+
+// NewFIXMLParserWithLocation creates a FIXML parser that interprets zoneless
+// timestamps in the supplied site zone.
+func NewFIXMLParserWithLocation(location *time.Location) *FIXMLParser {
+	p := newFIXMLParser()
+	p.location = normalizeParserLocation(location)
+	return p
+}
+
+func newFIXMLParser() *FIXMLParser {
 	return &FIXMLParser{
 		// Match FIXML root element with version info
 		fixmlPattern: regexp.MustCompile(`(?i)<FIXML[^>]*>`),
@@ -1748,24 +1766,45 @@ func (p *FIXMLParser) extractFIXMLTimestamp(log *ParsedLog, line string) {
 
 // parseFIXTimestamp parses FIX timestamp formats
 func (p *FIXMLParser) parseFIXTimestamp(s string) time.Time {
-	// FIX timestamp formats
-	// FIX UTCTimestamp formats are explicitly in UTC; others with zone offsets parse in their declared zone
-	formats := []string{
+	// Zone handling is per-layout, because FIX does not use one convention:
+	//
+	//   - UTCTimestamp layouts are defined by the spec as UTC, so they parse in
+	//     UTC regardless of the site zone.
+	//   - Layouts carrying an explicit offset keep that offset; the location
+	//     argument is only a fallback for zoneless input, so it is inert here.
+	//   - LocalMktDate ("20060102") and the zoneless datetime layout are local
+	//     to the market. Parsing those as UTC shifts the instant by the site's
+	//     offset, which for a trading venue can move a trade to the wrong day.
+	site := normalizeParserLocation(p.location)
+
+	utcLayouts := []string{
+		"20060102-15:04:05.999999999", // FIX UTCTimestamp with nanoseconds
+		"20060102-15:04:05.999",       // FIX UTCTimestamp with milliseconds
+		"20060102-15:04:05",           // FIX UTCTimestamp
+	}
+	offsetLayouts := []string{
 		time.RFC3339Nano,
 		time.RFC3339,
 		"2006-01-02T15:04:05.999999999Z07:00",
 		"2006-01-02T15:04:05.999Z",
-		"2006-01-02T15:04:05",
-		"20060102-15:04:05.999999999", // FIX UTCTimestamp with nanoseconds
-		"20060102-15:04:05.999",       // FIX UTCTimestamp with milliseconds
-		"20060102-15:04:05",           // FIX UTCTimestamp
-		"20060102",                    // FIX LocalMktDate
+	}
+	siteLayouts := []string{
+		"2006-01-02T15:04:05", // zoneless datetime
+		"20060102",            // FIX LocalMktDate
 	}
 
-	for _, format := range formats {
-		// Parse in UTC to avoid local-time misinterpretation
-		// FIX protocol timestamps without explicit zone are defined as UTC
+	for _, format := range offsetLayouts {
+		if ts, err := time.Parse(format, s); err == nil {
+			return ts
+		}
+	}
+	for _, format := range utcLayouts {
 		if ts, err := time.ParseInLocation(format, s, time.UTC); err == nil {
+			return ts
+		}
+	}
+	for _, format := range siteLayouts {
+		if ts, err := time.ParseInLocation(format, s, site); err == nil {
 			return ts
 		}
 	}

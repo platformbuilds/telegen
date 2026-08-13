@@ -23,9 +23,14 @@ const (
 	MetricTypeCounter = types.MetricTypeCounter
 )
 
-// Re-export functions
+// Re-export functions.
+//
+// Only the timestamp-taking constructors are mirrored; the clock-reading
+// variants were removed because they sampled the clock once per metric and
+// smeared a collection cycle across its full duration. See telegen/AGENTS.md
+// "Timestamp Provenance".
 var (
-	NewMetric              = types.NewMetric
-	NewCounterMetric       = types.NewCounterMetric
+	NewMetricAt            = types.NewMetricAt
+	NewCounterMetricAt     = types.NewCounterMetricAt
 	DefaultCollectorConfig = types.DefaultCollectorConfig
 )

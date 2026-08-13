@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/mirastacklabs-ai/telegen/internal/netinfra/types"
 )
@@ -75,11 +76,14 @@ func (c *BGPCollector) Collect(ctx context.Context) ([]*types.NetworkMetric, err
 		return nil, fmt.Errorf("failed to decode BGP sessions: %w", err)
 	}
 
-	return c.buildMetrics(response.Data), nil
+	// CVP BGP session objects carry no per-sample time, so one hoisted instant
+	// stamps the whole cycle. The update/keepalive counters below depend on it:
+	// a smear divides their deltas by a wrong dt and corrupts every rate.
+	return c.buildMetrics(response.Data, time.Now().UTC()), nil
 }
 
 // buildMetrics converts BGP session data to metrics
-func (c *BGPCollector) buildMetrics(sessions []BGPSession) []*types.NetworkMetric {
+func (c *BGPCollector) buildMetrics(sessions []BGPSession, timestamp time.Time) []*types.NetworkMetric {
 	var metrics []*types.NetworkMetric
 
 	// Track state counts
@@ -108,39 +112,40 @@ func (c *BGPCollector) buildMetrics(sessions []BGPSession) []*types.NetworkMetri
 			established = 1.0
 			establishedCount++
 		}
-		metrics = append(metrics, types.NewMetric("arista_bgp_session_established", established, labels))
+		metrics = append(metrics, types.NewMetricAt("arista_bgp_session_established", established, labels, timestamp))
 
 		// Prefix metrics
 		metrics = append(metrics,
-			types.NewMetric("arista_bgp_prefixes_received", float64(session.PrefixesReceived), labels),
-			types.NewMetric("arista_bgp_prefixes_sent", float64(session.PrefixesSent), labels),
-			types.NewMetric("arista_bgp_prefixes_accepted", float64(session.PrefixesAccepted), labels),
+			types.NewMetricAt("arista_bgp_prefixes_received", float64(session.PrefixesReceived), labels, timestamp),
+			types.NewMetricAt("arista_bgp_prefixes_sent", float64(session.PrefixesSent), labels, timestamp),
+			types.NewMetricAt("arista_bgp_prefixes_accepted", float64(session.PrefixesAccepted), labels, timestamp),
 		)
 
 		// Update counters
 		metrics = append(metrics,
-			types.NewCounterMetric("arista_bgp_updates_received_total", float64(session.UpdatesReceived), labels),
-			types.NewCounterMetric("arista_bgp_updates_sent_total", float64(session.UpdatesSent), labels),
+			types.NewCounterMetricAt("arista_bgp_updates_received_total", float64(session.UpdatesReceived), labels, timestamp),
+			types.NewCounterMetricAt("arista_bgp_updates_sent_total", float64(session.UpdatesSent), labels, timestamp),
 		)
 
 		// Keepalive counters
 		metrics = append(metrics,
-			types.NewCounterMetric("arista_bgp_keepalives_sent_total", float64(session.KeepalivesSent), labels),
-			types.NewCounterMetric("arista_bgp_keepalives_received_total", float64(session.KeepalivesRecv), labels),
+			types.NewCounterMetricAt("arista_bgp_keepalives_sent_total", float64(session.KeepalivesSent), labels, timestamp),
+			types.NewCounterMetricAt("arista_bgp_keepalives_received_total", float64(session.KeepalivesRecv), labels, timestamp),
 		)
 
 		// Timer configuration
 		metrics = append(metrics,
-			types.NewMetric("arista_bgp_hold_time_seconds", float64(session.HoldTime), labels),
-			types.NewMetric("arista_bgp_keepalive_time_seconds", float64(session.KeepaliveTime), labels),
+			types.NewMetricAt("arista_bgp_hold_time_seconds", float64(session.HoldTime), labels, timestamp),
+			types.NewMetricAt("arista_bgp_keepalive_time_seconds", float64(session.KeepaliveTime), labels, timestamp),
 		)
 
 		// Established time (uptime)
 		if session.EstablishedTime > 0 {
-			metrics = append(metrics, types.NewMetric(
+			metrics = append(metrics, types.NewMetricAt(
 				"arista_bgp_established_time_seconds",
 				float64(session.EstablishedTime),
 				labels,
+				timestamp,
 			))
 		}
 	}
@@ -148,18 +153,19 @@ func (c *BGPCollector) buildMetrics(sessions []BGPSession) []*types.NetworkMetri
 	// Summary metrics
 	baseLabels := c.cvp.BaseLabels()
 	metrics = append(metrics,
-		types.NewMetric("arista_bgp_sessions_total", float64(len(sessions)), baseLabels),
-		types.NewMetric("arista_bgp_sessions_established", float64(establishedCount), baseLabels),
+		types.NewMetricAt("arista_bgp_sessions_total", float64(len(sessions)), baseLabels, timestamp),
+		types.NewMetricAt("arista_bgp_sessions_established", float64(establishedCount), baseLabels, timestamp),
 	)
 
 	// Sessions by state
 	for state, count := range stateCounts {
 		labels := c.cvp.BaseLabels()
 		labels["state"] = state
-		metrics = append(metrics, types.NewMetric(
+		metrics = append(metrics, types.NewMetricAt(
 			"arista_bgp_sessions_by_state",
 			float64(count),
 			labels,
+			timestamp,
 		))
 	}
 

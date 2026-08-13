@@ -279,7 +279,7 @@ func (m *Manager) collectAll(ctx context.Context) {
 
 		if len(metrics) > 0 {
 			if m.sharedMetrics != nil {
-				if err := exportSharedMetrics(ctx, m.sharedMetrics, metrics); err != nil {
+				if err := exportSharedMetrics(ctx, m.sharedMetrics, metrics, m.config.EffectiveClockSkewWarn(), m.log); err != nil {
 					m.log.Warn("failed to export metrics via shared exporter", "collector", name, "error", err)
 				}
 			} else if m.exporter != nil {

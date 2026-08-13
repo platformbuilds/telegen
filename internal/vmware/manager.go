@@ -218,7 +218,7 @@ func (m *Manager) collectTarget(ctx context.Context, t vmwaredef.Target) {
 
 	if metrics := sink.metrics(); len(metrics) > 0 {
 		if m.metrics != nil {
-			if err := exportMetrics(s.ctx, m.metrics, t.Address, m.cfg.ExtraLabels, metrics); err != nil {
+			if err := exportMetrics(s.ctx, m.metrics, t.Address, m.cfg.ExtraLabels, metrics, m.cfg.EffectiveClockSkewWarn(), log); err != nil {
 				log.Warn("vmware metrics export failed", "error", err)
 			} else {
 				log.Debug("vmware metrics exported", "count", len(metrics))
