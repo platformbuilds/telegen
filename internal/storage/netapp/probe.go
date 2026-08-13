@@ -91,7 +91,10 @@ func parseVersionFromFull(full string) string {
 			}
 		}
 	}
-	return "9.12.0"
+	// No valid version found - return empty string to signal error
+	// Caller (VersionString) will use this as-is, causing template resolution to fail
+	// which is preferable to silently falling back to an arbitrary version
+	return ""
 }
 
 // UseRestPerf reports whether RestPerf engines should run.
