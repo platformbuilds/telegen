@@ -40,7 +40,7 @@ func (a *LogsConsumerAdapter) ConsumeLogs(ctx context.Context, ld plog.Logs) err
 	// (configured in the pipeline) handles the actual OTLP transmission.
 	//
 	// In the OTEL Collector pattern, logs received via ConsumeLogs are
-	// already in plog format and ready for direct export. 
+	// already in plog format and ready for direct export.
 	// The LoggerProvider acts as a processor/exporter pipeline.
 	//
 	// For now, we acknowledge receipt. Future: implement direct exporter access

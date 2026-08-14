@@ -14,11 +14,11 @@ func TestCookRates_DenominatorCooking(t *testing.T) {
 	prev := New("test")
 	prev.NewInstance("inst1")
 	prev.NewMetric(TimestampMetricName, TimestampMetricName, "gauge").Values["inst1"] = 1000.0
-	
+
 	opsMetric := prev.NewMetric("ops", "ops", "counter")
 	opsMetric.Property = "rate"
 	opsMetric.Values["inst1"] = 1000.0
-	
+
 	latencyMetric := prev.NewMetric("latency", "latency", "counter")
 	latencyMetric.Property = "average"
 	latencyMetric.Denominator = "ops"
@@ -29,11 +29,11 @@ func TestCookRates_DenominatorCooking(t *testing.T) {
 	cur := New("test")
 	cur.NewInstance("inst1")
 	cur.NewMetric(TimestampMetricName, TimestampMetricName, "gauge").Values["inst1"] = 1060.0
-	
+
 	opsMetric2 := cur.NewMetric("ops", "ops", "counter")
 	opsMetric2.Property = "rate"
 	opsMetric2.Values["inst1"] = 2000.0
-	
+
 	latencyMetric2 := cur.NewMetric("latency", "latency", "counter")
 	latencyMetric2.Property = "average"
 	latencyMetric2.Denominator = "ops"
@@ -65,11 +65,11 @@ func TestCookRates_PercentCooking(t *testing.T) {
 	prev := New("test")
 	prev.NewInstance("inst1")
 	prev.NewMetric(TimestampMetricName, TimestampMetricName, "gauge").Values["inst1"] = 1000.0
-	
+
 	totalMetric := prev.NewMetric("total_space", "total_space", "counter")
 	totalMetric.Property = "rate"
 	totalMetric.Values["inst1"] = 10000.0
-	
+
 	usedMetric := prev.NewMetric("used_space", "used_space", "counter")
 	usedMetric.Property = "percent"
 	usedMetric.Denominator = "total_space"
@@ -79,11 +79,11 @@ func TestCookRates_PercentCooking(t *testing.T) {
 	cur := New("test")
 	cur.NewInstance("inst1")
 	cur.NewMetric(TimestampMetricName, TimestampMetricName, "gauge").Values["inst1"] = 1060.0
-	
+
 	totalMetric2 := cur.NewMetric("total_space", "total_space", "counter")
 	totalMetric2.Property = "rate"
 	totalMetric2.Values["inst1"] = 15000.0
-	
+
 	usedMetric2 := cur.NewMetric("used_space", "used_space", "counter")
 	usedMetric2.Property = "percent"
 	usedMetric2.Denominator = "total_space"

@@ -23,11 +23,11 @@ import (
 //	    observer.RecordFallback(ctx)
 //	}
 type SkewObserver struct {
-	collectorName     string
-	skewGauge         metric.Float64Gauge
-	fallbackCounter   metric.Int64Counter
-	warnThresholdSec  float64
-	logger            SkewLogger
+	collectorName    string
+	skewGauge        metric.Float64Gauge
+	fallbackCounter  metric.Int64Counter
+	warnThresholdSec float64
+	logger           SkewLogger
 }
 
 // SkewLogger is the minimal logging interface required by SkewObserver.
@@ -38,10 +38,10 @@ type SkewLogger interface {
 
 // SkewObserverConfig holds configuration for a SkewObserver.
 type SkewObserverConfig struct {
-	CollectorName     string      // Required: collector name for metric labels
-	MeterProvider     metric.MeterProvider // Required: OTLP meter provider
-	WarnThresholdSec  float64     // Optional: warn when abs(skew) exceeds this (default: 300s = 5m)
-	Logger            SkewLogger  // Optional: logger for threshold warnings
+	CollectorName    string               // Required: collector name for metric labels
+	MeterProvider    metric.MeterProvider // Required: OTLP meter provider
+	WarnThresholdSec float64              // Optional: warn when abs(skew) exceeds this (default: 300s = 5m)
+	Logger           SkewLogger           // Optional: logger for threshold warnings
 }
 
 // NewSkewObserver creates a new SkewObserver with the given config.

@@ -82,7 +82,7 @@ func (c *Collector) Start(ctx context.Context) error {
 			c.version = "12.00.0" // fallback
 		}
 	}
-	
+
 	// Probe SANtricity version from first storage system
 	if err == nil && len(body) > 0 {
 		c.version = c.probeSANtricityVersion(body)
@@ -91,7 +91,7 @@ func (c *Collector) Start(ctx context.Context) error {
 		c.version = "12.00.0" // fallback
 	}
 	c.log.Info("eseries version detected", "version", c.version)
-	
+
 	c.running = true
 	c.health.Status = storagedef.HealthStatusHealthy
 	return nil
@@ -251,7 +251,7 @@ func (c *Collector) poll(ctx context.Context, tmpl *template.Template, now time.
 			}
 		}
 	}
-	
+
 	// Apply plugins (E-Series templates reference Volume, Pool, and others)
 	mats := plugins.ApplyAll(mat, tmpl.Plugins, c.log)
 	var out []storagedef.Metric

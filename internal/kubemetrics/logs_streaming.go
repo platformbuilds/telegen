@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/attribute"
+	otellog "go.opentelemetry.io/otel/log"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
 	corev1 "k8s.io/api/core/v1"

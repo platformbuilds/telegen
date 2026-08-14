@@ -37,15 +37,15 @@ const (
 
 // Status byte values for response frames.
 const (
-	StatusOK                  = 20
-	StatusClientTimeout       = 30
-	StatusServerTimeout       = 31
-	StatusBadRequest          = 40
-	StatusBadResponse         = 50
-	StatusServiceNotFound     = 60
-	StatusServiceError        = 70
-	StatusServerError         = 80
-	StatusClientError         = 90
+	StatusOK                        = 20
+	StatusClientTimeout             = 30
+	StatusServerTimeout             = 31
+	StatusBadRequest                = 40
+	StatusBadResponse               = 50
+	StatusServiceNotFound           = 60
+	StatusServiceError              = 70
+	StatusServerError               = 80
+	StatusClientError               = 90
 	StatusServerThreadpoolExhausted = 100
 )
 
@@ -53,13 +53,13 @@ const (
 type SerializationID uint8
 
 const (
-	SerializationHessian2 SerializationID = 2
-	SerializationJava     SerializationID = 3
+	SerializationHessian2    SerializationID = 2
+	SerializationJava        SerializationID = 3
 	SerializationCompactJava SerializationID = 4
-	SerializationFastJSON SerializationID = 6
-	SerializationNative   SerializationID = 7
-	SerializationFastJSON2 SerializationID = 8
-	SerializationProtobuf SerializationID = 12
+	SerializationFastJSON    SerializationID = 6
+	SerializationNative      SerializationID = 7
+	SerializationFastJSON2   SerializationID = 8
+	SerializationProtobuf    SerializationID = 12
 )
 
 // SerializationName returns a human-readable serialization name.
@@ -82,15 +82,15 @@ func SerializationName(id SerializationID) string {
 // StatusName returns a human-readable Dubbo2 status name.
 func StatusName(status uint8) string {
 	names := map[uint8]string{
-		StatusOK:                      "OK",
-		StatusClientTimeout:           "CLIENT_TIMEOUT",
-		StatusServerTimeout:           "SERVER_TIMEOUT",
-		StatusBadRequest:              "BAD_REQUEST",
-		StatusBadResponse:             "BAD_RESPONSE",
-		StatusServiceNotFound:         "SERVICE_NOT_FOUND",
-		StatusServiceError:            "SERVICE_ERROR",
-		StatusServerError:             "SERVER_ERROR",
-		StatusClientError:             "CLIENT_ERROR",
+		StatusOK:                        "OK",
+		StatusClientTimeout:             "CLIENT_TIMEOUT",
+		StatusServerTimeout:             "SERVER_TIMEOUT",
+		StatusBadRequest:                "BAD_REQUEST",
+		StatusBadResponse:               "BAD_RESPONSE",
+		StatusServiceNotFound:           "SERVICE_NOT_FOUND",
+		StatusServiceError:              "SERVICE_ERROR",
+		StatusServerError:               "SERVER_ERROR",
+		StatusClientError:               "CLIENT_ERROR",
 		StatusServerThreadpoolExhausted: "SERVER_THREADPOOL_EXHAUSTED",
 	}
 	if name, ok := names[status]; ok {
@@ -105,9 +105,9 @@ type Frame struct {
 	IsTwoWay      bool
 	IsEvent       bool
 	Serialization SerializationID
-	Status        uint8  // response frames only
-	RequestID     int64  // 8-byte correlation ID
-	DataLength    int32  // body byte count
+	Status        uint8 // response frames only
+	RequestID     int64 // 8-byte correlation ID
+	DataLength    int32 // body byte count
 	// ParsedMethod is the RPC service + method extracted from the body
 	// (best-effort; requires Hessian2 decoding or JSON key scanning).
 	ParsedMethod  string
@@ -178,7 +178,9 @@ func DecodeFrame(buf []byte) (Frame, int, error) {
 
 // extractDubboRequestFields attempts to extract service, version, and method name from
 // a Dubbo2 request body. For Hessian2 (the most common serialization), the body format is:
-//   dubboVersion(string) + serviceName(string) + serviceVersion(string) + methodName(string) + ...
+//
+//	dubboVersion(string) + serviceName(string) + serviceVersion(string) + methodName(string) + ...
+//
 // We use a simple length-prefixed string scanner (Hessian2 compact strings start with 0x00..0x1F
 // for single-byte length or 0x52 (R) for long strings; Java UTF8 strings use MSB length).
 func extractDubboRequestFields(body []byte, serial SerializationID) (service, version, method string) {

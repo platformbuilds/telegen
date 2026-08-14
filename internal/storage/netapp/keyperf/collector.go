@@ -94,14 +94,14 @@ func (c *Collector) CollectObject(ctx context.Context, now time.Time) ([]storage
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Apply per-object timeout if specified
 	if timeout := tmpl.GetTimeout(); timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
-	
+
 	obj := tmpl.Object
 	if obj == "" {
 		obj = strings.ToLower(tmpl.Name)
@@ -242,14 +242,14 @@ func (c *Collector) CollectObject(ctx context.Context, now time.Time) ([]storage
 		c.prev = map[string]*matrix.Matrix{}
 	}
 	c.prev[obj] = mat
-	
+
 	// Apply export_data directive: when false, suppress parent instances
 	if tmpl.ExportData != nil && !*tmpl.ExportData {
 		for _, inst := range cooked.Instances {
 			inst.Exportable = false
 		}
 	}
-	
+
 	mats := plugins.ApplyAll(cooked, tmpl.Plugins, c.Log)
 	var out []storagedef.Metric
 	for _, m := range mats {

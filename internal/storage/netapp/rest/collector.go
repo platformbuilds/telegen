@@ -125,7 +125,7 @@ func (c *Collector) pollObject(ctx context.Context, tmpl *template.Template, now
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
-	
+
 	mat := matrix.New(tmpl.Object)
 	if mat.Object == "" {
 		mat.Object = strings.ToLower(tmpl.Name)

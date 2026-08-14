@@ -223,4 +223,3 @@ func TestPollObject_DenominatorCooking(t *testing.T) {
 		t.Errorf("lun_avg_read_latency = %v, want %v (Δlatency/Δops = 100000/1000)", m.Value, want)
 	}
 }
-

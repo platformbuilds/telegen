@@ -16,7 +16,7 @@ func TestSelfTelemetryCreation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSelfTelemetry failed: %v", err)
 	}
-	
+
 	if st.metrics == nil {
 		t.Error("metrics should not be nil")
 	}
@@ -178,19 +178,19 @@ func TestV3MetricsRecording(t *testing.T) {
 func TestSelfTelemetryServer(t *testing.T) {
 	config := DefaultSelfTelemetryConfig()
 	config.ListenAddress = ":0" // Let OS pick a port.
-	
+
 	st, err := NewSelfTelemetry(config, nil)
 	if err != nil {
 		t.Fatalf("NewSelfTelemetry failed: %v", err)
 	}
 
 	ctx := context.Background()
-	
+
 	// Note: Start uses a listener with the config address.
 	// For testing, we'll just verify the server can be created and shutdown.
 	ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 	defer cancel()
-	
+
 	err = st.Shutdown(ctx)
 	if err != nil {
 		t.Errorf("Shutdown should succeed when server not started: %v", err)

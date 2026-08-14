@@ -21,13 +21,13 @@ type JFRConverter struct {
 
 // JFREvent represents a parsed JFR event.
 type JFREvent struct {
-	Type      string                 `json:"type"`
-	StartTime time.Time              `json:"startTime"`
-	EndTime   time.Time              `json:"endTime,omitempty"`
-	Duration  time.Duration          `json:"duration,omitempty"`
-	Thread    *JFRThread             `json:"thread,omitempty"`
-	StackTrace *JFRStackTrace        `json:"stackTrace,omitempty"`
-	Fields    map[string]interface{} `json:"fields"`
+	Type       string                 `json:"type"`
+	StartTime  time.Time              `json:"startTime"`
+	EndTime    time.Time              `json:"endTime,omitempty"`
+	Duration   time.Duration          `json:"duration,omitempty"`
+	Thread     *JFRThread             `json:"thread,omitempty"`
+	StackTrace *JFRStackTrace         `json:"stackTrace,omitempty"`
+	Fields     map[string]interface{} `json:"fields"`
 }
 
 // JFRThread represents thread information.
@@ -46,27 +46,27 @@ type JFRStackTrace struct {
 
 // JFRFrame represents a single stack frame.
 type JFRFrame struct {
-	Method    string `json:"method"`
-	Class     string `json:"class"`
-	LineNumber int   `json:"lineNumber"`
-	BytecodeIndex int `json:"bytecodeIndex,omitempty"`
-	Type      string `json:"type"` // Interpreted, JIT compiled, Inlined
+	Method        string `json:"method"`
+	Class         string `json:"class"`
+	LineNumber    int    `json:"lineNumber"`
+	BytecodeIndex int    `json:"bytecodeIndex,omitempty"`
+	Type          string `json:"type"` // Interpreted, JIT compiled, Inlined
 }
 
 // JFRRecording represents a collection of JFR events.
 type JFRRecording struct {
-	Events    []JFREvent        `json:"events"`
-	Metadata  *JFRMetadata      `json:"metadata,omitempty"`
+	Events   []JFREvent   `json:"events"`
+	Metadata *JFRMetadata `json:"metadata,omitempty"`
 }
 
 // JFRMetadata contains recording metadata.
 type JFRMetadata struct {
-	StartTime time.Time `json:"startTime"`
-	EndTime   time.Time `json:"endTime"`
-	Duration  time.Duration `json:"duration"`
-	JVMName   string    `json:"jvmName"`
-	JVMVersion string   `json:"jvmVersion"`
-	PID       int       `json:"pid"`
+	StartTime  time.Time     `json:"startTime"`
+	EndTime    time.Time     `json:"endTime"`
+	Duration   time.Duration `json:"duration"`
+	JVMName    string        `json:"jvmName"`
+	JVMVersion string        `json:"jvmVersion"`
+	PID        int           `json:"pid"`
 }
 
 // NewJFRConverter creates a new JFRConverter with default settings.
@@ -117,7 +117,7 @@ func (c *JFRConverter) ConvertLogs(ctx context.Context, source interface{}) (plo
 func (c *JFRConverter) convertEvent(event *JFREvent, lr plog.LogRecord) {
 	lr.SetTimestamp(pcommon.NewTimestampFromTime(event.StartTime))
 	lr.SetObservedTimestamp(Now())
-	
+
 	// Set severity based on event type.
 	severity := c.eventSeverity(event.Type)
 	lr.SetSeverityNumber(severity)
@@ -129,7 +129,7 @@ func (c *JFRConverter) convertEvent(event *JFREvent, lr plog.LogRecord) {
 	// Set attributes.
 	attrs := lr.Attributes()
 	attrs.PutStr("jfr.event.type", event.Type)
-	
+
 	if event.Duration > 0 {
 		attrs.PutInt("jfr.event.duration_ns", int64(event.Duration))
 	}
@@ -217,7 +217,7 @@ func (c *JFRConverter) ConvertMetrics(ctx context.Context, source interface{}) (
 
 	metrics := pmetric.NewMetrics()
 	rm := metrics.ResourceMetrics().AppendEmpty()
-	
+
 	if recording.Metadata != nil {
 		res := rm.Resource()
 		res.Attributes().PutStr("service.name", "java-application")

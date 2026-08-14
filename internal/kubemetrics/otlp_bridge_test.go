@@ -159,4 +159,3 @@ func assertGaugeWithAttribute(t *testing.T, metric metricdata.Metrics, key, expe
 		t.Fatalf("unexpected value for %q on metric %q: got %q want %q", key, metric.Name, value.AsString(), expected)
 	}
 }
-

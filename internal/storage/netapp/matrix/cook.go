@@ -310,4 +310,3 @@ func orderMetricsForCooking(m *Matrix) []string {
 	result = append(result, dependants...)
 	return result
 }
-

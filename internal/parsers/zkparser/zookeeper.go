@@ -22,34 +22,34 @@ var ErrNeedsMoreData = errors.New("zookeeper: needs more data")
 type OpCode int32
 
 const (
-	OpNotification    OpCode = 0
-	OpCreate          OpCode = 1
-	OpDelete          OpCode = 2
-	OpExists          OpCode = 3
-	OpGetData         OpCode = 4
-	OpSetData         OpCode = 5
-	OpGetACL          OpCode = 6
-	OpSetACL          OpCode = 7
-	OpGetChildren     OpCode = 8
-	OpSync            OpCode = 9
-	OpPing            OpCode = 11
-	OpGetChildren2    OpCode = 12
-	OpCheck           OpCode = 13
-	OpMulti           OpCode = 14
-	OpCreate2         OpCode = 15
-	OpReconfig        OpCode = 16
-	OpCheckWatches    OpCode = 17
-	OpRemoveWatches   OpCode = 18
-	OpCreateContainer OpCode = 19
-	OpDeleteContainer OpCode = 20
-	OpCreateTTL       OpCode = 21
-	OpMultiRead       OpCode = 22
-	OpAuth            OpCode = 100
-	OpSetWatches      OpCode = 101
-	OpSASL            OpCode = 102
-	OpGetEphemerals   OpCode = 103
+	OpNotification         OpCode = 0
+	OpCreate               OpCode = 1
+	OpDelete               OpCode = 2
+	OpExists               OpCode = 3
+	OpGetData              OpCode = 4
+	OpSetData              OpCode = 5
+	OpGetACL               OpCode = 6
+	OpSetACL               OpCode = 7
+	OpGetChildren          OpCode = 8
+	OpSync                 OpCode = 9
+	OpPing                 OpCode = 11
+	OpGetChildren2         OpCode = 12
+	OpCheck                OpCode = 13
+	OpMulti                OpCode = 14
+	OpCreate2              OpCode = 15
+	OpReconfig             OpCode = 16
+	OpCheckWatches         OpCode = 17
+	OpRemoveWatches        OpCode = 18
+	OpCreateContainer      OpCode = 19
+	OpDeleteContainer      OpCode = 20
+	OpCreateTTL            OpCode = 21
+	OpMultiRead            OpCode = 22
+	OpAuth                 OpCode = 100
+	OpSetWatches           OpCode = 101
+	OpSASL                 OpCode = 102
+	OpGetEphemerals        OpCode = 103
 	OpGetAllChildrenNumber OpCode = 104
-	OpSetWatches2     OpCode = 105
+	OpSetWatches2          OpCode = 105
 	// Negative opcodes used in response-only packets
 	OpWatcherEvent OpCode = -1
 	OpCloseSession OpCode = -11
@@ -60,7 +60,7 @@ const (
 type Direction int
 
 const (
-	DirectionRequest  Direction = iota
+	DirectionRequest Direction = iota
 	DirectionResponse
 )
 
@@ -81,9 +81,9 @@ type RequestHeader struct {
 
 // ReplyHeader is the header of a ZooKeeper response.
 type ReplyHeader struct {
-	XID        int32
-	ZXid       int64
-	ErrCode    int32
+	XID     int32
+	ZXid    int64
+	ErrCode int32
 }
 
 // Packet holds a decoded ZooKeeper packet.
@@ -102,37 +102,37 @@ type Packet struct {
 // OpCodeName returns a human-readable name for a ZooKeeper opcode.
 func OpCodeName(op OpCode) string {
 	names := map[OpCode]string{
-		OpNotification:       "Notification",
-		OpCreate:             "Create",
-		OpDelete:             "Delete",
-		OpExists:             "Exists",
-		OpGetData:            "GetData",
-		OpSetData:            "SetData",
-		OpGetACL:             "GetACL",
-		OpSetACL:             "SetACL",
-		OpGetChildren:        "GetChildren",
-		OpSync:               "Sync",
-		OpPing:               "Ping",
-		OpGetChildren2:       "GetChildren2",
-		OpCheck:              "Check",
-		OpMulti:              "Multi",
-		OpCreate2:            "Create2",
-		OpReconfig:           "Reconfig",
-		OpCheckWatches:       "CheckWatches",
-		OpRemoveWatches:      "RemoveWatches",
-		OpCreateContainer:    "CreateContainer",
-		OpDeleteContainer:    "DeleteContainer",
-		OpCreateTTL:          "CreateTTL",
-		OpMultiRead:          "MultiRead",
-		OpAuth:               "Auth",
-		OpSetWatches:         "SetWatches",
-		OpSASL:               "SASL",
-		OpGetEphemerals:      "GetEphemerals",
+		OpNotification:         "Notification",
+		OpCreate:               "Create",
+		OpDelete:               "Delete",
+		OpExists:               "Exists",
+		OpGetData:              "GetData",
+		OpSetData:              "SetData",
+		OpGetACL:               "GetACL",
+		OpSetACL:               "SetACL",
+		OpGetChildren:          "GetChildren",
+		OpSync:                 "Sync",
+		OpPing:                 "Ping",
+		OpGetChildren2:         "GetChildren2",
+		OpCheck:                "Check",
+		OpMulti:                "Multi",
+		OpCreate2:              "Create2",
+		OpReconfig:             "Reconfig",
+		OpCheckWatches:         "CheckWatches",
+		OpRemoveWatches:        "RemoveWatches",
+		OpCreateContainer:      "CreateContainer",
+		OpDeleteContainer:      "DeleteContainer",
+		OpCreateTTL:            "CreateTTL",
+		OpMultiRead:            "MultiRead",
+		OpAuth:                 "Auth",
+		OpSetWatches:           "SetWatches",
+		OpSASL:                 "SASL",
+		OpGetEphemerals:        "GetEphemerals",
 		OpGetAllChildrenNumber: "GetAllChildrenNumber",
-		OpSetWatches2:        "SetWatches2",
-		OpWatcherEvent:       "WatcherEvent",
-		OpCloseSession:       "CloseSession",
-		OpError:              "Error",
+		OpSetWatches2:          "SetWatches2",
+		OpWatcherEvent:         "WatcherEvent",
+		OpCloseSession:         "CloseSession",
+		OpError:                "Error",
 	}
 	if name, ok := names[op]; ok {
 		return name
@@ -143,16 +143,16 @@ func OpCodeName(op OpCode) string {
 // ErrCodeName returns a human-readable name for a ZooKeeper error code.
 func ErrCodeName(code int32) string {
 	codes := map[int32]string{
-		0:   "OK",
-		-1:  "SystemError",
-		-2:  "RuntimeInconsistency",
-		-3:  "DataInconsistency",
-		-4:  "ConnectionLoss",
-		-5:  "MarshallingError",
-		-6:  "Unimplemented",
-		-7:  "OperationTimeout",
-		-8:  "BadArguments",
-		-9:  "UnknownSession",
+		0:    "OK",
+		-1:   "SystemError",
+		-2:   "RuntimeInconsistency",
+		-3:   "DataInconsistency",
+		-4:   "ConnectionLoss",
+		-5:   "MarshallingError",
+		-6:   "Unimplemented",
+		-7:   "OperationTimeout",
+		-8:   "BadArguments",
+		-9:   "UnknownSession",
 		-100: "APIError",
 		-101: "NoNode",
 		-102: "NoAuth",

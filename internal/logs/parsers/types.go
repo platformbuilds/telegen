@@ -56,8 +56,8 @@ const (
 	AttrBodyOriginal    = "body.original"     // Original body before transformation (optional)
 
 	// XML-specific attributes (for XML log formats)
-	AttrXMLFormat     = "xml.format"      // Specific XML format: log4j_xml, nlog_xml, serilog_xml, windows_event_xml, generic_xml
-	AttrXMLNamespace  = "xml.namespace"   // XML namespace if present
+	AttrXMLFormat      = "xml.format"       // Specific XML format: log4j_xml, nlog_xml, serilog_xml, windows_event_xml, generic_xml
+	AttrXMLNamespace   = "xml.namespace"    // XML namespace if present
 	AttrXMLRootElement = "xml.root_element" // Root element name
 )
 
@@ -386,7 +386,7 @@ func sanitizeUTF8(s string) string {
 	if s == "" {
 		return s
 	}
-	
+
 	// Fast path: check if string is already valid UTF-8
 	valid := true
 	for i := 0; i < len(s); {
@@ -404,11 +404,11 @@ func sanitizeUTF8(s string) string {
 		}
 		i += size
 	}
-	
+
 	if valid {
 		return s
 	}
-	
+
 	// Slow path: rebuild string with invalid bytes replaced
 	result := make([]byte, 0, len(s))
 	for i := 0; i < len(s); {
@@ -427,7 +427,7 @@ func sanitizeUTF8(s string) string {
 			i += size
 		}
 	}
-	
+
 	return string(result)
 }
 
@@ -437,19 +437,19 @@ func decodeRune(s string) (rune, int) {
 	if len(s) == 0 {
 		return 0xFFFD, 0
 	}
-	
+
 	b := s[0]
-	
+
 	// 1-byte sequence (ASCII)
 	if b < 0x80 {
 		return rune(b), 1
 	}
-	
+
 	// Invalid start byte
 	if b < 0xC0 || b > 0xF7 {
 		return 0xFFFD, 1
 	}
-	
+
 	// Determine expected length
 	var size int
 	var min rune
@@ -464,11 +464,11 @@ func decodeRune(s string) (rune, int) {
 		size = 4
 		min = 0x10000
 	}
-	
+
 	if len(s) < size {
 		return 0xFFFD, 1
 	}
-	
+
 	// Extract continuation bytes
 	var r rune
 	switch size {
@@ -479,17 +479,17 @@ func decodeRune(s string) (rune, int) {
 	case 4:
 		r = rune(b&0x07)<<18 | rune(s[1]&0x3F)<<12 | rune(s[2]&0x3F)<<6 | rune(s[3]&0x3F)
 	}
-	
+
 	// Validate continuation bytes and check for overlong encoding
 	for i := 1; i < size; i++ {
 		if s[i]&0xC0 != 0x80 {
 			return 0xFFFD, 1
 		}
 	}
-	
+
 	if r < min || (r >= 0xD800 && r <= 0xDFFF) || r > 0x10FFFF {
 		return 0xFFFD, 1
 	}
-	
+
 	return r, size
 }

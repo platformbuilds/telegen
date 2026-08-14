@@ -36,26 +36,26 @@ type SecurityEventType string
 
 const (
 	// Syscall events.
-	SecurityEventExecve        SecurityEventType = "execve"
-	SecurityEventPtrace        SecurityEventType = "ptrace"
-	SecurityEventMmap          SecurityEventType = "mmap"
-	SecurityEventMprotect      SecurityEventType = "mprotect"
-	SecurityEventClone         SecurityEventType = "clone"
-	SecurityEventSetuid        SecurityEventType = "setuid"
-	SecurityEventSetgid        SecurityEventType = "setgid"
-	
+	SecurityEventExecve   SecurityEventType = "execve"
+	SecurityEventPtrace   SecurityEventType = "ptrace"
+	SecurityEventMmap     SecurityEventType = "mmap"
+	SecurityEventMprotect SecurityEventType = "mprotect"
+	SecurityEventClone    SecurityEventType = "clone"
+	SecurityEventSetuid   SecurityEventType = "setuid"
+	SecurityEventSetgid   SecurityEventType = "setgid"
+
 	// File integrity events.
-	SecurityEventFileCreate    SecurityEventType = "file_create"
-	SecurityEventFileModify    SecurityEventType = "file_modify"
-	SecurityEventFileDelete    SecurityEventType = "file_delete"
-	SecurityEventFileRename    SecurityEventType = "file_rename"
+	SecurityEventFileCreate     SecurityEventType = "file_create"
+	SecurityEventFileModify     SecurityEventType = "file_modify"
+	SecurityEventFileDelete     SecurityEventType = "file_delete"
+	SecurityEventFileRename     SecurityEventType = "file_rename"
 	SecurityEventFilePermChange SecurityEventType = "file_perm_change"
-	
+
 	// Container events.
-	SecurityEventContainerEscape SecurityEventType = "container_escape"
+	SecurityEventContainerEscape     SecurityEventType = "container_escape"
 	SecurityEventPrivilegeEscalation SecurityEventType = "privilege_escalation"
-	SecurityEventNamespaceChange SecurityEventType = "namespace_change"
-	
+	SecurityEventNamespaceChange     SecurityEventType = "namespace_change"
+
 	// Network events.
 	SecurityEventNetworkConnect SecurityEventType = "network_connect"
 	SecurityEventNetworkListen  SecurityEventType = "network_listen"
@@ -74,15 +74,15 @@ const (
 
 // ProcessInfo contains process information.
 type ProcessInfo struct {
-	PID        int    `json:"pid"`
-	PPID       int    `json:"ppid"`
-	UID        int    `json:"uid"`
-	GID        int    `json:"gid"`
-	Comm       string `json:"comm"`
-	Exe        string `json:"exe,omitempty"`
-	Cmdline    string `json:"cmdline,omitempty"`
-	Cwd        string `json:"cwd,omitempty"`
-	StartTime  time.Time `json:"startTime,omitempty"`
+	PID       int       `json:"pid"`
+	PPID      int       `json:"ppid"`
+	UID       int       `json:"uid"`
+	GID       int       `json:"gid"`
+	Comm      string    `json:"comm"`
+	Exe       string    `json:"exe,omitempty"`
+	Cmdline   string    `json:"cmdline,omitempty"`
+	Cwd       string    `json:"cwd,omitempty"`
+	StartTime time.Time `json:"startTime,omitempty"`
 }
 
 // ContainerInfo contains container information.

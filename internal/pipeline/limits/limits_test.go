@@ -129,7 +129,7 @@ func TestCardinalityHashAttributes(t *testing.T) {
 func TestRateLimiter(t *testing.T) {
 	config := DefaultRateLimiterConfig()
 	config.Metrics.DataPointsPerSecond = 10
-	config.BurstMultiplier = 1.0 // No burst for predictable testing
+	config.BurstMultiplier = 1.0          // No burst for predictable testing
 	config.ReportInterval = 1 * time.Hour // Avoid hitting report in test
 
 	limiter := NewRateLimiter(config, nil)

@@ -63,7 +63,7 @@ func TestNewReceiver(t *testing.T) {
 			name: "valid exclude patterns",
 			config: Config{
 				Brokers:       []string{"localhost:9092"},
-				Topics:        []string{"^test-.*"},  // Regex topic pattern (required for exclude_topics)
+				Topics:        []string{"^test-.*"}, // Regex topic pattern (required for exclude_topics)
 				GroupID:       "test-group",
 				ExcludeTopics: []string{".*-debug$"},
 			},
@@ -73,7 +73,7 @@ func TestNewReceiver(t *testing.T) {
 			name: "invalid exclude pattern",
 			config: Config{
 				Brokers:       []string{"localhost:9092"},
-				Topics:        []string{"^test-.*"},  // Regex topic pattern
+				Topics:        []string{"^test-.*"}, // Regex topic pattern
 				GroupID:       "test-group",
 				ExcludeTopics: []string{"[invalid"},
 			},
@@ -84,7 +84,7 @@ func TestNewReceiver(t *testing.T) {
 			name: "exclude_topics with literal topic",
 			config: Config{
 				Brokers:       []string{"localhost:9092"},
-				Topics:        []string{"test-topic"},  // Literal topic name
+				Topics:        []string{"test-topic"}, // Literal topic name
 				GroupID:       "test-group",
 				ExcludeTopics: []string{".*-debug$"},
 			},
@@ -114,10 +114,10 @@ func TestFilterTopics(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		configTopics   []string   // Topics in config (can be patterns for validation)
-		excludeTopics  []string   // Exclusion patterns
-		resolvedTopics []string   // Input to filterTopics (resolved concrete topic names)
-		expectedTopics []string   // Expected output from filterTopics
+		configTopics   []string // Topics in config (can be patterns for validation)
+		excludeTopics  []string // Exclusion patterns
+		resolvedTopics []string // Input to filterTopics (resolved concrete topic names)
+		expectedTopics []string // Expected output from filterTopics
 	}{
 		{
 			name:           "no exclusions",
@@ -128,21 +128,21 @@ func TestFilterTopics(t *testing.T) {
 		},
 		{
 			name:           "exclude dlq and retry topics",
-			configTopics:   []string{"^mcx-app-.*"},  // Regex pattern in config
+			configTopics:   []string{"^mcx-app-.*"}, // Regex pattern in config
 			excludeTopics:  []string{".*-dlq$", ".*-retry$"},
 			resolvedTopics: []string{"mcx-app-logs", "mcx-app-events", "mcx-app-logs-dlq", "mcx-app-events-retry"},
 			expectedTopics: []string{"mcx-app-logs", "mcx-app-events"},
 		},
 		{
 			name:           "exclude debug topics by suffix",
-			configTopics:   []string{"^app-.*"},  // Regex pattern in config
+			configTopics:   []string{"^app-.*"}, // Regex pattern in config
 			excludeTopics:  []string{".*-debug$"},
 			resolvedTopics: []string{"app-main", "app-debug", "app-logs", "app-test-debug"},
 			expectedTopics: []string{"app-main", "app-logs"},
 		},
 		{
 			name:           "exclude by prefix pattern",
-			configTopics:   []string{"^.*-app$"},  // Regex pattern in config
+			configTopics:   []string{"^.*-app$"}, // Regex pattern in config
 			excludeTopics:  []string{"^test-", "^staging-"},
 			resolvedTopics: []string{"prod-app", "test-app", "staging-app", "dev-app"},
 			expectedTopics: []string{"prod-app", "dev-app"},
@@ -150,16 +150,16 @@ func TestFilterTopics(t *testing.T) {
 		{
 			name:           "exact topic name exclusion",
 			configTopics:   []string{"^myapp-.*"},
-			excludeTopics:  []string{"^myapp-internal$"},  // Exact match with anchors
+			excludeTopics:  []string{"^myapp-internal$"}, // Exact match with anchors
 			resolvedTopics: []string{"myapp-logs", "myapp-internal", "myapp-events"},
 			expectedTopics: []string{"myapp-logs", "myapp-events"},
 		},
 		{
 			name:           "all topics excluded",
 			configTopics:   []string{"^test-.*"},
-			excludeTopics:  []string{"^test-"},  // Excludes everything starting with test-
+			excludeTopics:  []string{"^test-"}, // Excludes everything starting with test-
 			resolvedTopics: []string{"test-a", "test-b"},
-			expectedTopics: []string{},  // All filtered out
+			expectedTopics: []string{}, // All filtered out
 		},
 	}
 
@@ -388,14 +388,14 @@ func TestMetricsEnabled(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	tests := []struct {
-		name           string
-		telemetry      TelemetryConfig
-		expectEnabled  bool
+		name          string
+		telemetry     TelemetryConfig
+		expectEnabled bool
 	}{
 		{
-			name:           "all disabled",
-			telemetry:      TelemetryConfig{},
-			expectEnabled:  false,
+			name:          "all disabled",
+			telemetry:     TelemetryConfig{},
+			expectEnabled: false,
 		},
 		{
 			name: "records enabled",
@@ -434,10 +434,10 @@ func TestHeaderExtraction(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	tests := []struct {
-		name           string
-		config         HeaderExtractionConfig
-		expectEnabled  bool
-		expectedKeys   int
+		name          string
+		config        HeaderExtractionConfig
+		expectEnabled bool
+		expectedKeys  int
 	}{
 		{
 			name: "disabled",
@@ -477,7 +477,7 @@ func TestHeaderExtraction(t *testing.T) {
 			}
 			receiver, err := NewReceiver(cfg, "test-service", logger, nil)
 			require.NoError(t, err)
-			
+
 			if tt.expectEnabled {
 				assert.NotNil(t, receiver.headerKeys)
 				assert.Equal(t, tt.expectedKeys, len(receiver.headerKeys))

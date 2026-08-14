@@ -290,9 +290,9 @@ func (b *OTLPBridge) convertHistogram(name, help string, metrics []*dto.Metric, 
 		}
 
 		dp := metricdata.HistogramDataPoint[float64]{
-			Attributes: attrs,
-			StartTime:  startTime,
-			Time:       timestamp,
+			Attributes:   attrs,
+			StartTime:    startTime,
+			Time:         timestamp,
 			Count:        h.GetSampleCount(),
 			Sum:          h.GetSampleSum(),
 			Bounds:       boundaries,

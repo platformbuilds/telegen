@@ -27,9 +27,9 @@ type Template struct {
 	Plugins       any            `yaml:"plugins"`
 	ExportOptions *ExportOptions `yaml:"export_options"`
 	Endpoints     []Endpoint     `yaml:"endpoints"`
-	Override      any            `yaml:"override"`      // list or map of {counter: property}
-	GlobalLabels  []any          `yaml:"global_labels"` // list of {key: value} maps
-	ExportData    *bool          `yaml:"export_data"`   // when false, suppress parent instances (not plugin children)
+	Override      any            `yaml:"override"`       // list or map of {counter: property}
+	GlobalLabels  []any          `yaml:"global_labels"`  // list of {key: value} maps
+	ExportData    *bool          `yaml:"export_data"`    // when false, suppress parent instances (not plugin children)
 	ClientTimeout string         `yaml:"client_timeout"` // per-object HTTP timeout (e.g., "2m", "90s")
 	RawCounters   []CounterDef   `yaml:"-"`
 	// HiddenFields are counters-block `hidden_fields` entries. ONTAP omits
@@ -49,7 +49,7 @@ func (t *Template) GetOverrides() map[string]string {
 		return nil
 	}
 	result := make(map[string]string)
-	
+
 	// Try list format first (23 templates)
 	if list, ok := t.Override.([]any); ok {
 		for _, item := range list {
@@ -63,7 +63,7 @@ func (t *Template) GetOverrides() map[string]string {
 		}
 		return result
 	}
-	
+
 	// Fall back to map format (1 template: lif.yaml)
 	if m, ok := t.Override.(map[string]any); ok {
 		for k, v := range m {
@@ -72,7 +72,7 @@ func (t *Template) GetOverrides() map[string]string {
 			}
 		}
 	}
-	
+
 	return result
 }
 

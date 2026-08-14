@@ -189,10 +189,10 @@ func TestSkewObserver_RecordSkewBatch(t *testing.T) {
 	collectorClock := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
 
 	tests := []struct {
-		name            string
-		timestamps      []time.Time
-		expectWarn      bool
-		expectFallback  bool
+		name           string
+		timestamps     []time.Time
+		expectWarn     bool
+		expectFallback bool
 	}{
 		{
 			name:           "empty batch (fallback)",

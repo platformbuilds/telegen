@@ -62,8 +62,8 @@ type hsperfHeader struct {
 type hsperfEntry struct {
 	EntryLength  int32
 	NameOffset   int32
-	VectorLength int32  // 0 for scalars
-	DataType     uint8  // 'J' = long (8 bytes), 'B' = byte string
+	VectorLength int32 // 0 for scalars
+	DataType     uint8 // 'J' = long (8 bytes), 'B' = byte string
 	Flags        uint8
 	DataUnits    uint8
 	DataVar      uint8
@@ -72,11 +72,11 @@ type hsperfEntry struct {
 
 // jvmCounters holds the parsed metric values we care about.
 type jvmCounters struct {
-	youngGCTimeNs int64
-	fullGCTimeNs  int64
-	usedHeapBytes int64
+	youngGCTimeNs  int64
+	fullGCTimeNs   int64
+	usedHeapBytes  int64
 	totalHeapBytes int64
-	maxHeapBytes  int64
+	maxHeapBytes   int64
 }
 
 // HsperfDataConfig controls the collector behaviour.
@@ -94,14 +94,14 @@ func DefaultHsperfDataConfig() HsperfDataConfig {
 
 // HsperfDataCollector polls all JVM hsperfdata files and emits OTel gauges.
 type HsperfDataCollector struct {
-	cfg  HsperfDataConfig
-	log  *slog.Logger
+	cfg HsperfDataConfig
+	log *slog.Logger
 
-	youngGCTimeGauge  metric.Float64Gauge
-	fullGCTimeGauge   metric.Float64Gauge
-	usedHeapGauge     metric.Int64Gauge
-	totalHeapGauge    metric.Int64Gauge
-	maxHeapGauge      metric.Int64Gauge
+	youngGCTimeGauge metric.Float64Gauge
+	fullGCTimeGauge  metric.Float64Gauge
+	usedHeapGauge    metric.Int64Gauge
+	totalHeapGauge   metric.Int64Gauge
+	maxHeapGauge     metric.Int64Gauge
 }
 
 // NewHsperfDataCollector creates and registers a HsperfDataCollector.
@@ -162,13 +162,13 @@ func NewHsperfDataCollector(
 	}
 
 	return &HsperfDataCollector{
-		cfg:               cfg,
-		log:               log.With("component", "hsperfdata_collector"),
-		youngGCTimeGauge:  youngGC,
-		fullGCTimeGauge:   fullGC,
-		usedHeapGauge:     usedHeap,
-		totalHeapGauge:    totalHeap,
-		maxHeapGauge:      maxHeap,
+		cfg:              cfg,
+		log:              log.With("component", "hsperfdata_collector"),
+		youngGCTimeGauge: youngGC,
+		fullGCTimeGauge:  fullGC,
+		usedHeapGauge:    usedHeap,
+		totalHeapGauge:   totalHeap,
+		maxHeapGauge:     maxHeap,
 	}, nil
 }
 

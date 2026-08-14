@@ -33,15 +33,15 @@ type GPUEventType string
 
 const (
 	// CUDA events.
-	GPUEventKernelLaunch    GPUEventType = "cuda_kernel_launch"
-	GPUEventMemcpyHtoD      GPUEventType = "cuda_memcpy_htod"
-	GPUEventMemcpyDtoH      GPUEventType = "cuda_memcpy_dtoh"
-	GPUEventMemcpyDtoD      GPUEventType = "cuda_memcpy_dtod"
-	GPUEventMemAlloc        GPUEventType = "cuda_mem_alloc"
-	GPUEventMemFree         GPUEventType = "cuda_mem_free"
-	GPUEventSynchronize     GPUEventType = "cuda_synchronize"
-	GPUEventStreamCreate    GPUEventType = "cuda_stream_create"
-	GPUEventStreamDestroy   GPUEventType = "cuda_stream_destroy"
+	GPUEventKernelLaunch  GPUEventType = "cuda_kernel_launch"
+	GPUEventMemcpyHtoD    GPUEventType = "cuda_memcpy_htod"
+	GPUEventMemcpyDtoH    GPUEventType = "cuda_memcpy_dtoh"
+	GPUEventMemcpyDtoD    GPUEventType = "cuda_memcpy_dtod"
+	GPUEventMemAlloc      GPUEventType = "cuda_mem_alloc"
+	GPUEventMemFree       GPUEventType = "cuda_mem_free"
+	GPUEventSynchronize   GPUEventType = "cuda_synchronize"
+	GPUEventStreamCreate  GPUEventType = "cuda_stream_create"
+	GPUEventStreamDestroy GPUEventType = "cuda_stream_destroy"
 
 	// LLM inference events.
 	GPUEventLLMInference    GPUEventType = "llm_inference"
@@ -50,33 +50,33 @@ const (
 	GPUEventLLMBatchProcess GPUEventType = "llm_batch_process"
 
 	// AI/ML framework events.
-	GPUEventTensorOp        GPUEventType = "tensor_operation"
-	GPUEventMatmul          GPUEventType = "matmul"
-	GPUEventConvolution     GPUEventType = "convolution"
-	GPUEventPooling         GPUEventType = "pooling"
-	GPUEventNormalization   GPUEventType = "normalization"
-	GPUEventActivation      GPUEventType = "activation"
+	GPUEventTensorOp      GPUEventType = "tensor_operation"
+	GPUEventMatmul        GPUEventType = "matmul"
+	GPUEventConvolution   GPUEventType = "convolution"
+	GPUEventPooling       GPUEventType = "pooling"
+	GPUEventNormalization GPUEventType = "normalization"
+	GPUEventActivation    GPUEventType = "activation"
 )
 
 // GPUProcessInfo contains process information for GPU events.
 type GPUProcessInfo struct {
-	PID     int    `json:"pid"`
-	Comm    string `json:"comm"`
-	Exe     string `json:"exe,omitempty"`
+	PID  int    `json:"pid"`
+	Comm string `json:"comm"`
+	Exe  string `json:"exe,omitempty"`
 }
 
 // GPUEventBatch represents a batch of GPU events.
 type GPUEventBatch struct {
-	Events     []GPUEvent     `json:"events"`
+	Events     []GPUEvent      `json:"events"`
 	DeviceInfo []GPUDeviceInfo `json:"deviceInfo,omitempty"`
 }
 
 // GPUDeviceInfo contains GPU device information.
 type GPUDeviceInfo struct {
-	DeviceID     int    `json:"deviceId"`
-	Name         string `json:"name"`
-	Memory       int64  `json:"memory"` // bytes
-	ComputeCap   string `json:"computeCapability,omitempty"`
+	DeviceID      int    `json:"deviceId"`
+	Name          string `json:"name"`
+	Memory        int64  `json:"memory"` // bytes
+	ComputeCap    string `json:"computeCapability,omitempty"`
 	DriverVersion string `json:"driverVersion,omitempty"`
 }
 
@@ -130,7 +130,7 @@ func (c *GPUConverter) convertEventToSpan(event *GPUEvent, span ptrace.Span, dev
 	span.SetName(string(event.Type))
 	span.SetKind(ptrace.SpanKindInternal)
 	span.SetStartTimestamp(pcommon.NewTimestampFromTime(event.Timestamp))
-	
+
 	if event.Duration > 0 {
 		span.SetEndTimestamp(pcommon.NewTimestampFromTime(event.Timestamp.Add(event.Duration)))
 	} else {
@@ -304,8 +304,8 @@ func (c *GPUConverter) ConvertMetrics(ctx context.Context, source interface{}) (
 	}
 	opCounts := make(map[deviceOp]int64)
 	opDurations := make(map[deviceOp]int64)
-	memTransferred := make(map[int]int64)   // by device
-	memAllocated := make(map[int]int64)     // by device
+	memTransferred := make(map[int]int64) // by device
+	memAllocated := make(map[int]int64)   // by device
 
 	for _, event := range batch.Events {
 		key := deviceOp{event.DeviceID, event.Type}

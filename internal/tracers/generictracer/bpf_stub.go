@@ -47,22 +47,22 @@ type BpfObjects struct {
 }
 
 type BpfMaps struct {
-	ActiveSslReadArgs    *ebpf.Map
-	ActiveSslWriteArgs   *ebpf.Map
-	ActiveSslHandshakes  *ebpf.Map
-	SslToConn            *ebpf.Map
-	SslToPidTid          *ebpf.Map
-	OngoingHttp          *ebpf.Map
-	OngoingHttp2Grpc     *ebpf.Map
-	Http2InfoMem         *ebpf.Map
-	OngoingHttpFallback  *ebpf.Map
-	TraceMap             *ebpf.Map
-	JumpTable            *ebpf.Map
-	Events               *ebpf.Map
-	OngoingKafkaReq      *ebpf.Map
-	Newproc1             *ebpf.Map
-	ActiveNodejsIds      *ebpf.Map
-	NodejsParentMap      *ebpf.Map
+	ActiveSslReadArgs   *ebpf.Map
+	ActiveSslWriteArgs  *ebpf.Map
+	ActiveSslHandshakes *ebpf.Map
+	SslToConn           *ebpf.Map
+	SslToPidTid         *ebpf.Map
+	OngoingHttp         *ebpf.Map
+	OngoingHttp2Grpc    *ebpf.Map
+	Http2InfoMem        *ebpf.Map
+	OngoingHttpFallback *ebpf.Map
+	TraceMap            *ebpf.Map
+	JumpTable           *ebpf.Map
+	Events              *ebpf.Map
+	OngoingKafkaReq     *ebpf.Map
+	Newproc1            *ebpf.Map
+	ActiveNodejsIds     *ebpf.Map
+	NodejsParentMap     *ebpf.Map
 }
 type BpfPrograms struct{}
 

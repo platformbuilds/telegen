@@ -82,7 +82,7 @@ func TestPrometheusConverterGauge(t *testing.T) {
 
 	sm := metrics.ResourceMetrics().At(0).ScopeMetrics().At(0)
 	m := sm.Metrics().At(0)
-	
+
 	gauge := m.Gauge()
 	if gauge.DataPoints().Len() != 1 {
 		t.Errorf("expected 1 data point, got %d", gauge.DataPoints().Len())

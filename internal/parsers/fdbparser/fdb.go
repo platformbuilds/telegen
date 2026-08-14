@@ -42,16 +42,16 @@ const (
 
 // WellKnownToken values used by FDB Flow protocol.
 const (
-	TokenUnset     uint64 = 0
-	TokenReserved  uint64 = 1
-	TokenEndpoint  uint64 = 2
+	TokenUnset    uint64 = 0
+	TokenReserved uint64 = 1
+	TokenEndpoint uint64 = 2
 )
 
 // Packet holds a decoded FDB protocol packet.
 type Packet struct {
-	Type           FrameType
+	Type FrameType
 	// Connect packet fields
-	ProtocolVersion uint64
+	ProtocolVersion  uint64
 	ConnectPacketLen uint32
 	// Data packet fields
 	Token    uint64

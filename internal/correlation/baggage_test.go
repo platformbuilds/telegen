@@ -16,8 +16,8 @@ func TestParseBaggage(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name:  "empty baggage",
-			input: "",
+			name:     "empty baggage",
+			input:    "",
 			expected: map[string]string{},
 		},
 		{

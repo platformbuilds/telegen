@@ -8,7 +8,7 @@ import "errors"
 // JoinGroupRequest contains the fields extracted from a Kafka JoinGroup request.
 // JoinGroup (API key 11) is sent by consumers when joining or rejoining a consumer group.
 type JoinGroupRequest struct {
-	GroupID string
+	GroupID  string
 	MemberID string
 }
 

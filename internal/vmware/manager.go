@@ -203,7 +203,7 @@ func (m *Manager) collectTarget(ctx context.Context, t vmwaredef.Target) {
 	needHost := m.cfg.Collectors.Enabled("host") || m.cfg.Events.StateChanges
 	needDS := m.cfg.Collectors.Enabled("datastore") || m.cfg.Events.StateChanges
 
-	collectorsOK := true
+	var collectorsOK bool
 	if useSharedInventory {
 		var prefetchWG sync.WaitGroup
 		if needVM {

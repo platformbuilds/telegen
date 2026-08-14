@@ -65,10 +65,10 @@ type compiledPIIRule struct {
 
 // PIIMatcher performs PII detection and redaction.
 type PIIMatcher struct {
-	config           PIIRedactionConfig
-	rules            []compiledPIIRule
-	allowedAttrs     map[string]bool
-	redactionCount   atomic.Int64
+	config         PIIRedactionConfig
+	rules          []compiledPIIRule
+	allowedAttrs   map[string]bool
+	redactionCount atomic.Int64
 }
 
 // NewPIIMatcher creates a new PII matcher.

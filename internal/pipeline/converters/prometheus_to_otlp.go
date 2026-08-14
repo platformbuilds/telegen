@@ -290,7 +290,7 @@ func setLabelsAsAttributes(attrs pcommon.Map, labels map[string]string) {
 func ParsePrometheusText(text string) ([]*PrometheusMetricFamily, error) {
 	var families []*PrometheusMetricFamily
 	currentFamily := &PrometheusMetricFamily{}
-	
+
 	lines := strings.Split(text, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)

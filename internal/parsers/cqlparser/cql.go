@@ -16,7 +16,8 @@ import (
 )
 
 // CQL frame header is 9 bytes:
-//   version(1) + flags(1) + stream(2) + opcode(1) + length(4)
+//
+//	version(1) + flags(1) + stream(2) + opcode(1) + length(4)
 const HeaderLen = 9
 
 // ErrNeedsMoreData is returned when the buffer does not contain a complete frame.
@@ -26,7 +27,7 @@ var ErrNeedsMoreData = errors.New("cql: needs more data")
 type Direction int
 
 const (
-	DirectionRequest  Direction = iota
+	DirectionRequest Direction = iota
 	DirectionResponse
 )
 

@@ -10,19 +10,19 @@ import (
 type ConverterType string
 
 const (
-	ConverterPrometheus   ConverterType = "prometheus"
-	ConverterJFR          ConverterType = "jfr"
-	ConverterSecurity     ConverterType = "security"
-	ConverterGPU          ConverterType = "gpu"
-	ConverterEBPFProfile  ConverterType = "ebpf_profile"
+	ConverterPrometheus  ConverterType = "prometheus"
+	ConverterJFR         ConverterType = "jfr"
+	ConverterSecurity    ConverterType = "security"
+	ConverterGPU         ConverterType = "gpu"
+	ConverterEBPFProfile ConverterType = "ebpf_profile"
 )
 
 // ConverterRegistry manages all signal converters.
 type ConverterRegistry struct {
-	mu               sync.RWMutex
-	metricConverters map[ConverterType]MetricConverter
-	traceConverters  map[ConverterType]TraceConverter
-	logConverters    map[ConverterType]LogConverter
+	mu                sync.RWMutex
+	metricConverters  map[ConverterType]MetricConverter
+	traceConverters   map[ConverterType]TraceConverter
+	logConverters     map[ConverterType]LogConverter
 	profileConverters map[ConverterType]ProfileConverter
 }
 

@@ -14,8 +14,8 @@ type NetworkMetric struct {
 	Name              string            `json:"name"`
 	Value             float64           `json:"value"`
 	Labels            map[string]string `json:"labels"`
-	Timestamp         time.Time         `json:"timestamp"`           // Source timestamp (from gNMI, SNMP, etc.)
-	ObservedTimestamp time.Time         `json:"observed_timestamp"`  // Collection instant (time.Now() at collection time)
+	Timestamp         time.Time         `json:"timestamp"`          // Source timestamp (from gNMI, SNMP, etc.)
+	ObservedTimestamp time.Time         `json:"observed_timestamp"` // Collection instant (time.Now() at collection time)
 	Type              MetricType        `json:"type"`
 }
 

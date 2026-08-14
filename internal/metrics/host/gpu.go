@@ -15,10 +15,11 @@ import (
 // It is a no-op on non-NVIDIA hosts (NVML init failure is silently ignored).
 //
 // Metrics emitted:
-//   system_gpu_utilization_ratio{gpu_index, gpu_name, gpu_uuid}
-//   system_gpu_memory_used_bytes{gpu_index, gpu_name, gpu_uuid}
-//   system_gpu_memory_total_bytes{gpu_index, gpu_name, gpu_uuid}
-//   system_gpu_temperature_celsius{gpu_index, gpu_name, gpu_uuid}
+//
+//	system_gpu_utilization_ratio{gpu_index, gpu_name, gpu_uuid}
+//	system_gpu_memory_used_bytes{gpu_index, gpu_name, gpu_uuid}
+//	system_gpu_memory_total_bytes{gpu_index, gpu_name, gpu_uuid}
+//	system_gpu_temperature_celsius{gpu_index, gpu_name, gpu_uuid}
 func (c *Collector) appendGPU(wr *prompb.WriteRequest) {
 	ret := nvml.Init()
 	if ret != nvml.SUCCESS {

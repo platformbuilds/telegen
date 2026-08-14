@@ -17,7 +17,7 @@ type CollectorType string
 
 const (
 	// Agent mode collectors.
-	CollectorEBPFTraces   CollectorType = "ebpf_traces"
+	CollectorEBPFTraces    CollectorType = "ebpf_traces"
 	CollectorEBPFProfiling CollectorType = "ebpf_profiling"
 	CollectorJFRProfiling  CollectorType = "jfr_profiling"
 	CollectorFileLogs      CollectorType = "file_logs"

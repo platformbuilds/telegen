@@ -405,10 +405,10 @@ func TestXMLLogParserAttributeExtraction(t *testing.T) {
 	parser := NewXMLLogParser()
 
 	tests := []struct {
-		name       string
-		input      string
-		wantBody   string
-		wantAttrs  map[string]string
+		name      string
+		input     string
+		wantBody  string
+		wantAttrs map[string]string
 	}{
 		{
 			name:     "log4j xml with attributes",
@@ -669,11 +669,11 @@ func TestXMLLogParserTimestampExtraction(t *testing.T) {
 	parser := NewXMLLogParser()
 
 	tests := []struct {
-		name         string
-		input        string
-		wantYear     int
-		wantMonth    time.Month
-		wantDay      int
+		name      string
+		input     string
+		wantYear  int
+		wantMonth time.Month
+		wantDay   int
 	}{
 		{
 			name:      "RFC3339 timestamp attribute",
@@ -734,10 +734,10 @@ func TestXMLDeepKeyValueExtraction(t *testing.T) {
 	parser := NewXMLLogParser()
 
 	tests := []struct {
-		name       string
-		input      string
-		wantAttrs  map[string]string
-		checkBody  bool
+		name      string
+		input     string
+		wantAttrs map[string]string
+		checkBody bool
 	}{
 		{
 			name: "nested elements with values",
@@ -756,12 +756,12 @@ func TestXMLDeepKeyValueExtraction(t *testing.T) {
 				</order>
 			</root>`,
 			wantAttrs: map[string]string{
-				"xml.root.order.id":                        "ORD-12345",
-				"xml.root.order.customer.name":             "John Doe",
-				"xml.root.order.customer.email":            "john@example.com",
-				"xml.root.order.customer.address.city":     "New York",
-				"xml.root.order.customer.address.zip":      "10001",
-				"xml.root.order.total":                     "199.99",
+				"xml.root.order.id":                    "ORD-12345",
+				"xml.root.order.customer.name":         "John Doe",
+				"xml.root.order.customer.email":        "john@example.com",
+				"xml.root.order.customer.address.city": "New York",
+				"xml.root.order.customer.address.zip":  "10001",
+				"xml.root.order.total":                 "199.99",
 			},
 		},
 		{
@@ -771,13 +771,13 @@ func TestXMLDeepKeyValueExtraction(t *testing.T) {
 				<merchant id="M123" name="Example Store" category="retail"/>
 			</transaction>`,
 			wantAttrs: map[string]string{
-				"xml.transaction.id":              "TXN001",
-				"xml.transaction.status":          "completed",
-				"xml.transaction.currency":        "USD",
-				"xml.transaction.amount.value":    "500.00",
-				"xml.transaction.amount.type":     "credit",
-				"xml.transaction.merchant.id":     "M123",
-				"xml.transaction.merchant.name":   "Example Store",
+				"xml.transaction.id":                "TXN001",
+				"xml.transaction.status":            "completed",
+				"xml.transaction.currency":          "USD",
+				"xml.transaction.amount.value":      "500.00",
+				"xml.transaction.amount.type":       "credit",
+				"xml.transaction.merchant.id":       "M123",
+				"xml.transaction.merchant.name":     "Example Store",
 				"xml.transaction.merchant.category": "retail",
 			},
 		},
@@ -818,18 +818,18 @@ func TestXMLDeepKeyValueExtraction(t *testing.T) {
 				<settlement date="2024-01-17" status="pending"/>
 			</trade>`,
 			wantAttrs: map[string]string{
-				"xml.trade.id":                       "T123456",
-				"xml.trade.venue":                    "NYSE",
-				"xml.trade.instrument.symbol":        "AAPL",
-				"xml.trade.instrument.isin":          "US0378331005",
-				"xml.trade.instrument.type":          "equity",
-				"xml.trade.execution.price":          "150.25",
-				"xml.trade.execution.quantity":       "100",
-				"xml.trade.execution.side":           "buy",
-				"xml.trade.counterparty.id":          "CP001",
-				"xml.trade.counterparty.name":        "Goldman",
-				"xml.trade.settlement.date":          "2024-01-17",
-				"xml.trade.settlement.status":        "pending",
+				"xml.trade.id":                 "T123456",
+				"xml.trade.venue":              "NYSE",
+				"xml.trade.instrument.symbol":  "AAPL",
+				"xml.trade.instrument.isin":    "US0378331005",
+				"xml.trade.instrument.type":    "equity",
+				"xml.trade.execution.price":    "150.25",
+				"xml.trade.execution.quantity": "100",
+				"xml.trade.execution.side":     "buy",
+				"xml.trade.counterparty.id":    "CP001",
+				"xml.trade.counterparty.name":  "Goldman",
+				"xml.trade.settlement.date":    "2024-01-17",
+				"xml.trade.settlement.status":  "pending",
 			},
 		},
 		{
@@ -906,17 +906,17 @@ func TestXMLDeepKeyValueExtraction(t *testing.T) {
 				<status>active</status>
 			</sensor>`,
 			wantAttrs: map[string]string{
-				"xml.sensor.id":                     "SENS001",
-				"xml.sensor.location":               "warehouse-a",
+				"xml.sensor.id":                        "SENS001",
+				"xml.sensor.location":                  "warehouse-a",
 				"xml.sensor.readings.temperature.unit": "celsius",
-				"xml.sensor.readings.temperature":   "23.5",
-				"xml.sensor.readings.humidity.unit": "percent",
-				"xml.sensor.readings.humidity":      "45",
-				"xml.sensor.readings.pressure.unit": "hPa",
-				"xml.sensor.readings.pressure":      "1013.25",
-				"xml.sensor.battery.percent":        "85",
-				"xml.sensor.battery.charging":       "false",
-				"xml.sensor.status":                 "active",
+				"xml.sensor.readings.temperature":      "23.5",
+				"xml.sensor.readings.humidity.unit":    "percent",
+				"xml.sensor.readings.humidity":         "45",
+				"xml.sensor.readings.pressure.unit":    "hPa",
+				"xml.sensor.readings.pressure":         "1013.25",
+				"xml.sensor.battery.percent":           "85",
+				"xml.sensor.battery.charging":          "false",
+				"xml.sensor.status":                    "active",
 			},
 		},
 		{
@@ -934,10 +934,10 @@ func TestXMLDeepKeyValueExtraction(t *testing.T) {
 				</Body>
 			</Envelope>`,
 			wantAttrs: map[string]string{
-				"xml.Envelope.Header.Security.token":     "ABC123",
-				"xml.Envelope.Header.MessageID":          "MSG-001",
-				"xml.Envelope.Body.Request.action":       "GetAccount",
-				"xml.Envelope.Body.Request.AccountID":    "ACC12345",
+				"xml.Envelope.Header.Security.token":       "ABC123",
+				"xml.Envelope.Header.MessageID":            "MSG-001",
+				"xml.Envelope.Body.Request.action":         "GetAccount",
+				"xml.Envelope.Body.Request.AccountID":      "ACC12345",
 				"xml.Envelope.Body.Request.IncludeBalance": "true",
 			},
 		},
@@ -1307,7 +1307,7 @@ func TestJSONDeepKeyValueExtraction(t *testing.T) {
 				]
 			}`,
 			wantAttrs: map[string]string{
-				"json.orders._length": "2",
+				"json.orders._length":  "2",
 				"json.orders.0.id":     "O1",
 				"json.orders.0.amount": "100",
 				"json.orders.1.id":     "O2",
@@ -1337,19 +1337,19 @@ func TestJSONDeepKeyValueExtraction(t *testing.T) {
 				}
 			}`,
 			wantAttrs: map[string]string{
-				"json.trade.id":                   "T123456",
-				"json.trade.venue":                "NYSE",
-				"json.trade.instrument.symbol":    "AAPL",
-				"json.trade.instrument.isin":      "US0378331005",
-				"json.trade.instrument.type":      "equity",
-				"json.trade.execution.price":      "150.25",
-				"json.trade.execution.quantity":   "100",
-				"json.trade.execution.side":       "buy",
-				"json.trade.parties._length":      "2",
-				"json.trade.parties.0.role":       "buyer",
-				"json.trade.parties.0.id":         "B001",
-				"json.trade.parties.1.role":       "seller",
-				"json.trade.parties.1.id":         "S001",
+				"json.trade.id":                 "T123456",
+				"json.trade.venue":              "NYSE",
+				"json.trade.instrument.symbol":  "AAPL",
+				"json.trade.instrument.isin":    "US0378331005",
+				"json.trade.instrument.type":    "equity",
+				"json.trade.execution.price":    "150.25",
+				"json.trade.execution.quantity": "100",
+				"json.trade.execution.side":     "buy",
+				"json.trade.parties._length":    "2",
+				"json.trade.parties.0.role":     "buyer",
+				"json.trade.parties.0.id":       "B001",
+				"json.trade.parties.1.role":     "seller",
+				"json.trade.parties.1.id":       "S001",
 			},
 		},
 		{
@@ -1412,17 +1412,17 @@ func TestJSONDeepKeyValueExtraction(t *testing.T) {
 				}
 			}`,
 			wantAttrs: map[string]string{
-				"json.sensor.id":                    "SENS001",
-				"json.sensor.location":              "warehouse-a",
-				"json.sensor.readings.temperature":  "23.5",
-				"json.sensor.readings.humidity":     "45",
-				"json.sensor.readings.pressure":     "1013.25",
-				"json.sensor.alerts._length":        "2",
-				"json.sensor.alerts.0.type":         "threshold",
-				"json.sensor.alerts.0.value":        "high",
-				"json.sensor.alerts.1.type":         "maintenance",
-				"json.sensor.alerts.1.value":        "due",
-				"json.sensor.status":                "active",
+				"json.sensor.id":                   "SENS001",
+				"json.sensor.location":             "warehouse-a",
+				"json.sensor.readings.temperature": "23.5",
+				"json.sensor.readings.humidity":    "45",
+				"json.sensor.readings.pressure":    "1013.25",
+				"json.sensor.alerts._length":       "2",
+				"json.sensor.alerts.0.type":        "threshold",
+				"json.sensor.alerts.0.value":       "high",
+				"json.sensor.alerts.1.type":        "maintenance",
+				"json.sensor.alerts.1.value":       "due",
+				"json.sensor.status":               "active",
 			},
 		},
 		{
@@ -1449,17 +1449,17 @@ func TestJSONDeepKeyValueExtraction(t *testing.T) {
 				}
 			}`,
 			wantAttrs: map[string]string{
-				"json.apiVersion":                    "v1",
-				"json.kind":                         "Event",
-				"json.metadata.name":                "pod-123.abc",
-				"json.metadata.namespace":           "default",
-				"json.metadata.labels.app":          "myapp",
-				"json.metadata.labels.env":          "prod",
-				"json.involvedObject.kind":          "Pod",
-				"json.involvedObject.name":          "myapp-pod-xyz",
-				"json.involvedObject.namespace":     "default",
-				"json.reason":                       "Scheduled",
-				"json.source.component":             "default-scheduler",
+				"json.apiVersion":               "v1",
+				"json.kind":                     "Event",
+				"json.metadata.name":            "pod-123.abc",
+				"json.metadata.namespace":       "default",
+				"json.metadata.labels.app":      "myapp",
+				"json.metadata.labels.env":      "prod",
+				"json.involvedObject.kind":      "Pod",
+				"json.involvedObject.name":      "myapp-pod-xyz",
+				"json.involvedObject.namespace": "default",
+				"json.reason":                   "Scheduled",
+				"json.source.component":         "default-scheduler",
 			},
 		},
 		{
@@ -1645,29 +1645,29 @@ func TestFIXMLParser(t *testing.T) {
 	parser := NewFIXMLParser()
 
 	tests := []struct {
-		name       string
-		input      string
-		wantMatch  bool
+		name        string
+		input       string
+		wantMatch   bool
 		wantMsgType string
-		wantAttrs  map[string]string
+		wantAttrs   map[string]string
 	}{
 		{
-			name:      "trade match report",
-			input:     `<FIXML v="5.0SP2"><TrdMtchRpt TrdID="TRD12345" Sym="AAPL" LastPx="150.25" LastQty="100" TrdDt="2024-01-15"/></FIXML>`,
-			wantMatch: true,
+			name:        "trade match report",
+			input:       `<FIXML v="5.0SP2"><TrdMtchRpt TrdID="TRD12345" Sym="AAPL" LastPx="150.25" LastQty="100" TrdDt="2024-01-15"/></FIXML>`,
+			wantMatch:   true,
 			wantMsgType: "trade_match",
 			wantAttrs: map[string]string{
-				"fixml.fix_version": "5.0SP2",
-				"fixml.trade_id":    "TRD12345",
-				"fixml.symbol":      "AAPL",
-				"fixml.last_price":  "150.25",
+				"fixml.fix_version":   "5.0SP2",
+				"fixml.trade_id":      "TRD12345",
+				"fixml.symbol":        "AAPL",
+				"fixml.last_price":    "150.25",
 				"fixml.last_quantity": "100",
 			},
 		},
 		{
-			name:      "new order single",
-			input:     `<FIXML v="5.0"><Order ClOrdID="ORD001" Sym="MSFT" Side="1" Qty="500" OrdTyp="2" Px="300.00"/></FIXML>`,
-			wantMatch: true,
+			name:        "new order single",
+			input:       `<FIXML v="5.0"><Order ClOrdID="ORD001" Sym="MSFT" Side="1" Qty="500" OrdTyp="2" Px="300.00"/></FIXML>`,
+			wantMatch:   true,
 			wantMsgType: "order",
 			wantAttrs: map[string]string{
 				"fixml.client_order_id": "ORD001",
@@ -1679,35 +1679,35 @@ func TestFIXMLParser(t *testing.T) {
 			},
 		},
 		{
-			name:      "execution report",
-			input:     `<FIXML v="4.4"><ExecRpt ExecID="EXEC001" OrdID="ORD001" ExecTyp="F" OrdStat="2" CumQty="100" LeavesQty="400" LastPx="299.50"/></FIXML>`,
-			wantMatch: true,
+			name:        "execution report",
+			input:       `<FIXML v="4.4"><ExecRpt ExecID="EXEC001" OrdID="ORD001" ExecTyp="F" OrdStat="2" CumQty="100" LeavesQty="400" LastPx="299.50"/></FIXML>`,
+			wantMatch:   true,
 			wantMsgType: "execution",
 			wantAttrs: map[string]string{
-				"fixml.execution_id":      "EXEC001",
-				"fixml.order_id":          "ORD001",
-				"fixml.execution_type":    "F",
-				"fixml.order_status":      "2",
+				"fixml.execution_id":        "EXEC001",
+				"fixml.order_id":            "ORD001",
+				"fixml.execution_type":      "F",
+				"fixml.order_status":        "2",
 				"fixml.cumulative_quantity": "100",
-				"fixml.leaves_quantity":   "400",
+				"fixml.leaves_quantity":     "400",
 			},
 		},
 		{
-			name:      "quote request",
-			input:     `<FIXML v="5.0SP2"><QuotReq ReqID="QR001"><Instrmt Sym="GOOGL" SecTyp="CS"/></QuotReq></FIXML>`,
-			wantMatch: true,
+			name:        "quote request",
+			input:       `<FIXML v="5.0SP2"><QuotReq ReqID="QR001"><Instrmt Sym="GOOGL" SecTyp="CS"/></QuotReq></FIXML>`,
+			wantMatch:   true,
 			wantMsgType: "quote",
 			wantAttrs: map[string]string{
-				"fixml.fix_version":    "5.0SP2",
-				"fixml.request_id":     "QR001",
-				"fixml.symbol":         "GOOGL",
-				"fixml.security_type":  "CS",
+				"fixml.fix_version":   "5.0SP2",
+				"fixml.request_id":    "QR001",
+				"fixml.symbol":        "GOOGL",
+				"fixml.security_type": "CS",
 			},
 		},
 		{
-			name:      "market data with timestamp",
-			input:     `<FIXML v="5.0"><MktData Snt="2024-01-15T09:30:00.123Z" MktID="XNAS" Sym="AMZN"/></FIXML>`,
-			wantMatch: true,
+			name:        "market data with timestamp",
+			input:       `<FIXML v="5.0"><MktData Snt="2024-01-15T09:30:00.123Z" MktID="XNAS" Sym="AMZN"/></FIXML>`,
+			wantMatch:   true,
 			wantMsgType: "market_data",
 			wantAttrs: map[string]string{
 				"fixml.fix_version": "5.0",
@@ -1717,9 +1717,9 @@ func TestFIXMLParser(t *testing.T) {
 			},
 		},
 		{
-			name:      "position report",
-			input:     `<FIXML v="5.0SP1"><PosRpt PosID="POS001" Acct="ACC123" Sym="TSLA" Qty="1000"/></FIXML>`,
-			wantMatch: true,
+			name:        "position report",
+			input:       `<FIXML v="5.0SP1"><PosRpt PosID="POS001" Acct="ACC123" Sym="TSLA" Qty="1000"/></FIXML>`,
+			wantMatch:   true,
 			wantMsgType: "position",
 			wantAttrs: map[string]string{
 				"fixml.position_id": "POS001",
@@ -1729,9 +1729,9 @@ func TestFIXMLParser(t *testing.T) {
 			},
 		},
 		{
-			name:      "allocation report",
-			input:     `<FIXML v="5.0"><Alloc AllocID="ALL001" TrdDt="20240115" AvgPx="125.50"/></FIXML>`,
-			wantMatch: true,
+			name:        "allocation report",
+			input:       `<FIXML v="5.0"><Alloc AllocID="ALL001" TrdDt="20240115" AvgPx="125.50"/></FIXML>`,
+			wantMatch:   true,
 			wantMsgType: "allocation",
 			wantAttrs: map[string]string{
 				"fixml.allocation_id": "ALL001",
@@ -1859,9 +1859,9 @@ func TestISO8583Parser(t *testing.T) {
 			wantAttrs: map[string]string{
 				"iso8583.mti":                       "0100",
 				"iso8583.pan":                       "411111******1111", // Masked (first 6 + last 4)
-				"iso8583.processing_code":          "000000",
-				"iso8583.amount_transaction":       "000000010000",
-				"iso8583.stan":                     "123456",
+				"iso8583.processing_code":           "000000",
+				"iso8583.amount_transaction":        "000000010000",
+				"iso8583.stan":                      "123456",
 				"iso8583.card_acceptor_terminal_id": "TERM0001",
 				"iso8583.card_acceptor_id":          "MERCH00000001",
 			},
@@ -1992,9 +1992,9 @@ func TestISO8583PANMasking(t *testing.T) {
 	parser := NewISO8583Parser()
 
 	tests := []struct {
-		name     string
-		input    string
-		wantPAN  string
+		name    string
+		input   string
+		wantPAN string
 	}{
 		{
 			name:    "16-digit PAN",

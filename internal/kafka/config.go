@@ -203,9 +203,9 @@ func DefaultConfig() Config {
 			OnPermanentError: true,
 		},
 		Batch: BatchConfig{
-			Size:                100,
-			Timeout:             5 * time.Second,
-			MaxPartitionBytes:   1024 * 1024,
+			Size:              100,
+			Timeout:           5 * time.Second,
+			MaxPartitionBytes: 1024 * 1024,
 		},
 		Parser: parsers.DefaultPipelineConfig(),
 		Telemetry: TelemetryConfig{

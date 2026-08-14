@@ -13,13 +13,13 @@ func TestResolveSourceTimestamp(t *testing.T) {
 	validSource := time.Date(2026, 8, 13, 11, 30, 0, 0, time.UTC)
 
 	tests := []struct {
-		name          string
-		sourceTime    time.Time
-		fallback      time.Time
-		sourceName    string
-		expectValid   bool
-		expectTime    time.Time
-		expectSource  string
+		name         string
+		sourceTime   time.Time
+		fallback     time.Time
+		sourceName   string
+		expectValid  bool
+		expectTime   time.Time
+		expectSource string
 	}{
 		{
 			name:         "valid source timestamp",
@@ -174,9 +174,9 @@ func TestMonotonicToWallClock(t *testing.T) {
 	}
 
 	tests := []struct {
-		name              string
-		monotonicEventNs  uint64
-		expectDeltaSec    float64 // Expected delta from testNow
+		name             string
+		monotonicEventNs uint64
+		expectDeltaSec   float64 // Expected delta from testNow
 	}{
 		{
 			name:             "event 1 second ago",
