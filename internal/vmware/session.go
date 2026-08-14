@@ -42,7 +42,7 @@ type vcSession struct {
 	perf     *performance.Manager
 	counters map[string]*types.PerfCounterInfo
 	interval int32 // perf query IntervalId seconds (cfg.Interval)
-	samples  int32 // perf MaxSample count (cfg.SampleCount())
+	cfg      vmwaredef.Config
 	ctx      context.Context
 	cancel   context.CancelFunc
 }
@@ -84,7 +84,7 @@ func login(parent context.Context, t vmwaredef.Target, cfg vmwaredef.Config) (*v
 		perf:     perf,
 		counters: counters,
 		interval: cfg.EffectivePerfInterval(),
-		samples:  cfg.SampleCount(),
+		cfg:      cfg,
 		ctx:      ctx,
 		cancel:   cancel,
 	}, nil

@@ -5,6 +5,7 @@ package vmware
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -15,9 +16,11 @@ import (
 	"github.com/mirastacklabs-ai/telegen/internal/vmwaredef"
 )
 
-// captureExporter is a fake sdkmetric.Exporter that records the last batch.
 type captureExporter struct {
-	last *metricdata.ResourceMetrics
+	batches []*metricdata.ResourceMetrics
+	// failOn is a 1-based export call index set to fail.
+	failOn map[int]error
+	calls  int
 }
 
 func (e *captureExporter) Temporality(k sdkmetric.InstrumentKind) metricdata.Temporality {
@@ -29,35 +32,41 @@ func (e *captureExporter) Aggregation(k sdkmetric.InstrumentKind) sdkmetric.Aggr
 }
 
 func (e *captureExporter) Export(_ context.Context, rm *metricdata.ResourceMetrics) error {
-	e.last = rm
+	e.calls++
+	e.batches = append(e.batches, rm)
+	if err, ok := e.failOn[e.calls]; ok {
+		return err
+	}
 	return nil
 }
 
 func (e *captureExporter) ForceFlush(context.Context) error { return nil }
 func (e *captureExporter) Shutdown(context.Context) error   { return nil }
 
-// TestExportMetricsGroupsByName verifies each unique metric name becomes its own
-// metricdata.Metrics entry (the key correctness improvement over snmp's bucketing).
 func TestExportMetricsGroupsByName(t *testing.T) {
-	now := time.Now()
+	now := time.Now().UTC()
 	exp := &captureExporter{}
 	metrics := []vmwaredef.Metric{
-		{Name: "vmware_host_info", Type: vmwaredef.MetricTypeGauge, Value: 1, Labels: map[string]string{"host": "esx-1", "vcenter": "vc"}, Timestamp: now},
-		{Name: "vmware_host_info", Type: vmwaredef.MetricTypeGauge, Value: 1, Labels: map[string]string{"host": "esx-2", "vcenter": "vc"}, Timestamp: now},
-		{Name: "vmware_host_cpu_usagemhz_average", Type: vmwaredef.MetricTypeGauge, Value: 512, Labels: map[string]string{"host": "esx-1", "vcenter": "vc"}, Timestamp: now},
+		{Name: "vmware_host_info", Type: vmwaredef.MetricTypeGauge, Value: 1, Labels: map[string]string{"host": "esx-1", "vcenter": "vc"}, Timestamp: now, TimestampSource: vmwaredef.TimestampFromSource},
+		{Name: "vmware_host_info", Type: vmwaredef.MetricTypeGauge, Value: 1, Labels: map[string]string{"host": "esx-2", "vcenter": "vc"}, Timestamp: now, TimestampSource: vmwaredef.TimestampFromSource},
+		{Name: "vmware_host_cpu_usagemhz_average", Type: vmwaredef.MetricTypeGauge, Value: 512, Labels: map[string]string{"host": "esx-1", "vcenter": "vc"}, Timestamp: now, TimestampSource: vmwaredef.TimestampFromSource},
 	}
 
 	if err := exportMetrics(context.Background(), exp, "vc", map[string]string{"env": "test"}, metrics, 0, nil); err != nil {
 		t.Fatalf("exportMetrics: %v", err)
 	}
-	if exp.last == nil {
+	if len(exp.batches) != 1 {
+		t.Fatalf("expected one export batch, got %d", len(exp.batches))
+	}
+	last := exp.batches[len(exp.batches)-1]
+	if last == nil {
 		t.Fatal("exporter received no batch")
 	}
-	if len(exp.last.ScopeMetrics) != 1 {
-		t.Fatalf("expected 1 scope, got %d", len(exp.last.ScopeMetrics))
+	if len(last.ScopeMetrics) != 1 {
+		t.Fatalf("expected 1 scope, got %d", len(last.ScopeMetrics))
 	}
 
-	sm := exp.last.ScopeMetrics[0]
+	sm := last.ScopeMetrics[0]
 	if sm.Scope.Name != scopeName {
 		t.Errorf("scope name = %q, want %q", sm.Scope.Name, scopeName)
 	}
@@ -67,9 +76,6 @@ func TestExportMetricsGroupsByName(t *testing.T) {
 		byName[m.Name] = m
 	}
 
-	// The batch carries the domain metrics plus the timestamp-provenance
-	// signals, which deliberately ride the same OTLP export so a bad clock
-	// reaches VictoriaMetrics with the data it describes.
 	domain := 0
 	for name := range byName {
 		if name != timeutil.MetricClockSkewSeconds && name != timeutil.MetricTimestampFallbackTotal {
@@ -96,8 +102,6 @@ func TestExportMetricsGroupsByName(t *testing.T) {
 		t.Error("extra label 'env' not applied to datapoint attributes")
 	}
 
-	// Every sample carried a source timestamp, so skew is reported and there is
-	// nothing to count as a fallback.
 	if _, ok := byName[timeutil.MetricClockSkewSeconds]; !ok {
 		t.Error("expected the clock-skew gauge to ride along with the batch")
 	}
@@ -106,15 +110,28 @@ func TestExportMetricsGroupsByName(t *testing.T) {
 	}
 }
 
-// TestExportMetricsReportsClockSkew pins the sign and magnitude of the skew
-// gauge at the export seam. A source timestamp an hour ahead of the collector
-// means the collector clock is slow, which is the shape of the incident this
-// signal exists to catch.
-func TestExportMetricsReportsClockSkew(t *testing.T) {
+func TestExportMetricsReportsClockSkewFromSourceOnly(t *testing.T) {
 	exp := &captureExporter{}
 	sourceAhead := time.Now().UTC().Add(time.Hour)
 	metrics := []vmwaredef.Metric{
-		{Name: "vmware_host_info", Type: vmwaredef.MetricTypeGauge, Value: 1, Labels: map[string]string{"host": "esx-1"}, Timestamp: sourceAhead},
+		{
+			Name:            "vmware_host_cpu_usagemhz_average",
+			Type:            vmwaredef.MetricTypeGauge,
+			Value:           1,
+			Labels:          map[string]string{"host": "esx-1"},
+			Timestamp:       sourceAhead,
+			TimestampSource: vmwaredef.TimestampFromSource,
+		},
+	}
+	for i := 0; i < 50; i++ {
+		metrics = append(metrics, vmwaredef.Metric{
+			Name:            "vmware_host_info",
+			Type:            vmwaredef.MetricTypeGauge,
+			Value:           1,
+			Labels:          map[string]string{"host": "esx"},
+			Timestamp:       time.Now().UTC(),
+			TimestampSource: vmwaredef.TimestampFromCycleInstant,
+		})
 	}
 
 	if err := exportMetrics(context.Background(), exp, "vc", nil, metrics, 0, nil); err != nil {
@@ -122,7 +139,8 @@ func TestExportMetricsReportsClockSkew(t *testing.T) {
 	}
 
 	var skew *metricdata.Gauge[float64]
-	for _, m := range exp.last.ScopeMetrics[0].Metrics {
+	last := exp.batches[len(exp.batches)-1]
+	for _, m := range last.ScopeMetrics[0].Metrics {
 		if m.Name != timeutil.MetricClockSkewSeconds {
 			continue
 		}
@@ -144,13 +162,23 @@ func TestExportMetricsReportsClockSkew(t *testing.T) {
 	}
 }
 
-// TestExportMetricsCountsTimestampFallbacks proves a metric that reaches export
-// without a source timestamp is counted rather than silently accepted.
 func TestExportMetricsCountsTimestampFallbacks(t *testing.T) {
 	exp := &captureExporter{}
 	metrics := []vmwaredef.Metric{
-		{Name: "vmware_host_info", Type: vmwaredef.MetricTypeGauge, Value: 1, Labels: map[string]string{"host": "esx-1"}},
-		{Name: "vmware_host_info", Type: vmwaredef.MetricTypeGauge, Value: 1, Labels: map[string]string{"host": "esx-2"}},
+		{
+			Name:            "vmware_host_info",
+			Type:            vmwaredef.MetricTypeGauge,
+			Value:           1,
+			Labels:          map[string]string{"host": "esx-1"},
+			TimestampSource: vmwaredef.TimestampFromFallback,
+		},
+		{
+			Name:            "vmware_host_info",
+			Type:            vmwaredef.MetricTypeGauge,
+			Value:           1,
+			Labels:          map[string]string{"host": "esx-2"},
+			TimestampSource: vmwaredef.TimestampFromFallback,
+		},
 	}
 
 	if err := exportMetrics(context.Background(), exp, "vc", nil, metrics, 0, nil); err != nil {
@@ -158,7 +186,8 @@ func TestExportMetricsCountsTimestampFallbacks(t *testing.T) {
 	}
 
 	var found bool
-	for _, m := range exp.last.ScopeMetrics[0].Metrics {
+	last := exp.batches[len(exp.batches)-1]
+	for _, m := range last.ScopeMetrics[0].Metrics {
 		if m.Name != timeutil.MetricTimestampFallbackTotal {
 			continue
 		}
@@ -176,28 +205,72 @@ func TestExportMetricsCountsTimestampFallbacks(t *testing.T) {
 	}
 }
 
-// TestExportMetricsSetsObservedTimestamp proves collection lag stays measurable:
-// the source instant is preserved on the data point while ObservedTimestamp
-// records when the collector actually saw it.
-func TestExportMetricsSetsObservedTimestamp(t *testing.T) {
+func TestExportMetricsChunking(t *testing.T) {
 	exp := &captureExporter{}
-	source := time.Now().UTC().Add(-30 * time.Minute)
-	metrics := []vmwaredef.Metric{
-		{Name: "vmware_host_info", Type: vmwaredef.MetricTypeGauge, Value: 1, Labels: map[string]string{"host": "esx-1"}, Timestamp: source},
+	metrics := make([]vmwaredef.Metric, 0, maxDataPointsPerBatch+501)
+	now := time.Now().UTC()
+	for i := 0; i < maxDataPointsPerBatch+500; i++ {
+		metrics = append(metrics, vmwaredef.Metric{
+			Name:            "vmware_vm_cpu_usagemhz_average",
+			Type:            vmwaredef.MetricTypeGauge,
+			Value:           float64(i),
+			Labels:          map[string]string{"vm": "vm"},
+			Timestamp:       now,
+			TimestampSource: vmwaredef.TimestampFromSource,
+		})
 	}
 
 	if err := exportMetrics(context.Background(), exp, "vc", nil, metrics, 0, nil); err != nil {
 		t.Fatalf("exportMetrics: %v", err)
 	}
+	if len(exp.batches) < 2 {
+		t.Fatalf("expected chunked export into multiple batches, got %d", len(exp.batches))
+	}
 
-	if metrics[0].ObservedTimestamp.IsZero() {
-		t.Fatal("ObservedTimestamp was never populated, so collection lag is unmeasurable")
+	total := 0
+	provenanceCount := 0
+	for i, batch := range exp.batches {
+		if len(batch.ScopeMetrics) != 1 {
+			t.Fatalf("batch %d has %d scope metrics, want 1", i, len(batch.ScopeMetrics))
+		}
+		for _, m := range batch.ScopeMetrics[0].Metrics {
+			total += dataPointCount(m)
+			if m.Name == timeutil.MetricClockSkewSeconds || m.Name == timeutil.MetricTimestampFallbackTotal {
+				provenanceCount++
+			}
+		}
 	}
-	if !metrics[0].Timestamp.Equal(source) {
-		t.Errorf("source timestamp must survive export, got %v want %v", metrics[0].Timestamp, source)
+	if total < len(metrics) {
+		t.Fatalf("expected at least %d data points across chunks, got %d", len(metrics), total)
 	}
-	if !metrics[0].ObservedTimestamp.After(metrics[0].Timestamp) {
-		t.Errorf("ObservedTimestamp %v should be after the source instant %v",
-			metrics[0].ObservedTimestamp, metrics[0].Timestamp)
+	if provenanceCount != 1 {
+		t.Fatalf("expected one provenance metric set across chunks, got %d", provenanceCount)
+	}
+}
+
+func TestExportMetricsContinuesWhenChunkFails(t *testing.T) {
+	exp := &captureExporter{
+		failOn: map[int]error{
+			1: errors.New("first chunk failed"),
+		},
+	}
+	metrics := make([]vmwaredef.Metric, 0, maxDataPointsPerBatch+50)
+	now := time.Now().UTC()
+	for i := 0; i < maxDataPointsPerBatch+20; i++ {
+		metrics = append(metrics, vmwaredef.Metric{
+			Name:            "vmware_host_cpu_usagemhz_average",
+			Type:            vmwaredef.MetricTypeGauge,
+			Value:           float64(i),
+			Labels:          map[string]string{"host": "esx"},
+			Timestamp:       now,
+			TimestampSource: vmwaredef.TimestampFromSource,
+		})
+	}
+	err := exportMetrics(context.Background(), exp, "vc", nil, metrics, 0, nil)
+	if err == nil {
+		t.Fatal("expected export error when one chunk fails")
+	}
+	if len(exp.batches) < 2 {
+		t.Fatalf("expected subsequent chunks to still be exported, got %d batches", len(exp.batches))
 	}
 }

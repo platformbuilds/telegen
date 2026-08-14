@@ -5,6 +5,7 @@ package vmware
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -21,6 +22,8 @@ import (
 
 // scopeName is the OTel instrumentation scope for VMware signals.
 const scopeName = "telegen.vmware"
+
+const maxDataPointsPerBatch = 2000
 
 // exportMetrics groups the normalized metrics by name and exports them through
 // the shared OTLP metrics exporter as a single ResourceMetrics batch.
@@ -49,12 +52,15 @@ func exportMetrics(ctx context.Context, exp sdkmetric.Exporter, target string, e
 	observedAt := time.Now().UTC()
 	sourceTimestamps := make([]time.Time, 0, len(metrics))
 
-	for i := range metrics {
-		m := metrics[i]
-		if metrics[i].ObservedTimestamp.IsZero() {
-			metrics[i].ObservedTimestamp = observedAt
+	for _, m := range metrics {
+		switch m.TimestampSource {
+		case vmwaredef.TimestampFromSource:
+			sourceTimestamps = append(sourceTimestamps, m.Timestamp)
+		case vmwaredef.TimestampFromFallback:
+			sourceTimestamps = append(sourceTimestamps, time.Time{})
+		case vmwaredef.TimestampFromCycleInstant:
+			// No source timestamp exists for inventory gauges.
 		}
-		sourceTimestamps = append(sourceTimestamps, m.Timestamp)
 		attrs := buildAttributes(m.Labels, extra)
 		dp := metricdata.DataPoint[float64]{
 			Attributes: attribute.NewSet(attrs...),
@@ -114,18 +120,49 @@ func exportMetrics(ctx context.Context, exp sdkmetric.Exporter, target string, e
 	ms = append(ms, provenance.Metrics("vmware", observedAt)...)
 
 	res := resource.NewSchemaless(resourceAttrs...)
+	scope := instrumentation.Scope{Name: scopeName, Version: "1.0.0"}
 
-	rm := &metricdata.ResourceMetrics{
-		Resource: res,
-		ScopeMetrics: []metricdata.ScopeMetrics{
-			{
-				Scope:   instrumentation.Scope{Name: scopeName, Version: "1.0.0"},
-				Metrics: ms,
-			},
-		},
+	chunks := make([][]metricdata.Metrics, 0, (len(ms)/4)+1)
+	current := make([]metricdata.Metrics, 0, len(ms))
+	currentPoints := 0
+	for _, metric := range ms {
+		points := dataPointCount(metric)
+		if len(current) > 0 && currentPoints+points > maxDataPointsPerBatch {
+			chunks = append(chunks, current)
+			current = make([]metricdata.Metrics, 0, len(ms))
+			currentPoints = 0
+		}
+		current = append(current, metric)
+		currentPoints += points
+	}
+	if len(current) > 0 {
+		chunks = append(chunks, current)
 	}
 
-	return exp.Export(ctx, rm)
+	var exportErr error
+	for i, chunk := range chunks {
+		rm := &metricdata.ResourceMetrics{
+			Resource: res,
+			ScopeMetrics: []metricdata.ScopeMetrics{
+				{
+					Scope:   scope,
+					Metrics: chunk,
+				},
+			},
+		}
+		if err := exp.Export(ctx, rm); err != nil {
+			if logger != nil {
+				logger.Warn("vmware metrics chunk export failed",
+					"chunk_index", i,
+					"metrics", len(chunk),
+					"data_points", metricsDataPointCount(chunk),
+					"error", err)
+			}
+			exportErr = errors.Join(exportErr, err)
+		}
+	}
+
+	return exportErr
 }
 
 // buildAttributes converts metric labels plus extra labels to OTel attributes.
@@ -139,4 +176,25 @@ func buildAttributes(labels, extra map[string]string) []attribute.KeyValue {
 		attrs = append(attrs, attribute.String(k, v))
 	}
 	return attrs
+}
+
+func dataPointCount(m metricdata.Metrics) int {
+	switch data := m.Data.(type) {
+	case metricdata.Gauge[float64]:
+		return len(data.DataPoints)
+	case metricdata.Sum[float64]:
+		return len(data.DataPoints)
+	case metricdata.Sum[int64]:
+		return len(data.DataPoints)
+	default:
+		return 0
+	}
+}
+
+func metricsDataPointCount(metrics []metricdata.Metrics) int {
+	total := 0
+	for _, m := range metrics {
+		total += dataPointCount(m)
+	}
+	return total
 }

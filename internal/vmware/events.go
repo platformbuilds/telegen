@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -39,6 +40,15 @@ type targetState struct {
 	vmSnapCount map[string]int    // vmmo -> root snapshot count
 	hostConn    map[string]string // hostmo -> connectionState
 	dsHigh      map[string]bool   // dsmo -> above used threshold
+
+	perfMu sync.Mutex
+	// lastDatastorePerfAt tracks the last 300s datastore performance scrape.
+	lastDatastorePerfAt time.Time
+	// prevExport* carries the previous cycle export result; export health for a
+	// failed cycle is emitted in the next successful cycle batch.
+	prevExportOK       bool
+	prevExportSeen     bool
+	prevExportDuration time.Duration
 }
 
 func newTargetState() *targetState {
@@ -48,6 +58,36 @@ func newTargetState() *targetState {
 		hostConn:    make(map[string]string),
 		dsHigh:      make(map[string]bool),
 	}
+}
+
+func (s *targetState) lastDatastorePerf() time.Time {
+	s.perfMu.Lock()
+	defer s.perfMu.Unlock()
+	return s.lastDatastorePerfAt
+}
+
+func (s *targetState) markDatastorePerf(at time.Time) {
+	s.perfMu.Lock()
+	s.lastDatastorePerfAt = at
+	s.perfMu.Unlock()
+}
+
+func (s *targetState) markExport(ok bool, d time.Duration) {
+	s.perfMu.Lock()
+	s.prevExportOK = ok
+	s.prevExportDuration = d
+	s.prevExportSeen = true
+	s.perfMu.Unlock()
+}
+
+func (s *targetState) takeExport() (ok bool, d time.Duration, seen bool) {
+	s.perfMu.Lock()
+	defer s.perfMu.Unlock()
+	ok = s.prevExportOK
+	d = s.prevExportDuration
+	seen = s.prevExportSeen
+	s.prevExportSeen = false
+	return ok, d, seen
 }
 
 // collectEvents drains all vCenter events newer than the per-target watermark

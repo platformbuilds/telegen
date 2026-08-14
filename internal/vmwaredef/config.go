@@ -21,8 +21,8 @@ type Collectors struct {
 	Datastore     *bool `yaml:"datastore"`
 	Host          *bool `yaml:"host"`
 	VM            *bool `yaml:"vm"`
-	EsxcliHostNIC bool  `yaml:"esxcli_host_nic"` // NOT IMPLEMENTED in this build; reserved
-	EsxcliStorage bool  `yaml:"esxcli_storage"`  // NOT IMPLEMENTED in this build; reserved
+	EsxcliHostNIC bool  `yaml:"esxcli_host_nic"`
+	EsxcliStorage bool  `yaml:"esxcli_storage"`
 }
 
 // EventsConfig configures the VMware logs signal.
@@ -44,7 +44,7 @@ type Config struct {
 	InsecureTLS      bool              `yaml:"insecure_tls"`      // maps to soap Insecure
 	Collectors       Collectors        `yaml:"collectors"`
 	Events           EventsConfig      `yaml:"events"`
-	ExtraLabels      map[string]string `yaml:"extra_labels"`           // added to every metric/log
+	ExtraLabels      map[string]string `yaml:"extra_labels"`              // added to every metric/log
 	ClockSkewWarn    time.Duration     `yaml:"clock_skew_warn_threshold"` // warn past this |collector - source| skew (default 5m)
 }
 
@@ -92,20 +92,22 @@ func (c Config) EffectivePerfInterval() int32 {
 	return int32(c.Interval)
 }
 
-// SampleCount returns the number of perf samples to request (interval/granularity),
-// with both operands defaulting to 20 (yielding 1). Guards against divide-by-zero.
-func (c Config) SampleCount() int32 {
-	interval := c.Interval
-	if interval <= 0 {
-		interval = 20
+const maxPerfSamplesPerScrape = 180
+
+// MaxSamplesFor returns how many samples a vCenter interval can produce during
+// one collection cycle, capped to real-time retention.
+func (c Config) MaxSamplesFor(intervalID int32) int32 {
+	periodSec := int64(intervalID)
+	if periodSec <= 0 {
+		periodSec = int64(c.EffectivePerfInterval())
 	}
-	granularity := c.Granularity
-	if granularity <= 0 {
-		granularity = 20
-	}
-	samples := interval / granularity
+	periodMs := periodSec * 1000
+	samples := (c.EffectiveInterval().Milliseconds() + periodMs - 1) / periodMs
 	if samples < 1 {
 		samples = 1
+	}
+	if samples > maxPerfSamplesPerScrape {
+		samples = maxPerfSamplesPerScrape
 	}
 	return int32(samples)
 }
@@ -129,6 +131,10 @@ func (c Collectors) Enabled(name string) bool {
 		return resolve(c.Host)
 	case "vm":
 		return resolve(c.VM)
+	case "esxcli_host_nic":
+		return c.EsxcliHostNIC
+	case "esxcli_storage":
+		return c.EsxcliStorage
 	default:
 		return false
 	}

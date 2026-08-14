@@ -1664,9 +1664,12 @@ storage:
 # -----------------------------------------------------------------------------
 vmware:
   enabled: false
+  # Poll interval controls inventory cadence and perf max-sample sizing.
   collect_interval: 60s
   granularity: 20
   interval: 20
+  # operation_timeout: 55s
+  # clock_skew_warn_threshold: 5m
   insecure_tls: true
   targets: []
   #   - name: vcenter-prod
@@ -1679,6 +1682,7 @@ vmware:
     datastore: true
     host: true
     vm: true
+    # ESXCLI collectors (host storage/NIC driver inventory)
     esxcli_host_nic: false
     esxcli_storage: false
   events:

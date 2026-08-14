@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/vmware/govmomi/performance"
 	"github.com/vmware/govmomi/simulator"
@@ -33,7 +34,7 @@ func newSimSession(ctx context.Context, t *testing.T, c *vim25.Client) *vcSessio
 		perf:     perf,
 		counters: counters,
 		interval: 20,
-		samples:  1,
+		cfg:      vmwaredef.Config{CollectInterval: time.Minute, Interval: 20},
 		ctx:      ctx,
 	}
 }
@@ -50,14 +51,15 @@ func TestCollectorsAgainstSimulator(t *testing.T) {
 		log := discardLogger()
 		sink := &metricSink{}
 
-		for name, fn := range map[string]func(*vcSession, *metricSink, *slog.Logger) error{
+		st := newTargetState()
+		for name, fn := range map[string]func(*vcSession, *metricSink, *targetState, *slog.Logger) error{
 			"datacenter": collectDatacenter,
 			"cluster":    collectCluster,
 			"datastore":  collectDatastore,
 			"host":       collectHost,
 			"vm":         collectVM,
 		} {
-			if err := fn(s, sink, log); err != nil {
+			if err := fn(s, sink, st, log); err != nil {
 				t.Errorf("collect %s: %v", name, err)
 			}
 		}

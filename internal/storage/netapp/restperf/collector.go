@@ -6,9 +6,11 @@ package restperf
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"net/http"
 	"path"
 	"strconv"
 	"strings"
@@ -31,8 +33,23 @@ type Collector struct {
 	Log          *slog.Logger
 	GlobalLabels map[string]string
 	BatchSize    string
-	prev         map[string]*matrix.Matrix   // object -> previous poll
+	prev         map[string]*matrix.Matrix           // object -> previous poll
 	schemaInfo   map[string]map[string]counterSchema // object -> counter -> schema
+	// schemaKnown records that the counter schema was actually learned for an
+	// object. It is false when the fetch failed or returned no
+	// counter_schemas, and pruning is suppressed in that case.
+	schemaKnown map[string]bool
+	// schemaFetchedAt drives the refresh TTL so counters added by an ONTAP
+	// upgrade come back out of archive without a restart.
+	schemaFetchedAt map[string]time.Time
+	// unavailableAt records when an object's counter table answered 404.
+	// Presence means "skip"; the entry expires with schemaTTL.
+	unavailableAt map[string]time.Time
+	// archived holds counters pruned because the cluster does not report
+	// them, mirroring Harvest's archivedMetrics.
+	archived       map[string]map[string]template.CounterDef
+	prunedCounters int
+	skippedObjects int
 }
 
 type counterSchema struct {
@@ -41,12 +58,24 @@ type counterSchema struct {
 	Denominator string // for average/percent: denominator metric name
 }
 
+// errCounterTableMissing signals that the counter table does not exist on this
+// cluster. That is a capability difference, not a failure, so the caller skips
+// the object instead of reporting an error.
+var errCounterTableMissing = errors.New("counter table not present")
+
+// schemaTTL matches Harvest's `counter: 24h` schedule.
+const schemaTTL = 24 * time.Hour
+
 // NewCollector creates a RestPerf collector.
 func NewCollector() *Collector {
 	return &Collector{
-		prev:       make(map[string]*matrix.Matrix),
-		schemaInfo: make(map[string]map[string]counterSchema),
-		BatchSize:  "1000",
+		prev:            make(map[string]*matrix.Matrix),
+		schemaInfo:      make(map[string]map[string]counterSchema),
+		schemaKnown:     make(map[string]bool),
+		schemaFetchedAt: make(map[string]time.Time),
+		unavailableAt:   make(map[string]time.Time),
+		archived:        make(map[string]map[string]template.CounterDef),
+		BatchSize:       "1000",
 	}
 }
 
@@ -114,24 +143,67 @@ func (c *Collector) pollObject(ctx context.Context, objectName, fileName string,
 	if tmpl.Ignore {
 		return nil, nil
 	}
-	
+
 	// Apply per-object timeout if specified
 	if timeout := tmpl.GetTimeout(); timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
-	
+
 	obj := tmpl.Object
 	if obj == "" {
 		obj = strings.ToLower(tmpl.Name)
 	}
 
+	// A counter table this cluster does not have is a capability difference,
+	// not a failure. Skip it without another round trip.
+	if c.isUnavailable(obj) {
+		return nil, nil
+	}
+
 	keys, labels, metrics := template.Partition(tmpl.RawCounters)
 
 	// PollCounter — schema
-	if err := c.ensureSchema(ctx, tmpl.Query, obj, metrics); err != nil {
+	if err := c.ensureSchema(ctx, tmpl.Query, obj); err != nil {
+		if errors.Is(err, errCounterTableMissing) {
+			c.unavailableAt[obj] = time.Now()
+			c.skippedObjects++
+			c.Log.Debug("restperf counter table absent on this cluster, skipping object",
+				"object", objectName, "query", tmpl.Query)
+			return nil, nil
+		}
 		c.Log.Debug("schema fetch failed", "query", tmpl.Query, "error", err)
+	}
+
+	// ONTAP rejects the whole rows query when any entry in counters.name is
+	// unsupported by the table. Prune to schema-supported counters only when
+	// schema was successfully learned.
+	if c.schemaKnown[obj] {
+		kept := metrics[:0:0]
+		for _, m := range metrics {
+			if _, ok := c.schemaInfo[obj][m.APIName]; ok {
+				kept = append(kept, m)
+				continue
+			}
+			if c.archived[obj] == nil {
+				c.archived[obj] = map[string]template.CounterDef{}
+			}
+			if _, seen := c.archived[obj][m.APIName]; !seen {
+				c.archived[obj][m.APIName] = m
+				c.prunedCounters++
+			}
+		}
+		if len(kept) != len(metrics) {
+			c.Log.Debug("pruned counters absent from the cluster counter schema",
+				"object", objectName, "pruned", len(metrics)-len(kept), "kept", len(kept))
+		}
+		metrics = kept
+	}
+
+	// An empty counters.name would itself be rejected by ONTAP.
+	if len(metrics) == 0 {
+		return nil, nil
 	}
 
 	mat := matrix.New(obj)
@@ -143,10 +215,10 @@ func (c *Collector) pollObject(ctx context.Context, objectName, fileName string,
 		mat.GlobalLabels[k] = v
 	}
 	mat.NewMetric(matrix.TimestampMetricName, matrix.TimestampMetricName, "gauge")
-	
+
 	// Parse template overrides
 	overrides := tmpl.GetOverrides()
-	
+
 	for _, m := range metrics {
 		met := mat.NewMetric(m.APIName, m.Display, "counter")
 		// Apply schema info if available
@@ -227,7 +299,7 @@ func (c *Collector) pollObject(ctx context.Context, objectName, fileName string,
 		return nil, err
 	}
 	c.prev[obj] = mat
-	
+
 	// Apply export_data directive: when false, suppress parent instances
 	// (not plugin-created children). This bounds high-cardinality objects
 	// like Lock to their Aggregator rollups.
@@ -236,7 +308,7 @@ func (c *Collector) pollObject(ctx context.Context, objectName, fileName string,
 			inst.Exportable = false
 		}
 	}
-	
+
 	mats := plugins.ApplyAll(cooked, tmpl.Plugins, c.Log)
 	var out []storagedef.Metric
 	for _, m := range mats {
@@ -267,15 +339,21 @@ func hasPlugin(raw any, name string) bool {
 	return false
 }
 
-func (c *Collector) ensureSchema(ctx context.Context, query, obj string, metrics []template.CounterDef) error {
-	if c.schemaInfo[obj] != nil {
+func (c *Collector) ensureSchema(ctx context.Context, query, obj string) error {
+	if at, ok := c.schemaFetchedAt[obj]; ok && time.Since(at) < schemaTTL {
 		return nil
 	}
+
 	href := client.NewHrefBuilder().APIPath(strings.TrimPrefix(query, "/")).MaxRecords("1").Build()
 	records, err := c.Client.FetchAll(ctx, href)
 	if err != nil {
+		var apiErr *client.APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+			return errCounterTableMissing
+		}
 		return err
 	}
+
 	info := make(map[string]counterSchema)
 	if len(records) > 0 {
 		// counter_schemas is array on the table object
@@ -291,34 +369,52 @@ func (c *Collector) ensureSchema(ctx context.Context, query, obj string, metrics
 					if name == "" {
 						continue
 					}
-					
+
 					schema := counterSchema{
 						Type:     stringVal(sm, "type"),
 						Property: stringVal(sm, "type"), // ONTAP uses 'type' for property
 					}
-					
+
 					// Extract denominator if present
 					if den, ok := sm["denominator"].(map[string]any); ok {
 						schema.Denominator = stringVal(den, "name")
 					}
-					
+
 					info[name] = schema
 				}
 			}
 		}
 	}
-	// Ensure requested metrics present with defaults
-	for _, m := range metrics {
-		if _, ok := info[m.APIName]; !ok {
-			info[m.APIName] = counterSchema{
-				Type:     "counter",
-				Property: "rate",
-			}
-		}
-	}
+
 	c.schemaInfo[obj] = info
+	c.schemaKnown[obj] = len(info) > 0
+	c.schemaFetchedAt[obj] = time.Now()
+	delete(c.unavailableAt, obj)
 	return nil
 }
+
+// isUnavailable reports whether the object's counter table was found missing
+// recently. The record expires with schemaTTL so a cluster that gains the
+// table after an upgrade is retried without a restart.
+func (c *Collector) isUnavailable(obj string) bool {
+	at, ok := c.unavailableAt[obj]
+	if !ok {
+		return false
+	}
+	if time.Since(at) >= schemaTTL {
+		delete(c.unavailableAt, obj)
+		return false
+	}
+	return true
+}
+
+// PrunedCounters returns the number of distinct counters dropped because the
+// cluster's counter schema does not report them.
+func (c *Collector) PrunedCounters() int { return c.prunedCounters }
+
+// SkippedObjects returns the number of objects skipped because their counter
+// table does not exist on this cluster.
+func (c *Collector) SkippedObjects() int { return c.skippedObjects }
 
 func stringVal(m map[string]any, key string) string {
 	if v, ok := m[key].(string); ok {

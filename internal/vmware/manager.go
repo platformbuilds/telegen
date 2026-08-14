@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -16,6 +17,10 @@ import (
 
 	"github.com/mirastacklabs-ai/telegen/internal/vmwaredef"
 )
+
+const exportTimeout = 30 * time.Second
+
+type collectorFn func(*vcSession, *metricSink, *targetState, *slog.Logger) error
 
 // Manager coordinates VMware vSphere collection across all configured targets,
 // exporting metrics and event/state-change logs through Telegen's shared OTLP
@@ -68,11 +73,6 @@ func (m *Manager) Start(ctx context.Context) error {
 	}
 	m.stopCh = make(chan struct{})
 	m.stopOnce = sync.Once{}
-	if m.cfg.Collectors.EsxcliHostNIC || m.cfg.Collectors.EsxcliStorage {
-		m.log.Warn("vmware esxcli collectors are configured but not implemented in this build; ignoring",
-			"esxcli_host_nic", m.cfg.Collectors.EsxcliHostNIC,
-			"esxcli_storage", m.cfg.Collectors.EsxcliStorage)
-	}
 
 	if m.metrics == nil {
 		m.log.Warn("shared metrics exporter is nil; vmware metrics will not be exported", "status", "degraded")
@@ -164,17 +164,27 @@ func (m *Manager) collectTarget(ctx context.Context, t vmwaredef.Target) {
 		name = t.Address
 	}
 	log := m.log.With("target", name, "vcenter", t.Address)
+	st := m.stateFor(name)
+	sink := &metricSink{timestamp: time.Now().UTC()} // Hoist per-cycle instant once for all gauges.
 
+	if ok, d, seen := st.takeExport(); seen {
+		sink.addScrapeResult("export", t.Address, ok, d)
+	}
+
+	collectStart := time.Now()
+	loginStart := time.Now()
 	s, err := login(ctx, t, m.cfg)
+	loginDuration := time.Since(loginStart)
 	if err != nil {
+		sink.addScrapeResult("login", t.Address, false, loginDuration)
+		sink.addScrapeResult("all_collectors", t.Address, false, time.Since(collectStart))
+		m.exportTargetMetrics(ctx, t.Address, sink, st, log)
 		log.Warn("vmware login failed, skipping target this cycle", "error", err, "status", "degraded")
 		return
 	}
+	sink.addScrapeResult("login", t.Address, true, loginDuration)
 	defer s.close(log)
 
-	// Metrics collection.
-	sink := &metricSink{timestamp: time.Now().UTC()} // Hoist per-cycle instant once for all gauges
-	st := m.stateFor(name)
 	useSharedInventory := m.cfg.Events.StateChanges &&
 		(m.cfg.Collectors.Enabled("host") ||
 			m.cfg.Collectors.Enabled("vm") ||
@@ -189,67 +199,123 @@ func (m *Manager) collectTarget(ctx context.Context, t vmwaredef.Target) {
 		dsErr      error
 	)
 
-	if useSharedInventory {
-		vmErr = fetchProperties(s.ctx, s.view, s.client,
-			[]string{"VirtualMachine"},
-			[]string{"summary", "runtime", "storage", "snapshot", "snapshot.rootSnapshotList", "snapshot.currentSnapshot"},
-			&vms, log)
-		if vmErr != nil {
-			log.Debug("vmware state-change vm fetch failed", "vcenter", s.target, "error", vmErr)
-		}
-		hostErr = fetchProperties(s.ctx, s.view, s.client,
-			[]string{"HostSystem"},
-			[]string{"parent", "summary", "runtime"},
-			&hosts, log)
-		if hostErr != nil {
-			log.Debug("vmware state-change host fetch failed", "vcenter", s.target, "error", hostErr)
-		}
-		dsErr = fetchProperties(s.ctx, s.view, s.client,
-			[]string{"Datastore"},
-			[]string{"summary", "host", "vm", "parent"},
-			&datastores, log)
-		if dsErr != nil {
-			log.Debug("vmware state-change datastore fetch failed", "vcenter", s.target, "error", dsErr)
-		}
-		m.runCollectorsWithSharedInventory(s, sink, log, vms, vmErr, hosts, hostErr, datastores, dsErr)
-	} else {
-		m.runCollectors(s, sink, log)
-	}
+	needVM := m.cfg.Collectors.Enabled("vm") || m.cfg.Events.StateChanges
+	needHost := m.cfg.Collectors.Enabled("host") || m.cfg.Events.StateChanges
+	needDS := m.cfg.Collectors.Enabled("datastore") || m.cfg.Events.StateChanges
 
-	if metrics := sink.metrics(); len(metrics) > 0 {
-		if m.metrics != nil {
-			if err := exportMetrics(s.ctx, m.metrics, t.Address, m.cfg.ExtraLabels, metrics, m.cfg.EffectiveClockSkewWarn(), log); err != nil {
-				log.Warn("vmware metrics export failed", "error", err)
-			} else {
-				log.Debug("vmware metrics exported", "count", len(metrics))
-			}
+	collectorsOK := true
+	if useSharedInventory {
+		var prefetchWG sync.WaitGroup
+		if needVM {
+			prefetchWG.Add(1)
+			go func() {
+				defer prefetchWG.Done()
+				vmErr = fetchProperties(s.ctx, s.view, s.client,
+					[]string{"VirtualMachine"},
+					[]string{"summary", "runtime", "storage", "snapshot", "snapshot.rootSnapshotList", "snapshot.currentSnapshot"},
+					&vms, log)
+				if vmErr != nil {
+					log.Debug("vmware state-change vm fetch failed", "vcenter", s.target, "error", vmErr)
+				}
+			}()
 		}
+		if needHost {
+			prefetchWG.Add(1)
+			go func() {
+				defer prefetchWG.Done()
+				hostErr = fetchProperties(s.ctx, s.view, s.client,
+					[]string{"HostSystem"},
+					[]string{"parent", "summary", "runtime"},
+					&hosts, log)
+				if hostErr != nil {
+					log.Debug("vmware state-change host fetch failed", "vcenter", s.target, "error", hostErr)
+				}
+			}()
+		}
+		if needDS {
+			prefetchWG.Add(1)
+			go func() {
+				defer prefetchWG.Done()
+				dsErr = fetchProperties(s.ctx, s.view, s.client,
+					[]string{"Datastore"},
+					[]string{"summary", "host", "vm", "parent"},
+					&datastores, log)
+				if dsErr != nil {
+					log.Debug("vmware state-change datastore fetch failed", "vcenter", s.target, "error", dsErr)
+				}
+			}()
+		}
+		prefetchWG.Wait()
+		collectorsOK = m.runCollectorsWithSharedInventory(s, sink, st, log, vms, vmErr, hosts, hostErr, datastores, dsErr)
+	} else {
+		collectorsOK = m.runCollectors(s, sink, st, log)
 	}
 
 	// Logs collection (events + synthesized state changes).
+	eventsStart := time.Now()
+	eventsOK := true
 	var records []vmwaredef.LogRecord
-	if m.cfg.Events.Enabled {
-		records = append(records, collectEvents(s, m.cfg.Events.MaxPerPoll, st, log)...)
+	if m.cfg.Events.Enabled || m.cfg.Events.StateChanges {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					eventsOK = false
+					log.Error("vmware events collection panicked",
+						"panic", r,
+						"stack", string(debug.Stack()))
+				}
+			}()
+			if m.cfg.Events.Enabled {
+				records = append(records, collectEvents(s, m.cfg.Events.MaxPerPoll, st, log)...)
+			}
+			if m.cfg.Events.StateChanges {
+				if useSharedInventory {
+					records = append(records, collectStateChangesFromData(s, st, log, vms, hosts, datastores)...)
+				} else {
+					records = append(records, collectStateChanges(s, st, log)...)
+				}
+			}
+		}()
+		sink.addScrapeResult("events", s.target, eventsOK, time.Since(eventsStart))
 	}
-	if m.cfg.Events.StateChanges {
-		if useSharedInventory {
-			records = append(records, collectStateChangesFromData(s, st, log, vms, hosts, datastores)...)
-		} else {
-			records = append(records, collectStateChanges(s, st, log)...)
-		}
-	}
+
+	sink.addScrapeResult("all_collectors", s.target, collectorsOK && eventsOK, time.Since(collectStart))
+
+	m.exportTargetMetrics(ctx, t.Address, sink, st, log)
+
 	if len(records) > 0 && m.logs != nil {
-		emitLogs(s.ctx, m.logs, m.cfg.ExtraLabels, records)
+		exportCtx, cancel := context.WithTimeout(ctx, exportTimeout)
+		defer cancel()
+		emitLogs(exportCtx, m.logs, m.cfg.ExtraLabels, records)
 		log.Debug("vmware logs emitted", "count", len(records))
 	}
 }
 
+func (m *Manager) exportTargetMetrics(ctx context.Context, target string, sink *metricSink, st *targetState, log *slog.Logger) {
+	metrics := sink.metrics()
+	if len(metrics) == 0 || m.metrics == nil {
+		return
+	}
+
+	start := time.Now()
+	exportCtx, cancel := context.WithTimeout(ctx, exportTimeout)
+	err := exportMetrics(exportCtx, m.metrics, target, m.cfg.ExtraLabels, metrics, m.cfg.EffectiveClockSkewWarn(), log)
+	cancel()
+
+	st.markExport(err == nil, time.Since(start))
+	if err != nil {
+		log.Warn("vmware metrics export failed", "error", err)
+		return
+	}
+	log.Debug("vmware metrics exported", "count", len(metrics))
+}
+
 // runCollectors runs each enabled subsystem collector, logging and continuing on
 // per-collector errors (graceful degradation, matching internal/storage.Manager).
-func (m *Manager) runCollectors(s *vcSession, sink *metricSink, log *slog.Logger) {
+func (m *Manager) runCollectors(s *vcSession, sink *metricSink, st *targetState, log *slog.Logger) bool {
 	type namedCollector struct {
 		name string
-		fn   func(*vcSession, *metricSink, *slog.Logger) error
+		fn   collectorFn
 	}
 	collectors := []namedCollector{
 		{"datacenter", collectDatacenter},
@@ -257,8 +323,12 @@ func (m *Manager) runCollectors(s *vcSession, sink *metricSink, log *slog.Logger
 		{"datastore", collectDatastore},
 		{"host", collectHost},
 		{"vm", collectVM},
+		{"esxcli_storage", collectEsxcliStorage},
+		{"esxcli_host_nic", collectEsxcliHostNIC},
 	}
 
+	overallOK := true
+	var okMu sync.Mutex
 	var wg sync.WaitGroup
 	for _, c := range collectors {
 		if !m.cfg.Collectors.Enabled(c.name) {
@@ -267,49 +337,74 @@ func (m *Manager) runCollectors(s *vcSession, sink *metricSink, log *slog.Logger
 		wg.Add(1)
 		go func(c namedCollector) {
 			defer wg.Done()
-			if err := c.fn(s, sink, log); err != nil {
+			started := time.Now()
+			ok := true
+			defer func() {
+				if r := recover(); r != nil {
+					ok = false
+					log.Error("vmware collector panicked; continuing with remaining collectors",
+						"collector", c.name,
+						"panic", r,
+						"stack", string(debug.Stack()))
+				}
+				sink.addScrapeResult(c.name, s.target, ok, time.Since(started))
+				if !ok {
+					okMu.Lock()
+					overallOK = false
+					okMu.Unlock()
+				}
+			}()
+
+			if err := c.fn(s, sink, st, log); err != nil {
+				ok = false
 				log.Warn("vmware collector failed", "collector", c.name, "error", err, "status", "degraded")
 			}
 		}(c)
 	}
 	wg.Wait()
+	return overallOK
 }
 
 func (m *Manager) runCollectorsWithSharedInventory(
 	s *vcSession,
 	sink *metricSink,
+	st *targetState,
 	log *slog.Logger,
 	vms []mo.VirtualMachine, vmErr error,
 	hosts []mo.HostSystem, hostErr error,
 	datastores []mo.Datastore, dsErr error,
-) {
+) bool {
 	type namedCollector struct {
 		name string
 		fn   func() error
 	}
 	collectors := []namedCollector{
-		{"datacenter", func() error { return collectDatacenter(s, sink, log) }},
-		{"cluster", func() error { return collectCluster(s, sink, log) }},
+		{"datacenter", func() error { return collectDatacenter(s, sink, st, log) }},
+		{"cluster", func() error { return collectCluster(s, sink, st, log) }},
 		{"datastore", func() error {
 			if dsErr != nil {
 				return dsErr
 			}
-			return collectDatastoreFromData(s, sink, log, datastores)
+			return collectDatastoreFromData(s, sink, st, log, datastores)
 		}},
 		{"host", func() error {
 			if hostErr != nil {
 				return hostErr
 			}
-			return collectHostFromData(s, sink, log, hosts)
+			return collectHostFromData(s, sink, st, log, hosts)
 		}},
 		{"vm", func() error {
 			if vmErr != nil {
 				return vmErr
 			}
-			return collectVMFromData(s, sink, log, vms)
+			return collectVMFromData(s, sink, st, log, vms)
 		}},
+		{"esxcli_storage", func() error { return collectEsxcliStorage(s, sink, st, log) }},
+		{"esxcli_host_nic", func() error { return collectEsxcliHostNIC(s, sink, st, log) }},
 	}
 
+	overallOK := true
+	var okMu sync.Mutex
 	var wg sync.WaitGroup
 	for _, c := range collectors {
 		if !m.cfg.Collectors.Enabled(c.name) {
@@ -318,12 +413,32 @@ func (m *Manager) runCollectorsWithSharedInventory(
 		wg.Add(1)
 		go func(c namedCollector) {
 			defer wg.Done()
+			started := time.Now()
+			ok := true
+			defer func() {
+				if r := recover(); r != nil {
+					ok = false
+					log.Error("vmware collector panicked; continuing with remaining collectors",
+						"collector", c.name,
+						"panic", r,
+						"stack", string(debug.Stack()))
+				}
+				sink.addScrapeResult(c.name, s.target, ok, time.Since(started))
+				if !ok {
+					okMu.Lock()
+					overallOK = false
+					okMu.Unlock()
+				}
+			}()
+
 			if err := c.fn(); err != nil {
+				ok = false
 				log.Warn("vmware collector failed", "collector", c.name, "error", err, "status", "degraded")
 			}
 		}(c)
 	}
 	wg.Wait()
+	return overallOK
 }
 
 func (m *Manager) stateFor(name string) *targetState {

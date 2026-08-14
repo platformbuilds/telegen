@@ -32,14 +32,14 @@ tells you immediately.
 
 ### 1.2 Everything is a gauge — do NOT use `rate()`
 
-Both inventory metrics (`addGauge`, `collectors.go:53`) and performance metrics
-(`emitPerformanceMetrics`, `collect.go:139`) are emitted as **gauges**
+Both inventory metrics (`addGauge`, `collectors.go`) and performance metrics
+(`emitPerformanceMetrics`, `collect.go`) are emitted as **gauges**
 (`vmwaredef.MetricTypeGauge`). No counters or histograms are produced.
 
-Performance counters that vSphere names `*.summation` or `*.average` are
-**pre-averaged over the sample window** inside the collector before export
-(`collect.go:126-130`). They arrive as an instantaneous gauge value, not a
-monotonic counter.
+Performance counters are emitted **per vCenter sample** (one OTLP data point
+per `PerfSampleInfo` entry) with the source timestamp preserved. Counter names
+like `*.summation` or `*.average` still represent vSphere's own semantics and
+arrive as gauge values, not monotonic counters.
 
 Consequences for PromQL:
 
@@ -135,7 +135,7 @@ All PromQL below assumes a single vCenter. To scope to a specific target, add a
 
 ### 2.1 vCenter server / Datacenter / Folder
 
-Source: `collectDatacenter` (`collectors.go:70-107`). All are info gauges valued `1.0`.
+Source: `collectDatacenter` (`collectors.go`). All are info gauges valued `1.0`.
 
 | Metric | Type | Meaning | Labels |
 |--------|------|---------|--------|
@@ -179,8 +179,10 @@ count(vmware_cluster_info)
 
 ### 2.3 Datastore
 
-Sources: inventory `collectDatastoreFromData` (`collectors.go:163-206`);
-performance counters `datastoreCounters` (`collectors.go:47`).
+Sources: inventory `collectDatastoreFromData` (`collectors.go`);
+performance counters `datastoreCounters` (`collectors.go`).
+Datastore performance counters are sampled on vCenter's 300s interval and are
+re-emitted only when a new 300s sample window is available.
 
 | Metric | Type | Unit | Meaning | Labels |
 |--------|------|------|---------|--------|
@@ -217,8 +219,8 @@ sum(vmware_datastore_free)
 
 ### 2.4 Host / ESXi
 
-Sources: inventory `collectHostFromData` (`collectors.go:217-282`); performance
-counters `cHostCounters` + `iHostCounters` (`collectors.go:22-33`). Only hosts
+Sources: inventory `collectHostFromData` (`collectors.go`); performance
+counters `cHostCounters` + `iHostCounters` (`collectors.go`). Only hosts
 that are powered-on, connected, and not in maintenance are scraped.
 
 **Inventory:**
@@ -303,8 +305,8 @@ vmware_host_sys_uptime_latest / 86400
 
 ### 2.5 Virtual Machine
 
-Sources: inventory `collectVMFromData` (`collectors.go:296-374`); performance
-counters `cVMCounters` + `iVMCounters` (`collectors.go:35-45`). Only powered-on
+Sources: inventory `collectVMFromData` (`collectors.go`); performance
+counters `cVMCounters` + `iVMCounters` (`collectors.go`). Only powered-on
 VMs are scraped.
 
 **Inventory:**
@@ -378,6 +380,42 @@ topk(10, sum(vmware_vm_net_bytesRx_average + vmware_vm_net_bytesTx_average) by (
 
 # Snapshots older than 7 days (metric widget) — instant
 count((time() - vmware_vm_snapshot_info) / 86400 > 7)
+```
+
+### 2.6 Scrape health metrics
+
+Source: `addScrapeResult` (`health.go`) with call sites in `manager.go`.
+These gauges report collection outcomes per target and collector unit.
+
+| Metric | Type | Meaning | Labels |
+|--------|------|---------|--------|
+| `vmware_scrape_collector_success` | gauge | Collector result (1=success, 0=failure) | `collector`, `vcenter` |
+| `vmware_scrape_collector_duration_seconds` | gauge | Collector wall-clock duration in seconds | `collector`, `vcenter` |
+
+`collector` label values:
+
+- `login`
+- `datacenter`
+- `cluster`
+- `datastore`
+- `host`
+- `vm`
+- `esxcli_storage`
+- `esxcli_host_nic`
+- `events`
+- `export`
+- `all_collectors`
+
+Interpretation details:
+
+- `success == 0` means that collector unit returned an error or panicked.
+- `export` is reported one cycle later (carried forward in target state), because
+  an export failure cannot describe itself inside the failed batch.
+
+PromQL example:
+
+```promql
+vmware_scrape_collector_success == 0
 ```
 
 ---
@@ -597,6 +635,12 @@ vmware_vm_cpu_corecount
 vmware_vm_mem_capacity
 vmware_vm_datastore_capacity_used
 vmware_vm_snapshot_info
+vmware_esxcli_storage_driver
+vmware_esxcli_host_nic_driver
+vmware_scrape_collector_success
+vmware_scrape_collector_duration_seconds
+collector_clock_skew_seconds
+collector_timestamp_fallback_total
 ```
 
 Datastore performance gauges:
@@ -668,7 +712,7 @@ vmware_vm_datastore_totalWriteLatency_average
 
 > Note: perf counter names preserve camelCase from vSphere (e.g. `bytesRx`,
 > `numberReadAveraged`); only the dots in the vSphere counter id are converted to
-> underscores (`collect.go:139`).
+> underscores (`collect.go`).
 
 ## Appendix B — Excluded: cloud "unified" REST collector
 

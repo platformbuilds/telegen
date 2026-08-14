@@ -306,6 +306,11 @@ func (c *ONTAPCollector) CollectMetrics(ctx context.Context) ([]storagedef.Metri
 func (c *ONTAPCollector) metadataMetrics(now time.Time, metricCount int, elapsed time.Duration) []storagedef.Metric {
 	labels := c.commonLabels()
 	labels["collector"] = "netapp_ontap"
+	var prunedCounters, skippedObjects float64
+	if c.restPerf != nil {
+		prunedCounters = float64(c.restPerf.PrunedCounters())
+		skippedObjects = float64(c.restPerf.SkippedObjects())
+	}
 	vals := map[string]float64{
 		"metadata_collector_instances":       float64(metricCount),
 		"metadata_collector_metrics":         float64(metricCount),
@@ -320,6 +325,8 @@ func (c *ONTAPCollector) metadataMetrics(now time.Time, metricCount int, elapsed
 		"metadata_collector_skips":           0,
 		"metadata_collector_bytesRx":         0,
 		"metadata_collector_pluginInstances": 0,
+		"metadata_collector_pruned_counters": prunedCounters,
+		"metadata_collector_skipped_objects": skippedObjects,
 		"metadata_component_count":           1,
 		"metadata_component_status":          1,
 		"metadata_exporter_count":            1,

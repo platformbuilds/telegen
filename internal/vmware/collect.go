@@ -78,8 +78,8 @@ func fetchProperties(ctx context.Context, viewManager *view.Manager, vmwClient *
 	return nil
 }
 
-// emitPerformanceMetrics averages perf samples and appends normalized metrics
-// to the sink. Ported from vmware-exporter/vmware/collectors/vmware.go:79-151;
+// emitPerformanceMetrics emits normalized metrics to the sink. Ported from
+// vmware-exporter/vmware/collectors/vmware.go:79-151;
 // the prometheus.MustNewConstMetric block (source 131-148) is replaced by
 // sink.add of a vmwaredef.Metric. Metric names preserve the exporter's
 // Prometheus-style naming (vmware_<subsystem>_<counter>) for dashboard parity.
@@ -126,46 +126,45 @@ func emitPerformanceMetrics(
 				continue
 			}
 
-			var avg int64
-			for _, subvalue := range value.Value {
-				avg += subvalue
-			}
-			avg = avg / int64(len(value.Value))
-
 			// Copy the label map so concurrent instances don't share state.
 			labels := make(map[string]string, len(labelMap))
 			for k, v := range labelMap {
 				labels[k] = v
 			}
 
-			// Use vCenter sample timestamp (last sample = newest), fallback to cycle instant
-			var timestamp time.Time
-			if len(metric.SampleInfo) > 0 {
-				lastSample := metric.SampleInfo[len(metric.SampleInfo)-1]
-				if !lastSample.Timestamp.IsZero() {
-					timestamp = lastSample.Timestamp.UTC()
-				} else {
-					timestamp = fallbackInstant
-					logger.Warn("vCenter SampleInfo timestamp is zero, using fallback",
-						"entity", metric.Entity.Value,
-						"counter", value.Name)
-				}
-			} else {
-				timestamp = fallbackInstant
-				logger.Warn("vCenter SampleInfo is empty, using fallback",
-					"entity", metric.Entity.Value,
-					"counter", value.Name)
-			}
+			name := namespace + "_" + subsystem + "_" + strings.ReplaceAll(value.Name, ".", "_")
+			help := counterInfo.UnitInfo.GetElementDescription().Label + " in " +
+				counterInfo.NameInfo.GetElementDescription().Summary
 
-			sink.add(vmwaredef.Metric{
-				Name: namespace + "_" + subsystem + "_" + strings.ReplaceAll(value.Name, ".", "_"),
-				Help: counterInfo.UnitInfo.GetElementDescription().Label + " in " +
-					counterInfo.NameInfo.GetElementDescription().Summary,
-				Type:      vmwaredef.MetricTypeGauge,
-				Value:     float64(avg),
-				Labels:    labels,
-				Timestamp: timestamp,
-			})
+			// One data point per source sample. The len guard above ensures
+			// sample/value index alignment.
+			for i := range value.Value {
+				ts := metric.SampleInfo[i].Timestamp
+				source := vmwaredef.TimestampFromSource
+				if ts.IsZero() {
+					ts = fallbackInstant
+					source = vmwaredef.TimestampFromFallback
+					logger.Warn("vCenter PerfSampleInfo timestamp is zero, using collection instant",
+						"entity", metric.Entity.Value,
+						"counter", value.Name,
+						"sample_index", i)
+				}
+
+				pointLabels := make(map[string]string, len(labels))
+				for k, v := range labels {
+					pointLabels[k] = v
+				}
+
+				sink.add(vmwaredef.Metric{
+					Name:            name,
+					Help:            help,
+					Type:            vmwaredef.MetricTypeGauge,
+					Value:           float64(value.Value[i]),
+					Labels:          pointLabels,
+					Timestamp:       ts.UTC(),
+					TimestampSource: source,
+				})
+			}
 		}
 	}
 }

@@ -18,7 +18,8 @@ vmware:
   # vCenter performance sampling configuration.
   # granularity = perf sample interval seconds (real-time counters are 20s).
   # interval    = perf query IntervalId seconds.
-  # Number of samples fetched per poll = interval / granularity.
+  # Number of samples fetched per poll is derived from collect_interval and
+  # IntervalId so every source sample from the cycle is emitted.
   granularity: 20
   interval: 20
   # Per-collection-cycle timeout for all vCenter operations. Defaults to
@@ -42,8 +43,8 @@ vmware:
     datastore: true
     host: true
     vm: true
-    esxcli_host_nic: false   # reserved; not implemented in this build
-    esxcli_storage: false    # reserved; not implemented in this build
+    esxcli_host_nic: false
+    esxcli_storage: false
 
   # Logs signal: vCenter events and synthesized inventory state-change records.
   events:
