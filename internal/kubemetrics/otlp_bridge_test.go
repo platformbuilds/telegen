@@ -159,3 +159,25 @@ func assertGaugeWithAttribute(t *testing.T, metric metricdata.Metrics, key, expe
 		t.Fatalf("unexpected value for %q on metric %q: got %q want %q", key, metric.Name, value.AsString(), expected)
 	}
 }
+
+func TestOTLPBridgeConvertTextKubeNodeInfoHasEmptyUnit(t *testing.T) {
+	exposition := []byte(`# HELP kube_node_info Information about a cluster node.
+# TYPE kube_node_info gauge
+kube_node_info{node="n1"} 1
+`)
+
+	bridge := NewOTLPBridge(nil, nil, slog.Default(), sigdef.DefaultMetadataFieldsConfig(), false)
+	metrics, err := bridge.ConvertText(exposition)
+	if err != nil {
+		t.Fatalf("ConvertText failed: %v", err)
+	}
+	if len(metrics) != 1 {
+		t.Fatalf("expected 1 metric family, got %d", len(metrics))
+	}
+	if metrics[0].Name != "kube_node_info" {
+		t.Fatalf("expected metric name kube_node_info, got %q", metrics[0].Name)
+	}
+	if metrics[0].Unit != "" {
+		t.Fatalf("expected empty unit for kube_node_info, got %q", metrics[0].Unit)
+	}
+}

@@ -357,7 +357,6 @@ func guessUnit(name string) string {
 		{"_seconds_total", "s"},
 		{"_bytes", "By"},
 		{"_seconds", "s"},
-		{"_total", "1"},
 		{"_ratio", "1"},
 		{"_percent", "%"},
 	}
@@ -368,7 +367,7 @@ func guessUnit(name string) string {
 		}
 	}
 
-	return "1"
+	return ""
 }
 
 // sanitizeOpenMetricsTypes rewrites OpenMetrics-only TYPE hints that are not
