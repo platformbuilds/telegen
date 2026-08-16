@@ -189,7 +189,6 @@ func (b *OTLPBridge) convertGauge(name string, family *dto.MetricFamily, now tim
 	return &metricdata.Metrics{
 		Name:        name,
 		Description: family.GetHelp(),
-		Unit:        guessUnit(name),
 		Data: metricdata.Gauge[float64]{
 			DataPoints: dataPoints,
 		},
@@ -222,7 +221,6 @@ func (b *OTLPBridge) convertCounter(name string, family *dto.MetricFamily, now t
 	return &metricdata.Metrics{
 		Name:        name,
 		Description: family.GetHelp(),
-		Unit:        guessUnit(name),
 		Data: metricdata.Sum[float64]{
 			Temporality: metricdata.CumulativeTemporality,
 			IsMonotonic: true,
@@ -269,7 +267,6 @@ func (b *OTLPBridge) convertHistogram(name string, family *dto.MetricFamily, now
 	return &metricdata.Metrics{
 		Name:        name,
 		Description: family.GetHelp(),
-		Unit:        guessUnit(name),
 		Data: metricdata.Histogram[float64]{
 			Temporality: metricdata.CumulativeTemporality,
 			DataPoints:  dataPoints,
@@ -308,7 +305,6 @@ func (b *OTLPBridge) convertSummary(name string, family *dto.MetricFamily, now t
 	return &metricdata.Metrics{
 		Name:        name,
 		Description: family.GetHelp(),
-		Unit:        guessUnit(name),
 		Data: metricdata.Gauge[float64]{
 			DataPoints: dataPoints,
 		},
@@ -339,31 +335,6 @@ func getMetricPrefix(name string) string {
 	for _, p := range prefixes {
 		if len(name) >= len(p) && name[:len(p)] == p {
 			return p
-		}
-	}
-
-	return ""
-}
-
-// guessUnit guesses the unit from the metric name
-func guessUnit(name string) string {
-	// Order matters: more specific suffixes must come first
-	type suffixUnit struct {
-		suffix string
-		unit   string
-	}
-	suffixes := []suffixUnit{
-		{"_bytes_total", "By"},
-		{"_seconds_total", "s"},
-		{"_bytes", "By"},
-		{"_seconds", "s"},
-		{"_ratio", "1"},
-		{"_percent", "%"},
-	}
-
-	for _, su := range suffixes {
-		if len(name) > len(su.suffix) && name[len(name)-len(su.suffix):] == su.suffix {
-			return su.unit
 		}
 	}
 

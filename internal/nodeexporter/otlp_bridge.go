@@ -208,7 +208,6 @@ func (b *OTLPBridge) convertCounter(name, help string, metrics []*dto.Metric, ti
 	return &metricdata.Metrics{
 		Name:        name,
 		Description: help,
-		Unit:        inferUnit(name),
 		Data: metricdata.Sum[float64]{
 			DataPoints:  dataPoints,
 			Temporality: metricdata.CumulativeTemporality,
@@ -242,7 +241,6 @@ func (b *OTLPBridge) convertGauge(name, help string, metrics []*dto.Metric, time
 	return &metricdata.Metrics{
 		Name:        name,
 		Description: help,
-		Unit:        inferUnit(name),
 		Data: metricdata.Gauge[float64]{
 			DataPoints: dataPoints,
 		},
@@ -308,7 +306,6 @@ func (b *OTLPBridge) convertHistogram(name, help string, metrics []*dto.Metric, 
 	return &metricdata.Metrics{
 		Name:        name,
 		Description: help,
-		Unit:        inferUnit(name),
 		Data: metricdata.Histogram[float64]{
 			DataPoints:  dataPoints,
 			Temporality: metricdata.CumulativeTemporality,
@@ -347,7 +344,6 @@ func (b *OTLPBridge) convertSummary(name, help string, metrics []*dto.Metric, ti
 	return &metricdata.Metrics{
 		Name:        name + "_sum",
 		Description: help,
-		Unit:        inferUnit(name),
 		Data: metricdata.Gauge[float64]{
 			DataPoints: dataPoints,
 		},
@@ -443,22 +439,3 @@ func getSignalMetadataForMetric(name string) *sigdef.SignalMetadata {
 	}
 }
 
-// inferUnit infers the unit from the metric name based on common conventions.
-func inferUnit(name string) string {
-	switch {
-	case strings.HasSuffix(name, "_seconds") || strings.HasSuffix(name, "_seconds_total"):
-		return "s"
-	case strings.HasSuffix(name, "_bytes") || strings.HasSuffix(name, "_bytes_total"):
-		return "By"
-	case strings.HasSuffix(name, "_total"):
-		return "1"
-	case strings.HasSuffix(name, "_ratio"):
-		return "1"
-	case strings.HasSuffix(name, "_percent"):
-		return "%"
-	case strings.HasSuffix(name, "_celsius"):
-		return "Cel"
-	default:
-		return ""
-	}
-}

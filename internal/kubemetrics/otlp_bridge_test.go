@@ -181,3 +181,33 @@ kube_node_info{node="n1"} 1
 		t.Fatalf("expected empty unit for kube_node_info, got %q", metrics[0].Unit)
 	}
 }
+
+func TestOTLPBridgeConvertTextLeavesAllUnitsEmpty(t *testing.T) {
+	exposition := []byte(`# HELP container_memory_usage_bytes container bytes.
+# TYPE container_memory_usage_bytes gauge
+container_memory_usage_bytes{pod="p1"} 1
+# HELP container_cpu_usage_seconds_total container cpu.
+# TYPE container_cpu_usage_seconds_total counter
+container_cpu_usage_seconds_total{pod="p1"} 2
+# HELP node_cpu_ratio node ratio.
+# TYPE node_cpu_ratio gauge
+node_cpu_ratio{node="n1"} 0.5
+# HELP app_error_percent error percent.
+# TYPE app_error_percent gauge
+app_error_percent{service="svc"} 10
+`)
+
+	bridge := NewOTLPBridge(nil, nil, slog.Default(), sigdef.DefaultMetadataFieldsConfig(), false)
+	metrics, err := bridge.ConvertText(exposition)
+	if err != nil {
+		t.Fatalf("ConvertText failed: %v", err)
+	}
+	if len(metrics) != 4 {
+		t.Fatalf("expected 4 metric families, got %d", len(metrics))
+	}
+	for _, metric := range metrics {
+		if metric.Unit != "" {
+			t.Fatalf("expected empty unit for %q, got %q", metric.Name, metric.Unit)
+		}
+	}
+}

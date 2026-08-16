@@ -212,30 +212,6 @@ func TestGetMetadataByCategory(t *testing.T) {
 	}
 }
 
-func TestOTLPBridgeUnitGuessing(t *testing.T) {
-	testCases := []struct {
-		name     string
-		expected string
-	}{
-		{"container_memory_usage_bytes", "By"},
-		{"container_memory_working_set_bytes", "By"},
-		{"container_cpu_usage_seconds_total", "s"},
-		{"kube_pod_info", ""},
-		{"kube_node_info", ""},
-		{"telegen_kubestate_stores_total", ""},
-		{"request_duration_seconds", "s"},
-		{"http_requests_total", ""},
-		{"node_cpu_ratio", "1"},
-	}
-
-	for _, tc := range testCases {
-		unit := guessUnit(tc.name)
-		if unit != tc.expected {
-			t.Errorf("guessUnit(%s): expected %s, got %s", tc.name, tc.expected, unit)
-		}
-	}
-}
-
 func TestGetMetricPrefix(t *testing.T) {
 	testCases := []struct {
 		name     string

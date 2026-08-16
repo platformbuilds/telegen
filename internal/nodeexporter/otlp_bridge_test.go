@@ -203,29 +203,83 @@ func TestOTLPBridgeLabels(t *testing.T) {
 	}
 }
 
-// TestInferUnit tests unit inference from metric names.
-func TestInferUnit(t *testing.T) {
-	tests := []struct {
-		name     string
-		expected string
-	}{
-		{"node_cpu_seconds_total", "s"},
-		{"node_memory_bytes", "By"},
-		{"node_disk_read_bytes_total", "By"},
-		{"http_requests_total", "1"},
-		{"process_cpu_ratio", "1"},
-		{"temperature_celsius", "Cel"},
-		{"memory_percent", "%"},
-		{"some_metric", ""},
+func TestConvertMetricFamilyLeavesUnitsEmpty(t *testing.T) {
+	bridge := &OTLPBridge{
+		logger:       slog.Default(),
+		processStart: time.Now().UTC(),
+	}
+	timestamp := time.Now().UTC()
+
+	counterName := "http_requests_total"
+	counterType := dto.MetricType_COUNTER
+	counterValue := 2.0
+	counterFamily := &dto.MetricFamily{
+		Name: &counterName,
+		Type: &counterType,
+		Metric: []*dto.Metric{
+			{Counter: &dto.Counter{Value: &counterValue}},
+		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := inferUnit(tt.name)
-			if result != tt.expected {
-				t.Errorf("inferUnit(%q) = %q, expected %q", tt.name, result, tt.expected)
-			}
-		})
+	gaugeName := "node_memory_usage_bytes"
+	gaugeType := dto.MetricType_GAUGE
+	gaugeValue := 3.0
+	gaugeFamily := &dto.MetricFamily{
+		Name: &gaugeName,
+		Type: &gaugeType,
+		Metric: []*dto.Metric{
+			{Gauge: &dto.Gauge{Value: &gaugeValue}},
+		},
+	}
+
+	histName := "request_duration_seconds_total"
+	histType := dto.MetricType_HISTOGRAM
+	upperBound := 0.5
+	cumulativeCount := uint64(1)
+	histSampleCount := uint64(1)
+	histSampleSum := 0.5
+	histFamily := &dto.MetricFamily{
+		Name: &histName,
+		Type: &histType,
+		Metric: []*dto.Metric{
+			{
+				Histogram: &dto.Histogram{
+					SampleCount: &histSampleCount,
+					SampleSum:   &histSampleSum,
+					Bucket: []*dto.Bucket{
+						{UpperBound: &upperBound, CumulativeCount: &cumulativeCount},
+					},
+				},
+			},
+		},
+	}
+
+	summaryName := "temperature_celsius"
+	summaryType := dto.MetricType_SUMMARY
+	summaryCount := uint64(1)
+	summarySum := 1.2
+	summaryFamily := &dto.MetricFamily{
+		Name: &summaryName,
+		Type: &summaryType,
+		Metric: []*dto.Metric{
+			{
+				Summary: &dto.Summary{
+					SampleCount: &summaryCount,
+					SampleSum:   &summarySum,
+				},
+			},
+		},
+	}
+
+	families := []*dto.MetricFamily{counterFamily, gaugeFamily, histFamily, summaryFamily}
+	for _, family := range families {
+		metric := bridge.convertMetricFamily(family, timestamp)
+		if metric == nil {
+			t.Fatalf("expected metric for %q", family.GetName())
+		}
+		if metric.Unit != "" {
+			t.Fatalf("expected empty unit for %q, got %q", metric.Name, metric.Unit)
+		}
 	}
 }
 
