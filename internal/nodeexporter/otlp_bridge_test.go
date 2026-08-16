@@ -271,7 +271,29 @@ func TestConvertMetricFamilyLeavesUnitsEmpty(t *testing.T) {
 		},
 	}
 
-	families := []*dto.MetricFamily{counterFamily, gaugeFamily, histFamily, summaryFamily}
+	ratioName := "node_cpu_ratio"
+	ratioType := dto.MetricType_GAUGE
+	ratioValue := 0.5
+	ratioFamily := &dto.MetricFamily{
+		Name: &ratioName,
+		Type: &ratioType,
+		Metric: []*dto.Metric{
+			{Gauge: &dto.Gauge{Value: &ratioValue}},
+		},
+	}
+
+	percentName := "node_disk_used_percent"
+	percentType := dto.MetricType_GAUGE
+	percentValue := 42.0
+	percentFamily := &dto.MetricFamily{
+		Name: &percentName,
+		Type: &percentType,
+		Metric: []*dto.Metric{
+			{Gauge: &dto.Gauge{Value: &percentValue}},
+		},
+	}
+
+	families := []*dto.MetricFamily{counterFamily, gaugeFamily, histFamily, summaryFamily, ratioFamily, percentFamily}
 	for _, family := range families {
 		metric := bridge.convertMetricFamily(family, timestamp)
 		if metric == nil {
