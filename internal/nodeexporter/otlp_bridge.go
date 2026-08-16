@@ -438,4 +438,3 @@ func getSignalMetadataForMetric(name string) *sigdef.SignalMetadata {
 		}
 	}
 }
-
