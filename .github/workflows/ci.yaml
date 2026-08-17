@@ -87,7 +87,7 @@ jobs:
           ls -la internal/profiler/*_bpfel*.go || echo "WARNING: No profiler generated files found"
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -116,7 +116,7 @@ jobs:
           path: internal/
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -146,7 +146,7 @@ jobs:
           path: internal/
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -207,7 +207,7 @@ jobs:
           path: internal/
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -235,7 +235,7 @@ jobs:
           path: internal/
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
