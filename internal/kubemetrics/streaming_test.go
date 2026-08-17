@@ -301,4 +301,13 @@ kube_pod_status_phase{namespace="default",pod="demo-pod",phase="Running"} 1
 	if gauge.DataPoints[0].Value != 2 {
 		t.Fatalf("expected store_count value 2, got %d", gauge.DataPoints[0].Value)
 	}
+
+	// A dimensionless unit on a gauge makes the collector's prometheusremotewrite
+	// exporter append a _ratio suffix to the series name, so no metric leaving this
+	// collector may declare one.
+	for _, metric := range metrics {
+		if metric.Unit != "" {
+			t.Fatalf("expected empty unit for %q, got %q", metric.Name, metric.Unit)
+		}
+	}
 }

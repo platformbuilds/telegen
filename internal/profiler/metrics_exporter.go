@@ -392,7 +392,6 @@ func (e *MetricsExporter) cpuProfileToMetrics(profile *Profile, timestamp time.T
 	metrics = append(metrics, metricdata.Metrics{
 		Name:        "profiler.cpu.samples",
 		Description: "Number of CPU profile samples",
-		Unit:        "1",
 		Data: metricdata.Sum[int64]{
 			Temporality: metricdata.CumulativeTemporality,
 			IsMonotonic: true,
@@ -455,7 +454,6 @@ func (e *MetricsExporter) offCPUProfileToMetrics(profile *Profile, timestamp tim
 	metrics = append(metrics, metricdata.Metrics{
 		Name:        "profiler.offcpu.samples",
 		Description: "Number of off-CPU profile samples (blocked threads)",
-		Unit:        "1",
 		Data: metricdata.Sum[int64]{
 			Temporality: metricdata.CumulativeTemporality,
 			IsMonotonic: true,
@@ -526,7 +524,6 @@ func (e *MetricsExporter) memoryProfileToMetrics(profile *Profile, timestamp tim
 	metrics = append(metrics, metricdata.Metrics{
 		Name:        "profiler.memory.allocations",
 		Description: "Number of memory allocations",
-		Unit:        "1",
 		Data: metricdata.Sum[int64]{
 			Temporality: metricdata.CumulativeTemporality,
 			IsMonotonic: true,
@@ -599,7 +596,6 @@ func (e *MetricsExporter) mutexProfileToMetrics(profile *Profile, timestamp time
 	metrics = append(metrics, metricdata.Metrics{
 		Name:        "profiler.mutex.contentions",
 		Description: "Number of mutex contentions",
-		Unit:        "1",
 		Data: metricdata.Sum[int64]{
 			Temporality: metricdata.CumulativeTemporality,
 			IsMonotonic: true,
@@ -684,7 +680,6 @@ func (e *MetricsExporter) wallProfileToMetrics(profile *Profile, timestamp time.
 	metrics = append(metrics, metricdata.Metrics{
 		Name:        "profiler.wall.samples",
 		Description: "Number of wall clock samples",
-		Unit:        "1",
 		Data: metricdata.Sum[int64]{
 			Temporality: metricdata.CumulativeTemporality,
 			IsMonotonic: true,

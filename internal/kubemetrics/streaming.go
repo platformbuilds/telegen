@@ -328,7 +328,6 @@ func (s *StreamingExporter) collectKubestateMetricsFromData(
 	metrics = append(metrics, metricdata.Metrics{
 		Name:        "telegen_kubestate_stores_total",
 		Description: "Number of active kubestate metrics stores",
-		Unit:        "1",
 		Data: metricdata.Gauge[int64]{
 			DataPoints: []metricdata.DataPoint[int64]{
 				{
