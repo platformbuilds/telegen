@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Generate telegen-native eBPF code via Docker
         run: |
@@ -73,7 +73,7 @@ jobs:
     needs: [generate]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Download generated eBPF code
         uses: actions/download-artifact@v8
@@ -107,7 +107,7 @@ jobs:
     needs: [generate]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Download generated eBPF code
         uses: actions/download-artifact@v8
@@ -137,7 +137,7 @@ jobs:
     needs: [generate]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Download generated eBPF code
         uses: actions/download-artifact@v8
@@ -198,7 +198,7 @@ jobs:
     needs: [generate]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Download generated eBPF code
         uses: actions/download-artifact@v8
@@ -226,7 +226,7 @@ jobs:
         goarch: [amd64, arm64]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Download generated eBPF code
         uses: actions/download-artifact@v8
@@ -260,7 +260,7 @@ jobs:
     needs: [lint, test, verifier, obi-smoke]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -294,7 +294,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # Install Trivy via apt (workaround for aquasecurity/trivy repo unavailability)
       # See: https://github.com/aquasecurity/trivy-action/issues/511
@@ -329,7 +329,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
