@@ -50,7 +50,7 @@ RUN if [ "$SKIP_BPF_GENERATE" = "1" ]; then \
 # Gradle 9.x requires JDK 17+, but we target Java 8 bytecode for compatibility
 # =============================================================================
 ARG BUILDPLATFORM
-FROM --platform=$BUILDPLATFORM eclipse-temurin:17-jdk AS java-build
+FROM --platform=$BUILDPLATFORM eclipse-temurin:24-jdk AS java-build
 
 WORKDIR /src/internal/java
 
@@ -64,7 +64,7 @@ RUN chmod +x gradlew && ./gradlew clean shadowJar copyLoaderJar --no-daemon
 # Stage 2b: Build perf-map-agent for Java symbol resolution
 # =============================================================================
 ARG BUILDPLATFORM
-FROM --platform=$BUILDPLATFORM eclipse-temurin:17-jdk AS perfmap-build
+FROM --platform=$BUILDPLATFORM eclipse-temurin:24-jdk AS perfmap-build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
@@ -219,7 +219,7 @@ CMD ["--config", "/etc/telegen/config.yaml"]
 # Use this when profiling Java applications with eBPF
 # Build with: docker build --target java-profiling -t telegen:java-profiling .
 # =============================================================================
-FROM eclipse-temurin:21-jre-alpine AS java-profiling
+FROM eclipse-temurin:24-jre-alpine AS java-profiling
 
 RUN apk add --no-cache \
     ca-certificates \
